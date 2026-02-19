@@ -1,5 +1,10 @@
 {
     "version": 2,
+    "functions": {
+        "src/server.js": {
+            "runtime": "nodejs24.x"
+        }
+    },
     "builds": [
         {
             "src": "src/server.js",
