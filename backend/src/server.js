@@ -5,7 +5,6 @@ import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeDatabase, getDb, query, queryOne, run, getProcessedDatabaseUrl } from './config/database.js';
-import apiRoutes from './routes/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,25 +75,49 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', uptime: process.uptime(), timestamp: new Date() });
 });
 
+// Utility to catch errors during request handling
+process.on('uncaughtException', (err) => {
+    console.error('🔥 CRITICAL UNCAUGHT EXCEPTION:', err);
+});
+
 // Initialize database (deferred to first request or async background)
 let dbInitialized = false;
-const ensureDb = async (req, res, next) => {
-    if (!dbInitialized) {
-        try {
+let loadedApiRoutes = null;
+
+const ensureServices = async (req, res, next) => {
+    try {
+        if (!dbInitialized) {
+            console.log('🏗️ First request received. Initializing services...');
             await initializeDatabase();
             dbInitialized = true;
-        } catch (error) {
-            console.error('❌ Database initialization failed:', error);
         }
+
+        if (!loadedApiRoutes) {
+            console.log('💉 Lazy loading API routes...');
+            const { default: routes } = await import('./routes/api.js');
+            loadedApiRoutes = routes;
+        }
+
+        next();
+    } catch (error) {
+        console.error('❌ Service initialization failed:', error);
+        res.status(500).json({
+            error: 'Service initialization failed. Website is partially offline.',
+            details: error.message
+        });
     }
-    next();
 };
 
-// Internal API routes
-app.use('/api', ensureDb, apiRoutes);
+// Internal API routes (Lazy Loaded)
+app.use('/api', ensureServices, (req, res, next) => {
+    if (loadedApiRoutes) {
+        return loadedApiRoutes(req, res, next);
+    }
+    next();
+});
 
 // Database check route for debugging
-app.get('/api/db-check', ensureDb, async (req, res) => {
+app.get('/api/db-check', ensureServices, async (req, res) => {
     try {
         const db = await getDb();
         const isMongo = db.constructor.name === 'NativeConnection';

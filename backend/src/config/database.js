@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, '../../database.sqlite');
 const MONGODB_URI = process.env.MONGODB_URI;
+const DATABASE_URL = process.env.DATABASE_URL;
 const { Pool } = pg;
 
 let db;
@@ -191,7 +192,7 @@ async function runPostgresMigrations(database) {
  */
 export async function query(sql, params = []) {
     const database = await getDb();
-    if (DATABASE_URL) {
+    if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
         const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
         const result = await database.query(pgSql, params);
@@ -205,7 +206,7 @@ export async function query(sql, params = []) {
  */
 export async function queryOne(sql, params = []) {
     const database = await getDb();
-    if (DATABASE_URL) {
+    if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
         const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
         const result = await database.query(pgSql, params);
@@ -219,7 +220,7 @@ export async function queryOne(sql, params = []) {
  */
 export async function run(sql, params = []) {
     const database = await getDb();
-    if (DATABASE_URL) {
+    if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
         let pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
 

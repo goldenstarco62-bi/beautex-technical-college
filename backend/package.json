@@ -10,6 +10,9 @@
     "seed": "node src/scripts/seed.js",
     "seed-mongo": "node seed_mongo.js"
   },
+  "engines": {
+    "node": "18.x"
+  },
   "keywords": [
     "college",
     "management",
