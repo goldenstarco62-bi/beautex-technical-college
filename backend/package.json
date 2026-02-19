@@ -12,7 +12,7 @@
     "seed-mongo": "node seed_mongo.js"
   },
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   },
   "keywords": [
     "college",
