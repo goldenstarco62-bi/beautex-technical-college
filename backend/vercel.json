@@ -1,5 +1,4 @@
 {
-    "__comment": "Production Routing Config",
     "version": 2,
     "builds": [
         {
