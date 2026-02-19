@@ -33,4 +33,4 @@ frontend/*.err
 
 # Vercel
 .vercel
-vercel.json
+# vercel.json (Removed from ignore so custom routing works)
