@@ -32,9 +32,11 @@ export async function uploadMaterial(req, res) {
         let file_url = req.body.file_url || null;
 
         if (req.file) {
-            // A file was uploaded via multipart/form-data
-            const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-            file_url = `${baseUrl}/uploads/${req.file.filename}`;
+            // File uploaded via multipart/form-data (memoryStorage — no disk write on Vercel)
+            // Store as a base64 data URI so it can be retrieved later.
+            const mimeType = req.file.mimetype;
+            const b64 = req.file.buffer.toString('base64');
+            file_url = `data:${mimeType};base64,${b64}`;
         }
 
         if (!file_url) {

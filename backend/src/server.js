@@ -224,11 +224,14 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-    console.log(`📚 API Documentation: http://localhost:${PORT}/api`);
-    console.log(`🔒 Environment: ${process.env.NODE_ENV || 'development'}\n`);
-});
+// Start server only when NOT running as a Vercel serverless function
+// (On Vercel, the exported `app` is used directly — no TCP listener needed)
+if (process.env.VERCEL !== '1') {
+    app.listen(PORT, () => {
+        console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+        console.log(`📚 API Documentation: http://localhost:${PORT}/api`);
+        console.log(`🔒 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+    });
+}
 
 export default app;
