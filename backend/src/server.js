@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeDatabase, getDb, query, queryOne, run } from './config/database.js';
+import { initializeDatabase, getDb, query, queryOne, run, getProcessedDatabaseUrl } from './config/database.js';
 import apiRoutes from './routes/api.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -71,24 +71,30 @@ app.use((req, res, next) => {
     next();
 });
 
-// Initialize database
-const initDb = async () => {
-    try {
-        await initializeDatabase();
-    } catch (error) {
-        console.error('❌ Database initialization failed:', error);
+// Health check route (No DB required)
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'OK', uptime: process.uptime(), timestamp: new Date() });
+});
+
+// Initialize database (deferred to first request or async background)
+let dbInitialized = false;
+const ensureDb = async (req, res, next) => {
+    if (!dbInitialized) {
+        try {
+            await initializeDatabase();
+            dbInitialized = true;
+        } catch (error) {
+            console.error('❌ Database initialization failed:', error);
+        }
     }
+    next();
 };
-initDb();
 
-// Serve uploaded file assets as static files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
-
-// API Routes
-app.use('/api', apiRoutes);
+// Internal API routes
+app.use('/api', ensureDb, apiRoutes);
 
 // Database check route for debugging
-app.get('/api/db-check', async (req, res) => {
+app.get('/api/db-check', ensureDb, async (req, res) => {
     try {
         const db = await getDb();
         const isMongo = db.constructor.name === 'NativeConnection';
@@ -105,7 +111,7 @@ app.get('/api/db-check', async (req, res) => {
         }
 
         // Supabase / PostgreSQL Check
-        if (process.env.DATABASE_URL) {
+        if (getProcessedDatabaseUrl()) {
             const userCount = await queryOne('SELECT COUNT(*) as count FROM users');
             return res.json({
                 status: '✅ Connected to Supabase (PostgreSQL)',
@@ -128,8 +134,7 @@ app.get('/api/db-check', async (req, res) => {
         console.error('❌ Database Check Failed:', error);
         res.status(500).json({
             status: '❌ Database Connection Failed',
-            error: error.message,
-            stack: process.env.NODE_ENV === 'production' ? null : error.stack
+            error: error.message
         });
     }
 });
@@ -137,17 +142,9 @@ app.get('/api/db-check', async (req, res) => {
 // Root route
 app.get('/', (req, res) => {
     res.json({
-        message: 'Welcome to Beautex Technical Training College Management System API',
-        version: '1.0.0',
-        endpoints: {
-            auth: '/api/auth/login',
-            students: '/api/students',
-            courses: '/api/courses',
-            faculty: '/api/faculty',
-            attendance: '/api/attendance',
-            grades: '/api/grades',
-            announcements: '/api/announcements'
-        }
+        message: 'Welcome to BTTC Management System API',
+        environment: process.env.NODE_ENV,
+        timestamp: new Date()
     });
 });
 

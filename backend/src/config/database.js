@@ -15,7 +15,7 @@ let db;
 let pgPool;
 let mongoConnection;
 
-const getProcessedDatabaseUrl = () => {
+export const getProcessedDatabaseUrl = () => {
     let url = process.env.DATABASE_URL;
     if (!url) return null;
 
@@ -108,77 +108,49 @@ export async function getDb() {
 /**
  * Initialize database schema
  */
+let isInitializing = false;
 export async function initializeDatabase() {
-    if (MONGODB_URI) {
-        console.log('ℹ️ MongoDB detected. Schemas are handled by Mongoose models.');
-        return;
-    }
+    if (isInitializing) return;
+    isInitializing = true;
 
-    // Read schema from SQL file
-    const schemaPath = path.join(__dirname, '../models/schema.sql');
-    if (!fs.existsSync(schemaPath)) {
-        console.error('❌ Schema file not found at:', schemaPath);
-        return;
-    }
+    try {
+        if (MONGODB_URI) {
+            console.log('ℹ️ MongoDB detected. Schemas are handled by Mongoose models.');
+            return;
+        }
 
-    let schema = fs.readFileSync(schemaPath, 'utf8');
-    const database = await getDb();
+        // Read schema from SQL file
+        const schemaPath = path.join(__dirname, '../models/schema.sql');
+        if (!fs.existsSync(schemaPath)) {
+            console.warn('⚠️ Schema file not found. Skipping auto-initialization.');
+            return;
+        }
 
-    if (DATABASE_URL) {
-        console.log('🐘 Initializing PostgreSQL schema...');
-        // Basic SQLite -> Postgres translations
-        const pgSchema = schema
-            .replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY')
-            .replace(/DATETIME DEFAULT CURRENT_TIMESTAMP/gi, 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
-            .replace(/DATETIME/gi, 'TIMESTAMP')
-            .replace(/date\(\'now\'\)/gi, 'CURRENT_DATE')
-            .replace(/BOOLEAN DEFAULT 1/gi, 'BOOLEAN DEFAULT TRUE')
-            .replace(/BOOLEAN DEFAULT 0/gi, 'BOOLEAN DEFAULT FALSE')
-            .replace(/INSERT OR IGNORE/gi, 'INSERT')
-            .replace(/PRAGMA foreign_keys = ON;/gi, '');
+        const schema = fs.readFileSync(schemaPath, 'utf8');
+        const database = await getDb();
 
-        const statements = pgSchema.split(';').filter(s => s.trim().length > 0);
-        for (let statement of statements) {
-            try {
-                await database.query(statement.trim());
-            } catch (err) {
-                const errMsg = err.message.toLowerCase();
-                if (!errMsg.includes('already exists') &&
-                    !errMsg.includes('already a primary key') &&
-                    !errMsg.includes('duplicate key')) {
-                    console.warn(`⚠️ Postgres Init Warning: ${err.message}`);
-                }
+        const processedUrl = getProcessedDatabaseUrl();
+        if (processedUrl) {
+            console.log('🐘 PostgreSQL detected. Schema check skipped to speed up Vercel boot.');
+            // We only run migrations if needed to save time
+            await runPostgresMigrations(database);
+            return;
+        }
+
+        try {
+            await database.exec(schema);
+            console.log('✅ SQLite Database initialized successfully');
+        } catch (error) {
+            if (error.message.includes('already exists') || error.code === 'SQLITE_CONSTRAINT') {
+                console.log('ℹ️ SQLite Database already initialized');
+            } else {
+                console.error('❌ SQLite Initialization Error:', error);
             }
         }
-        console.log('✅ PostgreSQL Schema checked/initialized');
-        await runPostgresMigrations(database);
-        return;
-    }
-
-    try {
-        await database.exec(schema);
-        console.log('✅ SQLite Database initialized successfully');
-    } catch (error) {
-        if (error.message.includes('already exists') || error.code === 'SQLITE_CONSTRAINT') {
-            console.log('ℹ️ SQLite Database already initialized');
-        } else {
-            console.error('❌ SQLite Initialization Error:', error);
-            throw error;
-        }
-    }
-
-    // Auto-migration for must_change_password (SQLite)
-    try {
-        const tableInfo = await database.all("PRAGMA table_info(users)");
-        const columnExists = tableInfo.some(col => col.name === 'must_change_password');
-        if (!columnExists) {
-            console.log('🔄 Applying migration: Adding must_change_password to SQLite users table...');
-            await database.run('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 1');
-            await database.run("UPDATE users SET must_change_password = 0 WHERE role IN ('superadmin', 'admin')");
-            console.log('✅ Migration applied successfully');
-        }
     } catch (err) {
-        console.error('⚠️ Migration warning:', err.message);
+        console.error('❌ Critical Init Error:', err.message);
+    } finally {
+        isInitializing = false;
     }
 }
 
