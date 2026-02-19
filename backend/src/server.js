@@ -144,6 +144,11 @@ app.get('/', (req, res) => {
     res.json({
         message: 'Welcome to BTTC Management System API',
         environment: process.env.NODE_ENV,
+        config_check: {
+            db_url_set: !!process.env.DATABASE_URL,
+            mongo_uri_set: !!process.env.MONGODB_URI,
+            jwt_secret_set: !!process.env.JWT_SECRET
+        },
         timestamp: new Date()
     });
 });

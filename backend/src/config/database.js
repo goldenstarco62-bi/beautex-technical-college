@@ -76,11 +76,12 @@ export async function getDb() {
         return pgPool;
     }
 
-    // 3. Fallback to SQLite
+    // 3. Fallback to SQLite (Only in development)
     if (!db) {
         if (process.env.NODE_ENV === 'production') {
-            console.warn('⚠️ WARNING: No MONGODB_URI or DATABASE_URL found in production environment.');
-            console.warn('⚠️ Falling back to local SQLite. Data will NOT persist on Vercel.');
+            const error = new Error('CRITICAL: No DATABASE_URL or MONGODB_URI provided in production environment. Website cannot start without a cloud database.');
+            console.error(error.message);
+            throw error;
         }
 
         const sqlite3 = (await import('sqlite3')).default;
@@ -89,7 +90,6 @@ export async function getDb() {
         // Ensure directory exists for database file
         const dbDir = path.dirname(dbPath);
         if (!fs.existsSync(dbDir)) {
-            console.log(`📁 Creating missing database directory: ${dbDir}`);
             fs.mkdirSync(dbDir, { recursive: true });
         }
 
@@ -98,7 +98,6 @@ export async function getDb() {
             driver: sqlite3.Database
         });
 
-        // Enable foreign keys
         await db.run('PRAGMA foreign_keys = ON');
         console.log('📂 Connected to local SQLite');
     }
