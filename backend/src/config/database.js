@@ -8,14 +8,37 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, '../../database.sqlite');
-const DATABASE_URL = process.env.DATABASE_URL;
 const MONGODB_URI = process.env.MONGODB_URI;
-
 const { Pool } = pg;
 
 let db;
 let pgPool;
 let mongoConnection;
+
+const getProcessedDatabaseUrl = () => {
+    let url = process.env.DATABASE_URL;
+    if (!url) return null;
+
+    // Fix for special characters in password (like @)
+    // Format: postgresql://user:password@host:port/db
+    try {
+        if (url.includes('@') && url.indexOf('@') !== url.lastIndexOf('@')) {
+            const protocolPart = url.split('://')[0];
+            const rest = url.split('://')[1];
+            const credentials = rest.substring(0, rest.lastIndexOf('@'));
+            const hostPart = rest.substring(rest.lastIndexOf('@') + 1);
+
+            if (credentials.includes(':')) {
+                const [user, pass] = credentials.split(':');
+                const encodedPass = encodeURIComponent(pass);
+                return `${protocolPart}://${user}:${encodedPass}@${hostPart}`;
+            }
+        }
+    } catch (e) {
+        console.warn('⚠️ URL encoding helper failed, using raw URL');
+    }
+    return url;
+};
 
 /**
  * Get database connection based on environment variables
@@ -37,11 +60,13 @@ export async function getDb() {
     }
 
     // 2. Check for PostgreSQL (Supabase)
-    if (DATABASE_URL) {
+    const processedUrl = getProcessedDatabaseUrl();
+    if (processedUrl) {
         if (!pgPool) {
             pgPool = new Pool({
-                connectionString: DATABASE_URL,
-                ssl: { rejectUnauthorized: false }
+                connectionString: processedUrl,
+                ssl: { rejectUnauthorized: false },
+                connectionTimeoutMillis: 10000, // 10s timeout
             });
             pgPool.on('error', (err) => {
                 console.error('Unexpected error on idle client', err);
