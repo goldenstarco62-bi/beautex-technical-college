@@ -23,7 +23,9 @@ const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174'
+    'http://127.0.0.1:5174',
+    // Deployed frontend — always allowed
+    'https://beautexcollege-01.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
