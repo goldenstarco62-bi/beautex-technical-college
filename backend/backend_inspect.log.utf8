@@ -1,0 +1,26 @@
+﻿node.exe : Vercel CLI 
+50.10.0
+At C:\Users\ndiny\AppD
+ata\Roaming\npm\vercel
+.ps1:24 char:5
++     & "node$exe"  "$
+basedir/node_modules/v
+ercel/dist/vc.js" 
+$args
++     ~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (Vercel CLI   
+  50.10.0:String)     
+[], RemoteExcepti    
+on
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+Error: unknown or 
+unexpected option: 
+--prod

@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Production
+build/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Database
+backend/*.sqlite
+backend/*.sqlite-journal
+backend/*.sql
+
+# Logs
+*.log
+*.err
+backend/*.log
+backend/*.err
+frontend/*.log
+frontend/*.err
+*.txt
+
+# Vercel
+.vercel
+vercel.json

@@ -1,0 +1,43 @@
+﻿
+> college-management-backend@1.0.0 seed-mongo
+> node seed_mongo.js
+
+node.exe : Γ¥î 
+Seeding failed: 
+Error: querySrv 
+ECONNREFUSED _mongodb.
+_tcp.cluster0.3xmoe2z.
+mongodb.net
+At line:1 char:1
++ & "C:\Program Files\
+nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (Γ¥î Seedin   
+ g fai...e2z.mongo    
+db.net:String) []    
+, RemoteException
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+    at QueryReqWrap.on
+resolve [as 
+oncomplete] (node:inte
+rnal/dns/promises:294:
+17) {
+  errno: undefined,
+  code: 
+'ECONNREFUSED',
+  syscall: 'querySrv',
+  hostname: '_mongodb.
+_tcp.cluster0.3xmoe2z.
+mongodb.net'
+}

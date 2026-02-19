@@ -1,0 +1,137 @@
+﻿node.exe : Vercel CLI 
+50.10.0
+At C:\Users\ndiny\AppD
+ata\Roaming\npm\vercel
+.ps1:24 char:5
++     & "node$exe"  "$
+basedir/node_modules/v
+ercel/dist/vc.js" 
+$args
++     ~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
+~
+    + CategoryInfo    
+          : NotSpeci  
+  fied: (Vercel CLI   
+  50.10.0:String)     
+[], RemoteExcepti    
+on
+    + FullyQualifiedE 
+   rrorId : NativeCo  
+  mmandError
+ 
+Fetching deployments 
+in douglasndinyo5-8641
+s-projects
+> Deployments for doug
+lasndinyo5-8641s-proje
+cts/backend [645ms]
+
+  Age     Deployment  
+                      
+                      
+               Status 
+     Environment     
+Duration     Username 
+               
+  1m      https://back
+end-azlbi7jl1-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    17s          
+douglasndinyo5-8641   
+  
+  16m     https://back
+end-31uvpxisd-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    11s          
+douglasndinyo5-8641   
+  
+  25m     https://back
+end-66x1iqt05-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    11s          
+douglasndinyo5-8641   
+  
+  29m     https://back
+end-b88yu9t73-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    11s          
+douglasndinyo5-8641   
+  
+https://backend-azlbi7jl1-douglasndinyo5-8641s-projects.vercel.app
+https://backend-31uvpxisd-douglasndinyo5-8641s-projects.vercel.app
+https://backend-66x1iqt05-douglasndinyo5-8641s-projects.vercel.app
+https://backend-b88yu9t73-douglasndinyo5-8641s-projects.vercel.app
+https://backend-jlwu39bd6-douglasndinyo5-8641s-projects.vercel.app
+https://backend-ovp7y5yvm-douglasndinyo5-8641s-projects.vercel.app
+https://backend-gsp9su0fh-douglasndinyo5-8641s-projects.vercel.app
+https://backend-d958h1pvq-douglasndinyo5-8641s-projects.vercel.app
+https://backend-4osuy7pdk-douglasndinyo5-8641s-projects.vercel.app
+https://backend-7z7fh2t58-douglasndinyo5-8641s-projects.vercel.app
+https://backend-molp8r3ae-douglasndinyo5-8641s-projects.vercel.app
+  10h     https://back
+end-jlwu39bd6-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    11s          
+douglasndinyo5-8641   
+  
+  11h     https://back
+end-ovp7y5yvm-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    13s          
+douglasndinyo5-8641   
+  
+  11h     https://back
+end-gsp9su0fh-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    14s          
+douglasndinyo5-8641   
+  
+  11h     https://back
+end-d958h1pvq-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    11s          
+douglasndinyo5-8641   
+  
+  11h     https://back
+end-4osuy7pdk-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    10s          
+douglasndinyo5-8641   
+  
+  11h     https://back
+end-7z7fh2t58-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    12s          
+douglasndinyo5-8641   
+  
+  11h     https://back
+end-molp8r3ae-douglasn
+dinyo5-8641s-projects.
+vercel.app     ΓùÅ 
+Ready     Production  
+    18s          
+douglasndinyo5-8641   
+  
+
