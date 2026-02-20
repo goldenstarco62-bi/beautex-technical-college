@@ -5,17 +5,6 @@
             "runtime": "nodejs22.x"
         }
     },
-    "builds": [
-        {
-            "src": "src/server.js",
-            "use": "@vercel/node",
-            "config": {
-                "includeFiles": [
-                    "src/**"
-                ]
-            }
-        }
-    ],
     "routes": [
         {
             "src": "/(.*)",
