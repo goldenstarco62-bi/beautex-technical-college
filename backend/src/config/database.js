@@ -266,6 +266,10 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE students ADD COLUMN phone TEXT');
             console.log('✅ phone column added to students');
         }
+        if (!existingStudentCols.includes('intake')) {
+            await database.query('ALTER TABLE students ADD COLUMN intake TEXT');
+            console.log('✅ intake column added to students');
+        }
 
         // --- Faculty Table Migrations ---
         const facultyCols = await database.query(`

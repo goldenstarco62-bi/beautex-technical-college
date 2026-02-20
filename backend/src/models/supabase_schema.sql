@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS students (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   course TEXT NOT NULL,
-  semester TEXT,
+  intake TEXT,
   gpa DECIMAL DEFAULT 0.0,
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive', 'Graduated')),
   contact TEXT,
