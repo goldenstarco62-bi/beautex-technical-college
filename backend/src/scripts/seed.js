@@ -9,32 +9,58 @@ async function seed() {
         console.log('🐘 Initializing database schema...');
         await initializeDatabase();
 
-        // 1. Check for existing users first
-        let count = 0;
+        // 1. Seed Super Admin
+        let userCount = 0;
         try {
-            const existingUsers = await query('SELECT COUNT(*) as count FROM users');
-            count = parseInt(existingUsers[0]?.count || 0);
+            const userCountResult = await query('SELECT COUNT(*) as count FROM users');
+            userCount = parseInt(userCountResult[0]?.count || 0);
         } catch (e) {
-            console.log('ℹ️ Users table not ready or empty.');
+            console.log('ℹ️ Users table check failed, attempting to continue...');
         }
 
-        if (count > 0) {
-            console.log(`⚠️ Database already contains ${count} users. Skipping destructive seeding.`);
-            console.log('💡 If you want to force a reset, manually drop the tables in your database.');
-            process.exit(0);
+        if (userCount === 0) {
+            console.log('🌱 Seeding superadmin account...');
+            const hashedPassword = await bcrypt.hash('Beautex@2026', 10);
+            await run(
+                'INSERT INTO users (email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?)',
+                ['beautexcollege01@gmail.com', hashedPassword, 'superadmin', 'Active', false]
+            );
+            console.log('✅ Base superadmin account created: beautexcollege01@gmail.com');
+        } else {
+            console.log(`ℹ️ skipping user seed: ${userCount} users already exist.`);
         }
 
-        console.log('🌱 Seeding essential accounts only...');
-        const hashedPassword = await bcrypt.hash('Beautex@2026', 10);
+        // 2. Seed initial courses
+        let courseCount = 0;
+        try {
+            const courseCountResult = await query('SELECT COUNT(*) as count FROM courses');
+            courseCount = parseInt(courseCountResult[0]?.count || 0);
+        } catch (e) {
+            console.log('ℹ️ Courses table check failed.');
+        }
 
-        // ONLY seed the primary superadmin if it doesn't exist
-        await run(
-            'INSERT INTO users (email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?)',
-            ['beautexcollege01@gmail.com', hashedPassword, 'superadmin', 'Active', false]
-        );
+        if (courseCount === 0) {
+            console.log('🌱 Seeding sample courses...');
+            const sampleCourses = [
+                { id: 'SC-01', name: 'Makeup', dept: 'Beauty', dur: '1 Month' },
+                { id: 'SC-02', name: 'Nail Technology', dept: 'Beauty', dur: '6 Weeks' },
+                { id: 'SC-03', name: 'Hairdressing', dept: 'Hair', dur: '3 Months' },
+                { id: 'SC-04', name: 'Barbering', dept: 'Hair', dur: '2 Months' },
+                { id: 'SC-05', name: 'Braiding & Weaving', dept: 'Hair', dur: '2 Months' }
+            ];
 
-        console.log('✅ Base superadmin account created: beautexcollege01@gmail.com');
-        console.log('🎉 System is now ready.');
+            for (const c of sampleCourses) {
+                await run(
+                    'INSERT INTO courses (id, name, department, instructor, duration, capacity, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [c.id, c.name, c.dept, 'TBD', c.dur, 20, 'Active']
+                );
+            }
+            console.log(`✅ Seeded ${sampleCourses.length} sample courses.`);
+        } else {
+            console.log(`ℹ️ skipping course seed: ${courseCount} courses already exist.`);
+        }
+
+        console.log('🎉 Seeding process complete.');
 
     } catch (error) {
         console.error('❌ Seeding failed:', error.message);
