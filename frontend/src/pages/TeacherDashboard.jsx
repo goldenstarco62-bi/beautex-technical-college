@@ -28,14 +28,31 @@ export default function TeacherDashboard() {
 
             // 1. Identify the teacher
             const teacherProfile = facultyRes.data.find(f => f.email === user.email);
-            const name = teacherProfile ? teacherProfile.name : user.email; // Fallback to email if not in faculty list
+            const name = teacherProfile ? teacherProfile.name : (user.name || user.email);
             setTeacherName(name);
 
-            // 2. Filter Courses (where instructor matches teacher's name)
-            // Note: In a real app, we'd filter by ID, but the schema uses names
-            const filteredCourses = coursesRes.data.filter(c =>
-                c.instructor === name || (teacherProfile && c.instructor.includes(teacherProfile.name))
-            );
+            // 2. Filter Courses
+            // A course belongs to a teacher if:
+            // a) The course instructor matches the teacher's name
+            // b) The course name is in the teacher's 'courses' JSON array
+            let assignedCourseNames = [];
+            if (teacherProfile && teacherProfile.courses) {
+                try {
+                    assignedCourseNames = typeof teacherProfile.courses === 'string'
+                        ? JSON.parse(teacherProfile.courses)
+                        : teacherProfile.courses;
+                } catch (e) {
+                    console.error('Error parsing faculty courses:', e);
+                }
+            }
+
+            const filteredCourses = coursesRes.data.filter(c => {
+                const isInstructor = c.instructor && name && c.instructor.toLowerCase() === name.toLowerCase();
+                const isAssigned = assignedCourseNames.some(assignedName =>
+                    assignedName.toLowerCase() === c.name.toLowerCase()
+                );
+                return isInstructor || isAssigned;
+            });
             setMyCourses(filteredCourses);
 
             // 3. Filter Sessions (where teacher_email matches)
