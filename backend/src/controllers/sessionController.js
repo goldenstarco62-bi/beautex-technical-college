@@ -7,14 +7,48 @@ async function isMongo() {
 
 export async function getAllSessions(req, res) {
     try {
-        if (await isMongo()) {
-            const Session = (await import('../models/mongo/Session.js')).default;
-            const sessions = await Session.find().sort({ day: 1, time: 1 });
+        const { role, email } = req.user;
+        const mongo = await isMongo();
+
+        // Admin and Superadmin see everything
+        if (role === 'admin' || role === 'superadmin') {
+            if (mongo) {
+                const Session = (await import('../models/mongo/Session.js')).default;
+                const sessions = await Session.find().sort({ day: 1, time: 1 });
+                return res.json(sessions);
+            }
+            const sessions = await query('SELECT * FROM sessions ORDER BY day, time');
             return res.json(sessions);
         }
 
-        const sessions = await query('SELECT * FROM sessions ORDER BY day, time');
-        res.json(sessions);
+        // Teachers see sessions they teach
+        if (role === 'teacher') {
+            if (mongo) {
+                const Session = (await import('../models/mongo/Session.js')).default;
+                const sessions = await Session.find({ teacher_email: email }).sort({ day: 1, time: 1 });
+                return res.json(sessions);
+            }
+            const sessions = await query('SELECT * FROM sessions WHERE teacher_email = ? ORDER BY day, time', [email]);
+            return res.json(sessions);
+        }
+
+        // Students see sessions for their enrolled course
+        if (role === 'student') {
+            if (mongo) {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const Session = (await import('../models/mongo/Session.js')).default;
+                const sp = await Student.findOne({ email });
+                if (!sp) return res.json([]);
+                const sessions = await Session.find({ course: sp.course }).sort({ day: 1, time: 1 });
+                return res.json(sessions);
+            }
+            const sp = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
+            if (!sp) return res.json([]);
+            const sessions = await query('SELECT * FROM sessions WHERE course = ? ORDER BY day, time', [sp.course]);
+            return res.json(sessions);
+        }
+
+        res.json([]);
     } catch (error) {
         console.error('Get sessions error:', error);
         res.status(500).json({ error: 'Failed to fetch sessions' });

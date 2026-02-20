@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://beautexcollege-01.vercel.app/api/';
+// Remove trailing slash to prevent double-slash in URLs
+const rawUrl = import.meta.env.VITE_API_URL || 'https://beautexcollege-01.vercel.app/api';
+const API_BASE_URL = rawUrl.replace(/\/+$/, '') + '/';
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -26,6 +28,12 @@ export const authAPI = {
     resetPassword: (data) => api.post('auth/reset-password', data),
     changePassword: (data) => api.post('auth/change-password', data),
     getMe: () => api.get('auth/me'),
+};
+
+// Profile
+export const profileAPI = {
+    get: () => api.get('profile'),
+    update: (data) => api.put('profile', data),
 };
 
 // Students
@@ -96,7 +104,8 @@ export const usersAPI = {
     getAll: () => api.get('users'),
     updateRole: (id, role) => api.put(`users/${encodeURIComponent(id)}/role`, { role }),
     updateStatus: (id, status) => api.put(`users/${encodeURIComponent(id)}/status`, { status }),
-    resetPassword: (id, newPassword) => api.put(`users/${encodeURIComponent(id)}/password`, { newPassword }),
+    resetPassword: (id) => api.put(`users/${encodeURIComponent(id)}/password`),
+    resetByEmail: (email) => api.post('users/reset-by-email', { email }),
     delete: (id) => api.delete(`users/${encodeURIComponent(id)}`),
 };
 

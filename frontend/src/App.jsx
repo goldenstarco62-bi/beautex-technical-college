@@ -21,6 +21,7 @@ import AuditLogs from './pages/AuditLogs';
 import Finance from './pages/Finance';
 import AcademicMaster from './pages/AcademicMaster';
 import Materials from './pages/Materials';
+import Profile from './pages/Profile';
 
 
 
@@ -31,7 +32,9 @@ function ProtectedRoute({ children, allowedRoles }) {
 
     if (!user) return <Navigate to="/login" />;
 
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
+    const userRole = (user?.role ? String(user.role) : '').toLowerCase().trim();
+
+    if (allowedRoles && !allowedRoles.map(r => String(r).toLowerCase().trim()).includes(userRole)) {
         return <Navigate to="/dashboard" />;
     }
 
@@ -57,10 +60,12 @@ function App() {
                         <Route path="/grades" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Grades /></Layout></ProtectedRoute>} />
                         <Route path="/schedule" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Schedule /></Layout></ProtectedRoute>} />
                         <Route path="/announcements" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Announcements /></Layout></ProtectedRoute>} />
+
                         <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Settings /></Layout></ProtectedRoute>} />
-                        <Route path="/users" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><Users /></Layout></ProtectedRoute>} />
-                        <Route path="/reports" element={<ProtectedRoute allowedRoles={['teacher', 'admin', 'superadmin', 'student']}><Layout><AcademicReports /></Layout></ProtectedRoute>} />
-                        <Route path="/academic-master" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><AcademicMaster /></Layout></ProtectedRoute>} />
+                        <Route path="/users" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Users /></Layout></ProtectedRoute>} />
+                        <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
+                        <Route path="/reports" element={<ProtectedRoute allowedRoles={['teacher', 'admin', 'superadmin']}><Layout><AcademicReports /></Layout></ProtectedRoute>} />
+                        <Route path="/academic-master" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><AcademicMaster /></Layout></ProtectedRoute>} />
                         <Route path="/finance" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'student']}><Layout><Finance /></Layout></ProtectedRoute>} />
                         <Route path="/materials" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Materials /></Layout></ProtectedRoute>} />
                         <Route path="/activity-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><ActivityReports /></Layout></ProtectedRoute>} />

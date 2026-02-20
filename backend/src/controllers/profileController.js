@@ -1,25 +1,42 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 
+const ALLOWED_PROFILE_FIELDS = ['name', 'phone', 'address', 'photo', 'bio'];
+
 export async function getProfile(req, res) {
     try {
         const { email, role } = req.user;
+        const db = await getDb();
+        const isMongo = !!process.env.MONGODB_URI;
 
         let profileData = {};
 
-        if (role === 'student') {
-            profileData = await queryOne('SELECT * FROM students WHERE email = ?', [email]);
-        } else if (role === 'teacher') {
-            profileData = await queryOne('SELECT * FROM faculty WHERE email = ?', [email]);
+        if (isMongo) {
+            if (role === 'student') {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                profileData = await Student.findOne({ email });
+            } else if (role === 'teacher') {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                profileData = await Faculty.findOne({ email });
+            } else {
+                const User = (await import('../models/mongo/User.js')).default;
+                profileData = await User.findOne({ email }).select('-password');
+            }
         } else {
-            profileData = await queryOne('SELECT id, email, role, status, photo FROM users WHERE email = ?', [email]);
+            if (role === 'student') {
+                profileData = await queryOne('SELECT * FROM students WHERE LOWER(email) = LOWER(?)', [email]);
+            } else if (role === 'teacher') {
+                profileData = await queryOne('SELECT * FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
+            } else {
+                profileData = await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+            }
+
+            // Fallback to user table
+            if (!profileData) {
+                profileData = await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+            }
         }
 
-        if (!profileData) {
-            // Fallback to user table if not found in specific tables
-            profileData = await queryOne('SELECT id, email, role, status, photo FROM users WHERE email = ?', [email]);
-        }
-
-        res.json(profileData);
+        res.json(profileData || {});
     } catch (error) {
         console.error('Get profile error:', error);
         res.status(500).json({ error: 'Failed to fetch profile' });
@@ -29,30 +46,49 @@ export async function getProfile(req, res) {
 export async function updateProfile(req, res) {
     try {
         const { email, role } = req.user;
-        const updates = req.body;
+        const db = await getDb();
+        const isMongo = !!process.env.MONGODB_URI;
 
-        // Remove sensitive or non-updatable fields
-        delete updates.id;
-        delete updates.email;
-        delete updates.role;
-        delete updates.created_at;
-
-        const fields = Object.keys(updates);
-        if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
-
-        const setClause = fields.map(f => `${f} = ?`).join(', ');
-        const values = fields.map(f => updates[f]);
-        values.push(email);
-
-        if (role === 'student') {
-            await run(`UPDATE students SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE email = ?`, values);
-        } else if (role === 'teacher') {
-            await run(`UPDATE faculty SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE email = ?`, values);
+        // Whitelist safe fields only
+        const updates = {};
+        for (const key of ALLOWED_PROFILE_FIELDS) {
+            if (req.body[key] !== undefined) {
+                updates[key] = req.body[key];
+            }
         }
 
-        // Always update the core users table too if the field exists there (e.g., photo)
-        if (fields.includes('photo')) {
-            await run('UPDATE users SET photo = ? WHERE email = ?', [updates.photo, email]);
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        if (isMongo) {
+            const query = { email: email.toLowerCase() };
+            const options = { new: true };
+
+            if (role === 'student') {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                await Student.findOneAndUpdate(query, { $set: updates }, options);
+            } else if (role === 'teacher') {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                await Faculty.findOneAndUpdate(query, { $set: updates }, options);
+            }
+
+            // Always sync name/photo/phone/address/bio to User model
+            const User = (await import('../models/mongo/User.js')).default;
+            await User.findOneAndUpdate(query, { $set: updates }, options);
+        } else {
+            const fields = Object.keys(updates);
+            const setClause = fields.map(f => `${f} = ?`).join(', ');
+            const values = [...fields.map(f => updates[f]), email];
+
+            if (role === 'student') {
+                await run(`UPDATE students SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values);
+            } else if (role === 'teacher') {
+                await run(`UPDATE faculty SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values);
+            }
+
+            // Sync all updatable fields to users table
+            await run(`UPDATE users SET ${setClause} WHERE LOWER(email) = LOWER(?)`, values);
         }
 
         res.json({ message: 'Profile updated successfully' });

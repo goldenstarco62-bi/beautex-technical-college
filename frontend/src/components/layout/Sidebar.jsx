@@ -26,7 +26,7 @@ import {
 const navigation = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'User Management', path: '/users', icon: Shield, roles: ['superadmin'] },
-    { name: 'Academic Master', path: '/academic-master', icon: Building2, roles: ['superadmin'] },
+    { name: 'Academic Master', path: '/academic-master', icon: Building2, roles: ['admin', 'superadmin'] },
     { name: 'Finance', path: '/finance', icon: CreditCard, roles: ['admin', 'superadmin', 'student'] },
     { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin'] },
     { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
@@ -35,21 +35,24 @@ const navigation = [
     { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Grades', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Schedule', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['admin', 'teacher', 'superadmin', 'student'] },
+    { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['admin', 'teacher', 'superadmin'] },
     { name: 'Activity Reports', path: '/activity-reports', icon: BarChart3, roles: ['admin', 'superadmin'] },
     { name: 'Audit Trail', path: '/audit-logs', icon: History, roles: ['superadmin'] },
     { name: 'Announcements', path: '/announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['admin', 'superadmin'] },
-
+    { name: 'My Profile', path: '/profile', icon: UserCircle, roles: ['admin', 'teacher', 'student', 'superadmin'] },
 
 ];
 
 export default function Sidebar({ isOpen, setIsOpen }) {
     const location = useLocation();
     const { user } = useAuth();
-    const userRole = user?.role || 'student';
+    const userRole = (user?.role ? String(user.role) : '').toLowerCase().trim() || 'student';
 
-    const filteredNavigation = navigation.filter(item => item.roles.includes(userRole));
+    const filteredNavigation = navigation.filter(item => {
+        const allowedRoles = item.roles.map(r => String(r).toLowerCase().trim());
+        return allowedRoles.includes(userRole);
+    });
 
     return (
         <>

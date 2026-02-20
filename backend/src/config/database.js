@@ -119,34 +119,58 @@ export async function initializeDatabase() {
             return;
         }
 
-        // Read schema from SQL file
-        const schemaPath = path.join(__dirname, '../models/schema.sql');
-        if (!fs.existsSync(schemaPath)) {
-            console.warn('⚠️ Schema file not found. Skipping auto-initialization.');
-            return;
-        }
-
-        const schema = fs.readFileSync(schemaPath, 'utf8');
         const database = await getDb();
-
         const processedUrl = getProcessedDatabaseUrl();
+
         if (processedUrl) {
-            console.log('🐘 PostgreSQL detected. Schema check skipped to speed up Vercel boot.');
-            // We only run migrations if needed to save time
+            console.log('🐘 PostgreSQL detected. Ensuring all tables are initialized...');
+
+            // Check if users table exists
+            const checkTable = await database.query(`
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'users'
+                );
+            `);
+
+            if (!checkTable.rows[0].exists) {
+                console.log('🚀 Base table "users" missing. Running full schema initialization...');
+                const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');
+                const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
+                await database.query(supabaseSchema);
+                console.log('✅ Full PostgreSQL schema initialized.');
+            } else {
+                console.log('ℹ️ Base tables present. Running safe schema patch...');
+                const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');
+                if (fs.existsSync(supabaseSchemaPath)) {
+                    const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
+                    await database.query(supabaseSchema);
+                    console.log('✅ PostgreSQL schema check/update complete.');
+                }
+            }
+
             await runPostgresMigrations(database);
             return;
         }
 
-        try {
-            await database.exec(schema);
-            console.log('✅ SQLite Database initialized successfully');
-        } catch (error) {
-            if (error.message.includes('already exists') || error.code === 'SQLITE_CONSTRAINT') {
-                console.log('ℹ️ SQLite Database already initialized');
-            } else {
-                console.error('❌ SQLite Initialization Error:', error);
+        // SQLite Initialization
+        const schemaPath = path.join(__dirname, '../models/schema.sql');
+        if (fs.existsSync(schemaPath)) {
+            const schema = fs.readFileSync(schemaPath, 'utf-8');
+            try {
+                await database.exec(schema);
+                console.log('✅ SQLite Database initialized successfully');
+            } catch (error) {
+                if (error.message.includes('already exists') || error.code === 'SQLITE_CONSTRAINT') {
+                    console.log('ℹ️ SQLite Database already initialized');
+                } else {
+                    console.error('❌ SQLite Initialization Error:', error);
+                }
             }
+        } else {
+            console.warn('⚠️ Schema file not found. Skipping auto-initialization.');
         }
+
     } catch (err) {
         console.error('❌ Critical Init Error:', err.message);
     } finally {
@@ -182,6 +206,95 @@ async function runPostgresMigrations(database) {
             await database.query("UPDATE users SET must_change_password = FALSE WHERE role IN ('superadmin', 'admin')");
             console.log('✅ Migration applied successfully');
         }
+
+        // Check for phone column in users
+        const checkPhone = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='phone'
+        `);
+        if (checkPhone.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN phone TEXT');
+            console.log('✅ phone column added to users');
+        }
+
+        // Check for address column in users
+        const checkAddr = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='address'
+        `);
+        if (checkAddr.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN address TEXT');
+            console.log('✅ address column added to users');
+        }
+
+        // Check for bio column in users
+        const checkBio = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='bio'
+        `);
+        if (checkBio.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN bio TEXT');
+            console.log('✅ bio column added to users');
+        }
+
+        // Check for photo column in users
+        const checkPhoto = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='photo'
+        `);
+        if (checkPhoto.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN photo TEXT');
+            console.log('✅ photo column added to users');
+        }
+
+        // --- Students Table Migrations ---
+        const studentCols = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='students'
+        `);
+        const existingStudentCols = studentCols.rows.map(r => r.column_name);
+
+        if (!existingStudentCols.includes('bio')) {
+            await database.query('ALTER TABLE students ADD COLUMN bio TEXT');
+            console.log('✅ bio column added to students');
+        }
+        if (!existingStudentCols.includes('photo')) {
+            await database.query('ALTER TABLE students ADD COLUMN photo TEXT');
+            console.log('✅ photo column added to students');
+        }
+        if (!existingStudentCols.includes('phone')) {
+            await database.query('ALTER TABLE students ADD COLUMN phone TEXT');
+            console.log('✅ phone column added to students');
+        }
+
+        // --- Faculty Table Migrations ---
+        const facultyCols = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='faculty'
+        `);
+        const existingFacultyCols = facultyCols.rows.map(r => r.column_name);
+
+        if (!existingFacultyCols.includes('address')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN address TEXT');
+            console.log('✅ address column added to faculty');
+        }
+        if (!existingFacultyCols.includes('bio')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN bio TEXT');
+            console.log('✅ bio column added to faculty');
+        }
+        if (!existingFacultyCols.includes('passport')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN passport TEXT');
+            console.log('✅ passport column added to faculty');
+        }
+        if (!existingFacultyCols.includes('photo')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN photo TEXT');
+            console.log('✅ photo column added to faculty');
+        }
+        if (!existingFacultyCols.includes('phone')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN phone TEXT');
+            console.log('✅ phone column added to faculty');
+        }
+
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
     }

@@ -28,7 +28,11 @@ const facultySchema = new mongoose.Schema({
         type: String,
         enum: ['Active', 'Inactive'],
         default: 'Active'
-    }
+    },
+    photo: String,
+    address: String,
+    bio: String,
+    phone: String
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });

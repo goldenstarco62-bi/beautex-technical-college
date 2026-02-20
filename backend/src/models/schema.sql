@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'teacher', 'student')),
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
   photo TEXT,
+  phone TEXT,
+  address TEXT,
+  bio TEXT,
   must_change_password BOOLEAN DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -29,6 +32,8 @@ CREATE TABLE IF NOT EXISTS students (
   blood_group TEXT,
   enrolled_date DATE DEFAULT (date('now')),
   completion_date DATE,
+  bio TEXT,
+  phone TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -61,6 +66,9 @@ CREATE TABLE IF NOT EXISTS faculty (
   contact TEXT,
   photo TEXT,
   passport TEXT, -- Passport number for trainers
+  address TEXT,
+  bio TEXT,
+  phone TEXT,
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

@@ -7,7 +7,7 @@ async function findUserByEmail(email) {
     const db = await getDb();
 
     // Check if we're using MongoDB (Mongoose connection)
-    if (db.constructor.name === 'NativeConnection') {
+    if (!!process.env.MONGODB_URI) {
         const User = (await import('../models/mongo/User.js')).default;
         return await User.findOne({ email });
     }
@@ -19,18 +19,18 @@ async function findUserByEmail(email) {
 async function findUserById(id) {
     const db = await getDb();
 
-    if (db.constructor.name === 'NativeConnection') {
+    if (!!process.env.MONGODB_URI) {
         const User = (await import('../models/mongo/User.js')).default;
         return await User.findById(id).select('-password');
     }
 
-    return await queryOne('SELECT id, email, role, status, photo FROM users WHERE id = ?', [id]);
+    return await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE id = ?', [id]);
 }
 
 async function createUser(email, hashedPassword, role) {
     const db = await getDb();
 
-    if (db.constructor.name === 'NativeConnection') {
+    if (!!process.env.MONGODB_URI) {
         const User = (await import('../models/mongo/User.js')).default;
         const newUser = new User({ email, password: hashedPassword, role });
         return await newUser.save();
@@ -110,7 +110,7 @@ export async function login(req, res) {
         let student_id = null;
         if (user.role === 'student') {
             const db = await getDb();
-            if (db.constructor.name === 'NativeConnection') {
+            if (!!process.env.MONGODB_URI) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 const studentProfile = await Student.findOne({ email: user.email });
                 student_id = studentProfile ? studentProfile.id : null;
@@ -149,7 +149,7 @@ export async function login(req, res) {
         // Check System Settings for Portal Access
         const db = await getDb();
         let settings = {};
-        if (db.constructor.name !== 'NativeConnection') {
+        if (!process.env.MONGODB_URI) {
             const settingsRows = await query('SELECT * FROM system_settings');
             settings = settingsRows.reduce((acc, curr) => {
                 acc[curr.key] = curr.value;
@@ -178,6 +178,8 @@ export async function login(req, res) {
                 role: user.role,
                 status: user.status,
                 photo: user.photo,
+                name: user.name,
+                phone: user.phone,
                 student_id
             }
         });
@@ -197,7 +199,7 @@ export async function getMe(req, res) {
         // Fetch student_id if role is student
         if (user.role === 'student') {
             const db = await getDb();
-            if (db.constructor.name === 'NativeConnection') {
+            if (!!process.env.MONGODB_URI) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 const studentProfile = await Student.findOne({ email: user.email });
                 user.student_id = studentProfile ? studentProfile.id : null;
@@ -236,7 +238,7 @@ export async function changePassword(req, res) {
         const db = await getDb();
         let user;
 
-        if (db.constructor.name === 'NativeConnection') {
+        if (!!process.env.MONGODB_URI) {
             const User = (await import('../models/mongo/User.js')).default;
             user = await User.findById(userId);
         } else {
@@ -264,7 +266,7 @@ export async function changePassword(req, res) {
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         console.log('  🔐 New password hashed successfully');
 
-        if (db.constructor.name === 'NativeConnection') {
+        if (!!process.env.MONGODB_URI) {
             user.password = hashedPassword;
             user.must_change_password = false;
             await user.save();

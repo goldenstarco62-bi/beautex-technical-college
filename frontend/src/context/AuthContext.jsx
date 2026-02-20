@@ -62,8 +62,19 @@ export function AuthProvider({ children }) {
         setUser(null);
     };
 
+    const updateUser = (newData) => {
+        const updated = { ...user, ...newData };
+        try {
+            localStorage.setItem('user', JSON.stringify(updated));
+        } catch (e) {
+            console.error('Failed to save user to localStorage (likely quota exceeded):', e);
+            // Even if localStorage fails, we update the React state
+        }
+        setUser(updated);
+    };
+
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider value={{ user, setUser, updateUser, login, register, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );

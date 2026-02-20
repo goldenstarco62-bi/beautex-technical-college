@@ -8,6 +8,7 @@ const EMPTY_PERIOD = { name: '', start_date: '', end_date: '' };
 export default function AcademicMaster() {
     const [departments, setDepartments] = useState([]);
     const [periods, setPeriods] = useState([]);
+    const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const [showDeptModal, setShowDeptModal] = useState(false);
@@ -19,22 +20,54 @@ export default function AcademicMaster() {
     const [periodForm, setPeriodForm] = useState(EMPTY_PERIOD);
     const [savingPeriod, setSavingPeriod] = useState(false);
 
+    const [selectedStudents, setSelectedStudents] = useState([]);
+    const [targetStatus, setTargetStatus] = useState('Active');
+    const [promoting, setPromoting] = useState(false);
+
     useEffect(() => { fetchData(); }, []);
 
     const fetchData = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
-            const [deptRes, periodRes] = await Promise.all([
+            const [deptRes, periodRes, studentRes] = await Promise.all([
                 academicAPI.getDepartments().catch(() => ({ data: [] })),
-                academicAPI.getPeriods().catch(() => ({ data: [] }))
+                academicAPI.getPeriods().catch(() => ({ data: [] })),
+                studentsAPI.getAll().catch(() => ({ data: [] }))
             ]);
             setDepartments(Array.isArray(deptRes.data) ? deptRes.data : []);
             setPeriods(Array.isArray(periodRes.data) ? periodRes.data : []);
+            setStudents(Array.isArray(studentRes.data) ? studentRes.data : []);
         } catch (error) {
             console.error('Error fetching academic data:', error);
         } finally {
             if (!silent) setLoading(false);
         }
+    };
+
+    const handlePromote = async () => {
+        if (selectedStudents.length === 0) {
+            alert('Please select students to promote.');
+            return;
+        }
+        if (!confirm(`Are you sure you want to promote ${selectedStudents.length} students to "${targetStatus}"?`)) return;
+
+        try {
+            setPromoting(true);
+            await academicAPI.promoteStudents({ studentIds: selectedStudents, targetStatus });
+            alert(`Successfully promoted ${selectedStudents.length} students.`);
+            setSelectedStudents([]);
+            fetchData(true);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Failed to promote students.');
+        } finally {
+            setPromoting(false);
+        }
+    };
+
+    const toggleStudentSelection = (id) => {
+        setSelectedStudents(prev =>
+            prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+        );
     };
 
     const handleActivatePeriod = async (id) => {
@@ -125,7 +158,7 @@ export default function AcademicMaster() {
                     { label: 'Departments', value: departments.length },
                     { label: 'Academic Periods', value: periods.length },
                     { label: 'Active Period', value: activePeriod ? activePeriod.name : 'None' },
-                    { label: 'Completed Periods', value: periods.filter(p => p.status === 'Completed').length },
+                    { label: 'Registered Students', value: students.length },
                 ].map((s, i) => (
                     <div key={i} className="bg-white border border-maroon/8 rounded-2xl p-5 shadow-sm">
                         <p className="text-2xl font-black text-maroon">{s.value}</p>
@@ -224,8 +257,8 @@ export default function AcademicMaster() {
                                     </td>
                                     <td className="px-8 py-4">
                                         <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${period.status === 'Ongoing' ? 'bg-green-100 text-green-600' :
-                                                period.status === 'Completed' ? 'bg-blue-100 text-blue-600' :
-                                                    'bg-gray-100 text-gray-400'
+                                            period.status === 'Completed' ? 'bg-blue-100 text-blue-600' :
+                                                'bg-gray-100 text-gray-400'
                                             }`}>
                                             {period.status || 'Pending'}
                                         </span>
@@ -248,15 +281,74 @@ export default function AcademicMaster() {
                                     </td>
                                 </tr>
                             ))}
-                            {periods.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="px-8 py-16 text-center text-xs font-bold text-gray-300 uppercase tracking-widest">
-                                        No academic periods defined yet
-                                    </td>
-                                </tr>
-                            )}
                         </tbody>
                     </table>
+                </div>
+            </section>
+
+            {/* Student Promotion */}
+            <section className="bg-maroon/2 border border-maroon/[0.08] rounded-[3rem] p-10">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+                    <div>
+                        <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2 mb-2">
+                            <CheckCircle2 className="w-4 h-4" /> Student Promotion Engine
+                        </h2>
+                        <p className="text-[10px] font-bold text-maroon/40 uppercase tracking-widest">Batch update student statuses for new academic cycles</p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-maroon/10">
+                        <div className="px-4 border-r border-maroon/5">
+                            <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest mb-1">Target Status</p>
+                            <select
+                                value={targetStatus}
+                                onChange={(e) => setTargetStatus(e.target.value)}
+                                className="text-xs font-black text-maroon outline-none bg-transparent"
+                            >
+                                <option value="Active">Active</option>
+                                <option value="Graduated">Graduated</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                        <button
+                            onClick={handlePromote}
+                            disabled={promoting || selectedStudents.length === 0}
+                            className="bg-maroon text-gold px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 disabled:opacity-40"
+                        >
+                            {promoting ? 'Promoting...' : `Promote (${selectedStudents.length})`}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                    {students.map(student => (
+                        <div
+                            key={student.id}
+                            onClick={() => toggleStudentSelection(student.id)}
+                            className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${selectedStudents.includes(student.id)
+                                    ? 'bg-maroon border-gold/30 shadow-xl scale-[1.02]'
+                                    : 'bg-white border-maroon/5 hover:border-maroon/20 hover:shadow-md'
+                                }`}
+                        >
+                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${selectedStudents.includes(student.id)
+                                    ? 'bg-gold border-gold'
+                                    : 'bg-transparent border-maroon/10'
+                                }`}>
+                                {selectedStudents.includes(student.id) && <CheckCircle2 className="w-3.5 h-3.5 text-maroon" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-black truncate uppercase tracking-tight ${selectedStudents.includes(student.id) ? 'text-gold' : 'text-maroon'}`}>
+                                    {student.name}
+                                </p>
+                                <p className={`text-[9px] font-black uppercase tracking-widest ${selectedStudents.includes(student.id) ? 'text-gold/50' : 'text-maroon/30'}`}>
+                                    {student.id} • {student.course}
+                                </p>
+                            </div>
+                            <div className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${student.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'
+                                }`}>
+                                {student.status}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </section>
 

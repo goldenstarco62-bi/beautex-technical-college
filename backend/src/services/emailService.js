@@ -106,41 +106,53 @@ export const sendWelcomeEmail = async (email, role, tempPassword) => {
     }
 };
 
-export const sendPasswordResetEmail = async (email, resetUrl) => {
+export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
     try {
         if (!transporter) {
             transporter = await createTransporter();
         }
 
+        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://college-management-system-gczq.vercel.app' : 'http://localhost:5173');
+
         const info = await transporter.sendMail({
-            from: `"Beautex Technical Training College" <${process.env.SMTP_USER}>`,
+            from: `"Academic Registry" <${process.env.SMTP_USER}>`,
             to: email,
-            subject: 'Reset Your Password - Beautex Technical Training College',
+            subject: 'Account Password Reset - Beautex Technical Training College',
             html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #4a154b;">Password Reset Request</h2>
-                    <p>Hello,</p>
-                    <p>We received a request to reset your password. Click the button below to reset it:</p>
-                    <div style="text-align: center; margin: 30px 0;">
-                        <a href="${resetUrl}" style="display: inline-block; background-color: #4a154b; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; color: #1a202c;">
+                    <div style="background-color: #800000; padding: 40px 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">Password Reset</h1>
+                        <p style="color: #ffd700; margin: 10px 0 0; font-size: 14px; font-weight: bold; letter-spacing: 1px;">SECURE CREDENTIAL UPDATE</p>
                     </div>
-                    <p><strong>This link will expire in 1 hour.</strong></p>
-                    <p>If you didn't request a password reset, please ignore this email or contact support if you have concerns.</p>
-                    <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
-                        If the button doesn't work, copy and paste this link into your browser:<br>
-                        <a href="${resetUrl}" style="color: #4a154b; word-break: break-all;">${resetUrl}</a>
-                    </p>
+                    
+                    <div style="padding: 40px;">
+                        <h2 style="color: #800000; margin-top: 0; font-size: 18px;">Hello,</h2>
+                        <p style="line-height: 1.6; color: #4a5568;">Your portal password has been reset by the <strong>Academic Administrator</strong>. Please use the temporary credentials below to access your account.</p>
+                        
+                        <div style="background-color: #f7faf2; border-left: 4px solid #800000; padding: 25px; border-radius: 8px; margin: 30px 0;">
+                            <p style="margin: 0 0 15px 0; font-size: 13px; color: #800000; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">New Access Credentials</p>
+                            <p style="margin: 0; font-size: 15px;"><strong>Official Email:</strong> <span style="color: #2d3748;">${email}</span></p>
+                            <p style="margin: 10px 0 0; font-size: 15px;"><strong>Temporary Password:</strong> <span style="background-color: #800000; color: #ffffff; padding: 2px 8px; border-radius: 4px; font-family: monospace;">${tempPassword}</span></p>
+                        </div>
+                        
+                        <div style="text-align: center; margin: 40px 0;">
+                            <a href="${loginUrl}" style="background-color: #800000; color: #ffffff; padding: 15px 35px; text-decoration: none; border-radius: 12px; font-weight: bold; display: inline-block;">Login to Portal</a>
+                        </div>
+                        
+                        <div style="border-top: 1px solid #edf2f7; padding-top: 25px; margin-top: 20px;">
+                            <p style="font-size: 13px; color: #718096; line-height: 1.6;">
+                                <strong style="color: #e53e3e;">Security Requirement:</strong> You will be required to create a new permanent password immediately after logging in.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             `,
         });
 
-        console.log(`📧 Password reset email sent to ${email}: ${info.messageId}`);
-        if (nodemailer.getTestMessageUrl(info)) {
-            console.log(`🔗 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
-        }
+        console.log(`📧 Admin reset email sent to ${email}: ${info.messageId}`);
         return true;
     } catch (error) {
-        console.error('❌ Failed to send password reset email:', error);
+        console.error('❌ Failed to send admin reset email:', error);
         return false;
     }
 };

@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { getDb, query, queryOne, run } from '../config/database.js';
+import { sendAdminResetPasswordEmail } from '../services/emailService.js';
 
 async function isMongo() {
     const db = await getDb();
@@ -14,7 +16,7 @@ export async function getAllUsers(req, res) {
             return res.json(users);
         }
 
-        const users = await query('SELECT id, email, role, status FROM users ORDER BY email');
+        const users = await query('SELECT id, email, role, status, name, created_at FROM users ORDER BY email');
         res.json(users);
     } catch (error) {
         console.error('Get users error:', error);
@@ -68,19 +70,34 @@ export async function toggleUserStatus(req, res) {
 
 export async function resetUserPassword(req, res) {
     try {
-        const { password } = req.body;
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const userId = req.params.id;
+        const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
-            const user = await User.findByIdAndUpdate(req.params.id, { password: hashedPassword }, { new: true }).select('-password');
+            const user = await User.findById(userId);
             if (!user) return res.status(404).json({ error: 'User not found' });
-            return res.json({ message: 'Password reset successfully' });
+
+            user.password = hashedPassword;
+            user.must_change_password = true;
+            await user.save();
+
+            await sendAdminResetPasswordEmail(user.email, tempPassword);
+            return res.json({ message: 'Password reset — temporary credentials emailed' });
         }
 
-        const result = await run('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, req.params.id]);
-        if (result.changes === 0) return res.status(404).json({ error: 'User not found' });
-        res.json({ message: 'Password reset successfully' });
+        const user = await queryOne('SELECT email FROM users WHERE id = ?', [userId]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        await run('UPDATE users SET password = ?, must_change_password = true WHERE id = ?', [hashedPassword, userId]);
+
+        const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
+        if (!emailSent) {
+            console.warn('⚠️ Email delivery failed but password was reset. Temp password:', tempPassword);
+        }
+
+        res.json({ message: 'Password reset — temporary credentials emailed' });
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
@@ -125,3 +142,40 @@ export async function getAuditLogs(req, res) {
     }
 }
 
+export async function resetPasswordByEmail(req, res) {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required' });
+
+        const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+        if (await isMongo()) {
+            const User = (await import('../models/mongo/User.js')).default;
+            const user = await User.findOne({ email: email.toLowerCase() });
+            if (!user) return res.status(404).json({ error: 'No account found with that email address' });
+
+            user.password = hashedPassword;
+            user.must_change_password = true;
+            await user.save();
+
+            await sendAdminResetPasswordEmail(user.email, tempPassword);
+            return res.json({ message: 'Password reset — temporary credentials emailed' });
+        }
+
+        const user = await queryOne('SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+        if (!user) return res.status(404).json({ error: 'No account found with that email address' });
+
+        await run('UPDATE users SET password = ?, must_change_password = true WHERE id = ?', [hashedPassword, user.id]);
+
+        const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
+        if (!emailSent) {
+            console.warn('⚠️ Email delivery failed but password was reset. Temp password:', tempPassword);
+        }
+
+        res.json({ message: 'Password reset — temporary credentials emailed' });
+    } catch (error) {
+        console.error('Reset password by email error:', error);
+        res.status(500).json({ error: 'Failed to reset password' });
+    }
+}

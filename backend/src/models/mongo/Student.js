@@ -42,7 +42,9 @@ const studentSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
-    completion_date: Date
+    completion_date: Date,
+    bio: String,
+    phone: String
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });

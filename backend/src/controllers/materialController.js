@@ -2,22 +2,79 @@ import { query, queryOne, run } from '../config/database.js';
 
 export async function getMaterials(req, res) {
     try {
+        const { role, email } = req.user;
         const { courseId } = req.query;
-        let materials;
-        if (courseId) {
-            materials = await query(
-                'SELECT m.*, c.name as course_name FROM course_materials m LEFT JOIN courses c ON m.course_id = c.id WHERE m.course_id = ? ORDER BY m.created_at DESC',
-                [courseId]
-            );
-        } else {
-            materials = await query(`
+
+        // Admin and Superadmin see everything
+        if (role === 'admin' || role === 'superadmin') {
+            let sql = `SELECT m.*, c.name as course_name FROM course_materials m LEFT JOIN courses c ON m.course_id = c.id`;
+            let params = [];
+            if (courseId) {
+                sql += ` WHERE m.course_id = ?`;
+                params.push(courseId);
+            }
+            sql += ` ORDER BY m.created_at DESC`;
+            const materials = await query(sql, params);
+            return res.json(materials);
+        }
+
+        // Teachers see materials for their courses
+        if (role === 'teacher') {
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+            if (!faculty) return res.json([]);
+
+            let coursesList = [];
+            try {
+                coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+            } catch (e) { }
+
+            const placeholders = coursesList.length > 0 ? coursesList.map(() => '?').join(',') : "''";
+            const tutorCourses = await query(`
+                SELECT id FROM courses 
+                WHERE instructor = ? OR name IN (${placeholders})
+            `, [faculty.name, ...coursesList]);
+            const validCourseIds = tutorCourses.map(c => String(c.id));
+
+            if (validCourseIds.length === 0) return res.json([]);
+
+            let sql = `
                 SELECT m.*, c.name as course_name 
                 FROM course_materials m 
                 LEFT JOIN courses c ON m.course_id = c.id 
-                ORDER BY m.created_at DESC
-            `);
+                WHERE m.course_id IN (${validCourseIds.map(() => '?').join(',')})
+            `;
+            let params = [...validCourseIds];
+
+            if (courseId) {
+                if (validCourseIds.includes(String(courseId))) {
+                    sql += ` AND m.course_id = ?`;
+                    params.push(courseId);
+                } else {
+                    return res.json([]); // Unauthorized access to this course's materials
+                }
+            }
+
+            sql += ` ORDER BY m.created_at DESC`;
+            const materials = await query(sql, params);
+            return res.json(materials);
         }
-        res.json(materials);
+
+        // Students see materials for their enrolled course
+        if (role === 'student') {
+            const student = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
+            if (!student) return res.json([]);
+
+            const course = await queryOne('SELECT id FROM courses WHERE name = ?', [student.course]);
+            if (!course) return res.json([]);
+
+            const materials = await query(
+                'SELECT m.*, c.name as course_name FROM course_materials m LEFT JOIN courses c ON m.course_id = c.id WHERE m.course_id = ? ORDER BY m.created_at DESC',
+                [course.id]
+            );
+            return res.json(materials);
+        }
+
+        res.json([]);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

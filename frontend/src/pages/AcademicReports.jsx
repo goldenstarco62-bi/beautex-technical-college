@@ -126,9 +126,10 @@ export default function AcademicReports() {
         setShowModal(true);
     };
 
-    const attendancePct = (r) => r.total_lessons > 0
-        ? ((r.attended_lessons / r.total_lessons) * 100).toFixed(0)
-        : 0;
+    const attendancePct = (r) => {
+        if (!r.total_lessons || r.total_lessons <= 0) return '—';
+        return ((r.attended_lessons / r.total_lessons) * 100).toFixed(0) + '%';
+    };
 
     if (loading) return <div className="p-10 text-maroon font-black animate-pulse uppercase tracking-widest">Compiling Academic Data...</div>;
 
@@ -190,8 +191,8 @@ export default function AcademicReports() {
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
                                     <span className={`px-3 py-1 rounded-full font-black text-[8px] uppercase tracking-widest border ${report.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' :
-                                            report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' :
-                                                'bg-red-50 border-red-200 text-red-600'
+                                        report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' :
+                                            'bg-red-50 border-red-200 text-red-600'
                                         }`}>
                                         {report.recommendation}
                                     </span>
@@ -216,7 +217,7 @@ export default function AcademicReports() {
                             {/* Metrics */}
                             <div className="grid grid-cols-3 gap-3 mb-5">
                                 <div className="bg-maroon/3 rounded-xl p-3 border border-maroon/5 text-center">
-                                    <p className="text-lg font-black text-maroon">{attendancePct(report)}%</p>
+                                    <p className="text-lg font-black text-maroon">{attendancePct(report)}</p>
                                     <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Attendance</p>
                                 </div>
                                 <div className="bg-maroon/3 rounded-xl p-3 border border-maroon/5 text-center">
@@ -311,6 +312,13 @@ export default function AcademicReports() {
                                     <input type="number" min="0" max={formData.total_lessons} value={formData.attended_lessons}
                                         onChange={(e) => setFormData({ ...formData, attended_lessons: parseInt(e.target.value) })}
                                         className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Attendance % (Auto)</label>
+                                    <div className="w-full px-5 py-4 bg-maroon/5 border border-maroon/10 rounded-2xl text-maroon font-black flex items-center justify-between">
+                                        <span>{formData.total_lessons > 0 ? ((formData.attended_lessons / formData.total_lessons) * 100).toFixed(1) + '%' : '—'}</span>
+                                        <ShieldCheck className="w-4 h-4 text-maroon/20" />
+                                    </div>
                                 </div>
                             </div>
 

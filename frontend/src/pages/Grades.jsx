@@ -1,16 +1,22 @@
 import { useEffect, useState } from 'react';
-import { gradesAPI, coursesAPI, studentsAPI } from '../services/api';
+import { gradesAPI, coursesAPI, studentsAPI, reportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Search, TrendingUp, Download, Plus, X, Edit, Trash2, Calendar, BookOpen, User } from 'lucide-react';
+import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History } from 'lucide-react';
 
 export default function Grades() {
     const { user } = useAuth();
+    const isStudent = (user?.role ? String(user.role).toLowerCase() : '') === 'student';
+    const canManage = ['admin', 'superadmin', 'teacher'].includes(user?.role?.toLowerCase());
+
     const [courses, setCourses] = useState([]);
     const [students, setStudents] = useState([]);
     const [grades, setGrades] = useState([]);
+    const [allRecords, setAllRecords] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingGrade, setEditingGrade] = useState(null);
+    const [viewType, setViewType] = useState('CAT'); // 'CAT' or 'REPORTS'
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [formData, setFormData] = useState({
         student_id: '',
@@ -30,46 +36,51 @@ export default function Grades() {
     const assignments = ['CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6', 'Final Exam', 'Practical Assessment'];
 
     useEffect(() => {
-        fetchInitialData();
-    }, []);
+        if (!user) return;
+        const load = async () => {
+            setLoading(true);
+            try {
+                await fetchInitialData();
+                await fetchGrades();
+            } finally {
+                setLoading(false);
+            }
+        };
+        load();
+    }, [user?.id]);
 
     const fetchInitialData = async () => {
         try {
-            setLoading(true);
             const [{ data: coursesData }, { data: studentsData }] = await Promise.all([
-                coursesAPI.getAll(),
-                studentsAPI.getAll()
+                coursesAPI.getAll().catch(() => ({ data: [] })),
+                studentsAPI.getAll().catch(() => ({ data: [] }))
             ]);
-            setCourses(coursesData);
-            setStudents(studentsData);
+            setCourses(coursesData || []);
+            setStudents(studentsData || []);
         } catch (error) {
             console.error('Error fetching initial data:', error);
-        } finally {
-            setLoading(false);
         }
     };
 
-    const [allRecords, setAllRecords] = useState([]);
-    const [viewType, setViewType] = useState('CAT'); // 'CAT' or 'REPORTS'
-
-    useEffect(() => {
-        fetchInitialData();
-    }, []);
-
     const fetchGrades = async () => {
         try {
-            const [{ data: gradesData }, { data: reportsData }] = await Promise.all([
-                gradesAPI.getAll(),
-                reportsAPI.getAll()
+            const [gradesRes, reportsRes] = await Promise.all([
+                gradesAPI.getAll().catch(err => { console.error('Grades fetch error:', err); return { data: [] }; }),
+                !isStudent ? reportsAPI.getAll().catch(err => { console.error('Reports fetch error:', err); return { data: [] }; }) : Promise.resolve({ data: [] })
             ]);
+
+            const gradesData = (gradesRes && gradesRes.data) ? (Array.isArray(gradesRes.data) ? gradesRes.data : []) : [];
+            const reportsData = (reportsRes && reportsRes.data) ? (Array.isArray(reportsRes.data) ? reportsRes.data : []) : [];
+
+            console.log(`📦 Academic Registry: ${gradesData.length} marks, ${reportsData.length} reports for role: ${user?.role}`);
 
             const monthOrder = {
                 'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
                 'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
             };
 
-            // Process Grades
-            const filteredGrades = user?.role === 'student'
+            // Student isolation (frontend filter for extra security)
+            const filteredGrades = isStudent
                 ? gradesData.filter(g => {
                     const gradeSid = String(g.student_id || '').trim().toLowerCase();
                     const userSid = String(user?.student_id || '').trim().toLowerCase();
@@ -84,19 +95,10 @@ export default function Grades() {
                 return monthB - monthA;
             });
 
-            // Process Reports
-            const filteredReports = user?.role === 'student'
-                ? (reportsData || []).filter(r => {
-                    const rSid = String(r.student_id || '').trim().toLowerCase();
-                    const userSid = String(user?.student_id || '').trim().toLowerCase();
-                    return rSid === userSid;
-                })
-                : (reportsData || []);
-
             setGrades(sortedGrades);
-            setAllRecords(filteredReports);
+            setAllRecords(reportsData);
         } catch (error) {
-            console.error('Error fetching data:', error);
+            console.error('Error in fetchGrades sequence:', error);
         }
     };
 
@@ -155,6 +157,29 @@ export default function Grades() {
         });
     };
 
+    const filteredGradesDisplay = grades.filter(g => {
+        const student = students.find(s => String(s.id).trim().toLowerCase() === String(g.student_id).trim().toLowerCase());
+        const studentName = (student?.name || g.student_name || '').toLowerCase();
+        const search = searchTerm.toLowerCase().trim();
+        return studentName.includes(search) ||
+            String(g.student_id).toLowerCase().includes(search) ||
+            String(g.course).toLowerCase().includes(search) ||
+            String(g.assignment).toLowerCase().includes(search);
+    });
+
+    const filteredReportsDisplay = allRecords.filter(r => {
+        const search = searchTerm.toLowerCase().trim();
+        return (r.student_name || '').toLowerCase().includes(search) ||
+            (r.student_id || '').toLowerCase().includes(search) ||
+            (r.course_unit || '').toLowerCase().includes(search);
+    });
+
+    const stats = {
+        average: grades.length > 0
+            ? Math.round((grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / grades.length) * 100)
+            : 0
+    };
+
     if (loading) return (
         <div className="flex items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
@@ -163,15 +188,6 @@ export default function Grades() {
             </div>
         </div>
     );
-
-    const isStudent = user?.role === 'student';
-    const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'teacher';
-
-    const stats = {
-        average: grades.length > 0
-            ? Math.round((grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / grades.length) * 100)
-            : 0
-    };
 
     return (
         <div className="max-w-7xl mx-auto space-y-10 py-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
@@ -191,14 +207,23 @@ export default function Grades() {
                     </p>
                 </div>
 
-                {canManage && (
+                <div className="flex gap-4">
                     <button
-                        onClick={() => { resetForm(); setEditingGrade(null); setShowModal(true); }}
-                        className="bg-white text-black px-8 py-4 rounded-2xl flex items-center gap-3 hover:bg-black hover:text-white transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-black/5"
+                        onClick={() => { fetchInitialData(); fetchGrades(); }}
+                        className="bg-white text-maroon p-4 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-xl border border-maroon/10 group"
+                        title="Refresh Registry"
                     >
-                        <Plus className="w-5 h-5 text-maroon" /> Record CAT Result
+                        <History className="w-5 h-5 group-hover:rotate-90 transition-transform" />
                     </button>
-                )}
+                    {canManage && (
+                        <button
+                            onClick={() => { resetForm(); setEditingGrade(null); setShowModal(true); }}
+                            className="bg-maroon text-gold px-8 py-4 rounded-2xl flex items-center gap-3 hover:bg-elite-maroon transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-black/5"
+                        >
+                            <Plus className="w-5 h-5" /> Record CAT Result
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Performance Overview (Student Only) */}
@@ -234,32 +259,38 @@ export default function Grades() {
                 </div>
             )}
 
-            {/* Registry Toggle & Filter */}
-            <div className="bg-white rounded-[3rem] border border-black/5 shadow-2xl overflow-hidden">
-                <div className="p-10 border-b border-black/5 flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex bg-gray-50 p-2 rounded-2xl gap-2">
+            {/* Registry Card */}
+            <div className="card-light overflow-hidden shadow-2xl border border-maroon/5 min-h-[500px]">
+                <div className="bg-maroon/[0.02] px-10 py-8 border-b border-black/5 flex flex-col md:flex-row justify-between items-center gap-8">
+                    <div className="flex bg-black/[0.03] p-1.5 rounded-2xl">
                         <button
                             onClick={() => setViewType('CAT')}
                             className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'CAT' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
                         >
-                            CAT Marks
+                            CAT Marks ({filteredGradesDisplay.length})
                         </button>
-                        <button
-                            onClick={() => setViewType('REPORTS')}
-                            className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'REPORTS' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
-                        >
-                            Evaluation Reports
-                        </button>
+                        {!isStudent && (
+                            <button
+                                onClick={() => setViewType('REPORTS')}
+                                className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'REPORTS' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
+                            >
+                                Evaluation Reports ({filteredReportsDisplay.length})
+                            </button>
+                        )}
                     </div>
                     <div>
                         <h3 className="text-2xl font-black text-black uppercase tracking-tight">Official Results Registry</h3>
-                        <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">Verified Academic Records</p>
+                        <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">
+                            {viewType === 'CAT' ? `Archive contains ${grades.length} marks` : `Archive contains ${allRecords.length} evaluations`}
+                        </p>
                     </div>
                     <div className="flex items-center gap-4 bg-white border border-black/5 p-2 px-6 rounded-2xl shadow-sm">
                         <Search className="w-4 h-4 text-maroon" />
                         <input
                             type="text"
-                            placeholder="Filter results..."
+                            placeholder="Search by name or course..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
                             className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-48"
                         />
                     </div>
@@ -267,117 +298,133 @@ export default function Grades() {
 
                 <div className="overflow-x-auto">
                     {viewType === 'CAT' ? (
-                        <table className="w-full">
-                            <thead>
-                                <tr className="bg-black/[0.01]">
-                                    <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Student Detail</th>
-                                    <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAT & Period</th>
-                                    <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Marks</th>
-                                    <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Performance Remarks</th>
-                                    {canManage && <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Action</th>}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-black/5">
-                                {grades.map((grade) => (
-                                    <tr key={grade.id} className="hover:bg-maroon/[0.02] transition-colors group">
-                                        <td className="px-10 py-8">
-                                            <div className="flex items-center gap-5">
-                                                <div>
-                                                    <p className="text-sm font-black text-black uppercase tracking-tight">
-                                                        {students.find(s => s.id === grade.student_id)?.name || grade.student_name || 'Unknown Student'}
-                                                    </p>
-                                                    <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{grade.student_id}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <div>
-                                                <p className="text-sm font-black text-black uppercase tracking-tight">{grade.assignment}</p>
-                                                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{grade.month || '-'}</p>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8 text-center">
-                                            <div className="inline-block px-5 py-2 bg-white text-black rounded-xl font-black text-lg shadow-xl border border-black/5">
-                                                {Math.round((grade.score / (grade.max_score || 100)) * 100)}%
-                                                <span className="block text-[8px] text-black/30 uppercase tracking-widest leading-none mt-1">
-                                                    {grade.score} / {grade.max_score || 100}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <div className="max-w-xs">
-                                                <p className="text-xs font-bold text-black/60 italic leading-relaxed">
-                                                    {grade.remarks ? `"${grade.remarks}"` : 'No official remarks provided.'}
-                                                </p>
-                                            </div>
-                                        </td>
-                                        {canManage && (
-                                            <td className="px-10 py-8">
-                                                <div className="flex justify-center gap-3">
-                                                    <button onClick={() => handleEdit(grade)} className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon">
-                                                        <Edit className="w-4 h-4" />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(grade.id)} className="p-3 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon hover:border-red-600">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        )}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                        <>
+                            {filteredGradesDisplay.length > 0 ? (
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="bg-black/[0.01]">
+                                            <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Student Detail</th>
+                                            <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAT & Period</th>
+                                            <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Marks</th>
+                                            <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Performance Remarks</th>
+                                            {canManage && <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Action</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-black/5">
+                                        {filteredGradesDisplay.map((grade) => (
+                                            <tr key={grade.id} className="hover:bg-maroon/[0.02] transition-colors group">
+                                                <td className="px-10 py-8">
+                                                    <div className="flex items-center gap-5">
+                                                        <div>
+                                                            <p className="text-sm font-black text-black uppercase tracking-tight">
+                                                                {students.find(s => String(s.id).trim().toLowerCase() === String(grade.student_id).trim().toLowerCase())?.name || grade.student_name || 'Unknown Student'}
+                                                            </p>
+                                                            <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{grade.student_id}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8">
+                                                    <div>
+                                                        <p className="text-sm font-black text-black uppercase tracking-tight">{grade.assignment}</p>
+                                                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{grade.month || '-'}</p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8 text-center">
+                                                    <div className="inline-block px-5 py-2 bg-white text-black rounded-xl font-black text-lg shadow-xl border border-black/5">
+                                                        {Math.round((grade.score / (grade.max_score || 100)) * 100)}%
+                                                        <span className="block text-[8px] text-black/30 uppercase tracking-widest leading-none mt-1">
+                                                            {grade.score} / {grade.max_score || 100}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8">
+                                                    <div className="max-w-xs">
+                                                        <p className="text-xs font-bold text-black/60 italic leading-relaxed">
+                                                            {grade.remarks ? `"${grade.remarks}"` : 'No official remarks provided.'}
+                                                        </p>
+                                                    </div>
+                                                </td>
+                                                {canManage && (
+                                                    <td className="px-10 py-8">
+                                                        <div className="flex justify-center gap-3">
+                                                            <button onClick={() => handleEdit(grade)} className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon">
+                                                                <Edit className="w-4 h-4" />
+                                                            </button>
+                                                            <button onClick={() => handleDelete(grade.id)} className="p-3 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon hover:border-red-600">
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="py-24 text-center">
+                                    <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No matching assessment records found in the registry.</p>
+                                </div>
+                            )}
+                        </>
                     ) : (
-                        <table className="w-full">
-                            <thead>
-                                <tr className="bg-black/[0.01]">
-                                    <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Student Detail</th>
-                                    <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Period</th>
-                                    <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAS Score</th>
-                                    <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Trainer Observations</th>
-                                    <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Recommendation</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-black/5">
-                                {allRecords.map((report) => (
-                                    <tr key={report.id} className="hover:bg-gold/[0.02] transition-colors group">
-                                        <td className="px-10 py-8">
-                                            <div>
-                                                <p className="text-sm font-black text-black uppercase tracking-tight">{report.student_name}</p>
-                                                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{report.student_id}</p>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <div>
-                                                <p className="text-sm font-black text-black uppercase tracking-tight">{report.reporting_period}</p>
-                                                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{new Date(report.created_at).toLocaleDateString()}</p>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8 text-center">
-                                            <div className="inline-block px-5 py-2 bg-white text-black rounded-xl font-black text-lg shadow-xl border border-black/5">
-                                                {Math.round(report.theory_score)}%
-                                                <span className="block text-[8px] text-black/30 uppercase tracking-widest leading-none mt-1">Theory CAS</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8">
-                                            <div className="max-w-xs">
-                                                <p className="text-xs font-bold text-black/60 italic leading-relaxed line-clamp-2">
-                                                    {report.trainer_observations || 'No observations documented.'}
-                                                </p>
-                                            </div>
-                                        </td>
-                                        <td className="px-10 py-8 text-center">
-                                            <span className={`px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest border ${report.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' :
-                                                    report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' :
-                                                        'bg-red-50 border-red-200 text-red-600'
-                                                }`}>
-                                                {report.recommendation}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                        <>
+                            {filteredReportsDisplay.length > 0 ? (
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="bg-black/[0.01]">
+                                            <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Student Detail</th>
+                                            <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Period</th>
+                                            <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAS Score</th>
+                                            <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Trainer Observations</th>
+                                            <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Recommendation</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-black/5">
+                                        {filteredReportsDisplay.map((report) => (
+                                            <tr key={report.id} className="hover:bg-gold/[0.02] transition-colors group">
+                                                <td className="px-10 py-8">
+                                                    <div>
+                                                        <p className="text-sm font-black text-black uppercase tracking-tight">{report.student_name}</p>
+                                                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{report.student_id}</p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8">
+                                                    <div>
+                                                        <p className="text-sm font-black text-black uppercase tracking-tight">{report.reporting_period}</p>
+                                                        <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{new Date(report.created_at).toLocaleDateString()}</p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8 text-center">
+                                                    <div className="inline-block px-5 py-2 bg-white text-black rounded-xl font-black text-lg shadow-xl border border-black/5">
+                                                        {Math.round(report.theory_score)}%
+                                                        <span className="block text-[8px] text-black/30 uppercase tracking-widest leading-none mt-1">Theory CAS</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8">
+                                                    <div className="max-w-xs">
+                                                        <p className="text-xs font-bold text-black/60 italic leading-relaxed line-clamp-2">
+                                                            {report.trainer_observations || 'No observations documented.'}
+                                                        </p>
+                                                    </div>
+                                                </td>
+                                                <td className="px-10 py-8 text-center">
+                                                    <span className={`px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest border ${report.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' :
+                                                        report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' :
+                                                            'bg-red-50 border-red-200 text-red-600'
+                                                        }`}>
+                                                        {report.recommendation}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="py-24 text-center">
+                                    <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No matching evaluation reports found in the archive.</p>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
-import { studentsAPI } from '../services/api';
-import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart } from 'lucide-react';
+import { studentsAPI, usersAPI } from '../services/api';
+import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import IDCard from '../components/shared/IDCard';
+import { useAuth } from '../context/AuthContext';
 
 export default function Students() {
     const navigate = useNavigate();
+    const { user: currentUser } = useAuth();
     const [students, setStudents] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [showModal, setShowModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(null);
     const [editingStudent, setEditingStudent] = useState(null);
+    const [resetLoading, setResetLoading] = useState(false);
     const [formData, setFormData] = useState({
         id: '', name: '', email: '', course: '', intake: 'January Intake',
         gpa: 0, status: 'Active', contact: '',
@@ -124,10 +128,33 @@ export default function Students() {
         }, 500);
     };
 
+    const handleResetPassword = async (student) => {
+        if (!window.confirm(`Reset password for ${student.name}?\n\nA new temporary password will be generated and sent to:\n📧 ${student.email}\n\nThe student will be required to change it on next login.`)) return;
+
+        setResetLoading(true);
+        try {
+            await usersAPI.resetByEmail(student.email);
+            alert(`✅ Password reset successful!\n\nA temporary password has been sent to:\n📧 ${student.email}\n\nThe student must change it on next login.`);
+        } catch (error) {
+            const msg = error.response?.data?.error || 'Failed to reset password. Please try again.';
+            alert(msg);
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
     const courses = [
         'Cosmetology', 'Beauty Therapy', 'Catering', 'Computer Packages', 'Website Development', 'Cyber Security',
         'Makeup', 'Sista Locks', 'Braiding, Plaiting & Crotcheting', 'Weaving & Wig Installation', 'Nail Technology'
     ];
+
+    const canResetPassword = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
+
+    const getStatusColor = (status) => {
+        if (status === 'Active') return 'text-green-600 bg-green-50 border-green-200';
+        if (status === 'Graduated') return 'text-blue-600 bg-blue-50 border-blue-200';
+        return 'text-gray-500 bg-gray-50 border-gray-200';
+    };
 
     return (
         <div className="space-y-6">
@@ -217,15 +244,24 @@ export default function Students() {
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-parchment-200 border border-maroon/10 overflow-hidden flex items-center justify-center">
+                                            <button
+                                                onClick={() => setShowProfileModal(student)}
+                                                className="w-10 h-10 rounded-full bg-parchment-200 border border-maroon/10 overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-maroon/30 transition-all"
+                                                title="View Full Profile"
+                                            >
                                                 {student.photo ? (
                                                     <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
                                                 ) : (
-                                                    <span className="text-[10px] font-black text-maroon/20">{student.name?.[0]}</span>
+                                                    <span className="text-[10px] font-black text-maroon/40">{student.name?.[0]}</span>
                                                 )}
-                                            </div>
+                                            </button>
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-gray-800">{student.name}</span>
+                                                <button
+                                                    onClick={() => setShowProfileModal(student)}
+                                                    className="text-sm font-bold text-gray-800 hover:text-maroon transition-colors text-left"
+                                                >
+                                                    {student.name}
+                                                </button>
                                                 <span className="text-[10px] text-gray-400 font-medium">{student.email}</span>
                                             </div>
                                         </div>
@@ -242,10 +278,14 @@ export default function Students() {
                                         {student.contact || 'No contact'}
                                     </td>
                                     <td className="px-6 py-5">
-                                        <div className="flex gap-3">
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setShowProfileModal(student)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Profile"><Eye className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => navigate(`/reports?studentId=${student.id}`)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Academic Reports"><FileBarChart className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => handlePrintID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Print ID Card"><Printer className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => handleEdit(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg"><Edit className="w-3.5 h-3.5" /></button>
+                                            {canResetPassword && (
+                                                <button onClick={() => handleResetPassword(student)} className="p-2 text-primary/20 hover:text-amber-600 transition-colors border border-gray-100 rounded-lg" title="Reset Password"><Key className="w-3.5 h-3.5" /></button>
+                                            )}
                                             <button onClick={() => handleDelete(student.id)} className="p-2 text-primary/10 hover:text-red-600 transition-colors border border-gray-100 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
                                     </td>
@@ -256,7 +296,109 @@ export default function Students() {
                 </div>
             </div>
 
-            {/* Modal */}
+            {/* Student Profile Modal */}
+            {showProfileModal && (
+                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
+                    <div className="bg-white rounded-3xl max-w-2xl w-full border border-maroon/10 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col">
+                        {/* Header Band */}
+                        <div className="bg-maroon px-8 pt-8 pb-16 relative overflow-hidden shrink-0">
+                            <div className="absolute top-0 right-0 w-48 h-48 bg-gold/10 rounded-full -mr-24 -mt-24"></div>
+                            <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -ml-16 -mb-16"></div>
+                            <button onClick={() => setShowProfileModal(null)} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10">
+                                <X className="w-5 h-5 text-white" />
+                            </button>
+                            <div className="relative z-10 flex items-end gap-5">
+                                <div className="w-20 h-20 rounded-2xl bg-white/10 border-2 border-gold/40 flex items-center justify-center text-gold text-2xl font-black overflow-hidden shadow-2xl shrink-0">
+                                    {showProfileModal.photo
+                                        ? <img src={showProfileModal.photo} alt={showProfileModal.name} className="w-full h-full object-cover" />
+                                        : <span>{showProfileModal.name?.[0]?.toUpperCase()}</span>
+                                    }
+                                </div>
+                                <div className="pb-1">
+                                    <h2 className="text-xl font-black text-white tracking-tight">{showProfileModal.name}</h2>
+                                    <p className="text-gold text-[10px] font-black uppercase tracking-widest mt-1">
+                                        BT{showProfileModal.id?.toString().padStart(7, '0')} · {showProfileModal.course}
+                                    </p>
+                                    <span className={`inline-block mt-2 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border ${showProfileModal.status === 'Active' ? 'bg-green-500/20 text-green-200 border-green-400/30' : 'bg-white/10 text-white border-white/20'}`}>
+                                        {showProfileModal.status || 'Active'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Details */}
+                        <div className="px-8 py-6 -mt-6 relative z-10 overflow-y-auto custom-scrollbar">
+                            <div className="bg-white rounded-2xl border border-maroon/8 shadow-lg p-6 grid grid-cols-2 gap-5 mb-5">
+                                {[
+                                    { icon: Mail, label: 'Email Address', value: showProfileModal.email },
+                                    { icon: Phone, label: 'Contact Number', value: showProfileModal.contact || 'Not listed' },
+                                    { icon: BookOpen, label: 'Course / Programme', value: showProfileModal.course },
+                                    { icon: Calendar, label: 'Intake / Semester', value: showProfileModal.intake || showProfileModal.semester || 'N/A' },
+                                    { icon: User, label: 'Date of Birth', value: showProfileModal.dob ? new Date(showProfileModal.dob).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
+                                    { icon: Shield, label: 'Cumulative GPA', value: showProfileModal.gpa ?? 'N/A' },
+                                    { icon: MapPin, label: 'Address', value: showProfileModal.address || 'Not provided' },
+                                    { icon: Calendar, label: 'Enrollment Date', value: showProfileModal.enrolled_date ? new Date(showProfileModal.enrolled_date).toLocaleDateString('en-GB') : 'N/A' },
+                                ].map(({ icon: Icon, label, value }) => (
+                                    <div key={label} className="flex items-start gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-maroon/5 flex items-center justify-center shrink-0 mt-0.5">
+                                            <Icon className="w-3.5 h-3.5 text-maroon/40" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">{label}</p>
+                                            <p className="text-sm font-bold text-maroon mt-0.5">{value}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Guardian Info */}
+                            {(showProfileModal.guardian_name || showProfileModal.guardian_contact) && (
+                                <div className="bg-maroon/3 rounded-2xl p-5 border border-maroon/8 mb-5">
+                                    <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-3">Guardian Information</p>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-[9px] text-maroon/30 uppercase tracking-widest font-bold">Name</p>
+                                            <p className="text-sm font-bold text-maroon mt-0.5">{showProfileModal.guardian_name || 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] text-maroon/30 uppercase tracking-widest font-bold">Contact</p>
+                                            <p className="text-sm font-bold text-maroon mt-0.5">{showProfileModal.guardian_contact || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setShowProfileModal(null); handleEdit(showProfileModal); }}
+                                    className="flex-1 py-3 bg-maroon text-gold rounded-xl font-black text-xs uppercase tracking-widest hover:bg-maroon/90 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Edit className="w-4 h-4" /> Edit Profile
+                                </button>
+                                {canResetPassword && (
+                                    <button
+                                        onClick={() => handleResetPassword(showProfileModal)}
+                                        disabled={resetLoading}
+                                        className="flex-1 py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-amber-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                    >
+                                        <Key className="w-4 h-4" />
+                                        {resetLoading ? 'Sending...' : 'Reset Password'}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => { setShowProfileModal(null); navigate(`/reports?studentId=${showProfileModal.id}`); }}
+                                    className="py-3 px-4 bg-gray-50 text-gray-600 border border-gray-200 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <FileBarChart className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-maroon-950/60 backdrop-blur-xl flex items-center justify-center p-4 z-[100]">
                     <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-12 max-w-2xl w-full shadow-3xl border border-maroon/10 scale-in-center overflow-hidden relative">

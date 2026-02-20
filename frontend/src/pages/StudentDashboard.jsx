@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { BookOpen, Award, Clock, Zap, FileText, UserCheck, GraduationCap, CreditCard, FileStack } from 'lucide-react';
 import { coursesAPI, gradesAPI, announcementsAPI, attendanceAPI, studentsAPI, reportsAPI } from '../services/api';
 import api from '../services/api';
@@ -30,13 +31,12 @@ export default function StudentDashboard() {
     const fetchData = async () => {
         try {
             // 1. Fetch all data needed
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, reportsRes, feeRes] = await Promise.all([
+            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 announcementsAPI.getAll(),
                 gradesAPI.getAll(),
-                reportsAPI.getAll(),
-                api.get(`/finance/student-fees/${user.studentId || user.id}`).catch(() => ({ data: null }))
+                api.get(`/finance/student-fees/${user.student_id || user.id}`).catch(() => ({ data: null }))
             ]);
 
 
@@ -46,8 +46,14 @@ export default function StudentDashboard() {
             setStudentFee(feeRes.data);
 
 
-            // 3. Process Performance (Grades + Reports)
-            const myGrades = (gradesRes.data || []).map(g => ({
+            // 3. Process Performance (Grades + Reports) - Explicitly filter for security
+            const myGrades = (gradesRes.data || []).filter(g => {
+                const gradeSid = String(g.student_id || '').trim().toLowerCase();
+                const userSid = String(user?.student_id || '').trim().toLowerCase();
+                const userEmail = String(user?.email || '').trim().toLowerCase();
+                // Match by student ID or by email if student ID is missing in record
+                return gradeSid === userSid || (g.email && g.email.toLowerCase() === userEmail);
+            }).map(g => ({
                 ...g,
                 type: 'CAT',
                 displayDate: g.month,
@@ -55,18 +61,7 @@ export default function StudentDashboard() {
                 rawDate: g.created_at
             }));
 
-            const myReports = (reportsRes.data || []).map(r => ({
-                ...r,
-                type: 'Evaluation',
-                assignment: `Report: ${r.reporting_period}`,
-                score: r.theory_score,
-                max_score: 100,
-                displayDate: r.reporting_period,
-                performance: r.trainer_observations,
-                rawDate: r.created_at
-            }));
-
-            const mergedPerformance = [...myGrades, ...myReports].sort((a, b) =>
+            const mergedPerformance = [...myGrades].sort((a, b) =>
                 new Date(b.rawDate) - new Date(a.rawDate)
             );
 
@@ -156,9 +151,9 @@ export default function StudentDashboard() {
                                             <h3 className="text-2xl font-black text-white mb-2">{courseDetails.name}</h3>
                                             <p className="text-sm text-white/50 font-medium">Instructor: {courseDetails.instructor} • {courseDetails.room}</p>
                                         </div>
-                                        <a href="/grades" className="bg-gold text-maroon px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center">
+                                        <Link to="/grades" className="bg-gold text-maroon px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center">
                                             View All Results
-                                        </a>
+                                        </Link>
                                     </div>
                                     <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-3 gap-4">
                                         <div>
@@ -181,11 +176,15 @@ export default function StudentDashboard() {
                         </div>
                     </div>
 
-                    {/* Recent Performance Table */}
                     <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Recent Performance</h2>
-                            <Award className="w-5 h-5 text-maroon" />
+                            <div className="flex items-center gap-2">
+                                <Award className="w-5 h-5 text-maroon" />
+                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Recent Performance</h2>
+                            </div>
+                            <Link to="/grades" className="text-[10px] font-black text-maroon hover:underline uppercase tracking-widest bg-maroon/5 px-4 py-2 rounded-xl transition-all">
+                                View Full Grade
+                            </Link>
                         </div>
                         {recentGrades.length > 0 ? (
                             <div className="overflow-x-auto">
@@ -237,18 +236,18 @@ export default function StudentDashboard() {
 
                     {/* Quick Student Actions */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <a href="/grades" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+                        <Link to="/grades" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
                             <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 transition-colors">
                                 <FileText className="w-6 h-6 text-blue-600 group-hover:text-white" />
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Grades</span>
-                        </a>
-                        <a href="/attendance" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+                        </Link>
+                        <Link to="/attendance" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
                             <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center group-hover:bg-green-600 transition-colors">
                                 <Clock className="w-6 h-6 text-green-600 group-hover:text-white" />
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Absences</span>
-                        </a>
+                        </Link>
                         <button className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
                             <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center group-hover:bg-purple-600 transition-colors">
                                 <Zap className="w-6 h-6 text-purple-600 group-hover:text-white" />

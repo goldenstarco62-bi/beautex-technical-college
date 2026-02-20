@@ -13,7 +13,7 @@ export async function getDashboardStats(req, res) {
             queryOne('SELECT COUNT(*) as count FROM students'),
             queryOne('SELECT COUNT(*) as count FROM courses'),
             queryOne('SELECT COUNT(*) as count FROM faculty'),
-            queryOne('SELECT AVG(CASE WHEN status = "Present" THEN 1.0 ELSE 0.0 END) * 100 as avg FROM attendance'),
+            queryOne("SELECT AVG(CASE WHEN status = 'Present' THEN 1.0 ELSE 0.0 END) * 100 as avg FROM attendance"),
             query('SELECT enrolled_date as date, COUNT(*) as count FROM students GROUP BY enrolled_date ORDER BY enrolled_date DESC LIMIT 7'),
             query('SELECT department as name, COUNT(*) as value FROM students GROUP BY department') // This might need a join or department field in students
         ]);
@@ -32,7 +32,7 @@ export async function getDashboardStats(req, res) {
                 students: studentCount.count,
                 courses: courseCount.count,
                 faculty: facultyCount.count,
-                attendance: Math.round(attendanceAvg.avg || 0 * 10) / 10
+                attendance: Math.round((attendanceAvg.avg || 0) * 10) / 10
             },
             recentEnrollments: recentEnrollments.map(r => ({ date: r.date, count: r.count })),
             courseDistribution: distribution

@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'teacher', 'student')),
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
   photo TEXT,
+  phone TEXT,
+  address TEXT,
+  bio TEXT,
   must_change_password BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -29,6 +32,8 @@ CREATE TABLE IF NOT EXISTS students (
   blood_group TEXT,
   enrolled_date DATE DEFAULT CURRENT_DATE,
   completion_date DATE,
+  bio TEXT,
+  phone TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -61,6 +66,9 @@ CREATE TABLE IF NOT EXISTS faculty (
   contact TEXT,
   passport TEXT,
   photo TEXT,
+  address TEXT,
+  bio TEXT,
+  phone TEXT,
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -135,12 +143,12 @@ CREATE TABLE IF NOT EXISTS trainer_reports (
   theory_remarks TEXT,
   practical_tasks TEXT,
   equipment_used TEXT,
-  skill_level TEXT CHECK(skill_level IN ('Excellent', 'Good', 'Fair', 'Poor')),
-  safety_compliance TEXT CHECK(safety_compliance IN ('Yes', 'No')),
+  skill_level TEXT,
+  safety_compliance TEXT,
   discipline_issues TEXT,
   trainer_observations TEXT,
   progress_summary TEXT,
-  recommendation TEXT CHECK(recommendation IN ('Proceed', 'Improve', 'Review')),
+  recommendation TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -223,5 +231,100 @@ CREATE TABLE IF NOT EXISTS monthly_summary_reports (
   UNIQUE(month_start_date, month_end_date)
 );
 
+-- Departments
+CREATE TABLE IF NOT EXISTS departments (
+  id SERIAL PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  head_of_department TEXT,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
--- End of schema
+-- Academic Periods
+CREATE TABLE IF NOT EXISTS academic_periods (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  is_active BOOLEAN DEFAULT FALSE,
+  status TEXT DEFAULT 'Upcoming' CHECK(status IN ('Upcoming', 'Ongoing', 'Completed')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Fee Structures
+CREATE TABLE IF NOT EXISTS fee_structures (
+  id SERIAL PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id),
+  amount DECIMAL NOT NULL,
+  category TEXT NOT NULL,
+  semester TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Student Fees
+CREATE TABLE IF NOT EXISTS student_fees (
+  student_id TEXT PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  total_due DECIMAL DEFAULT 0.0,
+  total_paid DECIMAL DEFAULT 0.0,
+  balance DECIMAL DEFAULT 0.0,
+  last_payment_date TIMESTAMP,
+  status TEXT DEFAULT 'Pending' CHECK(status IN ('Paid', 'Partial', 'Pending', 'Overdue')),
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Payments
+CREATE TABLE IF NOT EXISTS payments (
+  id SERIAL PRIMARY KEY,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  amount DECIMAL NOT NULL,
+  method TEXT NOT NULL,
+  transaction_ref TEXT UNIQUE,
+  payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  recorded_by TEXT,
+  status TEXT DEFAULT 'Completed'
+);
+
+-- Course Materials
+CREATE TABLE IF NOT EXISTS course_materials (
+  id SERIAL PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  file_url TEXT NOT NULL,
+  uploaded_by TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- System Settings
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Audit Logs
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id SERIAL PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  resource_id TEXT,
+  details TEXT,
+  ip_address TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default settings
+INSERT INTO system_settings (key, value) VALUES 
+('college_name', 'Beautex Technical College'),
+('college_abbr', 'BTC'),
+('academic_year', '2025/2026'),
+('semester', 'Semester 1'),
+('contact_email', 'admin@beautex.edu'),
+('maintenance_mode', 'false'),
+('student_portal_enabled', 'true'),
+('teacher_portal_enabled', 'true'),
+('parent_portal_enabled', 'true'),
+('allow_registration', 'true'),
+('grading_system', 'standard')
+ON CONFLICT (key) DO NOTHING;

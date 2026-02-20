@@ -46,34 +46,29 @@ export default function Users() {
     };
 
     const handleResetPassword = async (userId, userEmail) => {
-        const newPassword = prompt(`Enter new password for ${userEmail}:`, 'password123');
-        if (!newPassword) return;
-
-        if (newPassword.length < 6) {
-            alert('Password must be at least 6 characters long.');
-            return;
-        }
+        if (!window.confirm(`Are you sure you want to reset the password for ${userEmail}? A new temporary password will be automatically generated and sent to their email address.`)) return;
 
         try {
-            await usersAPI.resetPassword(userId, newPassword);
-            alert(`Password for ${userEmail} has been reset successfully.`);
+            await usersAPI.resetPassword(userId);
+            alert(`A new temporary password has been dispatched to ${userEmail}.`);
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to reset password');
+            alert(error.response?.data?.error || 'Failed to trigger password reset');
         }
     };
 
-    const handleDelete = async (userId) => {
+    const handleDelete = async (userId, userEmail) => {
         if (userId === currentUser.id) {
             alert('Security Protocol: You cannot terminate your own administrative access.');
             return;
         }
-        if (!window.confirm('Are you sure you want to permanently revoke this users access?')) return;
+        if (!window.confirm(`CRITICAL ACTION: Are you sure you want to PERMANENTLY revoke access for ${userEmail || 'this user'}? This action cannot be undone.`)) return;
 
         try {
             await usersAPI.delete(userId);
             fetchUsers();
+            alert('Access revoked successfully.');
         } catch (error) {
-            alert('Failed to delete user');
+            alert(error.response?.data?.error || 'Failed to revoke access');
         }
     };
 
@@ -184,7 +179,7 @@ export default function Users() {
                                             <Key className="w-4 h-4" />
                                         </button>
                                         <button
-                                            onClick={() => handleDelete(u.id)}
+                                            onClick={() => handleDelete(u.id, u.email)}
                                             className="p-3 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/20 rounded-xl transition-all shadow-lg"
                                             title="Revoke Access"
                                         >

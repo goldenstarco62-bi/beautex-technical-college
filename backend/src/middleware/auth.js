@@ -13,6 +13,7 @@ export function authenticateToken(req, res, next) {
             console.error('JWT Verification Error:', err.message);
             return res.status(403).json({ error: `Invalid or expired token: ${err.message}` });
         }
+
         req.user = user;
         next();
     });
@@ -20,9 +21,13 @@ export function authenticateToken(req, res, next) {
 
 export function authorizeRoles(...roles) {
     return (req, res, next) => {
-        if (!req.user || !roles.includes(req.user.role)) {
+        const userRole = (req.user?.role ? String(req.user.role) : '').toLowerCase().trim();
+        const allowedRoles = roles.map(r => String(r).toLowerCase().trim());
+
+        if (!req.user || !allowedRoles.includes(userRole)) {
             return res.status(403).json({ error: 'Access denied. Insufficient permissions.' });
         }
+
         next();
     };
 }

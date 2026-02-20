@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 export default function MobileBottomNav({ onMenuClick }) {
     const location = useLocation();
     const { user } = useAuth();
-    const role = user?.role || 'student';
+    const userRole = (user?.role ? String(user.role) : '').toLowerCase().trim() || 'student';
 
     const navItems = [
         { name: 'Home', path: '/dashboard', icon: LayoutDashboard },
@@ -14,7 +14,11 @@ export default function MobileBottomNav({ onMenuClick }) {
         { name: 'Profile', path: '/settings', icon: UserCircle },
     ];
 
-    const filteredItems = navItems.filter(item => !item.roles || item.roles.includes(role));
+    const filteredItems = navItems.filter(item => {
+        if (!item.roles) return true;
+        const allowedRoles = item.roles.map(r => String(r).toLowerCase().trim());
+        return allowedRoles.includes(userRole);
+    });
 
     return (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] px-4 pb-4">

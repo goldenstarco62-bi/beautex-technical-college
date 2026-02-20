@@ -17,6 +17,7 @@ import * as statsController from '../controllers/statsController.js';
 import * as financeController from '../controllers/financeController.js';
 import * as academicController from '../controllers/academicController.js';
 import * as materialController from '../controllers/materialController.js';
+import * as profileController from '../controllers/profileController.js';
 import { authorizeRoles } from '../middleware/auth.js';
 
 
@@ -46,17 +47,17 @@ router.delete('/students/:id', authenticateToken, authorizeRoles('admin', 'super
 // Course routes (protected)
 router.get('/courses', authenticateToken, courseController.getAllCourses);
 router.get('/courses/:id', authenticateToken, courseController.getCourse);
-router.post('/courses', authenticateToken, logAudit('CREATE_COURSE', 'courses'), courseController.createCourse);
-router.put('/courses/:id', authenticateToken, logAudit('UPDATE_COURSE', 'courses'), courseController.updateCourse);
-router.delete('/courses/:id', authenticateToken, logAudit('DELETE_COURSE', 'courses'), courseController.deleteCourse);
+router.post('/courses', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('CREATE_COURSE', 'courses'), courseController.createCourse);
+router.put('/courses/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('UPDATE_COURSE', 'courses'), courseController.updateCourse);
+router.delete('/courses/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('DELETE_COURSE', 'courses'), courseController.deleteCourse);
 
 
 // Faculty routes (protected)
 router.get('/faculty', authenticateToken, facultyController.getAllFaculty);
 router.get('/faculty/:id', authenticateToken, facultyController.getFaculty);
-router.post('/faculty', authenticateToken, logAudit('CREATE_FACULTY', 'faculty'), facultyController.createFaculty);
-router.put('/faculty/:id', authenticateToken, logAudit('UPDATE_FACULTY', 'faculty'), facultyController.updateFaculty);
-router.delete('/faculty/:id', authenticateToken, logAudit('DELETE_FACULTY', 'faculty'), facultyController.deleteFaculty);
+router.post('/faculty', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('CREATE_FACULTY', 'faculty'), facultyController.createFaculty);
+router.put('/faculty/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('UPDATE_FACULTY', 'faculty'), facultyController.updateFaculty);
+router.delete('/faculty/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('DELETE_FACULTY', 'faculty'), facultyController.deleteFaculty);
 
 
 // Attendance routes (protected)
@@ -85,18 +86,23 @@ router.get('/sessions', authenticateToken, sessionController.getAllSessions);
 router.post('/sessions', authenticateToken, authorizeRoles('admin', 'superadmin'), sessionController.createSession);
 router.delete('/sessions/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), sessionController.deleteSession);
 
-// User Management routes (Superadmin Only)
-router.get('/users', authenticateToken, authorizeRoles('superadmin'), userController.getAllUsers);
+// Profile Routes (All Authenticated Users)
+router.get('/profile', authenticateToken, profileController.getProfile);
+router.put('/profile', authenticateToken, profileController.updateProfile);
+
+// User Management routes (Admin & Superadmin)
+router.get('/users', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.getAllUsers);
 router.put('/users/:id/role', authenticateToken, authorizeRoles('superadmin'), userController.updateUserRole);
-router.put('/users/:id/status', authenticateToken, authorizeRoles('superadmin'), userController.toggleUserStatus);
-router.put('/users/:id/password', authenticateToken, authorizeRoles('superadmin'), userController.resetUserPassword);
+router.put('/users/:id/status', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.toggleUserStatus);
+router.put('/users/:id/password', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetUserPassword);
+router.post('/users/reset-by-email', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetPasswordByEmail);
 router.delete('/users/:id', authenticateToken, authorizeRoles('superadmin'), userController.deleteUser);
 router.get('/audit-logs', authenticateToken, authorizeRoles('superadmin'), userController.getAuditLogs);
 
 
 // Academic Reports (Trainers/Admin/Superadmin)
-router.get('/reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin', 'student'), reportController.getAllReports);
-router.get('/reports/student/:studentId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin', 'student'), reportController.getStudentReports);
+router.get('/reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), reportController.getAllReports);
+router.get('/reports/student/:studentId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), reportController.getStudentReports);
 router.post('/reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), reportController.createReport);
 router.put('/reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), reportController.updateReport);
 router.delete('/reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), reportController.deleteReport);
@@ -132,7 +138,7 @@ router.get('/stats/dashboard', authenticateToken, statsController.getDashboardSt
 
 // Finance Routes
 router.get('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFeeStructures);
-router.post('/finance/fees', authenticateToken, authorizeRoles('superadmin'), financeController.createFeeStructure);
+router.post('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.createFeeStructure);
 router.get('/finance/student-fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getAllStudentFees);
 router.get('/finance/student-fees/:studentId', authenticateToken, financeController.getStudentFees);
 router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.recordPayment);

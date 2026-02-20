@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { Bell, Moon, Sun, LogOut, Menu } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { notificationsAPI } from '../../services/api';
 
 export default function Navbar({ onMenuClick }) {
@@ -97,17 +97,26 @@ export default function Navbar({ onMenuClick }) {
                 </div>
 
                 {/* User Info from Screenshot 1 */}
-                <div className="flex items-center gap-4 pl-6 border-l border-white/10">
-                    <div className="text-right">
-                        <p className="text-[10px] font-black text-white uppercase whitespace-nowrap">
+
+                {/* User Info - Clickable for Profile Settings */}
+                <Link
+                    to="/profile"
+                    className="flex items-center gap-4 pl-6 border-l border-white/10 hover:bg-white/5 px-4 py-2 rounded-2xl transition-all group"
+                >
+                    <div className="text-right hidden sm:block">
+                        <p className="text-[10px] font-black text-white uppercase whitespace-nowrap group-hover:text-gold transition-colors">
                             {user?.name || user?.email?.split('@')[0]}
                         </p>
-                        <p className="text-[9px] text-[#FFD700] font-bold uppercase tracking-widest mt-0.5">{user?.role}</p>
+                        <p className="text-[9px] text-gold/60 font-bold uppercase tracking-widest mt-0.5 group-hover:text-gold transition-colors">{user?.role}</p>
                     </div>
-                    <div className="w-10 h-10 bg-[#FFD700] text-[#800000] font-black rounded-full flex items-center justify-center shadow-lg text-sm">
-                        {(user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                    <div className="w-10 h-10 bg-gold text-maroon font-black rounded-full flex items-center justify-center shadow-lg text-sm group-hover:scale-110 group-hover:rotate-6 transition-all overflow-hidden border-2 border-transparent group-hover:border-gold">
+                        {user?.photo ? (
+                            <img src={user?.photo} alt="Avatar" className="w-full h-full object-cover" />
+                        ) : (
+                            (user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase()
+                        )}
                     </div>
-                </div>
+                </Link>
 
                 {/* Logout */}
                 <button

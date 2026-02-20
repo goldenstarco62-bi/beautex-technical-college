@@ -257,6 +257,56 @@ export default function ActivityReports() {
         });
     };
 
+    // Auto-calculate Daily Attendance %
+    useEffect(() => {
+        if (activeTab === 'daily') {
+            const present = parseInt(dailyForm.total_students_present) || 0;
+            const absent = parseInt(dailyForm.total_students_absent) || 0;
+            const total = present + absent;
+            if (total > 0) {
+                const pct = (present / total) * 100;
+                setDailyForm(prev => ({ ...prev, total_attendance_percentage: parseFloat(pct.toFixed(1)) }));
+            } else {
+                setDailyForm(prev => ({ ...prev, total_attendance_percentage: 0 }));
+            }
+        }
+    }, [dailyForm.total_students_present, dailyForm.total_students_absent, activeTab]);
+
+    // Auto-calculate Weekly/Monthly Avg Attendance (fetch from daily reports in range)
+    useEffect(() => {
+        const fetchRangeAvg = async () => {
+            let start, end;
+            if (activeTab === 'weekly' && weeklyForm.week_start_date && weeklyForm.week_end_date) {
+                start = weeklyForm.week_start_date;
+                end = weeklyForm.week_end_date;
+            } else if (activeTab === 'monthly' && monthlyForm.month_start_date && monthlyForm.month_end_date) {
+                start = monthlyForm.month_start_date;
+                end = monthlyForm.month_end_date;
+            } else {
+                return;
+            }
+
+            try {
+                const { data } = await activityReportsAPI.getDailyReports({ start_date: start, end_date: end, limit: 100 });
+                if (data.data?.length > 0) {
+                    const avg = data.data.reduce((acc, curr) => acc + (curr.total_attendance_percentage || 0), 0) / data.data.length;
+                    if (activeTab === 'weekly') {
+                        setWeeklyForm(prev => ({ ...prev, average_attendance: parseFloat(avg.toFixed(1)), total_classes_conducted: data.data.reduce((acc, curr) => acc + (curr.classes_conducted || 0), 0) }));
+                    } else {
+                        setMonthlyForm(prev => ({ ...prev, average_attendance: parseFloat(avg.toFixed(1)), total_classes: data.data.reduce((acc, curr) => acc + (curr.classes_conducted || 0), 0) }));
+                    }
+                }
+            } catch (err) {
+                console.error("Auto-fetch error:", err);
+            }
+        };
+        fetchRangeAvg();
+    }, [
+        weeklyForm.week_start_date, weeklyForm.week_end_date,
+        monthlyForm.month_start_date, monthlyForm.month_end_date,
+        activeTab
+    ]);
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header */}
@@ -354,7 +404,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{(report.total_attendance_percentage || 0).toFixed(1)}%</p>
+                                                <p className="text-2xl font-black text-gray-800">{report.total_attendance_percentage ? report.total_attendance_percentage.toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present</p>
@@ -426,7 +476,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{(report.average_attendance || 0).toFixed(1)}%</p>
+                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance ? report.average_attendance.toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Assessments</p>
@@ -490,7 +540,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{(report.average_attendance || 0).toFixed(1)}%</p>
+                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance ? report.average_attendance.toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pass Rate</p>
@@ -559,13 +609,13 @@ export default function ActivityReports() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Attendance %</label>
+                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Attendance % (Auto)</label>
                                             <input
                                                 type="number"
                                                 step="0.1"
                                                 value={dailyForm.total_attendance_percentage}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, total_attendance_percentage: parseFloat(e.target.value) })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
+                                                readOnly
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-maroon font-black outline-none cursor-not-allowed"
                                                 required
                                             />
                                         </div>
@@ -713,13 +763,13 @@ export default function ActivityReports() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Avg Attendance %</label>
+                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Avg Attendance % (Auto)</label>
                                             <input
                                                 type="number"
                                                 step="0.1"
                                                 value={weeklyForm.average_attendance}
-                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, average_attendance: parseFloat(e.target.value) })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
+                                                readOnly
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-maroon font-black outline-none cursor-not-allowed"
                                             />
                                         </div>
                                         <div>
@@ -849,13 +899,13 @@ export default function ActivityReports() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Avg Attendance %</label>
+                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Avg Attendance % (Auto)</label>
                                             <input
                                                 type="number"
                                                 step="0.1"
                                                 value={monthlyForm.average_attendance}
-                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, average_attendance: parseFloat(e.target.value) })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
+                                                readOnly
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-maroon font-black outline-none cursor-not-allowed"
                                             />
                                         </div>
                                         <div>

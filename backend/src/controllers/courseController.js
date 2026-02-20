@@ -7,14 +7,78 @@ async function isMongo() {
 
 export async function getAllCourses(req, res) {
     try {
-        if (await isMongo()) {
-            const Course = (await import('../models/mongo/Course.js')).default;
-            const courses = await Course.find().sort({ name: 1 });
+        const { role, email } = req.user;
+        const mongo = await isMongo();
+
+        // Admin and Superadmin see everything
+        if (role === 'admin' || role === 'superadmin') {
+            if (mongo) {
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const courses = await Course.find().sort({ name: 1 });
+                return res.json(courses);
+            }
+            const courses = await query("SELECT * FROM courses WHERE status = 'Active' ORDER BY name");
             return res.json(courses);
         }
 
-        const courses = await query("SELECT * FROM courses WHERE status = 'Active' ORDER BY name");
-        res.json(courses);
+        // Teachers see courses they instruct
+        if (role === 'teacher') {
+            if (mongo) {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const faculty = await Faculty.findOne({ email });
+                if (!faculty) return res.json([]);
+
+                const courses = await Course.find({
+                    $or: [
+                        { instructor: faculty.name },
+                        { name: { $in: faculty.courses || [] } }
+                    ],
+                    status: 'Active'
+                }).sort({ name: 1 });
+                return res.json(courses);
+            }
+
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+            if (!faculty) return res.json([]);
+
+            let facultyCourses = [];
+            try {
+                facultyCourses = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+            } catch (e) {
+                facultyCourses = [];
+            }
+
+            const placeholders = facultyCourses.length > 0 ? facultyCourses.map(() => '?').join(',') : "''";
+            const courses = await query(`
+                SELECT * FROM courses 
+                WHERE (instructor = ? OR name IN (${placeholders}))
+                AND status = 'Active' 
+                ORDER BY name
+            `, [faculty.name, ...facultyCourses]);
+            return res.json(courses);
+        }
+
+        // Students see their enrolled course
+        if (role === 'student') {
+            if (mongo) {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const studentProfile = await Student.findOne({ email });
+                if (!studentProfile) return res.json([]);
+
+                const courses = await Course.find({ name: studentProfile.course, status: 'Active' });
+                return res.json(courses);
+            }
+
+            const studentProfile = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
+            if (!studentProfile) return res.json([]);
+
+            const courses = await query("SELECT * FROM courses WHERE name = ? AND status = 'Active'", [studentProfile.course]);
+            return res.json(courses);
+        }
+
+        res.json([]);
     } catch (error) {
         console.error('Get courses error:', error);
         res.status(500).json({ error: 'Failed to fetch courses' });

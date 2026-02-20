@@ -5,7 +5,7 @@ import { Calendar, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 export default function Attendance() {
     const { user } = useAuth();
-    const isStudent = user?.role === 'student';
+    const isStudent = (user?.role ? String(user.role).toLowerCase() : '') === 'student';
 
     const [courses, setCourses] = useState([]);
     const [selectedCourse, setSelectedCourse] = useState('');
@@ -58,7 +58,7 @@ export default function Attendance() {
             // Fetch this student's own attendance records from the API
             const { data } = await attendanceAPI.getAll(null, null);
             // The API returns all records; filter for this student by studentId
-            const studentId = user.studentId || user.id;
+            const studentId = user.student_id || user.id;
             const history = Array.isArray(data)
                 ? data.filter(r => String(r.student_id) === String(studentId))
                 : [];

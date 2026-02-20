@@ -50,9 +50,9 @@ export async function setActivePeriod(req, res) {
     try {
         const { id } = req.params;
         // Reset all
-        await run('UPDATE academic_periods SET is_active = 0');
+        await run('UPDATE academic_periods SET is_active = false');
         // Set new active
-        await run('UPDATE academic_periods SET is_active = 1, status = "Ongoing" WHERE id = ?', [id]);
+        await run('UPDATE academic_periods SET is_active = true, status = ? WHERE id = ?', ['Ongoing', id]);
         res.json({ message: 'Active period updated' });
     } catch (error) {
         res.status(500).json({ error: error.message });

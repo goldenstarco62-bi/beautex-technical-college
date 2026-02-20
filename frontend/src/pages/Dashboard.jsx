@@ -15,7 +15,7 @@ function AdminDashboard() {
         students: 0,
         courses: 0,
         faculty: 0,
-        attendance: 92.4
+        attendance: 0
     });
     const [students, setStudents] = useState([]);
     const [courses, setCourses] = useState([]);
@@ -231,8 +231,9 @@ function AdminDashboard() {
 
 export default function Dashboard() {
     const { user } = useAuth();
+    const role = (user?.role ? String(user.role) : '').toLowerCase().trim() || 'student';
 
-    if (user?.role === 'teacher') return <TeacherDashboard />;
-    if (user?.role === 'student') return <StudentDashboard />;
+    if (role === 'teacher') return <TeacherDashboard />;
+    if (role === 'student') return <StudentDashboard />;
     return <AdminDashboard />;
 }
