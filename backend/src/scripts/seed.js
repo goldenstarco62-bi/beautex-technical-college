@@ -31,34 +31,30 @@ async function seed() {
         }
 
         // 2. Seed initial courses
-        let courseCount = 0;
-        try {
-            const courseCountResult = await query('SELECT COUNT(*) as count FROM courses');
-            courseCount = parseInt(courseCountResult[0]?.count || 0);
-        } catch (e) {
-            console.log('ℹ️ Courses table check failed.');
-        }
+        const sampleCourses = [
+            { id: 'SC-01', name: 'Makeup', dept: 'Beauty', dur: '1 Month' },
+            { id: 'SC-02', name: 'Nail Technology', dept: 'Beauty', dur: '6 Weeks' },
+            { id: 'SC-03', name: 'Hairdressing', dept: 'Hair', dur: '3 Months' },
+            { id: 'SC-04', name: 'Barbering', dept: 'Hair', dur: '2 Months' },
+            { id: 'SC-05', name: 'Braiding & Weaving', dept: 'Hair', dur: '2 Months' },
+            { id: 'SC-06', name: 'Beauty Therapy', dept: 'Beauty', dur: '3 Months' },
+            { id: 'SC-07', name: 'Computer Packages', dept: 'ICT', dur: '1 Month' },
+            { id: 'SC-08', name: 'Cyber Security', dept: 'ICT', dur: '6 Months' },
+            { id: 'SC-09', name: 'Website Development', dept: 'ICT', dur: '4 Months' }
+        ];
 
-        if (courseCount === 0) {
-            console.log('🌱 Seeding sample courses...');
-            const sampleCourses = [
-                { id: 'SC-01', name: 'Makeup', dept: 'Beauty', dur: '1 Month' },
-                { id: 'SC-02', name: 'Nail Technology', dept: 'Beauty', dur: '6 Weeks' },
-                { id: 'SC-03', name: 'Hairdressing', dept: 'Hair', dur: '3 Months' },
-                { id: 'SC-04', name: 'Barbering', dept: 'Hair', dur: '2 Months' },
-                { id: 'SC-05', name: 'Braiding & Weaving', dept: 'Hair', dur: '2 Months' }
-            ];
-
-            for (const c of sampleCourses) {
+        console.log('🌱 Synchronizing courses...');
+        for (const c of sampleCourses) {
+            const exists = await queryOne('SELECT id FROM courses WHERE name = ?', [c.name]);
+            if (!exists) {
                 await run(
                     'INSERT INTO courses (id, name, department, instructor, duration, capacity, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
                     [c.id, c.name, c.dept, 'TBD', c.dur, 20, 'Active']
                 );
+                console.log(`   + Added course: ${c.name}`);
             }
-            console.log(`✅ Seeded ${sampleCourses.length} sample courses.`);
-        } else {
-            console.log(`ℹ️ skipping course seed: ${courseCount} courses already exist.`);
         }
+        console.log('✅ Course synchronization complete.');
 
         console.log('🎉 Seeding process complete.');
 

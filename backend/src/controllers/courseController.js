@@ -10,14 +10,26 @@ export async function getAllCourses(req, res) {
         const { role, email } = req.user;
         const mongo = await isMongo();
 
+        // SQL Query parts
+        const sqlSelect = `
+            c.*, 
+            (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) = LOWER(c.name)) as enrolled
+        `;
+
         // Admin and Superadmin see everything
         if (role === 'admin' || role === 'superadmin') {
             if (mongo) {
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const courses = await Course.find().sort({ name: 1 });
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const courses = await Course.find().sort({ name: 1 }).lean();
+
+                // Manually add counts for Mongo
+                for (const course of courses) {
+                    course.enrolled = await Student.countDocuments({ course: course.name });
+                }
                 return res.json(courses);
             }
-            const courses = await query("SELECT * FROM courses WHERE status = 'Active' ORDER BY name");
+            const courses = await query(`SELECT ${sqlSelect} FROM courses c WHERE c.status = 'Active' ORDER BY c.name`);
             return res.json(courses);
         }
 
@@ -26,6 +38,7 @@ export async function getAllCourses(req, res) {
             if (mongo) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
+                const Student = (await import('../models/mongo/Student.js')).default;
                 const faculty = await Faculty.findOne({ email });
                 if (!faculty) return res.json([]);
 
@@ -35,7 +48,11 @@ export async function getAllCourses(req, res) {
                         { name: { $in: faculty.courses || [] } }
                     ],
                     status: 'Active'
-                }).sort({ name: 1 });
+                }).sort({ name: 1 }).lean();
+
+                for (const course of courses) {
+                    course.enrolled = await Student.countDocuments({ course: course.name });
+                }
                 return res.json(courses);
             }
 
@@ -51,10 +68,10 @@ export async function getAllCourses(req, res) {
 
             const placeholders = facultyCourses.length > 0 ? facultyCourses.map(() => '?').join(',') : "''";
             const courses = await query(`
-                SELECT * FROM courses 
-                WHERE (instructor = ? OR name IN (${placeholders}))
-                AND status = 'Active' 
-                ORDER BY name
+                SELECT ${sqlSelect} FROM courses c
+                WHERE (c.instructor = ? OR c.name IN (${placeholders}))
+                AND c.status = 'Active' 
+                ORDER BY c.name
             `, [faculty.name, ...facultyCourses]);
             return res.json(courses);
         }
@@ -67,14 +84,17 @@ export async function getAllCourses(req, res) {
                 const studentProfile = await Student.findOne({ email });
                 if (!studentProfile) return res.json([]);
 
-                const courses = await Course.find({ name: studentProfile.course, status: 'Active' });
+                const courses = await Course.find({ name: studentProfile.course, status: 'Active' }).lean();
+                for (const course of courses) {
+                    course.enrolled = await Student.countDocuments({ course: course.name });
+                }
                 return res.json(courses);
             }
 
             const studentProfile = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
             if (!studentProfile) return res.json([]);
 
-            const courses = await query("SELECT * FROM courses WHERE name = ? AND status = 'Active'", [studentProfile.course]);
+            const courses = await query(`SELECT ${sqlSelect} FROM courses c WHERE c.name = ? AND c.status = 'Active'`, [studentProfile.course]);
             return res.json(courses);
         }
 
@@ -89,12 +109,19 @@ export async function getCourse(req, res) {
     try {
         if (await isMongo()) {
             const Course = (await import('../models/mongo/Course.js')).default;
-            const course = await Course.findOne({ id: req.params.id });
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const course = await Course.findOne({ id: req.params.id }).lean();
             if (!course) return res.status(404).json({ error: 'Course not found' });
+
+            course.enrolled = await Student.countDocuments({ course: course.name });
             return res.json(course);
         }
 
-        const course = await queryOne('SELECT * FROM courses WHERE id = ?', [req.params.id]);
+        const sql = `
+            SELECT c.*, (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) = LOWER(c.name)) as enrolled 
+            FROM courses c WHERE c.id = ?
+        `;
+        const course = await queryOne(sql, [req.params.id]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
         res.json(course);
     } catch (error) {
