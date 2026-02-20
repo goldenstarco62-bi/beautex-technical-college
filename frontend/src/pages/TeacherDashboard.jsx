@@ -26,8 +26,8 @@ export default function TeacherDashboard() {
                 sessionsAPI.getAll()
             ]);
 
-            // 1. Identify the teacher
-            const teacherProfile = facultyRes.data.find(f => f.email === user.email);
+            // 1. Identify the teacher (Case-insensitive)
+            const teacherProfile = facultyRes.data.find(f => f.email?.toLowerCase() === user.email?.toLowerCase());
             const name = teacherProfile ? teacherProfile.name : (user.name || user.email);
             setTeacherName(name);
 
@@ -38,9 +38,16 @@ export default function TeacherDashboard() {
             let assignedCourseNames = [];
             if (teacherProfile && teacherProfile.courses) {
                 try {
-                    assignedCourseNames = typeof teacherProfile.courses === 'string'
-                        ? JSON.parse(teacherProfile.courses)
-                        : teacherProfile.courses;
+                    if (typeof teacherProfile.courses === 'string') {
+                        if (teacherProfile.courses.startsWith('[')) {
+                            assignedCourseNames = JSON.parse(teacherProfile.courses);
+                        } else {
+                            // Handle comma-separated string
+                            assignedCourseNames = teacherProfile.courses.split(',').map(s => s.trim());
+                        }
+                    } else {
+                        assignedCourseNames = teacherProfile.courses;
+                    }
                 } catch (e) {
                     console.error('Error parsing faculty courses:', e);
                 }
@@ -55,8 +62,8 @@ export default function TeacherDashboard() {
             });
             setMyCourses(filteredCourses);
 
-            // 3. Filter Sessions (where teacher_email matches)
-            const filteredSessions = sessionsRes.data.filter(s => s.teacher_email === user.email);
+            // 3. Filter Sessions (where teacher_email matches - Case-insensitive)
+            const filteredSessions = sessionsRes.data.filter(s => s.teacher_email?.toLowerCase() === user.email?.toLowerCase());
             setMySessions(filteredSessions);
 
             setRecentAnnouncements(announcementsRes.data.slice(0, 3));

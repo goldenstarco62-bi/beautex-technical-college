@@ -56,14 +56,21 @@ export async function getAllCourses(req, res) {
                 return res.json(courses);
             }
 
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
             if (!faculty) return res.json([]);
 
             let facultyCourses = [];
-            try {
-                facultyCourses = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
-            } catch (e) {
-                facultyCourses = [];
+            if (faculty.courses) {
+                try {
+                    if (faculty.courses.startsWith('[')) {
+                        facultyCourses = JSON.parse(faculty.courses);
+                    } else {
+                        facultyCourses = faculty.courses.split(',').map(s => s.trim());
+                    }
+                } catch (e) {
+                    console.error('Error parsing faculty courses:', e);
+                    facultyCourses = [];
+                }
             }
 
             const placeholders = facultyCourses.length > 0 ? facultyCourses.map(() => '?').join(',') : "''";
