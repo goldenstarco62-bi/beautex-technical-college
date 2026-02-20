@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS faculty (
   specialization TEXT,
   courses TEXT, -- JSON string of course names
   contact TEXT,
+  id_number TEXT,
   passport TEXT,
   photo TEXT,
   address TEXT,

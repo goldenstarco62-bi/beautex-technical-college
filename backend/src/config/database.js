@@ -298,6 +298,10 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE faculty ADD COLUMN phone TEXT');
             console.log('✅ phone column added to faculty');
         }
+        if (!existingFacultyCols.includes('id_number')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN id_number TEXT');
+            console.log('✅ id_number column added to faculty');
+        }
 
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
