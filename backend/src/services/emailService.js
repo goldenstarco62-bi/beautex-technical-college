@@ -51,7 +51,7 @@ export const sendWelcomeEmail = async (email, role, tempPassword) => {
             transporter = await createTransporter();
         }
 
-        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://college-management-system-gczq.vercel.app' : 'http://localhost:5173');
+        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
         console.log(`📧 Dispatching email: To: ${email}, Login: ${loginUrl}, Mode: ${process.env.NODE_ENV}`);
 
         const info = await transporter.sendMail({
@@ -112,7 +112,7 @@ export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
             transporter = await createTransporter();
         }
 
-        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://college-management-system-gczq.vercel.app' : 'http://localhost:5173');
+        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
 
         const info = await transporter.sendMail({
             from: `"Academic Registry" <${process.env.SMTP_USER}>`,
