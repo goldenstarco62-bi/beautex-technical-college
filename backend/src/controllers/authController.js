@@ -123,7 +123,7 @@ export async function login(req, res) {
 
         // Check if password change is required
         if (user.must_change_password) {
-            console.log(`⚠️ Password change required for: ${email}. Providing temporary token.`);
+            console.log('⚠️ Password change required. Providing temporary token.');
             return res.json({
                 requirePasswordChange: true,
                 token, // Provide token for the change-password request
@@ -224,10 +224,6 @@ export async function getMe(req, res) {
 export async function changePassword(req, res) {
     try {
         const { email, currentPassword, newPassword } = req.body;
-        console.log('🔄 Change password request received');
-        console.log('  req.user:', JSON.stringify(req.user));
-        console.log('  body email:', email, 'has newPassword:', !!newPassword);
-
         const userId = req.user.id;
         const userEmail = req.user.email || email;
 
@@ -239,7 +235,6 @@ export async function changePassword(req, res) {
             return res.status(400).json({ error: 'Email and new password are required' });
         }
 
-        console.log('  Looking up user by id:', userId);
         const db = await getDb();
         let user;
 

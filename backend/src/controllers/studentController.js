@@ -112,6 +112,12 @@ export async function getStudent(req, res) {
 
         const student = await queryOne('SELECT * FROM students WHERE id = ?', [req.params.id]);
         if (!student) return res.status(404).json({ error: 'Student not found' });
+
+        // IDOR Protection: Check if user is authorized to view this profile
+        if (req.user.role === 'student' && req.user.student_id !== student.id) {
+            return res.status(403).json({ error: 'Access denied. You can only view your own profile.' });
+        }
+
         res.json(student);
     } catch (error) {
         console.error('Get student error:', error);
