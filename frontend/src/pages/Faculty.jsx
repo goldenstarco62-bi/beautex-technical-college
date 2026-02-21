@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { facultyAPI, usersAPI } from '../services/api';
-import { Plus, Search, Edit, Trash2, X, Printer, Mail, Phone, BookOpen, Award, MapPin, Key } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Printer, Mail, Phone, BookOpen, Award, MapPin, Key, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import IDCard from '../components/shared/IDCard';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,7 +15,7 @@ export default function Faculty() {
     const [editingFaculty, setEditingFaculty] = useState(null);
     const [resetLoading, setResetLoading] = useState(false);
     const [formData, setFormData] = useState({
-        id: '', name: '', email: '', department: '', position: '', specialization: '', contact: '', passport: '', courses: '', status: 'Active'
+        id: '', name: '', email: '', department: '', position: '', specialization: '', contact: '', passport: '', courses: '', status: 'Active', category: 'Trainer'
     });
     const [printingFaculty, setPrintingFaculty] = useState(null);
     const [filteredFaculty, setFilteredFaculty] = useState([]);
@@ -73,18 +75,97 @@ export default function Faculty() {
             id: member.id, name: member.name, email: member.email,
             department: member.department, position: member.position,
             specialization: member.specialization || '', contact: member.contact || '',
-            passport: member.passport || '', courses: member.courses || '', status: member.status || 'Active'
+            passport: member.passport || '', courses: member.courses || '', status: member.status || 'Active', category: member.category || 'Trainer'
         });
         setShowModal(true);
     };
 
     const resetForm = () => {
-        setFormData({ id: '', name: '', email: '', department: '', position: '', specialization: '', contact: '', passport: '', courses: '', status: 'Active' });
+        setFormData({ id: '', name: '', email: '', department: '', position: '', specialization: '', contact: '', passport: '', courses: '', status: 'Active', category: 'Trainer' });
+    };
+
+    const handlePhotoUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setFormData(prev => ({ ...prev, photo: reader.result }));
+            };
+            reader.readAsDataURL(file);
+        }
     };
 
     const handlePrintID = (member) => {
         setPrintingFaculty(member);
         setTimeout(() => { window.print(); setPrintingFaculty(null); }, 500);
+    };
+
+    const handleDownloadID = async (member) => {
+        setPrintingFaculty(member);
+        // Wait for render and images to load
+        setTimeout(async () => {
+            const front = document.getElementById(`id-card-front-${member.id}`);
+            const back = document.getElementById(`id-card-back-${member.id}`);
+
+            if (front && back) {
+                try {
+                    const canvasFront = await html2canvas(front, {
+                        scale: 4,
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+                    const canvasBack = await html2canvas(back, {
+                        scale: 4,
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+
+                    const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+
+                    const imgFront = canvasFront.toDataURL('image/png');
+                    const imgBack = canvasBack.toDataURL('image/png');
+
+                    // Modern PDF Layout
+                    pdf.setTextColor(128, 0, 0); // Maroon
+                    pdf.setFontSize(18);
+                    pdf.text("BEAUTEX TECHNICAL TRAINING COLLEGE", 105, 20, { align: 'center' });
+
+                    pdf.setTextColor(100, 100, 100);
+                    pdf.setFontSize(10);
+                    pdf.text("OFFICIAL STAFF IDENTIFICATION CARD", 105, 28, { align: 'center' });
+
+                    // Add Front Side (Centered)
+                    pdf.addImage(imgFront, 'PNG', (210 - 85.6) / 2, 40, 85.6, 53.98);
+
+                    // Divider
+                    pdf.setDrawColor(128, 0, 0);
+                    pdf.setLineWidth(0.2);
+                    pdf.line(20, 105, 190, 105);
+                    pdf.setTextColor(150, 150, 150);
+                    pdf.setFontSize(8);
+                    pdf.text("OFFICIAL CARD REVERSE SIDE", 105, 112, { align: 'center' });
+
+                    // Add Back Side (Centered)
+                    pdf.addImage(imgBack, 'PNG', (210 - 85.6) / 2, 125, 85.6, 53.98);
+
+                    // Verification Footer
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(150, 150, 150);
+                    const date = new Date().toLocaleDateString();
+                    pdf.text(`Generated on ${date} | System Verified ID`, 105, 280, { align: 'center' });
+
+                    pdf.save(`ID_Card_${member.id}_${member.name.replace(/\s+/g, '_')}.pdf`);
+                } catch (err) {
+                    console.error("PDF generation failed:", err);
+                    alert("Failed to generate PDF. Please ensure all resources are loaded.");
+                }
+            }
+            setPrintingFaculty(null);
+        }, 1200);
     };
 
     const handleResetPassword = async (member) => {
@@ -201,6 +282,9 @@ export default function Faculty() {
                                         <button onClick={() => handlePrintID(member)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Print ID">
                                             <Printer className="w-3 h-3 text-maroon/40" />
                                         </button>
+                                        <button onClick={() => handleDownloadID(member)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Download ID">
+                                            <Download className="w-3 h-3 text-maroon/40" />
+                                        </button>
                                         <button onClick={() => handleEdit(member)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors">
                                             <Edit className="w-3 h-3 text-maroon/40" />
                                         </button>
@@ -263,6 +347,31 @@ export default function Faculty() {
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-5 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="flex items-center gap-6 mb-6">
+                                <div className="relative group">
+                                    <div className="w-24 h-24 rounded-2xl bg-gray-50 border-2 border-dashed border-maroon/20 flex items-center justify-center overflow-hidden">
+                                        {formData.photo ? (
+                                            <img src={formData.photo} alt="Preview" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <Plus className="w-6 h-6 text-maroon/20" />
+                                        )}
+                                    </div>
+                                    <input
+                                        type="file"
+                                        onChange={handlePhotoUpload}
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                        accept="image/*"
+                                    />
+                                    <div className="absolute -bottom-2 -right-2 bg-maroon text-gold p-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Edit className="w-3 h-3" />
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-xs font-black text-maroon/60 uppercase tracking-widest mb-1">Passport Photo</p>
+                                    <p className="text-[10px] text-maroon/30 font-bold uppercase tracking-tighter">Required for school ID generation</p>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 {[
                                     { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Dr. Jane Smith', required: true },
@@ -307,6 +416,19 @@ export default function Faculty() {
                                         <option value="Active">Active</option>
                                         <option value="Inactive">Inactive</option>
                                         <option value="On Leave">On Leave</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Staff Category</label>
+                                    <select
+                                        value={formData.category}
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                        className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-sm"
+                                    >
+                                        <option value="Trainer">Trainer</option>
+                                        <option value="Lecturer">Lecturer</option>
+                                        <option value="Staff">Staff</option>
+                                        <option value="Administration">Administration</option>
                                     </select>
                                 </div>
                             </div>
@@ -407,8 +529,12 @@ export default function Faculty() {
                 </div>
             )}
 
-            {/* Hidden Print Container */}
-            <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+            {/* Capturable and Printable Container */}
+            <div className={`fixed z-[9999] ${printingFaculty ? 'block' : 'hidden'} 
+                /* Off-screen for normal view but capturable */
+                left-[-9999px] top-0 bg-white
+                /* Full screen for print mode */
+                print:left-0 print:right-0 print:top-0 print:bottom-0 print:bg-white`}>
                 {printingFaculty && <IDCard data={printingFaculty} role="teacher" />}
             </div>
         </div>

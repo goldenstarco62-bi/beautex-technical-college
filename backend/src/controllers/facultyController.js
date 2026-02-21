@@ -53,7 +53,7 @@ export async function getFaculty(req, res) {
 
 export async function createFaculty(req, res) {
     try {
-        const { id, name, email, department, position, specialization, courses, contact, passport, id_number, status } = req.body;
+        const { id, name, email, department, position, specialization, courses, contact, passport, id_number, photo, status, category } = req.body;
         const idNumber = id_number || passport; // Support both field names
 
         if (!id || !name || !email || !department) {
@@ -70,7 +70,7 @@ export async function createFaculty(req, res) {
             const User = (await import('../models/mongo/User.js')).default;
 
             const newFaculty = new Faculty({
-                id, name, email, department, position, specialization, courses, contact, id_number: idNumber, status: status || 'Active'
+                id, name, email, department, position, specialization, courses, contact, photo, id_number: idNumber, status: status || 'Active', category: category || 'Trainer'
             });
             savedFaculty = await newFaculty.save();
 
@@ -81,6 +81,7 @@ export async function createFaculty(req, res) {
                 password: hashedPassword,
                 role: 'teacher',
                 status: 'Active',
+                photo,
                 must_change_password: true
             });
             await newUser.save();
@@ -89,15 +90,15 @@ export async function createFaculty(req, res) {
 
             // Create faculty record
             await run(
-                'INSERT INTO faculty (id, name, email, department, position, specialization, courses, contact, id_number, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, name, email, department, position, specialization, coursesStr, contact, idNumber, status || 'Active']
+                'INSERT INTO faculty (id, name, email, department, position, specialization, courses, contact, id_number, photo, status, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [id, name, email, department, position, specialization, coursesStr, contact, idNumber, photo, status || 'Active', category || 'Trainer']
             );
 
             // Create user account for login
             await run(
-                `INSERT INTO users (name, email, password, role, status, must_change_password)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [name, email, hashedPassword, 'teacher', 'Active', true]
+                `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [name, email, hashedPassword, 'teacher', 'Active', photo, true]
             );
 
             savedFaculty = await queryOne('SELECT * FROM faculty WHERE id = ?', [id]);

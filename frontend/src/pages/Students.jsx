@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { studentsAPI, usersAPI } from '../services/api';
-import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { useNavigate } from 'react-router-dom';
 import IDCard from '../components/shared/IDCard';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +20,8 @@ export default function Students() {
         id: '', name: '', email: '', course: '', intake: 'January Intake',
         gpa: 0, status: 'Active', contact: '',
         dob: '', address: '', guardian_name: '', guardian_contact: '',
-        photo: '', completion_date: '', enrolled_date: new Date().toISOString().split('T')[0]
+        photo: '', completion_date: '', enrolled_date: new Date().toISOString().split('T')[0],
+        department: '', level: 'Module 1'
     });
     const [printingStudent, setPrintingStudent] = useState(null);
 
@@ -105,7 +108,7 @@ export default function Students() {
             id: '', name: '', email: '', course: '', intake: 'January Intake',
             gpa: 0, status: 'Active', contact: '',
             dob: '', address: '', guardian_name: '', guardian_contact: '',
-            photo: ''
+            photo: '', department: '', level: 'Module 1'
         });
     };
 
@@ -126,6 +129,74 @@ export default function Students() {
             window.print();
             setPrintingStudent(null);
         }, 500);
+    };
+
+    const handleDownloadID = async (student) => {
+        setPrintingStudent(student);
+        // Wait for render and images to load
+        setTimeout(async () => {
+            const front = document.getElementById(`id-card-front-${student.id}`);
+            const back = document.getElementById(`id-card-back-${student.id}`);
+
+            if (front && back) {
+                try {
+                    const canvasFront = await html2canvas(front, {
+                        scale: 4,
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+                    const canvasBack = await html2canvas(back, {
+                        scale: 4,
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+
+                    const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+
+                    const imgFront = canvasFront.toDataURL('image/png');
+                    const imgBack = canvasBack.toDataURL('image/png');
+
+                    // Modern PDF Layout
+                    pdf.setTextColor(128, 0, 0); // Maroon
+                    pdf.setFontSize(18);
+                    pdf.text("BEAUTEX TECHNICAL TRAINING COLLEGE", 105, 20, { align: 'center' });
+
+                    pdf.setTextColor(100, 100, 100);
+                    pdf.setFontSize(10);
+                    pdf.text("OFFICIAL STUDENT IDENTIFICATION CARD", 105, 28, { align: 'center' });
+
+                    // Add Front Side (Centered)
+                    pdf.addImage(imgFront, 'PNG', (210 - 85.6) / 2, 40, 85.6, 53.98);
+
+                    // Divider
+                    pdf.setDrawColor(128, 0, 0);
+                    pdf.setLineWidth(0.2);
+                    pdf.line(20, 105, 190, 105);
+                    pdf.setTextColor(150, 150, 150);
+                    pdf.setFontSize(8);
+                    pdf.text("OFFICIAL CARD REVERSE SIDE", 105, 112, { align: 'center' });
+
+                    // Add Back Side (Centered)
+                    pdf.addImage(imgBack, 'PNG', (210 - 85.6) / 2, 125, 85.6, 53.98);
+
+                    // Verification Footer
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(150, 150, 150);
+                    const date = new Date().toLocaleDateString();
+                    pdf.text(`Generated on ${date} | System Verified ID`, 105, 280, { align: 'center' });
+
+                    pdf.save(`ID_Card_${student.id}_${student.name.replace(/\s+/g, '_')}.pdf`);
+                } catch (err) {
+                    console.error("PDF generation failed:", err);
+                    alert("Failed to generate PDF. Please ensure all resources are loaded.");
+                }
+            }
+            setPrintingStudent(null);
+        }, 1200);
     };
 
     const handleResetPassword = async (student) => {
@@ -282,6 +353,7 @@ export default function Students() {
                                             <button onClick={() => setShowProfileModal(student)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Profile"><Eye className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => navigate(`/reports?studentId=${student.id}`)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Academic Reports"><FileBarChart className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => handlePrintID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Print ID Card"><Printer className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => handleDownloadID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Download ID Card"><Download className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => handleEdit(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg"><Edit className="w-3.5 h-3.5" /></button>
                                             {canResetPassword && (
                                                 <button onClick={() => handleResetPassword(student)} className="p-2 text-primary/20 hover:text-amber-600 transition-colors border border-gray-100 rounded-lg" title="Reset Password"><Key className="w-3.5 h-3.5" /></button>
@@ -566,6 +638,38 @@ export default function Students() {
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
+                                            <select
+                                                value={formData.department}
+                                                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                            >
+                                                <option value="">Select Department</option>
+                                                <option value="Cosmetology">Cosmetology</option>
+                                                <option value="Beauty Therapy">Beauty Therapy</option>
+                                                <option value="Information Technology">Information Technology</option>
+                                                <option value="Catering & Hospitality">Catering & Hospitality</option>
+                                                <option value="Fashion & Design">Fashion & Design</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Academic Level</label>
+                                            <select
+                                                value={formData.level}
+                                                onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                            >
+                                                <option value="Module 1">Module 1</option>
+                                                <option value="Module 2">Module 2</option>
+                                                <option value="Module 3">Module 3</option>
+                                                <option value="Short Course">Short Course</option>
+                                                <option value="Certificate">Certificate</option>
+                                                <option value="Diploma">Diploma</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
                                             <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment Date</label>
                                             <input
                                                 type="date"
@@ -620,8 +724,12 @@ export default function Students() {
                 </div>
             )}
 
-            {/* Hidden Print Container */}
-            <div className="hidden print:block fixed inset-0 bg-white z-[9999]">
+            {/* Capturable and Printable Container */}
+            <div className={`fixed z-[9999] ${printingStudent ? 'block' : 'hidden'} 
+                /* Off-screen for normal view but capturable */
+                left-[-9999px] top-0 bg-white
+                /* Full screen for print mode */
+                print:left-0 print:right-0 print:top-0 print:bottom-0 print:bg-white`}>
                 {printingStudent && <IDCard data={printingStudent} role="student" />}
             </div>
         </div>

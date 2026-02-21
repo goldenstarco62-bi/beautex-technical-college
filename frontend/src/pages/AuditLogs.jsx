@@ -74,7 +74,8 @@ export default function AuditLogs() {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${log.action.includes('CREATE') ? 'bg-green-100 text-green-600' :
+                                        <span className={`text-[9px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${log.action === 'Login' ? 'bg-purple-100 text-purple-600' :
+                                            log.action.includes('CREATE') ? 'bg-green-100 text-green-600' :
                                                 log.action.includes('DELETE') ? 'bg-red-100 text-red-600' :
                                                     log.action.includes('UPDATE') ? 'bg-blue-100 text-blue-600' :
                                                         'bg-gray-100 text-gray-600'

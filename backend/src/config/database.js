@@ -171,6 +171,9 @@ export async function initializeDatabase() {
             console.warn('⚠️ Schema file not found. Skipping auto-initialization.');
         }
 
+        // Run migrations for SQLite
+        await runSqliteMigrations(database);
+
     } catch (err) {
         console.error('❌ Critical Init Error:', err.message);
     } finally {
@@ -270,6 +273,14 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE students ADD COLUMN intake TEXT');
             console.log('✅ intake column added to students');
         }
+        if (!existingStudentCols.includes('department')) {
+            await database.query('ALTER TABLE students ADD COLUMN department TEXT');
+            console.log('✅ department column added to students');
+        }
+        if (!existingStudentCols.includes('level')) {
+            await database.query('ALTER TABLE students ADD COLUMN level TEXT DEFAULT \'Module 1\'');
+            console.log('✅ level column added to students');
+        }
 
         // --- Faculty Table Migrations ---
         const facultyCols = await database.query(`
@@ -302,9 +313,82 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE faculty ADD COLUMN id_number TEXT');
             console.log('✅ id_number column added to faculty');
         }
+        if (!existingFacultyCols.includes('category')) {
+            await database.query('ALTER TABLE faculty ADD COLUMN category TEXT DEFAULT \'Trainer\'');
+            console.log('✅ category column added to faculty');
+        }
+
+        // --- Audit Logs Table Migrations ---
+        const auditCols = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='audit_logs'
+        `);
+        const existingAuditCols = auditCols.rows.map(r => r.column_name);
+
+        if (!existingAuditCols.includes('user_email')) {
+            console.log('🔄 Applying migration: Adding user_email to Postgres audit_logs...');
+            await database.query('ALTER TABLE audit_logs ADD COLUMN user_email TEXT');
+            console.log('✅ user_email column added to audit_logs');
+        }
 
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
+    }
+}
+
+async function runSqliteMigrations(database) {
+    try {
+        // Check for user_email in audit_logs
+        const tableInfo = await database.all("PRAGMA table_info('audit_logs')");
+        const hasUserEmail = tableInfo.some(col => col.name === 'user_email');
+        const hasUserId = tableInfo.some(col => col.name === 'user_id');
+
+        if (!hasUserEmail) {
+            console.log('🔄 Applying SQLite migration: Adding user_email to audit_logs...');
+            await database.run('ALTER TABLE audit_logs ADD COLUMN user_email TEXT');
+            console.log('✅ user_email column added to SQLite audit_logs');
+        }
+
+        // Check for department and level in students
+        const studentInfo = await database.all("PRAGMA table_info('students')");
+        const hasDept = studentInfo.some(col => col.name === 'department');
+        const hasLevel = studentInfo.some(col => col.name === 'level');
+
+        if (!hasDept) {
+            console.log('🔄 Applying SQLite migration: Adding department to students...');
+            await database.run('ALTER TABLE students ADD COLUMN department TEXT');
+            console.log('✅ department column added to SQLite students');
+        }
+        if (!hasLevel) {
+            console.log('🔄 Applying SQLite migration: Adding level to students...');
+            await database.run('ALTER TABLE students ADD COLUMN level TEXT DEFAULT \'Module 1\'');
+            console.log('✅ level column added to SQLite students');
+        }
+
+        // Check for category in faculty
+        const facultyInfo = await database.all("PRAGMA table_info('faculty')");
+        const hasCategory = facultyInfo.some(col => col.name === 'category');
+
+        if (!hasCategory) {
+            console.log('🔄 Applying SQLite migration: Adding category to faculty...');
+            await database.run('ALTER TABLE faculty ADD COLUMN category TEXT DEFAULT \'Trainer\'');
+            console.log('✅ category column added to SQLite faculty');
+        }
+
+        const facultyPhotoInfo = await database.all("PRAGMA table_info('faculty')");
+        if (!facultyPhotoInfo.some(col => col.name === 'photo')) {
+            await database.run('ALTER TABLE faculty ADD COLUMN photo TEXT');
+            console.log('✅ photo column added to SQLite faculty');
+        }
+
+        const studentPhotoInfo = await database.all("PRAGMA table_info('students')");
+        if (!studentPhotoInfo.some(col => col.name === 'photo')) {
+            await database.run('ALTER TABLE students ADD COLUMN photo TEXT');
+            console.log('✅ photo column added to SQLite students');
+        }
+
+    } catch (error) {
+        console.error('⚠️ SQLite migration warning:', error.message);
     }
 }
 

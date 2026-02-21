@@ -307,14 +307,13 @@ INSERT OR IGNORE INTO system_settings (key, value) VALUES
 -- Audit Logs table
 CREATE TABLE IF NOT EXISTS audit_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
+  user_email TEXT NOT NULL,
   action TEXT NOT NULL,
   resource TEXT,
   resource_id TEXT,
   details TEXT,
   ip_address TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Departments table

@@ -1,6 +1,8 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { getDb, query, queryOne, run } from '../config/database.js';
+import { logActivity } from '../services/auditService.js';
+
 
 // Dynamic user lookup that works with both MongoDB and SQLite
 async function findUserByEmail(email) {
@@ -183,7 +185,17 @@ export async function login(req, res) {
                 student_id
             }
         });
+
+        // Log successful login
+        await logActivity({
+            userEmail: user.email,
+            action: 'Login',
+            resource: 'Auth',
+            details: `User logged in with role: ${user.role}`,
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress
+        });
     } catch (error) {
+
         console.error('Login error:', error);
         res.status(500).json({ error: 'Failed to login' });
     }

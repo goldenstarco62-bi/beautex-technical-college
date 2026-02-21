@@ -125,14 +125,14 @@ export async function deleteUser(req, res) {
 export async function getAuditLogs(req, res) {
     try {
         if (await isMongo()) {
-            return res.json({ message: 'Audit logs not implemented for MongoDB' });
+            const AuditLog = (await import('../models/mongo/AuditLog.js')).default;
+            const logs = await AuditLog.find().sort({ created_at: -1 }).limit(100);
+            return res.json(logs);
         }
 
         const logs = await query(`
-            SELECT a.*, u.email as user_email 
-            FROM audit_logs a 
-            LEFT JOIN users u ON a.user_id = u.id 
-            ORDER BY a.created_at DESC 
+            SELECT * FROM audit_logs 
+            ORDER BY created_at DESC 
             LIMIT 100
         `);
         res.json(logs);

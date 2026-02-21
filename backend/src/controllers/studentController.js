@@ -147,6 +147,7 @@ export async function createStudent(req, res) {
                 password: hashedPassword,
                 role: 'student',
                 status: 'Active',
+                photo,
                 must_change_password: true
             });
             await newUser.save();
@@ -160,9 +161,9 @@ export async function createStudent(req, res) {
 
             // Create user account for login
             await run(
-                `INSERT INTO users (name, email, password, role, status, must_change_password)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [name, email, hashedPassword, 'student', 'Active', true]
+                `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [name, email, hashedPassword, 'student', 'Active', photo, true]
             );
 
             savedStudent = await queryOne('SELECT * FROM students WHERE id = ?', [id]);
