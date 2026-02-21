@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { academicAPI } from '../services/api';
-import { Building2, Calendar, Plus, Trash2, Edit, CheckCircle2, X } from 'lucide-react';
+import { Building2, Calendar, Plus, Trash2, Edit, CheckCircle2, X, Search } from 'lucide-react';
 
 const EMPTY_DEPT = { name: '', head_of_department: '', description: '' };
 const EMPTY_PERIOD = { name: '', start_date: '', end_date: '' };
@@ -23,6 +23,7 @@ export default function AcademicMaster() {
     const [selectedStudents, setSelectedStudents] = useState([]);
     const [targetStatus, setTargetStatus] = useState('Active');
     const [promoting, setPromoting] = useState(false);
+    const [studentSearch, setStudentSearch] = useState('');
 
     useEffect(() => { fetchData(); }, []);
 
@@ -79,6 +80,26 @@ export default function AcademicMaster() {
         }
     };
 
+    const handleDeptDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this department?')) return;
+        try {
+            await academicAPI.deleteDepartment(id);
+            fetchData(true);
+        } catch (error) {
+            alert('Failed to delete department.');
+        }
+    };
+
+    const handlePeriodDelete = async (id) => {
+        if (!confirm('Are you sure you want to delete this period? This might affect enrollment logic.')) return;
+        try {
+            await academicAPI.deletePeriod(id);
+            fetchData(true);
+        } catch (error) {
+            alert('Failed to delete period.');
+        }
+    };
+
     const openNewDept = () => {
         setEditingDept(null);
         setDeptForm(EMPTY_DEPT);
@@ -96,9 +117,14 @@ export default function AcademicMaster() {
         if (!deptForm.name.trim()) { alert('Department name is required.'); return; }
         try {
             setSavingDept(true);
-            await academicAPI.createDepartment(deptForm);
+            if (editingDept) {
+                await academicAPI.updateDepartment(editingDept.id, deptForm);
+            } else {
+                await academicAPI.createDepartment(deptForm);
+            }
             setShowDeptModal(false);
             setDeptForm(EMPTY_DEPT);
+            setEditingDept(null);
             fetchData(true);
         } catch (error) {
             alert(error.response?.data?.error || 'Failed to save department.');
@@ -198,6 +224,13 @@ export default function AcademicMaster() {
                                     >
                                         <Edit className="w-4 h-4" />
                                     </button>
+                                    <button
+                                        onClick={() => handleDeptDelete(dept.id)}
+                                        className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                                        title="Delete Department"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -264,20 +297,28 @@ export default function AcademicMaster() {
                                         </span>
                                     </td>
                                     <td className="px-8 py-4 text-right">
-                                        {!period.is_active && period.status !== 'Completed' && (
+                                        <div className="flex items-center justify-end gap-3">
+                                            {!period.is_active && period.status !== 'Completed' && (
+                                                <button
+                                                    onClick={() => handleActivatePeriod(period.id)}
+                                                    className="text-[9px] font-black text-green-600 uppercase tracking-widest hover:underline flex items-center gap-1"
+                                                >
+                                                    <CheckCircle2 className="w-3 h-3" /> Activate
+                                                </button>
+                                            )}
+                                            {period.is_active && (
+                                                <span className="text-[9px] font-black text-maroon uppercase tracking-widest opacity-40">Current Active</span>
+                                            )}
+                                            {period.status === 'Completed' && (
+                                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest opacity-60">Completed</span>
+                                            )}
                                             <button
-                                                onClick={() => handleActivatePeriod(period.id)}
-                                                className="text-[9px] font-black text-green-600 uppercase tracking-widest hover:underline flex items-center gap-1 ml-auto"
+                                                onClick={() => handlePeriodDelete(period.id)}
+                                                className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                                             >
-                                                <CheckCircle2 className="w-3 h-3" /> Activate
+                                                <Trash2 className="w-4 h-4" />
                                             </button>
-                                        )}
-                                        {period.is_active && (
-                                            <span className="text-[9px] font-black text-maroon uppercase tracking-widest opacity-40">Current Active</span>
-                                        )}
-                                        {period.status === 'Completed' && (
-                                            <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest opacity-60">Completed</span>
-                                        )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -297,6 +338,16 @@ export default function AcademicMaster() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-maroon/10">
+                        <div className="px-4 border-r border-maroon/5 flex items-center gap-2">
+                            <Search className="w-3 h-3 text-maroon/20" />
+                            <input
+                                type="text"
+                                placeholder="Search by name or course..."
+                                value={studentSearch}
+                                onChange={(e) => setStudentSearch(e.target.value)}
+                                className="text-[10px] font-bold text-maroon outline-none bg-transparent w-40 placeholder:text-maroon/20 uppercase"
+                            />
+                        </div>
                         <div className="px-4 border-r border-maroon/5">
                             <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest mb-1">Target Status</p>
                             <select
@@ -320,18 +371,23 @@ export default function AcademicMaster() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    {students.map(student => (
+                    {students.filter(s => {
+                        const search = studentSearch.toLowerCase();
+                        return s.name.toLowerCase().includes(search) ||
+                            s.course.toLowerCase().includes(search) ||
+                            s.id.toLowerCase().includes(search);
+                    }).map(student => (
                         <div
                             key={student.id}
                             onClick={() => toggleStudentSelection(student.id)}
                             className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${selectedStudents.includes(student.id)
-                                    ? 'bg-maroon border-gold/30 shadow-xl scale-[1.02]'
-                                    : 'bg-white border-maroon/5 hover:border-maroon/20 hover:shadow-md'
+                                ? 'bg-maroon border-gold/30 shadow-xl scale-[1.02]'
+                                : 'bg-white border-maroon/5 hover:border-maroon/20 hover:shadow-md'
                                 }`}
                         >
                             <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${selectedStudents.includes(student.id)
-                                    ? 'bg-gold border-gold'
-                                    : 'bg-transparent border-maroon/10'
+                                ? 'bg-gold border-gold'
+                                : 'bg-transparent border-maroon/10'
                                 }`}>
                                 {selectedStudents.includes(student.id) && <CheckCircle2 className="w-3.5 h-3.5 text-maroon" />}
                             </div>

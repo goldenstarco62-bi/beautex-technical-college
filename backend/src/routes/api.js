@@ -104,6 +104,8 @@ router.put('/attendance/:id', authenticateToken, authorizeRoles('teacher', 'admi
 
 // Grade routes (Protected with RBAC)
 router.get('/grades', authenticateToken, gradeController.getAllGrades);
+router.get('/grades/batch-students', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.getBatchStudents);
+router.post('/grades/batch', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.createBatchGrades);
 router.post('/grades', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.createGrade);
 router.put('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.updateGrade);
 router.delete('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.deleteGrade);
@@ -185,9 +187,12 @@ router.get('/finance/analytics', authenticateToken, authorizeRoles('admin', 'sup
 // Academic Master Routes
 router.get('/academic/departments', authenticateToken, academicController.getDepartments);
 router.post('/academic/departments', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.createDepartment);
+router.put('/academic/departments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.updateDepartment);
+router.delete('/academic/departments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.deleteDepartment);
 router.get('/academic/periods', authenticateToken, academicController.getAcademicPeriods);
 router.post('/academic/periods', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.createAcademicPeriod);
 router.put('/academic/periods/:id/activate', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.setActivePeriod);
+router.delete('/academic/periods/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.deleteAcademicPeriod);
 router.post('/academic/promote', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.promoteStudents);
 
 // Course Materials Routes

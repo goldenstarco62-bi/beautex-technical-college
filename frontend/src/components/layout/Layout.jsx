@@ -36,7 +36,9 @@ export default function Layout({ children }) {
                 <main className="flex-1 p-4 lg:p-10 pt-20 lg:pt-28 pb-24 lg:pb-10 print:p-0 print:pt-4 overflow-x-hidden">
                     {children}
                 </main>
-                <MobileBottomNav onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+                <div className="print:hidden">
+                    <MobileBottomNav onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+                </div>
             </div>
         </div>
     );

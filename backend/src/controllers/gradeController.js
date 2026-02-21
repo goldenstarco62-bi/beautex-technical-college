@@ -141,6 +141,66 @@ export async function getAllGrades(req, res) {
     }
 }
 
+export async function getBatchStudents(req, res) {
+    try {
+        const { course } = req.query;
+        if (!course) return res.status(400).json({ error: 'Course name is required' });
+
+        if (await isMongo()) {
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const students = await Student.find({ course, status: 'Active' }).select('id name course').lean();
+            return res.json(students);
+        }
+
+        const students = await query('SELECT id, name, course FROM students WHERE course = ? AND status = ?', [course, 'Active']);
+        res.json(students);
+    } catch (error) {
+        console.error('Batch students fetch error:', error);
+        res.status(500).json({ error: 'Failed to fetch students for this course' });
+    }
+}
+
+export async function createBatchGrades(req, res) {
+    try {
+        const { grades } = req.body;
+        if (!Array.isArray(grades) || grades.length === 0) {
+            return res.status(400).json({ error: 'Grades must be a non-empty array' });
+        }
+
+        const mongo = await isMongo();
+        const results = [];
+
+        if (mongo) {
+            const Grade = (await import('../models/mongo/Grade.js')).default;
+            for (const g of grades) {
+                const newGrade = new Grade({
+                    student_id: g.student_id,
+                    course: g.course,
+                    assignment: g.assignment,
+                    month: g.month,
+                    score: g.score,
+                    max_score: g.max_score || 100,
+                    remarks: g.remarks || ''
+                });
+                await newGrade.save();
+                results.push(newGrade);
+            }
+        } else {
+            for (const g of grades) {
+                await run(
+                    'INSERT INTO grades (student_id, course, assignment, month, score, max_score, remarks) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [g.student_id, g.course, g.assignment, g.month, g.score, g.max_score || 100, g.remarks || '']
+                );
+            }
+        }
+
+        res.status(201).json({ message: `Successfully recorded ${grades.length} marks`, count: grades.length });
+    } catch (error) {
+        console.error('Batch grade creation error:', error);
+        res.status(500).json({ error: 'Failed to record batch marks' });
+    }
+}
+
 export async function createGrade(req, res) {
     try {
         const { student_id, course, assignment, month, score, max_score, remarks } = req.body;

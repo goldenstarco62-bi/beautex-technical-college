@@ -73,6 +73,8 @@ export const attendanceAPI = {
 // Grades
 export const gradesAPI = {
     getAll: (course) => api.get('grades', { params: { course } }),
+    getBatchStudents: (course) => api.get('grades/batch-students', { params: { course } }),
+    createBatch: (data) => api.post('grades/batch', data),
     create: (data) => api.post('grades', data),
     update: (id, data) => api.put(`grades/${encodeURIComponent(id)}`, data),
     delete: (id) => api.delete(`grades/${encodeURIComponent(id)}`),
@@ -175,9 +177,12 @@ export const materialsAPI = {
 export const academicAPI = {
     getDepartments: () => api.get('academic/departments'),
     createDepartment: (data) => api.post('academic/departments', data),
+    updateDepartment: (id, data) => api.put(`academic/departments/${id}`, data),
+    deleteDepartment: (id) => api.delete(`academic/departments/${id}`),
     getPeriods: () => api.get('academic/periods'),
     createPeriod: (data) => api.post('academic/periods', data),
     activatePeriod: (id) => api.put(`academic/periods/${id}/activate`),
+    deletePeriod: (id) => api.delete(`academic/periods/${id}`),
     promoteStudents: (data) => api.post('academic/promote', data),
 };
 

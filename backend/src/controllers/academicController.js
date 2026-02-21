@@ -23,6 +23,30 @@ export async function createDepartment(req, res) {
     }
 }
 
+export async function updateDepartment(req, res) {
+    try {
+        const { id } = req.params;
+        const { name, head_of_department, description } = req.body;
+        await run(
+            'UPDATE departments SET name = ?, head_of_department = ?, description = ? WHERE id = ?',
+            [name, head_of_department, description, id]
+        );
+        res.json({ message: 'Department updated' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+export async function deleteDepartment(req, res) {
+    try {
+        const { id } = req.params;
+        await run('DELETE FROM departments WHERE id = ?', [id]);
+        res.json({ message: 'Department deleted' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
 // Academic Periods
 export async function getAcademicPeriods(req, res) {
     try {
@@ -54,6 +78,16 @@ export async function setActivePeriod(req, res) {
         // Set new active
         await run('UPDATE academic_periods SET is_active = true, status = ? WHERE id = ?', ['Ongoing', id]);
         res.json({ message: 'Active period updated' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+}
+
+export async function deleteAcademicPeriod(req, res) {
+    try {
+        const { id } = req.params;
+        await run('DELETE FROM academic_periods WHERE id = ?', [id]);
+        res.json({ message: 'Academic period deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
