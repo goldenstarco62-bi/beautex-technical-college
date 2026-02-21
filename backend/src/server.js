@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
+import { rateLimit } from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { initializeDatabase, getDb, query, queryOne, run, getProcessedDatabaseUrl } from './config/database.js';
 import { authenticateToken, authorizeRoles } from './middleware/auth.js';
@@ -67,6 +68,32 @@ app.use(cors({
     },
     credentials: true
 }));
+
+// Rate Limiting Configuration
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 20, // Limit each IP to 20 login/reset attempts per windowMs
+    message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' },
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    limit: 100, // Limit each IP to 100 requests per minute
+    message: { error: 'Too many requests. Please slow down.' },
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+});
+
+// Apply global rate limiter
+app.use('/api/', apiLimiter);
+
+// Specific limiter for sensitive auth routes
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+app.use('/api/auth/reset-password', authLimiter);
 
 // Request logger
 app.use((req, res, next) => {

@@ -27,6 +27,12 @@ export async function createFeeStructure(req, res) {
 export async function getStudentFees(req, res) {
     try {
         const { studentId } = req.params;
+
+        // IDOR Protection: Students can only view their own fees
+        if (req.user.role === 'student' && req.user.student_id !== studentId) {
+            return res.status(403).json({ error: 'Access denied. You can only view your own fee records.' });
+        }
+
         const fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
         if (!fee) return res.status(404).json({ error: 'Fee record not found' });
         res.json(fee);
@@ -88,6 +94,15 @@ export async function recordPayment(req, res) {
 export async function getPayments(req, res) {
     try {
         const { studentId } = req.query;
+
+        // IDOR Protection: Students can only view their own payments
+        if (req.user.role === 'student') {
+            const effectiveId = studentId || req.user.student_id;
+            if (effectiveId !== req.user.student_id) {
+                return res.status(403).json({ error: 'Access denied. You can only view your own payment records.' });
+            }
+        }
+
         let payments;
         if (studentId) {
             payments = await query('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC', [studentId]);

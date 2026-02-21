@@ -23,12 +23,49 @@ import { authorizeRoles } from '../middleware/auth.js';
 
 import { logAudit } from '../middleware/audit.js';
 import { upload } from '../middleware/upload.js';
+import { body, validationResult } from 'express-validator';
+
+// Validation Result Middleware
+const validate = (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+    }
+    next();
+};
+
+// Common Validation Rules
+const loginValidation = [
+    body('email').isEmail().withMessage('Please enter a valid email address'),
+    body('password').notEmpty().withMessage('Password is required'),
+    validate
+];
+
+const registerValidation = [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+    body('role').isIn(['superadmin', 'admin', 'teacher', 'student']).withMessage('Invalid role'),
+    validate
+];
+
+const paymentValidation = [
+    body('student_id').notEmpty().withMessage('Student ID is required'),
+    body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be a positive number'),
+    body('method').notEmpty().withMessage('Payment method is required'),
+    validate
+];
+
+const feeValidation = [
+    body('course_id').notEmpty().withMessage('Course ID is required'),
+    body('amount').isFloat({ min: 0 }).withMessage('Amount must be a non-negative number'),
+    validate
+];
 
 const router = express.Router();
 
 // Auth routes (Restricted registration to prevent unauthorized elevation)
-router.post('/auth/register', authenticateToken, authorizeRoles('superadmin'), authController.register);
-router.post('/auth/login', authController.login);
+router.post('/auth/register', authenticateToken, authorizeRoles('superadmin'), registerValidation, authController.register);
+router.post('/auth/login', loginValidation, authController.login);
 router.post('/auth/change-password', authenticateToken, authController.changePassword);
 router.post('/auth/forgot-password', authController.forgotPassword);
 router.post('/auth/reset-password', authController.resetPassword);
@@ -138,10 +175,10 @@ router.get('/stats/dashboard', authenticateToken, statsController.getDashboardSt
 
 // Finance Routes
 router.get('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFeeStructures);
-router.post('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.createFeeStructure);
+router.post('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), feeValidation, financeController.createFeeStructure);
 router.get('/finance/student-fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getAllStudentFees);
 router.get('/finance/student-fees/:studentId', authenticateToken, financeController.getStudentFees);
-router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.recordPayment);
+router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), paymentValidation, financeController.recordPayment);
 router.get('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getPayments);
 router.get('/finance/analytics', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFinanceAnalytics);
 
