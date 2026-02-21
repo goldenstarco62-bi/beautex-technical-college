@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'teacher', 'student')),
-  status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
+  status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive', 'Suspended', 'Pending Approval')),
   photo TEXT,
   phone TEXT,
   address TEXT,

@@ -130,7 +130,7 @@ router.put('/profile', authenticateToken, profileController.updateProfile);
 // User Management routes (Admin & Superadmin)
 router.get('/users', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.getAllUsers);
 router.put('/users/:id/role', authenticateToken, authorizeRoles('superadmin'), userController.updateUserRole);
-router.put('/users/:id/status', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.toggleUserStatus);
+router.put('/users/:id/status', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.updateUserStatus);
 router.put('/users/:id/password', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetUserPassword);
 router.post('/users/reset-by-email', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetPasswordByEmail);
 router.delete('/users/:id', authenticateToken, authorizeRoles('superadmin'), userController.deleteUser);

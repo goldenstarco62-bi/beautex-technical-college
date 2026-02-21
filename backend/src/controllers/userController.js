@@ -45,13 +45,16 @@ export async function updateUserRole(req, res) {
     }
 }
 
-export async function toggleUserStatus(req, res) {
+export async function updateUserStatus(req, res) {
     try {
+        const { status } = req.body;
+        if (!status) return res.status(400).json({ error: 'Status is required' });
+
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
             const user = await User.findById(req.params.id);
             if (!user) return res.status(404).json({ error: 'User not found' });
-            user.status = user.status === 'Active' ? 'Inactive' : 'Active';
+            user.status = status;
             await user.save();
             return res.json({ id: user._id, email: user.email, role: user.role, status: user.status });
         }
@@ -59,12 +62,11 @@ export async function toggleUserStatus(req, res) {
         const user = await queryOne('SELECT * FROM users WHERE id = ?', [req.params.id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        const newStatus = user.status === 'Active' ? 'Inactive' : 'Active';
-        await run('UPDATE users SET status = ? WHERE id = ?', [newStatus, req.params.id]);
-        res.json({ id: user.id, email: user.email, role: user.role, status: newStatus });
+        await run('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
+        res.json({ id: user.id, email: user.email, role: user.role, status });
     } catch (error) {
-        console.error('Toggle user status error:', error);
-        res.status(500).json({ error: 'Failed to toggle user status' });
+        console.error('Update user status error:', error);
+        res.status(500).json({ error: 'Failed to update user status' });
     }
 }
 
