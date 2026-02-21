@@ -45,7 +45,6 @@ app.use(helmet({
     hidePoweredBy: true,
     hsts: true,
     ieNoOpen: true,
-    noSniff: true,
     originAgentCluster: true,
     permittedCrossDomainPolicies: { policy: 'none' },
     xssFilter: true,
