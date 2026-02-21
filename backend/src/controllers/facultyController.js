@@ -3,12 +3,14 @@ import { sendWelcomeEmail } from '../services/emailService.js';
 import { sendLoginCredentials } from '../services/smsService.js';
 import bcrypt from 'bcryptjs';
 
+import crypto from 'crypto';
+
 // Generate random password
 function generatePassword(length = 12) {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     let password = '';
     for (let i = 0; i < length; i++) {
-        password += chars.charAt(Math.floor(Math.random() * chars.length));
+        password += chars.charAt(crypto.randomInt(0, chars.length));
     }
     return password;
 }

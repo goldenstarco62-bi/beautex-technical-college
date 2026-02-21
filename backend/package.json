@@ -35,7 +35,8 @@
     "mongoose": "^8.0.0",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.1",
-    "pg": "^8.18.0"
+    "pg": "^8.18.0",
+    "xss": "^1.0.15"
   },
   "optionalDependencies": {
     "sqlite": "^5.1.1",

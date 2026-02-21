@@ -88,14 +88,17 @@ export async function login(req, res) {
         // Find user
         const user = await findUserByEmail(email);
 
+        // Verification - Use same timing/generic error for both "not found" and "wrong password"
         if (!user) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+            // Fake hash compare to prevent timing attacks
+            await bcrypt.compare(password, '$2b$10$abcdefghijklmnopqrstuv');
+            return res.status(401).json({ error: 'Invalid email or password' });
         }
 
         // Verify password
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+            return res.status(401).json({ error: 'Invalid email or password' });
         }
 
         // Generate JWT
@@ -288,16 +291,18 @@ export async function forgotPassword(req, res) {
         const { email } = req.body;
         const user = await findUserByEmail(email);
 
-        if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+        // Security Principle: Do not reveal if the email exists in the registry
+        if (user) {
+            // In a real app, generate a reset token and send an email
+            console.log(`📡 Security Reset requested for valid user: ${email}`);
+        } else {
+            console.log(`🛡️ Security Reset requested for NON-EXISTENT user: ${email}`);
         }
 
-        // In a real app, generate a reset token and send an email
-        // For now, we'll just return success to match the expected API behavior
-        res.json({ message: 'Password reset link sent to your email' });
+        res.json({ message: 'If an account exists with that email, a password reset link has been dispatched.' });
     } catch (error) {
         console.error('Forgot password error:', error);
-        res.status(500).json({ error: 'Failed to process forgot password request' });
+        res.status(500).json({ error: 'An error occurred processing the security request' });
     }
 }
 

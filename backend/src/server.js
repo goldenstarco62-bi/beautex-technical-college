@@ -7,6 +7,7 @@ import { rateLimit } from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { initializeDatabase, getDb, query, queryOne, run, getProcessedDatabaseUrl } from './config/database.js';
 import { authenticateToken, authorizeRoles } from './middleware/auth.js';
+import { sanitizeMiddleware } from './utils/sanitize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,7 +21,35 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 1000 }));
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+// Global XSS Sanitization
+app.use(sanitizeMiddleware);
+
+// Advanced Security Headers (CSP)
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"], // unsafe-inline often needed for dev/simple react apps
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            imgSrc: ["'self'", "data:", "https:", "blob:"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            connectSrc: ["'self'", "https:", "wss:", "http://localhost:5000", "http://127.0.0.1:5000"],
+            frameAncestors: ["'none'"],
+        },
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    xContentTypeOptions: true,
+    dnsPrefetchControl: { allow: false },
+    frameguard: { action: 'deny' },
+    hidePoweredBy: true,
+    hsts: true,
+    ieNoOpen: true,
+    noSniff: true,
+    originAgentCluster: true,
+    permittedCrossDomainPolicies: { policy: 'none' },
+    xssFilter: true,
+}));
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',

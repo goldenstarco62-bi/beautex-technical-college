@@ -100,6 +100,22 @@ export async function markAttendance(req, res) {
     try {
         const { student_id, course, date, status } = req.body;
 
+        // Security check for teachers
+        if (req.user.role === 'teacher') {
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
+            if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
+
+            let coursesList = [];
+            try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+
+            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+            const allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+
+            if (!allowedCourses.includes(course)) {
+                return res.status(403).json({ error: `Security Protocol: You are not authorized to mark attendance for "${course}"` });
+            }
+        }
+
         if (await isMongo()) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
             const newAttendance = new Attendance({ student_id, course, date, status });
@@ -121,6 +137,25 @@ export async function markAttendance(req, res) {
 
 export async function updateAttendance(req, res) {
     try {
+        const recordId = req.params.id;
+
+        // Security check for teachers
+        if (req.user.role === 'teacher') {
+            const record = await queryOne('SELECT course FROM attendance WHERE id = ?', [recordId]);
+            if (!record) return res.status(404).json({ error: 'Attendance record not found' });
+
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
+            let coursesList = [];
+            try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+
+            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+            const allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+
+            if (!allowedCourses.includes(record.course)) {
+                return res.status(403).json({ error: 'Access Denied: You cannot modify records for this course.' });
+            }
+        }
+
         if (await isMongo()) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
             const updated = await Attendance.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true });
