@@ -94,7 +94,7 @@ export async function resetUserPassword(req, res) {
 
         const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
         if (!emailSent) {
-            console.warn('⚠️ Email delivery failed but password was reset. Temp password:', tempPassword);
+            console.warn('⚠️ Email delivery failed for password reset.');
         }
 
         res.json({ message: 'Password reset — temporary credentials emailed' });
@@ -170,7 +170,7 @@ export async function resetPasswordByEmail(req, res) {
 
         const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
         if (!emailSent) {
-            console.warn('⚠️ Email delivery failed but password was reset. Temp password:', tempPassword);
+            console.warn('⚠️ Email delivery failed for password reset by email.');
         }
 
         res.json({ message: 'Password reset — temporary credentials emailed' });
