@@ -101,6 +101,12 @@ export async function getStudent(req, res) {
             const Student = (await import('../models/mongo/Student.js')).default;
             const student = await Student.findOne({ id: req.params.id });
             if (!student) return res.status(404).json({ error: 'Student not found' });
+
+            // IDOR Protection: Check if user is authorized to view this profile
+            if (req.user.role === 'student' && req.user.student_id !== student.id) {
+                return res.status(403).json({ error: 'Access denied. You can only view your own profile.' });
+            }
+
             return res.json(student);
         }
 
@@ -256,7 +262,9 @@ export async function searchStudents(req, res) {
 
         if (await isMongo()) {
             const Student = (await import('../models/mongo/Student.js')).default;
-            const regex = new RegExp(query, 'i');
+            // ReDoS Protection: Escape special characters in the query string
+            const safeQuery = String(req.query.q || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(safeQuery, 'i');
             const students = await Student.find({
                 $or: [{ name: regex }, { email: regex }, { id: regex }, { course: regex }]
             }).sort({ created_at: -1 });

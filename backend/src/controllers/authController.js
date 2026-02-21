@@ -79,7 +79,6 @@ export async function register(req, res) {
 export async function login(req, res) {
     try {
         const { email, password } = req.body;
-        console.log(`🔑 Login attempt for: ${email}`);
 
         // Validate input
         if (!email || !password) {
@@ -87,21 +86,15 @@ export async function login(req, res) {
         }
 
         // Find user
-        console.log('🔍 Searching for user in database...');
         const user = await findUserByEmail(email);
 
         if (!user) {
-            console.log(`❌ User not found: ${email}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        console.log(`✅ User found. Role: ${user.role}, must_change_password: ${user.must_change_password}`);
-        console.log(`🔐 Stored hash starts with: ${user.password?.substring(0, 20)}...`);
         // Verify password
         const validPassword = await bcrypt.compare(password, user.password);
-        console.log(`🔑 Password comparison result: ${validPassword}`);
         if (!validPassword) {
-            console.log(`❌ Invalid password for: ${email}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 

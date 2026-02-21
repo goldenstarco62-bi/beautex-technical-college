@@ -26,8 +26,8 @@ import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
 
-// Auth routes (public)
-router.post('/auth/register', authController.register);
+// Auth routes (Restricted registration to prevent unauthorized elevation)
+router.post('/auth/register', authenticateToken, authorizeRoles('superadmin'), authController.register);
 router.post('/auth/login', authController.login);
 router.post('/auth/change-password', authenticateToken, authController.changePassword);
 router.post('/auth/forgot-password', authController.forgotPassword);
@@ -60,16 +60,16 @@ router.put('/faculty/:id', authenticateToken, authorizeRoles('admin', 'superadmi
 router.delete('/faculty/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('DELETE_FACULTY', 'faculty'), facultyController.deleteFaculty);
 
 
-// Attendance routes (protected)
+// Attendance routes (Protected with RBAC)
 router.get('/attendance', authenticateToken, attendanceController.getAllAttendance);
-router.post('/attendance', authenticateToken, attendanceController.markAttendance);
-router.put('/attendance/:id', authenticateToken, attendanceController.updateAttendance);
+router.post('/attendance', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.markAttendance);
+router.put('/attendance/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.updateAttendance);
 
-// Grade routes (protected)
+// Grade routes (Protected with RBAC)
 router.get('/grades', authenticateToken, gradeController.getAllGrades);
-router.post('/grades', authenticateToken, gradeController.createGrade);
-router.put('/grades/:id', authenticateToken, gradeController.updateGrade);
-router.delete('/grades/:id', authenticateToken, gradeController.deleteGrade);
+router.post('/grades', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.createGrade);
+router.put('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.updateGrade);
+router.delete('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.deleteGrade);
 
 // Announcement routes (protected)
 router.get('/announcements', authenticateToken, announcementController.getAllAnnouncements);

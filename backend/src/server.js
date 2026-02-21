@@ -14,9 +14,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Initial parsers at start
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb', parameterLimit: 100000 }));
+// Initial parsers at start (Security: Reduced limits to prevent DoS)
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 1000 }));
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 const allowedOrigins = [
@@ -179,8 +179,8 @@ app.get('/', (req, res) => {
     });
 });
 
-// SMTP Diagnostic Route (Hidden)
-app.get('/api/diag/smtp', async (req, res) => {
+// SMTP Diagnostic Route (Hidden & Restricted to Superadmin)
+app.get('/api/diag/smtp', authenticateToken, authorizeRoles('superadmin'), async (req, res) => {
     try {
         const { sendWelcomeEmail } = await import('./services/emailService.js');
         const { getDb } = await import('./config/database.js');
