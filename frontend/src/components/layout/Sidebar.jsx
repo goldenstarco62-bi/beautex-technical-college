@@ -19,6 +19,7 @@ import {
     CreditCard,
     FileStack,
     Building2,
+    LayoutList,
 } from 'lucide-react';
 
 
@@ -38,6 +39,7 @@ const navigation = [
     { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['admin', 'teacher', 'superadmin'] },
     { name: 'Activity Reports', path: '/activity-reports', icon: BarChart3, roles: ['admin', 'superadmin'] },
     { name: 'Audit Trail', path: '/audit-logs', icon: History, roles: ['superadmin'] },
+    { name: 'Trainer Reports', path: '/trainer-reports', icon: LayoutList, roles: ['admin', 'teacher', 'superadmin'] },
     { name: 'Announcements', path: '/announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['admin', 'superadmin'] },
     { name: 'My Profile', path: '/profile', icon: UserCircle, roles: ['admin', 'teacher', 'student', 'superadmin'] },

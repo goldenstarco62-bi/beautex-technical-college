@@ -196,5 +196,20 @@ export const settingsAPI = {
     downloadBackup: () => api.get('settings/backup', { responseType: 'blob' }),
 };
 
+// Interactions
+export const interactionAPI = {
+    get: (type, id) => api.get('interactions', { params: { entity_type: type, entity_id: id } }),
+    create: (data) => api.post('interactions', data),
+    react: (id, emoji) => api.post(`interactions/${id}/react`, { emoji }),
+    delete: (id) => api.delete(`interactions/${id}`),
+};
+
+// Trainer Reports
+export const trainerReportsAPI = {
+    getAll: () => api.get('trainer-reports'),
+    create: (data) => api.post('trainer-reports', data),
+    delete: (id) => api.delete(`trainer-reports/${id}`),
+};
+
 export default api;
 

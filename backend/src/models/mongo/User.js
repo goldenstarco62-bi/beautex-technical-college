@@ -34,6 +34,13 @@ const userSchema = new mongoose.Schema({
     created_at: {
         type: Date,
         default: Date.now
+    },
+    last_login: {
+        type: Date
+    },
+    last_active: {
+        type: Date,
+        default: Date.now
     }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

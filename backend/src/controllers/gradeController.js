@@ -152,8 +152,11 @@ export async function getBatchStudents(req, res) {
             return res.json(students);
         }
 
-        const students = await query('SELECT id, name, course FROM students WHERE course = ? AND status = ?', [course, 'Active']);
-        res.json(students);
+        const students = await query('SELECT id, name, course FROM students WHERE course LIKE ? AND status = ?', [`%${course}%`, 'Active']);
+        res.json(students.map(s => ({
+            ...s,
+            course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
+        })));
     } catch (error) {
         console.error('Batch students fetch error:', error);
         res.status(500).json({ error: 'Failed to fetch students for this course' });

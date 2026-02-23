@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { coursesAPI, studentsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Plus, BookOpen, Edit, Monitor, ShieldAlert, Trash2, X } from 'lucide-react';
+import { Plus, BookOpen, Edit, Monitor, ShieldAlert, Trash2, X, MessageSquare } from 'lucide-react';
+import Interactions from '../components/shared/Interactions';
 
 export default function Courses() {
     const { user } = useAuth();
@@ -11,6 +12,7 @@ export default function Courses() {
     const [formData, setFormData] = useState({
         id: '', name: '', department: '', instructor: '', duration: '', capacity: 30, room: '', schedule: '', status: 'Active'
     });
+    const [discussionEntity, setDiscussionEntity] = useState(null);
 
     const isStudent = user?.role === 'student';
     const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business'];
@@ -30,7 +32,7 @@ export default function Courses() {
 
                 if (studentProfile && studentProfile.course) {
                     // Filter courses to show only the enrolled one
-                    const studentCourse = data.filter(c => c.name === studentProfile.course);
+                    const studentCourse = data.filter(c => c.name === (Array.isArray(studentProfile.course) ? studentProfile.course[0] : studentProfile.course));
                     setCourses(studentCourse);
                 } else {
                     // Fallback if no enrollment found (or show empty)
@@ -125,16 +127,29 @@ export default function Courses() {
                                 <div className={`p-4 rounded-2xl bg-maroon/5 group-hover:bg-maroon transition-colors`}>
                                     <BookOpen className="w-6 h-6 text-maroon group-hover:text-gold transition-colors" />
                                 </div>
-                                {!isStudent && (
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleEdit(course)} className="p-2 hover:bg-parchment-100 rounded-lg text-maroon/20 hover:text-maroon transition-all">
-                                            <Edit className="w-4 h-4" />
-                                        </button>
-                                        <button onClick={() => handleDelete(course.id)} className="p-2 hover:bg-red-50 rounded-lg text-maroon/10 hover:text-red-600 transition-all">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                )}
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setDiscussionEntity({
+                                            type: 'course',
+                                            id: course.id || course._id,
+                                            title: `${course.name} - Discussion`
+                                        })}
+                                        className="p-2 bg-maroon/5 hover:bg-maroon hover:text-gold rounded-lg text-maroon transition-all"
+                                        title="Join Discussion"
+                                    >
+                                        <MessageSquare className="w-4 h-4" />
+                                    </button>
+                                    {!isStudent && (
+                                        <>
+                                            <button onClick={() => handleEdit(course)} className="p-2 hover:bg-parchment-100 rounded-lg text-maroon/20 hover:text-maroon transition-all">
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(course.id)} className="p-2 hover:bg-red-50 rounded-lg text-maroon/10 hover:text-red-600 transition-all">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
 
                             <h3 className="text-xl font-black text-maroon tracking-tight mb-2 uppercase">{course.name}</h3>
@@ -161,7 +176,7 @@ export default function Courses() {
                                 <div className="w-full bg-parchment-200 h-2 rounded-full overflow-hidden">
                                     <div
                                         className="bg-maroon h-full rounded-full transition-all duration-1000"
-                                        style={{ width: `${((course.enrolled || 0) / course.capacity) * 100}%` }}
+                                        style={{ width: `${((course.enrolled || 0) / (course.capacity || 1)) * 100}%` }}
                                     ></div>
                                 </div>
                             </div>
@@ -297,6 +312,26 @@ export default function Courses() {
                                 {editingCourse ? 'Synchronize Curriculum' : 'Release Program'}
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Discourse Panel */}
+            {discussionEntity && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-end">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-500" onClick={() => setDiscussionEntity(null)}></div>
+                    <div className="relative w-full max-w-xl h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 overflow-y-auto p-8 sm:p-12 custom-scrollbar">
+                        <div className="flex justify-between items-start mb-8">
+                            <div>
+                                <h2 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight leading-none">{discussionEntity.title}</h2>
+                                <p className="text-[10px] text-maroon/40 font-bold uppercase tracking-[0.3em] mt-3 italic">Curriculum Discourse Module</p>
+                            </div>
+                            <button onClick={() => setDiscussionEntity(null)} className="p-3 bg-gray-50 hover:bg-black hover:text-white rounded-2xl transition-all shadow-sm">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <Interactions entityType={discussionEntity.type} entityId={discussionEntity.id} />
                     </div>
                 </div>
             )}

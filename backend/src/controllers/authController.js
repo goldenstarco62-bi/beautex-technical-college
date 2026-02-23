@@ -182,6 +182,18 @@ export async function login(req, res) {
             }
         });
 
+        // Update last_login and last_seen_at
+        const now = new Date();
+        if (!!process.env.MONGODB_URI) {
+            const User = (await import('../models/mongo/User.js')).default;
+            await User.findByIdAndUpdate(userId, {
+                last_login: now,
+                last_active: now // Using last_active for Mongo
+            });
+        } else {
+            await run('UPDATE users SET last_login = ?, last_seen_at = ? WHERE id = ?', [now.toISOString(), now.toISOString(), userId]);
+        }
+
         // Log successful login
         await logActivity({
             userEmail: user.email,

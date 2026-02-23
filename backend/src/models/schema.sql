@@ -384,4 +384,36 @@ CREATE TABLE IF NOT EXISTS academic_periods (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Interactions (Comments & Reactions)
+CREATE TABLE IF NOT EXISTS interactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  user_photo TEXT,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  reactions TEXT, -- JSON string
+  parent_id INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (parent_id) REFERENCES interactions(id) ON DELETE CASCADE
+);
+
+-- Trainer Daily Reports & Record of Work
+CREATE TABLE IF NOT EXISTS trainer_reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  trainer_id TEXT NOT NULL,
+  trainer_name TEXT NOT NULL,
+  week_number TEXT NOT NULL,
+  report_date DATE NOT NULL,
+  daily_report TEXT NOT NULL,
+  record_of_work TEXT NOT NULL,
+  course_id TEXT,
+  status TEXT DEFAULT 'Submitted',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 

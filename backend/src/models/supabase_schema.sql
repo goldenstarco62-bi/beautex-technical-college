@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS users (
   address TEXT,
   bio TEXT,
   must_change_password BOOLEAN DEFAULT TRUE,
+  last_login TIMESTAMP,
+  last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -330,3 +332,34 @@ INSERT INTO system_settings (key, value) VALUES
 ('allow_registration', 'true'),
 ('grading_system', 'standard')
 ON CONFLICT (key) DO NOTHING;
+
+-- Interactions (Comments & Reactions)
+CREATE TABLE IF NOT EXISTS interactions (
+  id SERIAL PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  user_photo TEXT,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL,
+  reactions TEXT, -- JSON string
+  parent_id INTEGER REFERENCES interactions(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Trainer Daily Reports & Record of Work
+CREATE TABLE IF NOT EXISTS trainer_reports (
+  id SERIAL PRIMARY KEY,
+  trainer_id TEXT NOT NULL,
+  trainer_name TEXT NOT NULL,
+  week_number TEXT NOT NULL,
+  report_date DATE NOT NULL,
+  daily_report TEXT NOT NULL,
+  record_of_work TEXT NOT NULL,
+  course_id TEXT,
+  status TEXT DEFAULT 'Submitted',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

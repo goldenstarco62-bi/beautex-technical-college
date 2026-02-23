@@ -17,7 +17,8 @@ const ALL_COURSES = [
 
 const EMPTY_FORM = {
     course_name: '',
-    reporting_period: 'Week 1',
+    reporting_period: '',
+    report_date: new Date().toISOString().split('T')[0],
     total_lessons: 10,
     attended_lessons: 10,
     theory_topics: '',
@@ -127,6 +128,7 @@ export default function AcademicReports() {
         setFormData({
             course_name: report.course_unit || report.student_name || '',
             reporting_period: report.reporting_period,
+            report_date: report.report_date || (report.created_at ? new Date(report.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]),
             total_lessons: report.total_lessons,
             attended_lessons: report.attended_lessons,
             theory_topics: report.theory_topics,
@@ -324,16 +326,25 @@ export default function AcademicReports() {
                                 {/* Period + Lessons */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Reporting Period</label>
-                                        <select
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Academic Week</label>
+                                        <input
+                                            type="text"
                                             value={formData.reporting_period}
                                             onChange={(e) => setFormData({ ...formData, reporting_period: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10"
+                                            placeholder="e.g. Week 5"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Report Date</label>
+                                        <input
+                                            type="date"
+                                            value={formData.report_date}
+                                            onChange={(e) => setFormData({ ...formData, report_date: e.target.value })}
                                             className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                        >
-                                            {['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Month 1', 'Month 2', 'Month 3', 'Month 4', 'Month 5', 'Month 6', 'End of Term'].map(p =>
-                                                <option key={p} value={p}>{p}</option>
-                                            )}
-                                        </select>
+                                            required
+                                        />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Total Lessons</label>
@@ -478,6 +489,7 @@ export default function AcademicReports() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Course</p><p className="font-bold text-maroon">{printingReport.course_unit || printingReport.student_name}</p></div>
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Period</p><p className="font-bold text-maroon">{printingReport.reporting_period}</p></div>
+                                    <div><p className="text-xs font-black text-gray-400 uppercase">Date</p><p className="font-bold text-maroon">{printingReport.report_date || (printingReport.created_at ? new Date(printingReport.created_at).toLocaleDateString() : '')}</p></div>
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Attendance</p><p className="font-bold text-maroon">{printingReport.attended_lessons}/{printingReport.total_lessons} lessons ({attendancePct(printingReport)}%)</p></div>
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Theory Score</p><p className="font-bold text-maroon">{printingReport.theory_score}/100</p></div>
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Skill Level</p><p className="font-bold text-maroon">{printingReport.skill_level}</p></div>

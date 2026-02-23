@@ -17,7 +17,7 @@ export default function Students() {
     const [editingStudent, setEditingStudent] = useState(null);
     const [resetLoading, setResetLoading] = useState(false);
     const [formData, setFormData] = useState({
-        id: '', name: '', email: '', course: '', intake: 'January Intake',
+        id: '', name: '', email: '', course: [], intake: 'January Intake',
         gpa: 0, status: 'Active', contact: '',
         dob: '', address: '', guardian_name: '', guardian_contact: '',
         photo: '', completion_date: '', enrolled_date: new Date().toISOString().split('T')[0],
@@ -56,7 +56,7 @@ export default function Students() {
         if (!formData.id) return 'Enrollment ID is required';
         if (!formData.name) return 'Full Name is required';
         if (!emailRegex.test(formData.email)) return 'Invalid email format';
-        if (!formData.course) return 'Please select a specialization course';
+        if (!formData.course || (Array.isArray(formData.course) && formData.course.length === 0)) return 'Please select at least one specialization course';
         if (formData.gpa < 0 || formData.gpa > 4) return 'GPA must be between 0.0 and 4.0';
         return null;
     };
@@ -88,7 +88,10 @@ export default function Students() {
 
     const handleEdit = (student) => {
         setEditingStudent(student);
-        setFormData(student);
+        setFormData({
+            ...student,
+            course: Array.isArray(student.course) ? student.course : [student.course].filter(Boolean)
+        });
         setShowModal(true);
     };
 
@@ -105,7 +108,7 @@ export default function Students() {
 
     const resetForm = () => {
         setFormData({
-            id: '', name: '', email: '', course: '', intake: 'January Intake',
+            id: '', name: '', email: '', course: [], intake: 'January Intake',
             gpa: 0, status: 'Active', contact: '',
             dob: '', address: '', guardian_name: '', guardian_contact: '',
             photo: '', department: '', level: 'Module 1'
@@ -337,7 +340,9 @@ export default function Students() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5 text-xs font-bold text-gray-600">{student.course}</td>
+                                    <td className="px-6 py-5 text-xs font-bold text-gray-600">
+                                        {Array.isArray(student.course) ? student.course.join(', ') : student.course}
+                                    </td>
                                     <td className="px-6 py-5 text-xs font-bold text-gray-400">{student.intake || student.semester || 'N/A'}</td>
                                     <td className="px-6 py-5 text-xs font-bold text-gray-800">{student.gpa}</td>
                                     <td className="px-6 py-5">
@@ -389,7 +394,7 @@ export default function Students() {
                                 <div className="pb-1">
                                     <h2 className="text-xl font-black text-white tracking-tight">{showProfileModal.name}</h2>
                                     <p className="text-gold text-[10px] font-black uppercase tracking-widest mt-1">
-                                        BT{showProfileModal.id?.toString().padStart(7, '0')} · {showProfileModal.course}
+                                        BT{showProfileModal.id?.toString().padStart(7, '0')} · {Array.isArray(showProfileModal.course) ? showProfileModal.course.join(', ') : showProfileModal.course}
                                     </p>
                                     <span className={`inline-block mt-2 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border ${showProfileModal.status === 'Active' ? 'bg-green-500/20 text-green-200 border-green-400/30' : 'bg-white/10 text-white border-white/20'}`}>
                                         {showProfileModal.status || 'Active'}
@@ -404,7 +409,7 @@ export default function Students() {
                                 {[
                                     { icon: Mail, label: 'Email Address', value: showProfileModal.email },
                                     { icon: Phone, label: 'Contact Number', value: showProfileModal.contact || 'Not listed' },
-                                    { icon: BookOpen, label: 'Course / Programme', value: showProfileModal.course },
+                                    { icon: BookOpen, label: 'Course / Programme', value: Array.isArray(showProfileModal.course) ? showProfileModal.course.join(', ') : showProfileModal.course },
                                     { icon: Calendar, label: 'Intake / Semester', value: showProfileModal.intake || showProfileModal.semester || 'N/A' },
                                     { icon: User, label: 'Date of Birth', value: showProfileModal.dob ? new Date(showProfileModal.dob).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
                                     { icon: Shield, label: 'Cumulative GPA', value: showProfileModal.gpa ?? 'N/A' },
@@ -584,110 +589,124 @@ export default function Students() {
                                             className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 min-h-[80px]"
                                         />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Specialization Course</label>
-                                            <select
-                                                value={formData.course}
-                                                onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                                required
-                                            >
-                                                <option value="">Select Specialization</option>
-                                                {courses.map(course => <option key={course} value={course}>{course}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Current Intake</label>
-                                            <select
-                                                value={formData.intake}
-                                                onChange={(e) => setFormData({ ...formData, intake: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            >
-                                                {['January Intake', 'February Intake', 'March Intake', 'April Intake', 'May Intake', 'June Intake', 'July Intake', 'August Intake', 'September Intake', 'October Intake', 'November Intake', 'December Intake'].map(intake => (
-                                                    <option key={intake} value={intake}>{intake}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Cumulative GPA</label>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                min="0"
-                                                max="4.0"
-                                                value={formData.gpa}
-                                                onChange={(e) => setFormData({ ...formData, gpa: parseFloat(e.target.value) })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment Status</label>
-                                            <select
-                                                value={formData.status}
-                                                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            >
-                                                <option value="Active">Active</option>
-                                                <option value="Inactive">Inactive</option>
-                                                <option value="Graduated">Graduated</option>
-                                            </select>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Specialization Courses (Select all that apply)</label>
+                                        <div className="grid grid-cols-2 gap-2 p-4 bg-gray-50 rounded-2xl border border-gray-100 max-h-48 overflow-y-auto custom-scrollbar">
+                                            {courses.map(course => {
+                                                const isSelected = Array.isArray(formData.course) && formData.course.includes(course);
+                                                return (
+                                                    <button
+                                                        key={course}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const currentCourses = Array.isArray(formData.course) ? formData.course : [];
+                                                            if (isSelected) {
+                                                                setFormData({ ...formData, course: currentCourses.filter(c => c !== course) });
+                                                            } else {
+                                                                setFormData({ ...formData, course: [...currentCourses, course] });
+                                                            }
+                                                        }}
+                                                        className={`text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all border ${isSelected
+                                                            ? 'bg-maroon text-gold border-maroon'
+                                                            : 'bg-white text-gray-600 border-gray-100 hover:border-maroon/30'
+                                                            }`}
+                                                    >
+                                                        {course}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
-                                            <select
-                                                value={formData.department}
-                                                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            >
-                                                <option value="">Select Department</option>
-                                                <option value="Cosmetology">Cosmetology</option>
-                                                <option value="Beauty Therapy">Beauty Therapy</option>
-                                                <option value="Hairdressing">Hairdressing</option>
-                                                <option value="Information Technology">Information Technology</option>
-                                                <option value="Catering & Hospitality">Catering & Hospitality</option>
-                                                <option value="Fashion & Design">Fashion & Design</option>
-                                            </select>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Academic Level</label>
-                                            <select
-                                                value={formData.level}
-                                                onChange={(e) => setFormData({ ...formData, level: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            >
-                                                <option value="Module 1">Module 1</option>
-                                                <option value="Module 2">Module 2</option>
-                                                <option value="Module 3">Module 3</option>
-                                                <option value="Short Course">Short Course</option>
-                                                <option value="Certificate">Certificate</option>
-                                                <option value="Diploma">Diploma</option>
-                                            </select>
-                                        </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Current Intake</label>
+                                        <select
+                                            value={formData.intake}
+                                            onChange={(e) => setFormData({ ...formData, intake: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        >
+                                            {['January Intake', 'February Intake', 'March Intake', 'April Intake', 'May Intake', 'June Intake', 'July Intake', 'August Intake', 'September Intake', 'October Intake', 'November Intake', 'December Intake'].map(intake => (
+                                                <option key={intake} value={intake}>{intake}</option>
+                                            ))}
+                                        </select>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment Date</label>
-                                            <input
-                                                type="date"
-                                                value={formData.enrolled_date}
-                                                onChange={(e) => setFormData({ ...formData, enrolled_date: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Completion Date</label>
-                                            <input
-                                                type="date"
-                                                value={formData.completion_date}
-                                                onChange={(e) => setFormData({ ...formData, completion_date: e.target.value })}
-                                                className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
-                                            />
-                                        </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Cumulative GPA</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            max="4.0"
+                                            value={formData.gpa}
+                                            onChange={(e) => setFormData({ ...formData, gpa: parseFloat(e.target.value) })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment Status</label>
+                                        <select
+                                            value={formData.status}
+                                            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        >
+                                            <option value="Active">Active</option>
+                                            <option value="Inactive">Inactive</option>
+                                            <option value="Graduated">Graduated</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
+                                        <select
+                                            value={formData.department}
+                                            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        >
+                                            <option value="">Select Department</option>
+                                            <option value="Cosmetology">Cosmetology</option>
+                                            <option value="Beauty Therapy">Beauty Therapy</option>
+                                            <option value="Hairdressing">Hairdressing</option>
+                                            <option value="Information Technology">Information Technology</option>
+                                            <option value="Catering & Hospitality">Catering & Hospitality</option>
+                                            <option value="Fashion & Design">Fashion & Design</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Academic Level</label>
+                                        <select
+                                            value={formData.level}
+                                            onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        >
+                                            <option value="Module 1">Module 1</option>
+                                            <option value="Module 2">Module 2</option>
+                                            <option value="Module 3">Module 3</option>
+                                            <option value="Short Course">Short Course</option>
+                                            <option value="Certificate">Certificate</option>
+                                            <option value="Diploma">Diploma</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment Date</label>
+                                        <input
+                                            type="date"
+                                            value={formData.enrolled_date}
+                                            onChange={(e) => setFormData({ ...formData, enrolled_date: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Completion Date</label>
+                                        <input
+                                            type="date"
+                                            value={formData.completion_date}
+                                            onChange={(e) => setFormData({ ...formData, completion_date: e.target.value })}
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -695,7 +714,7 @@ export default function Students() {
                             {/* Section 3: Guardian */}
                             <div className="space-y-6 pt-6 border-t border-maroon/5">
                                 <h3 className="text-[10px] font-black text-gold uppercase tracking-widest">Guardian Info</h3>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Name</label>
                                         <input
@@ -711,13 +730,13 @@ export default function Students() {
                                             type="text"
                                             value={formData.guardian_contact}
                                             onChange={(e) => setFormData({ ...formData, guardian_contact: e.target.value })}
-                                            className="w-full px-5 py-4 bg-parchment-100 border-none rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            <button type="submit" className="w-full bg-maroon text-gold py-6 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] hover:bg-elite-maroon shadow-xl transition-all mt-4 border border-gold/20">
+                            <button type="submit" className="w-full bg-maroon text-gold py-6 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] hover:bg-elite-maroon shadow-xl transition-all mt-4 border border-gold/20 shrink-0">
                                 {editingStudent ? 'Synchronize Registry' : 'Finalize Enrollment'}
                             </button>
                         </form>
@@ -727,9 +746,7 @@ export default function Students() {
 
             {/* Capturable and Printable Container */}
             <div className={`fixed z-[9999] ${printingStudent ? 'block' : 'hidden'} 
-                /* Off-screen for normal view but capturable */
                 left-[-9999px] top-0 bg-white
-                /* Full screen for print mode */
                 print:left-0 print:right-0 print:top-0 print:bottom-0 print:bg-white`}>
                 {printingStudent && <IDCard data={printingStudent} role="student" />}
             </div>

@@ -18,6 +18,8 @@ import * as financeController from '../controllers/financeController.js';
 import * as academicController from '../controllers/academicController.js';
 import * as materialController from '../controllers/materialController.js';
 import * as profileController from '../controllers/profileController.js';
+import * as interactionController from '../controllers/interactionController.js';
+import * as trainerReportController from '../controllers/trainerReportController.js';
 import { authorizeRoles } from '../middleware/auth.js';
 
 
@@ -206,6 +208,17 @@ router.delete('/materials/:id', authenticateToken, materialController.deleteMate
 router.get('/settings', authenticateToken, authorizeRoles('admin', 'superadmin'), settingsController.getSettings);
 router.put('/settings', authenticateToken, authorizeRoles('admin', 'superadmin'), settingsController.updateSettings);
 router.get('/settings/backup', authenticateToken, authorizeRoles('superadmin'), settingsController.downloadBackup);
+
+// Interaction Routes (Comments & Reactions)
+router.get('/interactions', authenticateToken, interactionController.getInteractions);
+router.post('/interactions', authenticateToken, interactionController.createInteraction);
+router.post('/interactions/:id/react', authenticateToken, interactionController.toggleReaction);
+router.delete('/interactions/:id', authenticateToken, interactionController.deleteInteraction);
+
+// Trainer Reports
+router.get('/trainer-reports', authenticateToken, trainerReportController.getAllReports);
+router.post('/trainer-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.createReport);
+router.delete('/trainer-reports/:id', authenticateToken, trainerReportController.deleteReport);
 
 // Multer error handler (file size & type errors)
 router.use((err, req, res, next) => {

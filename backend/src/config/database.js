@@ -250,14 +250,19 @@ async function runPostgresMigrations(database) {
             console.log('✅ photo column added to users');
         }
 
-        // Check for last_seen_at column in users
-        const checkLastSeen = await database.query(`
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name='users' AND column_name='last_seen_at'
-        `);
         if (checkLastSeen.rows.length === 0) {
             await database.query('ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMPTZ');
             console.log('✅ last_seen_at column added to users');
+        }
+
+        // Check for last_login column in users
+        const checkLastLogin = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='last_login'
+        `);
+        if (checkLastLogin.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN last_login TIMESTAMPTZ');
+            console.log('✅ last_login column added to users');
         }
 
         // --- Students Table Migrations ---
@@ -413,6 +418,11 @@ async function runSqliteMigrations(database) {
             console.log('🔄 Applying SQLite migration: Adding last_seen_at to users...');
             await database.run('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
             console.log('✅ last_seen_at column added to SQLite users');
+        }
+        if (!userInfo.some(col => col.name === 'last_login')) {
+            console.log('🔄 Applying SQLite migration: Adding last_login to users...');
+            await database.run('ALTER TABLE users ADD COLUMN last_login TEXT');
+            console.log('✅ last_login column added to SQLite users');
         }
 
         // Daily activity reports - add disciplinary_cases

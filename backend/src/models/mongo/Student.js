@@ -18,7 +18,7 @@ const studentSchema = new mongoose.Schema({
         trim: true
     },
     course: {
-        type: String,
+        type: [String],
         required: true
     },
     semester: String,

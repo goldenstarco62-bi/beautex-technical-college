@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { gradesAPI, coursesAPI, studentsAPI, reportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History, Users, CheckCircle, Printer, FileDown } from 'lucide-react';
+import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History, Users, CheckCircle, Printer, FileDown, MessageSquare } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import Interactions from '../components/shared/Interactions';
 
 export default function Grades() {
     const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function Grades() {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingGrade, setEditingGrade] = useState(null);
+    const [discussionEntity, setDiscussionEntity] = useState(null);
     const [viewType, setViewType] = useState('CAT'); // 'CAT' or 'REPORTS'
     const [searchTerm, setSearchTerm] = useState('');
     const [showBatchModal, setShowBatchModal] = useState(false);
@@ -511,6 +513,17 @@ export default function Grades() {
                                                             >
                                                                 <FileDown className="w-4 h-4" />
                                                             </button>
+                                                            <button
+                                                                onClick={() => setDiscussionEntity({
+                                                                    type: 'grade',
+                                                                    id: grade.id || grade._id,
+                                                                    title: `${grade.assignment} - ${students.find(s => String(s.id) === String(grade.student_id))?.name || 'Academic Result'}`
+                                                                })}
+                                                                className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
+                                                                title="Discuss This Result"
+                                                            >
+                                                                <MessageSquare className="w-4 h-4" />
+                                                            </button>
                                                             {canManage && (
                                                                 <>
                                                                     <button onClick={() => handleEdit(grade)} className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon">
@@ -592,6 +605,17 @@ export default function Grades() {
                                                             >
                                                                 <FileDown className="w-4 h-4" />
                                                             </button>
+                                                            <button
+                                                                onClick={() => setDiscussionEntity({
+                                                                    type: 'grade', // Treat reports similar to grades for interactions
+                                                                    id: report.id || report._id,
+                                                                    title: `Report: ${report.reporting_period} - ${report.student_name}`
+                                                                })}
+                                                                className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon ml-3"
+                                                                title="Discuss This Report"
+                                                            >
+                                                                <MessageSquare className="w-4 h-4" />
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -655,9 +679,17 @@ export default function Grades() {
                                             className="w-full bg-white border border-black/10 outline-none rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-widest text-black appearance-none focus:ring-2 ring-black/5 transition-all shadow-sm"
                                         >
                                             <option value="">Select Course</option>
-                                            {courses.map(c => (
-                                                <option key={c.id} value={c.name}>{c.name}</option>
-                                            ))}
+                                            {(() => {
+                                                const selectedStudent = students.find(s => String(s.id) === String(formData.student_id));
+                                                // If student is selected and has specific courses, filter the list
+                                                const studentCourses = selectedStudent?.course || [];
+                                                const filteredCourses = (Array.isArray(studentCourses) && studentCourses.length > 0)
+                                                    ? courses.filter(c => studentCourses.includes(c.name))
+                                                    : courses;
+                                                return filteredCourses.map(c => (
+                                                    <option key={c.id} value={c.name}>{c.name}</option>
+                                                ));
+                                            })()}
                                         </select>
                                     </div>
                                     <div className="space-y-2">
@@ -978,6 +1010,25 @@ export default function Grades() {
                         </div>
                     </div>
                 </>
+            )}
+            {/* Discourse Panel */}
+            {discussionEntity && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-end">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-500" onClick={() => setDiscussionEntity(null)}></div>
+                    <div className="relative w-full max-w-xl h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 overflow-y-auto p-8 sm:p-12 custom-scrollbar">
+                        <div className="flex justify-between items-start mb-8">
+                            <div>
+                                <h2 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight leading-none">{discussionEntity.title}</h2>
+                                <p className="text-[10px] text-maroon/40 font-bold uppercase tracking-[0.3em] mt-3 italic">Registry Discourse Module</p>
+                            </div>
+                            <button onClick={() => setDiscussionEntity(null)} className="p-3 bg-gray-50 hover:bg-black hover:text-white rounded-2xl transition-all shadow-sm">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <Interactions entityType={discussionEntity.type} entityId={discussionEntity.id} />
+                    </div>
+                </div>
             )}
         </div>
     );

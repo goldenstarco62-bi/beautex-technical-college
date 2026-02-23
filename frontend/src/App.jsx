@@ -22,6 +22,7 @@ import Finance from './pages/Finance';
 import AcademicMaster from './pages/AcademicMaster';
 import Materials from './pages/Materials';
 import Profile from './pages/Profile';
+import TrainerReports from './pages/TrainerReports';
 
 
 
@@ -71,6 +72,7 @@ function App() {
                         <Route path="/activity-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><ActivityReports /></Layout></ProtectedRoute>} />
 
                         <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><AuditLogs /></Layout></ProtectedRoute>} />
+                        <Route path="/trainer-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><TrainerReports /></Layout></ProtectedRoute>} />
 
 
                         <Route path="/" element={<Navigate to="/login" />} />

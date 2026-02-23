@@ -44,7 +44,11 @@ export default function Attendance() {
                 studentsAPI.getAll(),
                 attendanceAPI.getAll(selectedCourse, selectedDate).catch(() => ({ data: [] }))
             ]);
-            const filtered = studentsRes.data.filter(s => s.course === selectedCourse);
+            const filtered = studentsRes.data.filter(s =>
+                Array.isArray(s.course)
+                    ? s.course.includes(selectedCourse)
+                    : s.course === selectedCourse
+            );
             const existingMap = {};
             (attendanceRes.data || []).forEach(r => { existingMap[r.student_id] = r.status; });
             setStudents(filtered.map(s => ({ ...s, attendance: existingMap[s.id] || '' })));
