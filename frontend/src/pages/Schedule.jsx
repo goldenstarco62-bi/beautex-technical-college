@@ -26,7 +26,7 @@ export default function Schedule() {
                 setFilteredClasses(allData.filter(c => c.teacher_email === user.email));
             } else if (user?.role === 'student') {
                 // Students see all for demo, or filter by their specific course
-                setFilteredClasses(allData.filter(c => c.course === 'Cosmetology'));
+                setFilteredClasses(allData.filter(c => c.course === (user.course || 'Cosmetology')));
             } else {
                 setFilteredClasses(allData);
             }
@@ -121,60 +121,58 @@ export default function Schedule() {
             </div>
 
             {/* Main Schedule Table */}
-            <div className="bg-white rounded-[3rem] border border-black/5 shadow-2xl overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                        <thead>
-                            <tr className="bg-black/5">
-                                <th className="p-6 border-b border-r border-black/5 w-24 bg-black/10"></th>
-                                {days.map(day => (
-                                    <th key={day} className="p-6 border-b border-r border-black/5 text-[10px] font-black text-black/40 uppercase tracking-[0.2em] last:border-r-0">
-                                        {day}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-black/5">
-                            {hours.map(hour => (
-                                <tr key={hour}>
-                                    <td className="p-6 border-r border-black/5 text-center text-[10px] font-black text-black/20 uppercase tracking-widest bg-black/[0.02]">
-                                        {hour}
-                                    </td>
-                                    {days.map((day, idx) => {
-                                        const session = getClass(day, hour);
-                                        return (
-                                            <td key={day} className={`p-3 border-r border-black/5 min-w-[180px] last:border-r-0 ${idx % 2 === 0 ? 'bg-transparent' : 'bg-black/[0.01]'}`}>
-                                                {session && (
-                                                    <div className="bg-white border-l-4 border-black p-5 rounded-2xl space-y-2 group hover:bg-black hover:text-white transition-all duration-300 cursor-pointer shadow-xl relative scale-in-center overflow-hidden">
-                                                        <p className="text-[11px] font-black tracking-widest uppercase truncate relative z-10">
-                                                            {session.course}
-                                                        </p>
-                                                        <div className="space-y-1 relative z-10">
-                                                            <div className="flex items-center gap-2 text-[9px] font-bold opacity-60">
-                                                                <MapPin className="w-3 h-3" /> {session.room}
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-[9px] font-bold opacity-60">
-                                                                <Clock className="w-3 h-3" /> {session.instructor}
-                                                            </div>
-                                                        </div>
-                                                        {(user?.role === 'admin' || user?.role === 'superadmin') && (
-                                                            <button
-                                                                onClick={(e) => { e.stopPropagation(); handleDelete(session.id); }}
-                                                                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-2 hover:bg-red-600 rounded-lg transition-all z-20"
-                                                            >
-                                                                <Trash2 className="w-3 h-3" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </td>
-                                        )
-                                    })}
-                                </tr>
+            <div className="table-container custom-scrollbar">
+                <table className="w-full border-collapse">
+                    <thead>
+                        <tr className="bg-black/5">
+                            <th className="p-6 border-b border-r border-black/5 w-24 bg-black/10"></th>
+                            {days.map(day => (
+                                <th key={day} className="p-6 border-b border-r border-black/5 text-[10px] font-black text-black/40 uppercase tracking-[0.2em] last:border-r-0">
+                                    {day}
+                                </th>
                             ))}
-                        </tbody>
-                    </table>
-                </div>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-black/5">
+                        {hours.map(hour => (
+                            <tr key={hour}>
+                                <td className="p-6 border-r border-black/5 text-center text-[10px] font-black text-black/20 uppercase tracking-widest bg-black/[0.02]">
+                                    {hour}
+                                </td>
+                                {days.map((day, idx) => {
+                                    const session = getClass(day, hour);
+                                    return (
+                                        <td key={day} className={`p-3 border-r border-black/5 min-w-[180px] last:border-r-0 ${idx % 2 === 0 ? 'bg-transparent' : 'bg-black/[0.01]'}`}>
+                                            {session && (
+                                                <div className="bg-white border-l-4 border-black p-5 rounded-2xl space-y-2 group hover:bg-black hover:text-white transition-all duration-300 cursor-pointer shadow-xl relative scale-in-center overflow-hidden">
+                                                    <p className="text-[11px] font-black tracking-widest uppercase truncate relative z-10">
+                                                        {session.course}
+                                                    </p>
+                                                    <div className="space-y-1 relative z-10">
+                                                        <div className="flex items-center gap-2 text-[9px] font-bold opacity-60">
+                                                            <MapPin className="w-3 h-3" /> {session.room}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-[9px] font-bold opacity-60">
+                                                            <Clock className="w-3 h-3" /> {session.instructor}
+                                                        </div>
+                                                    </div>
+                                                    {(user?.role === 'admin' || user?.role === 'superadmin') && (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDelete(session.id); }}
+                                                            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-2 hover:bg-red-600 rounded-lg transition-all z-20"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </td>
+                                    )
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
 
             {/* New Session Modal */}
@@ -259,7 +257,8 @@ export default function Schedule() {
                         </form>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }

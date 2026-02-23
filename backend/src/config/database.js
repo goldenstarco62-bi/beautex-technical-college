@@ -250,6 +250,16 @@ async function runPostgresMigrations(database) {
             console.log('✅ photo column added to users');
         }
 
+        // Check for last_seen_at column in users
+        const checkLastSeen = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='last_seen_at'
+        `);
+        if (checkLastSeen.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN last_seen_at TIMESTAMPTZ');
+            console.log('✅ last_seen_at column added to users');
+        }
+
         // --- Students Table Migrations ---
         const studentCols = await database.query(`
             SELECT column_name FROM information_schema.columns
@@ -331,6 +341,16 @@ async function runPostgresMigrations(database) {
             console.log('✅ user_email column added to audit_logs');
         }
 
+        // Add disciplinary_cases to daily_activity_reports
+        const dailyCols = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='daily_activity_reports' AND column_name='disciplinary_cases'
+        `);
+        if (dailyCols.rows.length === 0) {
+            await database.query('ALTER TABLE daily_activity_reports ADD COLUMN disciplinary_cases INTEGER DEFAULT 0');
+            console.log('✅ disciplinary_cases column added to daily_activity_reports');
+        }
+
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
     }
@@ -385,6 +405,21 @@ async function runSqliteMigrations(database) {
         if (!studentPhotoInfo.some(col => col.name === 'photo')) {
             await database.run('ALTER TABLE students ADD COLUMN photo TEXT');
             console.log('✅ photo column added to SQLite students');
+        }
+
+        // Check for last_seen_at in users
+        const userInfo = await database.all("PRAGMA table_info('users')");
+        if (!userInfo.some(col => col.name === 'last_seen_at')) {
+            console.log('🔄 Applying SQLite migration: Adding last_seen_at to users...');
+            await database.run('ALTER TABLE users ADD COLUMN last_seen_at TEXT');
+            console.log('✅ last_seen_at column added to SQLite users');
+        }
+
+        // Daily activity reports - add disciplinary_cases
+        const dailyInfo = await database.all("PRAGMA table_info('daily_activity_reports')");
+        if (!dailyInfo.some(col => col.name === 'disciplinary_cases')) {
+            await database.run('ALTER TABLE daily_activity_reports ADD COLUMN disciplinary_cases INTEGER DEFAULT 0');
+            console.log('✅ disciplinary_cases column added to daily_activity_reports');
         }
 
     } catch (error) {

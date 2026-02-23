@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS daily_activity_reports (
   new_enrollments INTEGER DEFAULT 0,
   staff_present INTEGER DEFAULT 0,
   staff_absent INTEGER DEFAULT 0,
+  disciplinary_cases INTEGER DEFAULT 0,
   facilities_issues TEXT,
   equipment_maintenance TEXT,
   notable_events TEXT,

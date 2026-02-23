@@ -215,7 +215,7 @@ export default function Students() {
     };
 
     const courses = [
-        'Cosmetology', 'Beauty Therapy', 'Catering', 'Computer Packages', 'Website Development', 'Cyber Security',
+        'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Computer Packages', 'Website Development', 'Cyber Security',
         'Makeup', 'Sista Locks', 'Braiding, Plaiting & Crotcheting', 'Weaving & Wig Installation', 'Nail Technology'
     ];
 
@@ -231,21 +231,21 @@ export default function Students() {
         <div className="space-y-6">
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">Students</h1>
                         <p className="text-sm text-gray-400 font-medium">Manage and view all student information</p>
                     </div>
-                    <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
                         <button
                             onClick={() => window.print()}
-                            className="flex-1 md:flex-none justify-center bg-gold text-maroon px-4 md:px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-gold-dark transition-all font-bold text-[10px] md:text-xs uppercase tracking-widest shadow-sm"
+                            className="flex-1 sm:flex-none justify-center bg-gold text-maroon px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-gold-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
                         >
                             <Plus className="w-4 h-4" /> Export
                         </button>
                         <button
                             onClick={() => { resetForm(); setShowModal(true); }}
-                            className="flex-1 md:flex-none justify-center bg-maroon text-white px-4 md:px-6 py-3 rounded-xl flex items-center gap-2 hover:bg-maroon-dark transition-all font-bold text-[10px] md:text-xs uppercase tracking-widest shadow-sm"
+                            className="flex-1 sm:flex-none justify-center bg-maroon text-white px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-maroon-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
                         >
                             <Plus className="w-4 h-4" /> Add Student
                         </button>
@@ -370,10 +370,10 @@ export default function Students() {
 
             {/* Student Profile Modal */}
             {showProfileModal && (
-                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-sm flex items-center justify-center p-4 z-[200]">
-                    <div className="bg-white rounded-3xl max-w-2xl w-full border border-maroon/10 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col">
+                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[200]">
+                    <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full border border-maroon/10 shadow-2xl relative overflow-hidden max-h-[95vh] flex flex-col">
                         {/* Header Band */}
-                        <div className="bg-maroon px-8 pt-8 pb-16 relative overflow-hidden shrink-0">
+                        <div className="bg-maroon px-5 sm:px-8 pt-6 sm:pt-8 pb-12 sm:pb-16 relative overflow-hidden shrink-0">
                             <div className="absolute top-0 right-0 w-48 h-48 bg-gold/10 rounded-full -mr-24 -mt-24"></div>
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -ml-16 -mb-16"></div>
                             <button onClick={() => setShowProfileModal(null)} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10">
@@ -399,8 +399,8 @@ export default function Students() {
                         </div>
 
                         {/* Details */}
-                        <div className="px-8 py-6 -mt-6 relative z-10 overflow-y-auto custom-scrollbar">
-                            <div className="bg-white rounded-2xl border border-maroon/8 shadow-lg p-6 grid grid-cols-2 gap-5 mb-5">
+                        <div className="px-4 sm:px-8 py-5 sm:py-6 -mt-6 relative z-10 overflow-y-auto custom-scrollbar">
+                            <div className="bg-white rounded-2xl border border-maroon/8 shadow-lg p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 mb-5">
                                 {[
                                     { icon: Mail, label: 'Email Address', value: showProfileModal.email },
                                     { icon: Phone, label: 'Contact Number', value: showProfileModal.contact || 'Not listed' },
@@ -472,15 +472,15 @@ export default function Students() {
 
             {/* Add/Edit Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-maroon-950/60 backdrop-blur-xl flex items-center justify-center p-4 z-[100]">
-                    <div className="bg-white rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-12 max-w-2xl w-full shadow-3xl border border-maroon/10 scale-in-center overflow-hidden relative">
+                <div className="fixed inset-0 bg-maroon-950/60 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4 z-[100]">
+                    <div className="bg-white rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-2xl w-full shadow-3xl border border-maroon/10 overflow-hidden relative max-h-[95vh] flex flex-col">
                         {/* Elegant background texture */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-maroon/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
                         <div className="absolute bottom-0 left-0 w-48 h-48 bg-gold/5 rounded-full -ml-24 -mb-24 blur-3xl"></div>
 
-                        <div className="relative flex justify-between items-center mb-6 md:mb-12">
+                        <div className="relative flex justify-between items-center mb-5 shrink-0">
                             <div>
-                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">
+                                <h2 className="text-xl sm:text-2xl font-black text-maroon uppercase tracking-tight">
                                     {editingStudent ? 'Update Registry' : 'New Enrollment'}
                                 </h2>
                                 <p className="text-xs text-maroon/40 font-bold mt-1 uppercase tracking-widest">Beautex Student Information</p>
@@ -489,7 +489,7 @@ export default function Students() {
                                 <X className="w-6 h-6 text-maroon/20" />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit} className="space-y-8 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
+                        <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto pr-1 custom-scrollbar flex-1">
                             {/* Section 1: Personal & Photo */}
                             <div className="space-y-6">
                                 <div className="flex items-center gap-6">
@@ -647,6 +647,7 @@ export default function Students() {
                                                 <option value="">Select Department</option>
                                                 <option value="Cosmetology">Cosmetology</option>
                                                 <option value="Beauty Therapy">Beauty Therapy</option>
+                                                <option value="Hairdressing">Hairdressing</option>
                                                 <option value="Information Technology">Information Technology</option>
                                                 <option value="Catering & Hospitality">Catering & Hospitality</option>
                                                 <option value="Fashion & Design">Fashion & Design</option>

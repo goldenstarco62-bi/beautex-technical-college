@@ -21,7 +21,7 @@ export default function MobileBottomNav({ onMenuClick }) {
     });
 
     return (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] px-4 pb-4">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] px-4 pb-4 mobile-bottom-nav">
             <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-white/20 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] rounded-[2rem] flex items-center justify-around h-16 px-2 overflow-hidden">
                 {filteredItems.map((item) => {
                     const Icon = item.icon;

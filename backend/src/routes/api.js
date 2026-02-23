@@ -170,6 +170,7 @@ router.delete('/activity-reports/monthly/:id', authenticateToken, authorizeRoles
 
 // Reports Summary
 router.get('/activity-reports/summary', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getReportsSummary);
+router.get('/activity-reports/auto-capture', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAutoCaptureStats);
 
 
 // Dashboard Stats

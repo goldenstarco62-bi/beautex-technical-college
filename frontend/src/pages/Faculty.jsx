@@ -190,7 +190,7 @@ export default function Faculty() {
 
     const canResetPassword = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
 
-    const departments = ['Cosmetology', 'Beauty Therapy', 'Catering', 'IT & Computer Science', 'Business'];
+    const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business'];
 
     const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
@@ -199,23 +199,23 @@ export default function Faculty() {
             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
                 {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                     <div>
                         <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.3em] mb-1">Beautex Training Centre</p>
-                        <h1 className="text-3xl font-black text-maroon tracking-tight uppercase">Faculty Registry</h1>
+                        <h1 className="text-2xl sm:text-3xl font-black text-maroon tracking-tight uppercase">Faculty Registry</h1>
                         <div className="w-16 h-0.5 bg-gold mt-3"></div>
                     </div>
                     <button
                         onClick={() => { resetForm(); setShowModal(true); }}
-                        className="w-full md:w-auto bg-maroon text-gold px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
+                        className="w-full sm:w-auto bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
                     >
                         <Plus className="w-4 h-4" /> Enroll Instructor
                     </button>
                 </div>
 
                 {/* Search */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2 bg-white border border-maroon/8 rounded-2xl p-3 flex items-center gap-3 shadow-sm">
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1 bg-white border border-maroon/8 rounded-2xl p-3 flex items-center gap-3 shadow-sm">
                         <Search className="w-4 h-4 text-maroon/20 ml-2 shrink-0" />
                         <input
                             type="text"
@@ -225,7 +225,7 @@ export default function Faculty() {
                             className="flex-1 bg-transparent text-sm font-medium text-maroon placeholder-maroon/20 outline-none"
                         />
                     </div>
-                    <div className="bg-white border border-maroon/8 rounded-2xl p-3 shadow-sm">
+                    <div className="bg-white border border-maroon/8 rounded-2xl p-3 shadow-sm sm:w-48">
                         <select className="w-full bg-transparent text-xs font-black uppercase tracking-widest text-maroon/50 outline-none">
                             <option>All Departments</option>
                             {departments.map(dept => <option key={dept}>{dept}</option>)}
@@ -277,8 +277,8 @@ export default function Faculty() {
                                             </span>
                                         </div>
                                     </div>
-                                    {/* Action buttons */}
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {/* Action buttons - always visible on mobile, hover on desktop */}
+                                    <div className="flex gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                         <button onClick={() => handlePrintID(member)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Print ID">
                                             <Printer className="w-3 h-3 text-maroon/40" />
                                         </button>
@@ -329,14 +329,14 @@ export default function Faculty() {
 
             {/* Add/Edit Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
-                    <div className="bg-white border border-maroon/10 rounded-[2.5rem] p-10 max-w-2xl w-full shadow-2xl overflow-hidden relative">
+                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-2xl w-full shadow-2xl overflow-hidden relative max-h-[95vh] flex flex-col">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
                         <div className="absolute top-0 right-0 w-64 h-64 bg-maroon/3 rounded-full -mr-32 -mt-32 blur-3xl"></div>
 
-                        <div className="relative flex justify-between items-center mb-8">
+                        <div className="relative flex justify-between items-center mb-6 shrink-0">
                             <div>
-                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">
+                                <h2 className="text-xl sm:text-2xl font-black text-maroon uppercase tracking-tight">
                                     {editingFaculty ? 'Update Instructor' : 'Add Faculty Member'}
                                 </h2>
                                 <div className="w-10 h-0.5 bg-gold mt-2"></div>
@@ -346,7 +346,7 @@ export default function Faculty() {
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-5 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+                        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 custom-scrollbar flex-1">
                             <div className="flex items-center gap-6 mb-6">
                                 <div className="relative group">
                                     <div className="w-24 h-24 rounded-2xl bg-gray-50 border-2 border-dashed border-maroon/20 flex items-center justify-center overflow-hidden">
@@ -372,7 +372,7 @@ export default function Faculty() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {[
                                     { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Dr. Jane Smith', required: true },
                                     { label: 'Email Address', key: 'email', type: 'email', placeholder: 'jane@beautex.edu', required: true },
@@ -442,10 +442,10 @@ export default function Faculty() {
 
             {/* Profile Modal */}
             {showProfile && (
-                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
                     <div className="bg-white rounded-3xl max-w-2xl w-full border border-maroon/10 shadow-2xl relative overflow-hidden max-h-[90vh] flex flex-col">
                         {/* Header band */}
-                        <div className="bg-maroon px-8 pt-8 pb-16 relative overflow-hidden shrink-0">
+                        <div className="bg-maroon px-5 sm:px-8 pt-6 sm:pt-8 pb-14 sm:pb-16 relative overflow-hidden shrink-0">
                             <div className="absolute top-0 right-0 w-48 h-48 bg-gold/10 rounded-full -mr-24 -mt-24"></div>
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -ml-16 -mb-16"></div>
                             <button onClick={() => setShowProfile(null)} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10">
@@ -475,8 +475,8 @@ export default function Faculty() {
                         </div>
 
                         {/* Details */}
-                        <div className="px-8 py-6 -mt-6 relative z-10 overflow-y-auto custom-scrollbar">
-                            <div className="bg-white rounded-2xl border border-maroon/8 shadow-lg p-6 grid grid-cols-2 gap-5 mb-5">
+                        <div className="px-4 sm:px-8 py-5 sm:py-6 -mt-6 relative z-10 overflow-y-auto custom-scrollbar">
+                            <div className="bg-white rounded-2xl border border-maroon/8 shadow-lg p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 mb-5">
                                 {[
                                     { icon: Mail, label: 'Email Address', value: showProfile.email },
                                     { icon: Phone, label: 'Contact Number', value: showProfile.contact || 'Not listed' },

@@ -28,6 +28,8 @@ export const authAPI = {
     resetPassword: (data) => api.post('auth/reset-password', data),
     changePassword: (data) => api.post('auth/change-password', data),
     getMe: () => api.get('auth/me'),
+    // Lightweight heartbeat — just triggers the auth middleware which updates last_seen_at
+    ping: () => api.get('auth/me'),
 };
 
 // Profile
@@ -138,6 +140,7 @@ export const activityReportsAPI = {
     updateMonthlyReport: (id, data) => api.put(`activity-reports/monthly/${id}`, data),
     deleteMonthlyReport: (id) => api.delete(`activity-reports/monthly/${id}`),
     getSummary: () => api.get('activity-reports/summary'),
+    getAutoCapture: (params) => api.get('activity-reports/auto-capture', { params }),
 };
 
 

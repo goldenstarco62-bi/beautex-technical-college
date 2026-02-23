@@ -310,44 +310,44 @@ export default function Grades() {
     return (
         <div className="max-w-7xl mx-auto space-y-10 py-8 animate-in fade-in slide-in-from-bottom-4 duration-1000 pb-20">
             <div className="print:hidden space-y-10">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                     <div className="space-y-2">
                         <div className="flex items-center gap-3">
                             <div className="p-3 bg-white border border-black/5 shadow-xl rounded-2xl text-maroon">
                                 <Award className="w-6 h-6" />
                             </div>
-                            <h1 className="text-4xl font-black text-black tracking-tight uppercase">
+                            <h1 className="text-2xl sm:text-4xl font-black text-black tracking-tight uppercase">
                                 {isStudent ? 'CAT Performance' : 'Academic Registry'}
                             </h1>
                         </div>
-                        <p className="text-xs text-black/40 font-bold tracking-[0.3em] uppercase pl-14">
+                        <p className="text-xs text-black/40 font-bold tracking-[0.3em] uppercase sm:pl-14">
                             Continues Assessment Testing Portal
                         </p>
                     </div>
 
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-2 sm:gap-4 w-full sm:w-auto">
                         <button
                             onClick={() => { fetchInitialData(); fetchGrades(); }}
-                            className="bg-white text-maroon p-4 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-xl border border-maroon/10 group"
+                            className="bg-white text-maroon p-3 sm:p-4 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-xl border border-maroon/10 group"
                             title="Refresh Registry"
                         >
                             <History className="w-5 h-5 group-hover:rotate-90 transition-transform" />
                         </button>
                         {canManage && (
-                            <div className="flex gap-4">
+                            <>
                                 <button
                                     onClick={() => { setShowBatchModal(true); }}
-                                    className="bg-white text-maroon px-8 py-4 rounded-2xl flex items-center gap-3 hover:bg-maroon hover:text-white transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-maroon/10"
+                                    className="flex-1 sm:flex-none bg-white text-maroon px-4 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 sm:gap-3 hover:bg-maroon hover:text-white transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-maroon/10"
                                 >
                                     <Users className="w-5 h-5" /> Batch Entry
                                 </button>
                                 <button
                                     onClick={() => { resetForm(); setEditingGrade(null); setShowModal(true); }}
-                                    className="bg-maroon text-gold px-8 py-4 rounded-2xl flex items-center gap-3 hover:bg-elite-maroon transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-black/5"
+                                    className="flex-1 sm:flex-none bg-maroon text-gold px-4 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 sm:gap-3 hover:bg-elite-maroon transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-black/5"
                                 >
                                     <Plus className="w-5 h-5" /> Record CAT Result
                                 </button>
-                            </div>
+                            </>
                         )}
                     </div>
                 </div>
@@ -387,47 +387,49 @@ export default function Grades() {
 
                 {/* Registry Card */}
                 <div className="card-light overflow-hidden shadow-2xl border border-maroon/5 min-h-[500px]">
-                    <div className="bg-maroon/[0.02] px-10 py-8 border-b border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 no-print">
-                        <div className="flex bg-black/[0.03] p-1.5 rounded-2xl">
-                            <button
-                                onClick={() => setViewType('CAT')}
-                                className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'CAT' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
-                            >
-                                CAT Marks ({filteredGradesDisplay.length})
-                            </button>
-                            {!isStudent && (
+                    <div className="bg-maroon/[0.02] px-4 sm:px-10 py-5 sm:py-8 border-b border-black/5 flex flex-col gap-4 no-print">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex bg-black/[0.03] p-1.5 rounded-2xl self-start">
                                 <button
-                                    onClick={() => setViewType('REPORTS')}
-                                    className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'REPORTS' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
+                                    onClick={() => setViewType('CAT')}
+                                    className={`px-4 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'CAT' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
                                 >
-                                    Evaluation Reports ({filteredReportsDisplay.length})
+                                    CAT Marks ({filteredGradesDisplay.length})
                                 </button>
-                            )}
+                                {!isStudent && (
+                                    <button
+                                        onClick={() => setViewType('REPORTS')}
+                                        className={`px-4 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'REPORTS' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
+                                    >
+                                        Eval Reports ({filteredReportsDisplay.length})
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 flex items-center gap-3 bg-white border border-black/5 p-2 px-4 sm:px-6 rounded-2xl shadow-sm">
+                                    <Search className="w-4 h-4 text-maroon shrink-0" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search registry..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-full sm:w-36"
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => window.print()}
+                                    className="bg-white border border-black/5 p-3 sm:p-4 rounded-2xl text-maroon hover:bg-maroon hover:text-white transition-all shadow-sm shrink-0"
+                                    title="Print Registry View"
+                                >
+                                    <Printer className="w-5 h-5" />
+                                </button>
+                            </div>
                         </div>
                         <div>
-                            <h3 className="text-2xl font-black text-black uppercase tracking-tight">Official Results Registry</h3>
+                            <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">Official Results Registry</h3>
                             <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">
                                 {viewType === 'CAT' ? `Archive contains ${grades.length} marks` : `Archive contains ${allRecords.length} evaluations`}
                             </p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-4 bg-white border border-black/5 p-2 px-6 rounded-2xl shadow-sm">
-                                <Search className="w-4 h-4 text-maroon" />
-                                <input
-                                    type="text"
-                                    placeholder="Search registry..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-48"
-                                />
-                            </div>
-                            <button
-                                onClick={() => window.print()}
-                                className="bg-white border border-black/5 p-4 rounded-2xl text-maroon hover:bg-maroon hover:text-white transition-all shadow-sm"
-                                title="Print Registry View"
-                            >
-                                <Printer className="w-5 h-5" />
-                            </button>
                         </div>
                     </div>
 
@@ -452,7 +454,7 @@ export default function Grades() {
                         </div>
                     )}
 
-                    <div className="overflow-x-auto">
+                    <div className="table-container custom-scrollbar">
                         {viewType === 'CAT' ? (
                             <>
                                 {filteredGradesDisplay.length > 0 ? (
@@ -463,7 +465,7 @@ export default function Grades() {
                                                 <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAT & Period</th>
                                                 <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Marks</th>
                                                 <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Performance Remarks</th>
-                                                {canManage && <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Action</th>}
+                                                <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-black/5">
@@ -500,25 +502,27 @@ export default function Grades() {
                                                             </p>
                                                         </div>
                                                     </td>
-                                                    {canManage && (
-                                                        <td className="px-10 py-8">
-                                                            <div className="flex justify-center gap-3">
-                                                                <button
-                                                                    onClick={() => handleDownloadReport(grade.student_id)}
-                                                                    className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
-                                                                    title="Download Performance Statement"
-                                                                >
-                                                                    <FileDown className="w-4 h-4" />
-                                                                </button>
-                                                                <button onClick={() => handleEdit(grade)} className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon">
-                                                                    <Edit className="w-4 h-4" />
-                                                                </button>
-                                                                <button onClick={() => handleDelete(grade.id)} className="p-3 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon hover:border-red-600">
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    )}
+                                                    <td className="px-10 py-8">
+                                                        <div className="flex justify-center gap-3">
+                                                            <button
+                                                                onClick={() => handleDownloadReport(grade.student_id)}
+                                                                className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
+                                                                title="Download Performance Statement"
+                                                            >
+                                                                <FileDown className="w-4 h-4" />
+                                                            </button>
+                                                            {canManage && (
+                                                                <>
+                                                                    <button onClick={() => handleEdit(grade)} className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon">
+                                                                        <Edit className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button onClick={() => handleDelete(grade.id)} className="p-3 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon hover:border-red-600">
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -540,6 +544,7 @@ export default function Grades() {
                                                 <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAS Score</th>
                                                 <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Trainer Observations</th>
                                                 <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Recommendation</th>
+                                                <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-black/5">
@@ -577,6 +582,17 @@ export default function Grades() {
                                                             }`}>
                                                             {report.recommendation}
                                                         </span>
+                                                    </td>
+                                                    <td className="px-10 py-8">
+                                                        <div className="flex justify-center">
+                                                            <button
+                                                                onClick={() => handleDownloadReport(report.student_id)}
+                                                                className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
+                                                                title="Download Performance Statement"
+                                                            >
+                                                                <FileDown className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}

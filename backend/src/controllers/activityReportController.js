@@ -9,20 +9,24 @@ async function isMongo() {
 
 export const getAllDailyReports = async (req, res) => {
     try {
-        if (await isMongo()) {
+        console.log('Fetching daily reports...');
+        const mongo = await isMongo();
+        if (mongo) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
             const { limit = 30, startDate, endDate } = req.query;
-            let query = { report_type: 'daily' };
+            let queryObj = { report_type: 'daily' };
             if (startDate || endDate) {
-                query.report_date = {};
-                if (startDate) query.report_date.$gte = new Date(startDate);
-                if (endDate) query.report_date.$lte = new Date(endDate);
+                queryObj.report_date = {};
+                if (startDate) queryObj.report_date.$gte = new Date(startDate);
+                if (endDate) queryObj.report_date.$lte = new Date(endDate);
             }
-            const reports = await ActivityReport.find(query).sort({ report_date: -1 }).limit(parseInt(limit));
+            const reports = await ActivityReport.find(queryObj).sort({ report_date: -1 }).limit(parseInt(limit));
             return res.json({ success: true, data: reports });
         }
 
+        console.log('Executing SQL query for daily reports...');
         const reports = await query('SELECT * FROM daily_activity_reports ORDER BY report_date DESC LIMIT 30');
+        console.log(`Found ${reports.length} daily reports.`);
         res.json({ success: true, data: reports });
     } catch (error) {
         console.error('Error fetching daily reports:', error);
@@ -61,7 +65,7 @@ export const createDailyReport = async (req, res) => {
 
         const { report_date, classes_conducted, total_attendance_percentage, assessments_conducted,
             total_students_present, total_students_absent, late_arrivals, new_enrollments,
-            staff_present, staff_absent, facilities_issues, equipment_maintenance,
+            staff_present, staff_absent, disciplinary_cases, facilities_issues, equipment_maintenance,
             notable_events, incidents, achievements, additional_notes } = req.body;
 
         if (!report_date) {
@@ -71,11 +75,11 @@ export const createDailyReport = async (req, res) => {
         const result = await run(
             `INSERT INTO daily_activity_reports (report_date, reported_by, classes_conducted, total_attendance_percentage,
              assessments_conducted, total_students_present, total_students_absent, late_arrivals, new_enrollments,
-             staff_present, staff_absent, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             staff_present, staff_absent, disciplinary_cases, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [report_date, req.user.email, classes_conducted, total_attendance_percentage, assessments_conducted,
                 total_students_present, total_students_absent, late_arrivals, new_enrollments,
-                staff_present, staff_absent, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes]
+                staff_present, staff_absent, disciplinary_cases || 0, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes]
         );
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
@@ -132,6 +136,7 @@ export const deleteDailyReport = async (req, res) => {
 
 export const getAllWeeklyReports = async (req, res) => {
     try {
+        console.log('Fetching weekly reports...');
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
             const { limit = 20 } = req.query;
@@ -139,7 +144,9 @@ export const getAllWeeklyReports = async (req, res) => {
             return res.json({ success: true, data: reports });
         }
 
+        console.log('Executing SQL query for weekly reports...');
         const reports = await query('SELECT * FROM weekly_summary_reports ORDER BY week_start_date DESC LIMIT 20');
+        console.log(`Found ${reports.length} weekly reports.`);
         res.json({ success: true, data: reports });
     } catch (error) {
         console.error('Error fetching weekly reports:', error);
@@ -239,6 +246,7 @@ export const deleteWeeklyReport = async (req, res) => {
 
 export const getAllMonthlyReports = async (req, res) => {
     try {
+        console.log('Fetching monthly reports...');
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
             const { limit = 12 } = req.query;
@@ -246,7 +254,9 @@ export const getAllMonthlyReports = async (req, res) => {
             return res.json({ success: true, data: reports });
         }
 
+        console.log('Executing SQL query for monthly reports...');
         const reports = await query('SELECT * FROM monthly_summary_reports ORDER BY month_start_date DESC LIMIT 12');
+        console.log(`Found ${reports.length} monthly reports.`);
         res.json({ success: true, data: reports });
     } catch (error) {
         console.error('Error fetching monthly reports:', error);
@@ -341,6 +351,95 @@ export const deleteMonthlyReport = async (req, res) => {
         res.json({ success: true, message: 'Report deleted successfully' });
     } catch (error) {
         console.error('Error deleting monthly report:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+// ============ AUTO-CAPTURE STATS ============
+
+export const getAutoCaptureStats = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+
+        if (await isMongo()) {
+            // MongoDB aggregation logic
+            const Attendance = (await import('../models/mongo/Attendance.js')).default;
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const Payment = (await import('../models/mongo/Payment.js')).default;
+            const Faculty = (await import('../models/mongo/Faculty.js')).default;
+
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+
+            const attendanceStats = await Attendance.aggregate([
+                { $match: { date: { $gte: start, $lte: end } } },
+                { $group: { _id: '$status', count: { $sum: 1 } } }
+            ]);
+
+            const newStudents = await Student.countDocuments({ enrolled_date: { $gte: start, $lte: end } });
+            const revenue = await Payment.aggregate([
+                { $match: { payment_date: { $gte: start, $lte: end }, status: 'Completed' } },
+                { $group: { _id: null, total: { $sum: '$amount' } } }
+            ]);
+
+            const facultyCount = await Faculty.countDocuments({});
+
+            const stats = {
+                attendance: {
+                    Present: attendanceStats.find(s => s._id === 'Present')?.count || 0,
+                    Absent: attendanceStats.find(s => s._id === 'Absent')?.count || 0,
+                    Late: attendanceStats.find(s => s._id === 'Late')?.count || 0
+                },
+                new_enrollments: newStudents,
+                revenue_collected: revenue[0]?.total || 0,
+                total_faculty: facultyCount
+            };
+
+            return res.json({ success: true, data: stats });
+        }
+
+        // SQLite / PostgreSQL logic
+        const start = startDate;
+        const end = endDate;
+        const isPostgres = !!(await import('../config/database.js')).getProcessedDatabaseUrl();
+
+        const attendanceRows = await query(
+            `SELECT status, COUNT(*) as count FROM attendance WHERE date BETWEEN ? AND ? GROUP BY status`,
+            [start, end]
+        );
+
+        const enrollments = await queryOne(
+            'SELECT COUNT(*) as count FROM students WHERE enrolled_date BETWEEN ? AND ?',
+            [start, end]
+        );
+
+        // Date casting varies between SQLite and PostgreSQL
+        const dateCast = isPostgres ? 'CAST(payment_date AS DATE)' : 'DATE(payment_date)';
+        const payments = await queryOne(
+            `SELECT SUM(amount) as total FROM payments WHERE ${dateCast} BETWEEN ? AND ? AND status = 'Completed'`,
+            [start, end]
+        );
+
+        const faculty = await queryOne('SELECT COUNT(*) as count FROM faculty');
+
+        const stats = {
+            attendance: {
+                Present: attendanceRows.find(r => r.status === 'Present')?.count || 0,
+                Absent: attendanceRows.find(r => r.status === 'Absent')?.count || 0,
+                Late: attendanceRows.find(r => r.status === 'Late')?.count || 0
+            },
+            new_enrollments: enrollments?.count || 0,
+            revenue_collected: parseFloat(payments?.total || 0),
+            total_faculty: faculty?.count || 0
+        };
+
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        console.error('Error auto-capturing stats:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };

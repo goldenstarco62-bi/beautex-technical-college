@@ -10,7 +10,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const ALL_COURSES = [
-    'Cosmetology', 'Beauty Therapy', 'Catering', 'Computer Packages',
+    'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Computer Packages',
     'Website Development', 'Cyber Security', 'Makeup', 'Sista Locks',
     'Braiding, Plaiting & Crotcheting', 'Weaving & Wig Installation', 'Nail Technology'
 ];
@@ -171,17 +171,17 @@ export default function AcademicReports() {
         <div className="space-y-8 pb-20">
             <div className="print:hidden space-y-8">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                     <div>
                         <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.3em] mb-1">Beautex Training Centre</p>
-                        <h1 className="text-2xl md:text-3xl font-black text-maroon uppercase tracking-tight">Academic Reports</h1>
+                        <h1 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight">Academic Reports</h1>
                         <div className="w-16 h-0.5 bg-gold mt-3"></div>
                         <p className="text-xs text-maroon/40 font-bold mt-2">General class & course progress reports by trainer</p>
                     </div>
                     {user?.role !== 'student' && (
                         <button
                             onClick={openNew}
-                            className="w-full md:w-auto bg-maroon text-gold px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
+                            className="w-full sm:w-auto bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
                         >
                             <Plus className="w-4 h-4" /> Capture New Report
                         </button>
@@ -231,7 +231,7 @@ export default function AcademicReports() {
                                             }`}>
                                             {report.recommendation}
                                         </span>
-                                        <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex gap-1.5 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                             <button onClick={() => handleDownload(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Download PDF">
                                                 <FileDown className="w-3.5 h-3.5 text-maroon/40" />
                                             </button>
@@ -289,14 +289,13 @@ export default function AcademicReports() {
 
                 {/* Capture / Edit Modal */}
                 {showModal && (
-                    <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
-                        <div className="bg-white border border-maroon/10 rounded-[2.5rem] p-10 max-w-3xl w-full shadow-2xl overflow-hidden relative max-h-[90vh] flex flex-col">
+                    <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                        <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-3xl w-full shadow-2xl overflow-hidden relative max-h-[95vh] flex flex-col">
                             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
 
-                            {/* Modal Header */}
-                            <div className="flex justify-between items-center mb-8 shrink-0">
+                            <div className="flex justify-between items-center mb-5 shrink-0">
                                 <div>
-                                    <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">
+                                    <h2 className="text-xl sm:text-2xl font-black text-maroon uppercase tracking-tight">
                                         {editingReport ? 'Update Report' : 'Capture Class Report'}
                                     </h2>
                                     <div className="w-10 h-0.5 bg-gold mt-2"></div>

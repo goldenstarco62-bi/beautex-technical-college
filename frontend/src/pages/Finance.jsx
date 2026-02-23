@@ -116,15 +116,15 @@ export default function Finance() {
     if (user?.role === 'student') {
         return (
             <div className="space-y-6 animate-in fade-in duration-700">
-                <div className="flex justify-between items-end mb-8">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                     <div>
                         <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.3em] mb-1">Beautex Training Centre</p>
-                        <h1 className="text-3xl font-black text-maroon uppercase tracking-tight">My Fee Account</h1>
+                        <h1 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight">My Fee Account</h1>
                         <div className="w-12 h-0.5 bg-gold mt-2" />
                     </div>
                     <button
                         onClick={() => alert('M-Pesa integration: Dial *334# and use Paybill 123456, Account: ' + (user.studentId || user.id))}
-                        className="bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center gap-2 shadow-xl hover:scale-105 transition-transform cursor-pointer border border-gold/20"
+                        className="w-full sm:w-auto bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-xl hover:scale-105 transition-transform cursor-pointer border border-gold/20"
                     >
                         <CreditCard className="w-4 h-4" />
                         <span className="text-xs font-black uppercase tracking-widest">Pay with M-Pesa</span>
@@ -137,7 +137,7 @@ export default function Finance() {
                         { label: 'Total Amount Paid', value: studentFee?.total_paid || 0, color: 'text-green-600' },
                         { label: 'Current Balance', value: studentFee?.balance || 0, color: 'text-red-600' },
                     ].map((item, i) => (
-                        <div key={i} className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl">
+                        <div key={i} className="bg-white p-6 sm:p-8 rounded-[2rem] border border-gray-100 shadow-xl">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">{item.label}</p>
                             <div className="flex items-baseline gap-1">
                                 <span className="text-xs font-black text-maroon/40 uppercase">KSh</span>
@@ -152,8 +152,8 @@ export default function Finance() {
                 {studentFee && (
                     <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex items-center gap-3">
                         <span className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest ${studentFee.status === 'Paid' ? 'bg-green-100 text-green-700' :
-                                studentFee.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
-                                    'bg-red-100 text-red-700'
+                            studentFee.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-red-100 text-red-700'
                             }`}>
                             {studentFee.status}
                         </span>
@@ -165,7 +165,7 @@ export default function Finance() {
                     </div>
                 )}
 
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden mt-8">
+                <div className="table-container custom-scrollbar mt-8">
                     <div className="px-8 py-6 border-b border-gray-50 flex justify-between items-center">
                         <h3 className="text-xs font-black text-gray-800 uppercase tracking-[0.2em]">Payment History</h3>
                         <button
@@ -213,24 +213,23 @@ export default function Finance() {
     const summary = analytics?.summary || {};
     return (
         <div className="space-y-6 animate-in fade-in duration-700">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 gap-4">
                 <div>
                     <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.3em] mb-1">Beautex Training Centre</p>
-                    <h1 className="text-3xl font-black text-maroon uppercase tracking-tight">Finance Center</h1>
+                    <h1 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight">Finance Center</h1>
                     <div className="w-12 h-0.5 bg-gold mt-2" />
                     <p className="text-xs text-maroon/40 font-bold mt-1">Revenue Monitoring & Payment Registry</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
                     <button
                         onClick={handleExportReport}
-                        className="bg-white border border-gray-200 text-maroon px-6 py-3 rounded-2xl flex items-center gap-2 shadow-sm hover:bg-gray-50 transition-all font-black text-[10px] uppercase tracking-widest"
+                        className="flex-1 sm:flex-none bg-white border border-gray-200 text-maroon px-4 sm:px-6 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 transition-all font-black text-[10px] uppercase tracking-widest"
                     >
                         <Download className="w-4 h-4" /> Export CSV
                     </button>
                     <button
                         onClick={() => setShowModal(true)}
-                        className="bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center gap-2 shadow-xl hover:bg-maroon/90 transition-all font-black text-[10px] uppercase tracking-widest border border-gold/20"
+                        className="flex-1 sm:flex-none bg-maroon text-gold px-4 sm:px-6 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all font-black text-[10px] uppercase tracking-widest border border-gold/20"
                     >
                         <Plus className="w-4 h-4" /> Record Payment
                     </button>
@@ -238,7 +237,7 @@ export default function Finance() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
                     { label: 'Expected Revenue', value: summary.total_revenue_expected, icon: TrendingUp, color: 'text-gray-800', prefix: 'KSh ' },
                     { label: 'Collected', value: summary.total_revenue_collected, icon: DollarSign, color: 'text-green-600', prefix: 'KSh ' },
@@ -272,7 +271,7 @@ export default function Finance() {
 
             {/* Payment Registry Table */}
             {activeTab === 'payments' && (
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
+                <div className="table-container custom-scrollbar">
                     <div className="px-8 py-6 border-b border-gray-50">
                         <h3 className="text-xs font-black text-gray-800 uppercase tracking-[0.2em]">Global Payment Registry</h3>
                     </div>
@@ -319,7 +318,7 @@ export default function Finance() {
 
             {/* Student Accounts Table */}
             {activeTab === 'accounts' && (
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
+                <div className="table-container custom-scrollbar">
                     <div className="px-8 py-6 border-b border-gray-50">
                         <h3 className="text-xs font-black text-gray-800 uppercase tracking-[0.2em]">Student Fee Accounts</h3>
                     </div>
@@ -345,8 +344,8 @@ export default function Finance() {
                                         <td className="px-8 py-4 text-xs font-bold text-red-500 text-right">KSh {Number(f.balance || 0).toLocaleString()}</td>
                                         <td className="px-8 py-4">
                                             <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${f.status === 'Paid' ? 'bg-green-100 text-green-700' :
-                                                    f.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
-                                                        'bg-red-100 text-red-700'
+                                                f.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
+                                                    'bg-red-100 text-red-700'
                                                 }`}>{f.status || 'Unpaid'}</span>
                                         </td>
                                     </tr>
@@ -362,10 +361,9 @@ export default function Finance() {
                 </div>
             )}
 
-            {/* Record Payment Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
-                    <div className="bg-white border border-maroon/10 rounded-[2.5rem] p-10 max-w-lg w-full shadow-2xl relative">
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-6 sm:p-10 max-w-lg w-full shadow-2xl relative max-h-[95vh] flex flex-col">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
                         <div className="flex justify-between items-center mb-8">
                             <div>

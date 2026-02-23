@@ -100,9 +100,9 @@ export default function Attendance() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-black text-maroon tracking-tight uppercase">
+                    <h1 className="text-2xl sm:text-3xl font-black text-maroon tracking-tight uppercase">
                         {isStudent ? 'Attendance Profile' : 'Attendance Registry'}
                     </h1>
                     <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">
@@ -138,8 +138,8 @@ export default function Attendance() {
                 </div>
             )}
 
-            <div className="card-light overflow-x-auto shadow-xl border border-maroon/5 custom-scrollbar">
-                <table className="w-full min-w-[700px]">
+            <div className="table-container custom-scrollbar overflow-x-auto">
+                <table className="w-full min-w-[580px]">
                     <thead>
                         <tr className="bg-maroon/5">
                             {isStudent ? (
@@ -188,10 +188,10 @@ export default function Attendance() {
                 </table>
             </div>
 
-            <div className="flex justify-end pr-8">
+            <div className="flex justify-center md:justify-end md:pr-8">
                 <button
                     onClick={isStudent ? () => window.print() : handleSave}
-                    className="bg-maroon text-gold px-12 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-elite-maroon shadow-2xl transition-all"
+                    className="w-full md:w-auto bg-maroon text-gold px-12 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-elite-maroon shadow-2xl transition-all"
                 >
                     {isStudent ? 'Download Attendance Report' : 'Save Daily Registry Portfolio'}
                 </button>

@@ -54,7 +54,7 @@ export default function Navbar({ onMenuClick }) {
             </div>
             {/* ... header ... */}
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2 sm:gap-6">
                 {/* Theme Toggle */}
                 <button
                     onClick={toggleDarkMode}
@@ -74,7 +74,7 @@ export default function Navbar({ onMenuClick }) {
                     </button>
 
                     {showNotifications && (
-                        <div className="absolute right-0 mt-4 w-80 bg-white dark:bg-card-bg border border-primary/10 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute right-0 mt-4 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-white dark:bg-card-bg border border-primary/10 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                             <div className="p-4 border-b border-primary/5 flex justify-between items-center">
                                 <h3 className="text-[10px] font-black text-primary uppercase tracking-widest">Notifications</h3>
                                 <span className="text-[9px] font-bold text-accent px-2 py-0.5 bg-primary/5 rounded-full">{unreadCount} New</span>
@@ -101,7 +101,7 @@ export default function Navbar({ onMenuClick }) {
                 {/* User Info - Clickable for Profile Settings */}
                 <Link
                     to="/profile"
-                    className="flex items-center gap-4 pl-6 border-l border-white/10 hover:bg-white/5 px-4 py-2 rounded-2xl transition-all group"
+                    className="flex items-center gap-2 sm:gap-4 pl-3 sm:pl-6 border-l border-white/10 hover:bg-white/5 px-2 sm:px-4 py-2 rounded-2xl transition-all group"
                 >
                     <div className="text-right hidden sm:block">
                         <p className="text-[10px] font-black text-white uppercase whitespace-nowrap group-hover:text-gold transition-colors">

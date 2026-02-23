@@ -1,4 +1,17 @@
 import jwt from 'jsonwebtoken';
+import { run, getProcessedDatabaseUrl } from '../config/database.js';
+
+/**
+ * Fire-and-forget: update last_seen_at for the authenticated user.
+ * Runs asynchronously — never blocks the request pipeline.
+ */
+function touchLastSeen(userId) {
+    const now = new Date().toISOString();
+    // Use a local import to avoid circular deps
+    import('../config/database.js').then(({ run: dbRun, getProcessedDatabaseUrl: getDbUrl }) => {
+        dbRun('UPDATE users SET last_seen_at = ? WHERE id = ?', [now, userId]).catch(() => { });
+    }).catch(() => { });
+}
 
 export function authenticateToken(req, res, next) {
     const authHeader = req.headers['authorization'];
@@ -15,6 +28,10 @@ export function authenticateToken(req, res, next) {
         }
 
         req.user = user;
+
+        // Non-blocking: update last_seen_at in background
+        if (user?.id) touchLastSeen(user.id);
+
         next();
     });
 }

@@ -107,7 +107,7 @@ export default function StudentDashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {[
                     { title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen },
                     { title: 'Fee Balance', value: `KSh ${(studentFee?.balance || 0).toLocaleString()}`, icon: CreditCard },
@@ -135,7 +135,7 @@ export default function StudentDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
                     {/* Current Course View */}
-                    <div className="bg-maroon p-8 rounded-[2rem] shadow-2xl relative overflow-hidden group">
+                    <div className="bg-maroon p-6 sm:p-8 rounded-[2rem] shadow-2xl relative overflow-hidden group">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-gold/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-gold/20 transition-all duration-700"></div>
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-6">
@@ -176,7 +176,7 @@ export default function StudentDashboard() {
                         </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
+                    <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-2">
                                 <Award className="w-5 h-5 text-maroon" />

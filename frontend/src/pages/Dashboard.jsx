@@ -78,7 +78,7 @@ function AdminDashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
@@ -107,7 +107,7 @@ function AdminDashboard() {
                     </div>
                     <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Global Directives</h2>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                     <button onClick={() => navigate('/students')} className="flex items-center justify-center gap-3 bg-[#800000] text-white px-4 md:px-6 py-4 md:py-5 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] hover:bg-[#600000] transition-all shadow-xl hover:-translate-y-1 active:scale-95">
                         <UserPlus className="w-4 h-4 text-[#FFD700]" /> Register Student
                     </button>

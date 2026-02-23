@@ -13,7 +13,7 @@ export default function Courses() {
     });
 
     const isStudent = user?.role === 'student';
-    const departments = ['Cosmetology', 'Beauty Therapy', 'Catering', 'IT & Computer Science', 'Business'];
+    const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business'];
 
     useEffect(() => {
         fetchCourses();
@@ -88,15 +88,15 @@ export default function Courses() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex justify-between items-end">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
                 <div>
-                    <h1 className="text-3xl font-black text-maroon tracking-tight uppercase">Courses</h1>
+                    <h1 className="text-2xl sm:text-3xl font-black text-maroon tracking-tight uppercase">Courses</h1>
                     <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">Academic Programs & Curriculum</p>
                 </div>
                 {(user?.role === 'admin' || user?.role === 'superadmin') && (
                     <button
                         onClick={() => { resetForm(); setShowModal(true); }}
-                        className="bg-maroon text-gold px-8 py-3.5 rounded-2xl flex items-center gap-2 hover:bg-elite-maroon shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
+                        className="w-full sm:w-auto bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-elite-maroon shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
                     >
                         <Plus className="w-5 h-5" /> Add New Course
                     </button>
@@ -176,11 +176,11 @@ export default function Courses() {
 
             {/* Modal */}
             {showModal && !isStudent && (
-                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-[2rem] p-10 max-w-md w-full shadow-2xl border border-maroon/10 scale-in-center">
-                        <div className="flex justify-between items-center mb-10">
+                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white rounded-2xl sm:rounded-[2rem] p-5 sm:p-10 max-w-md w-full shadow-2xl border border-maroon/10 max-h-[95vh] flex flex-col">
+                        <div className="flex justify-between items-center mb-6 shrink-0">
                             <div>
-                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">
+                                <h2 className="text-xl sm:text-2xl font-black text-maroon uppercase tracking-tight">
                                     {editingCourse ? 'Update Curriculum' : 'Add New Program'}
                                 </h2>
                                 <p className="text-xs text-maroon/40 font-bold mt-1 uppercase tracking-widest">Academic Program Registry</p>
@@ -189,7 +189,7 @@ export default function Courses() {
                                 <X className="w-6 h-6 text-maroon/20" />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit} className="space-y-6 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
+                        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto pr-1 custom-scrollbar flex-1">
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Course Code / ID</label>
                                 <input

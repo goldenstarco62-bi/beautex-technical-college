@@ -8,16 +8,44 @@ async function isMongo() {
     return db.constructor.name === 'NativeConnection';
 }
 
+/**
+ * Compute presence based on last_seen_at timestamp.
+ * Online  = seen within the last 5 minutes
+ * Away    = seen within the last 30 minutes
+ * Offline = seen before but not in the last 30 minutes
+ * Never   = has never accessed the portal
+ */
+function computeOnlineStatus(lastSeenAt) {
+    if (!lastSeenAt) return 'Never';
+    const diffMs = Date.now() - new Date(lastSeenAt).getTime();
+    const diffMin = diffMs / 60000;
+    if (diffMin < 5) return 'Online';
+    if (diffMin < 30) return 'Away';
+    return 'Offline';
+}
+
 export async function getAllUsers(req, res) {
     try {
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
             const users = await User.find().select('-password').sort({ email: 1 });
-            return res.json(users);
+            const enriched = users.map(u => ({
+                ...u.toObject(),
+                online_status: computeOnlineStatus(u.last_seen_at),
+            }));
+            return res.json(enriched);
         }
 
-        const users = await query('SELECT id, email, role, status, name, created_at FROM users ORDER BY email');
-        res.json(users);
+        const users = await query(
+            'SELECT id, email, role, status, name, created_at, last_seen_at FROM users ORDER BY email'
+        );
+
+        const enriched = users.map(u => ({
+            ...u,
+            online_status: computeOnlineStatus(u.last_seen_at),
+        }));
+
+        res.json(enriched);
     } catch (error) {
         console.error('Get users error:', error);
         res.status(500).json({ error: 'Failed to fetch users' });

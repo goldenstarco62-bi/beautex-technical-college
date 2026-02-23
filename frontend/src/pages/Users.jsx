@@ -34,6 +34,9 @@ export default function Users() {
 
     useEffect(() => {
         fetchUsers();
+        // Auto-refresh every 30 seconds so presence stays current
+        const interval = setInterval(fetchUsers, 30000);
+        return () => clearInterval(interval);
     }, []);
 
     const handleRoleChange = async (userId, newRole) => {
@@ -129,6 +132,35 @@ export default function Users() {
 
     const filteredUsers = getFilteredUsers();
 
+    // Presence badge component
+    const PresenceBadge = ({ onlineStatus }) => {
+        if (onlineStatus === 'Online') return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/15 text-green-600 border border-green-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping absolute"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 relative"></span>
+                Online
+            </span>
+        );
+        if (onlineStatus === 'Away') return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/15 text-amber-600 border border-amber-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                Away
+            </span>
+        );
+        if (onlineStatus === 'Never') return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-blue-500/15 text-blue-600 border border-blue-500/20 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                Pending First Login
+            </span>
+        );
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-gray-200/60 text-gray-400 border border-gray-200 dark:bg-white/5 dark:border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                Offline
+            </span>
+        );
+    };
+
     const UserDetailModal = ({ user, onClose }) => {
         if (!user) return null;
         return (
@@ -142,6 +174,7 @@ export default function Users() {
                             <div>
                                 <h2 className="text-2xl font-black uppercase tracking-tight">{user.name || 'User Profile'}</h2>
                                 <p className="text-white/60 font-medium tracking-wide">{user.email}</p>
+                                <div className="mt-2"><PresenceBadge onlineStatus={user.online_status} /></div>
                             </div>
                         </div>
                         <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all">
@@ -156,7 +189,10 @@ export default function Users() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div><p className="text-[10px] text-gray-400 uppercase font-black">System ID</p><p className="text-sm font-bold">#{user.id}</p></div>
                                 <div><p className="text-[10px] text-gray-400 uppercase font-black">Account Role</p><p className="text-sm font-bold uppercase text-gold">{user.role}</p></div>
-                                <div><p className="text-[10px] text-gray-400 uppercase font-black">Current Status</p><p className={`text-sm font-bold uppercase ${user.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>{user.status}</p></div>
+                                <div><p className="text-[10px] text-gray-400 uppercase font-black">Current Status</p>
+                                    <p className={`text-sm font-bold uppercase ${user.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>{user.status}</p>
+                                    <div className="mt-1"><PresenceBadge onlineStatus={user.online_status} /></div>
+                                </div>
                                 <div><p className="text-[10px] text-gray-400 uppercase font-black">Join Date</p><p className="text-sm font-bold">{new Date(user.created_at).toLocaleDateString()}</p></div>
                             </div>
                         </section>
@@ -327,15 +363,20 @@ export default function Users() {
                                         </div>
                                     </td>
                                     <td className="px-10 py-8">
-                                        <div className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[9px] font-black uppercase tracking-widest border shadow-sm ${u.status === 'Active'
-                                            ? 'bg-green-500/10 border-green-500/20 text-green-600'
-                                            : u.status === 'Suspended' || u.status === 'Inactive'
-                                                ? 'bg-red-500/10 border-red-500/20 text-red-600'
-                                                : 'bg-gold/10 border-gold/20 text-gold'
-                                            }`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500 animate-pulse' : u.status === 'Suspended' ? 'bg-red-500' : 'bg-gold'
-                                                }`}></div>
-                                            {u.status}
+                                        <div className="flex flex-col gap-1.5">
+                                            {/* Account status (admin-set) */}
+                                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest border w-fit ${u.status === 'Active'
+                                                ? 'bg-green-500/10 border-green-500/20 text-green-600'
+                                                : u.status === 'Suspended' || u.status === 'Inactive'
+                                                    ? 'bg-red-500/10 border-red-500/20 text-red-600'
+                                                    : 'bg-gold/10 border-gold/20 text-gold'
+                                                }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500' : u.status === 'Suspended' ? 'bg-red-500' : 'bg-gold'
+                                                    }`}></div>
+                                                {u.status}
+                                            </div>
+                                            {/* Real-time presence (only meaningful if account is Active) */}
+                                            {u.status === 'Active' && <PresenceBadge onlineStatus={u.online_status} />}
                                         </div>
                                     </td>
                                     <td className="px-10 py-8">
@@ -383,6 +424,10 @@ export default function Users() {
                     <div className="flex gap-8">
                         <span>Total Records: {users.length}</span>
                         <span>Authorized: {users.filter(u => u.status === 'Active').length}</span>
+                        <span className="text-green-500 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block"></span>
+                            Online Now: {users.filter(u => u.online_status === 'Online').length}
+                        </span>
                     </div>
                 </div>
             </div>

@@ -1,14 +1,31 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { authAPI } from '../services/api';
 
 const AuthContext = createContext();
 
+const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const heartbeatRef = useRef(null);
+
+    // Start a repeating ping to keep last_seen_at fresh on the server
+    const startHeartbeat = () => {
+        if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+        heartbeatRef.current = setInterval(() => {
+            authAPI.ping().catch(() => { });
+        }, HEARTBEAT_INTERVAL_MS);
+    };
+
+    const stopHeartbeat = () => {
+        if (heartbeatRef.current) {
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = null;
+        }
+    };
 
     useEffect(() => {
-        // Check if user is already logged in
         const token = localStorage.getItem('token');
         const savedUser = localStorage.getItem('user');
 
@@ -17,27 +34,32 @@ export function AuthProvider({ children }) {
                 const parsedUser = JSON.parse(savedUser);
                 setUser(parsedUser);
 
-                // Proactively refresh student info if it's a student
-                if (parsedUser.role === 'student') {
-                    const fetchUpdatedUser = async () => {
-                        try {
-                            const { data } = await authAPI.getMe();
-                            if (data) {
-                                localStorage.setItem('user', JSON.stringify(data));
-                                setUser(data);
-                            }
-                        } catch (err) {
-                            console.error('Auto-refresh user failed:', err);
+                // Always refresh user info on load (updates last_seen_at immediately)
+                const fetchUpdatedUser = async () => {
+                    try {
+                        const { data } = await authAPI.getMe();
+                        if (data) {
+                            localStorage.setItem('user', JSON.stringify(data));
+                            setUser(data);
                         }
-                    };
-                    fetchUpdatedUser();
-                }
+                    } catch (err) {
+                        console.error('Auto-refresh user failed:', err);
+                    }
+                };
+                fetchUpdatedUser();
+
+                // Start heartbeat so last_seen_at stays current while portal is open
+                startHeartbeat();
             } catch (e) {
                 console.error('Failed to parse user data:', e);
                 localStorage.removeItem('user');
             }
         }
+
         setLoading(false);
+
+        // Clean up on unmount
+        return () => stopHeartbeat();
     }, []);
 
     const login = async (email, password) => {
@@ -49,6 +71,8 @@ export function AuthProvider({ children }) {
             localStorage.setItem('user', JSON.stringify(data.user));
             setUser(data.user);
         }
+        // Start heartbeat immediately on login
+        startHeartbeat();
         return data;
     };
 
@@ -57,6 +81,7 @@ export function AuthProvider({ children }) {
     };
 
     const logout = () => {
+        stopHeartbeat();
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
@@ -68,7 +93,6 @@ export function AuthProvider({ children }) {
             localStorage.setItem('user', JSON.stringify(updated));
         } catch (e) {
             console.error('Failed to save user to localStorage (likely quota exceeded):', e);
-            // Even if localStorage fails, we update the React state
         }
         setUser(updated);
     };

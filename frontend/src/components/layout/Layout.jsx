@@ -29,7 +29,7 @@ export default function Layout({ children }) {
             <div className="print:hidden">
                 <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
             </div>
-            <div className="lg:ml-64 relative min-h-screen flex flex-col print:ml-0 transition-all duration-300">
+            <div className="lg:ml-72 relative min-h-screen flex flex-col print:ml-0 transition-all duration-300">
                 <div className="print:hidden">
                     <Navbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
                 </div>

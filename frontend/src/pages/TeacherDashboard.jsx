@@ -94,7 +94,7 @@ export default function TeacherDashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
@@ -149,8 +149,8 @@ export default function TeacherDashboard() {
                     </div>
 
                     {/* Quick Teacher Actions */}
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-lg relative overflow-hidden">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-gray-100 shadow-lg relative overflow-hidden">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                             <a href="/attendance" className="flex items-center justify-center gap-3 bg-maroon text-white px-6 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon-dark transition-all shadow-xl hover:-translate-y-1">
                                 <ClipboardCheck className="w-4 h-4 text-gold" /> Mark Attendance
                             </a>

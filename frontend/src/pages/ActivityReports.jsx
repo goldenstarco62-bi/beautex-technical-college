@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, Plus, Calendar, TrendingUp, BarChart3, X, Trash2, Edit, Printer } from 'lucide-react';
+import { FileText, Plus, Calendar, TrendingUp, BarChart3, X, Trash2, Edit, Printer, RefreshCw, Zap } from 'lucide-react';
 import { activityReportsAPI } from '../services/api';
 
 export default function ActivityReports() {
@@ -24,6 +24,7 @@ export default function ActivityReports() {
         new_enrollments: 0,
         staff_present: 0,
         staff_absent: 0,
+        disciplinary_cases: 0,
         facilities_issues: '',
         equipment_maintenance: '',
         notable_events: '',
@@ -95,7 +96,8 @@ export default function ActivityReports() {
             }
         } catch (error) {
             console.error('Error fetching reports:', error);
-            alert('Failed to fetch reports');
+            const errorMsg = error.response?.data?.error || error.message;
+            alert(`Failed to fetch reports: ${errorMsg}`);
         } finally {
             setLoading(false);
         }
@@ -307,6 +309,78 @@ export default function ActivityReports() {
         activeTab
     ]);
 
+    const handleAutoSync = async () => {
+        let start, end;
+        if (activeTab === 'daily') {
+            start = end = dailyForm.report_date;
+        } else if (activeTab === 'weekly') {
+            start = weeklyForm.week_start_date;
+            end = weeklyForm.week_end_date;
+        } else if (activeTab === 'monthly') {
+            start = monthlyForm.month_start_date;
+            end = monthlyForm.month_end_date;
+        }
+
+        if (!start || !end) {
+            alert('Please select a date range first');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const { data } = await activityReportsAPI.getAutoCapture({ startDate: start, endDate: end });
+            const stats = data.data;
+
+            if (activeTab === 'daily') {
+                setDailyForm(prev => ({
+                    ...prev,
+                    total_students_present: stats.attendance.Present,
+                    total_students_absent: stats.attendance.Absent,
+                    late_arrivals: stats.attendance.Late,
+                    new_enrollments: stats.new_enrollments,
+                    staff_present: stats.total_faculty, // Mapping faculty as proxy for staff for now
+                    total_attendance_percentage: stats.attendance.Present + stats.attendance.Absent > 0
+                        ? parseFloat(((stats.attendance.Present / (stats.attendance.Present + stats.attendance.Absent)) * 100).toFixed(1))
+                        : 0
+                }));
+            } else if (activeTab === 'weekly') {
+                setWeeklyForm(prev => ({
+                    ...prev,
+                    average_attendance: stats.attendance.Present + stats.attendance.Absent > 0
+                        ? parseFloat(((stats.attendance.Present / (stats.attendance.Present + stats.attendance.Absent)) * 100).toFixed(1))
+                        : 0,
+                    new_enrollments: stats.new_enrollments,
+                    revenue_collected: stats.revenue_collected,
+                    active_students: stats.attendance.Present // Proxied
+                }));
+            } else if (activeTab === 'monthly') {
+                setMonthlyForm(prev => ({
+                    ...prev,
+                    new_enrollments: stats.new_enrollments,
+                    revenue: stats.revenue_collected,
+                    total_faculty: stats.total_faculty,
+                    average_attendance: stats.attendance.Present + stats.attendance.Absent > 0
+                        ? parseFloat(((stats.attendance.Present / (stats.attendance.Present + stats.attendance.Absent)) * 100).toFixed(1))
+                        : 0,
+                }));
+            }
+
+            // Notification of success
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl animate-in slide-in-from-bottom-4 z-[100]';
+            toast.innerText = '✨ Data Synchronized Successfully';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+
+        } catch (error) {
+            console.error('Auto-sync error:', error);
+            const errorMsg = error.response?.data?.error || error.message;
+            alert(`Failed to sync live data: ${errorMsg}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header */}
@@ -397,7 +471,7 @@ export default function ActivityReports() {
                                                 </button>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Classes</p>
                                                 <p className="text-2xl font-black text-gray-800">{report.classes_conducted}</p>
@@ -417,6 +491,10 @@ export default function ActivityReports() {
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">New Enrollments</p>
                                                 <p className="text-2xl font-black text-blue-600">{report.new_enrollments || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Discipline</p>
+                                                <p className="text-2xl font-black text-amber-600">{report.disciplinary_cases || 0}</p>
                                             </div>
                                         </div>
                                         {report.achievements && (
@@ -575,10 +653,21 @@ export default function ActivityReports() {
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
                     <div className="bg-white rounded-[2rem] max-w-4xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-                        <div className="sticky top-0 bg-white border-b border-gray-100 p-6 rounded-t-[2rem] flex justify-between items-center">
-                            <h2 className="text-lg font-black text-gray-800 uppercase tracking-wider">
-                                {modalMode === 'create' ? 'Create' : 'Edit'} {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Report
-                            </h2>
+                        <div className="sticky top-0 bg-white border-b border-gray-100 p-6 rounded-t-[2rem] flex justify-between items-center z-10">
+                            <div className="flex items-center gap-4">
+                                <h2 className="text-lg font-black text-gray-800 uppercase tracking-wider">
+                                    {modalMode === 'create' ? 'Create' : 'Edit'} {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Report
+                                </h2>
+                                <button
+                                    onClick={handleAutoSync}
+                                    type="button"
+                                    className="flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-100"
+                                    title="Fetch latest data from system"
+                                >
+                                    <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                                    Auto-Sync Live Data
+                                </button>
+                            </div>
                             <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                                 <X className="w-5 h-5 text-gray-500" />
                             </button>
@@ -670,6 +759,15 @@ export default function ActivityReports() {
                                                 type="number"
                                                 value={dailyForm.staff_present}
                                                 onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) })}
+                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Disciplinary Cases</label>
+                                            <input
+                                                type="number"
+                                                value={dailyForm.disciplinary_cases}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
