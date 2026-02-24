@@ -263,7 +263,7 @@ export async function changePassword(req, res) {
             user.must_change_password = false;
             await user.save();
         } else {
-            await run('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?', [hashedPassword, userId]);
+            await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, false, userId]);
         }
 
         res.json({ message: 'Password changed successfully' });
@@ -377,8 +377,8 @@ export async function resetPassword(req, res) {
             await user.save();
         } else {
             await run(
-                'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL, must_change_password = 0 WHERE id = ?',
-                [hashedPassword, user.id]
+                'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL, must_change_password = ? WHERE id = ?',
+                [hashedPassword, false, user.id]
             );
         }
 

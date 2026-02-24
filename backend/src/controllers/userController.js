@@ -120,7 +120,7 @@ export async function resetUserPassword(req, res) {
         const user = await queryOne('SELECT email FROM users WHERE id = ?', [userId]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        await run('UPDATE users SET password = ?, must_change_password = true WHERE id = ?', [hashedPassword, userId]);
+        await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, userId]);
 
         const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
         if (!emailSent) {
@@ -196,7 +196,7 @@ export async function resetPasswordByEmail(req, res) {
         const user = await queryOne('SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)', [email]);
         if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
-        await run('UPDATE users SET password = ?, must_change_password = true WHERE id = ?', [hashedPassword, user.id]);
+        await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, user.id]);
 
         const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
         if (!emailSent) {

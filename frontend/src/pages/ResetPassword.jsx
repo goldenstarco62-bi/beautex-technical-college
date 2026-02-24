@@ -12,6 +12,7 @@ export default function ResetPassword() {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const token = searchParams.get('token');
+    const email = searchParams.get('email');
 
     useEffect(() => {
         if (!token) {
@@ -35,7 +36,7 @@ export default function ResetPassword() {
 
         setLoading(true);
         try {
-            await authAPI.resetPassword({ token, newPassword: password });
+            await authAPI.resetPassword({ token, email, newPassword: password });
             setSuccess(true);
             setTimeout(() => navigate('/login'), 3000);
         } catch (err) {
