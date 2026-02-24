@@ -156,8 +156,8 @@ CREATE TABLE IF NOT EXISTS academic_reports (
   -- Practical Assessment
   practical_tasks TEXT,
   equipment_used TEXT,
-  skill_level TEXT CHECK(skill_level IN ('Excellent', 'Good', 'Fair', 'Poor')),
-  safety_compliance TEXT CHECK(safety_compliance IN ('Yes', 'No')),
+  skill_level TEXT,
+  safety_compliance TEXT,
   
   -- Discipline & Conduct
   discipline_issues TEXT,
@@ -165,11 +165,10 @@ CREATE TABLE IF NOT EXISTS academic_reports (
   
   -- Overall
   progress_summary TEXT,
-  recommendation TEXT CHECK(recommendation IN ('Proceed', 'Improve', 'Review')),
+  recommendation TEXT,
   
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Daily Activity Reports

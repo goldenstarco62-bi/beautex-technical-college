@@ -216,6 +216,14 @@ async function runPostgresMigrations(database) {
             }
         }
 
+        // Migration: Relax constraints on academic_reports for Class Reporting
+        try {
+            await database.query('ALTER TABLE academic_reports DROP CONSTRAINT IF EXISTS academic_reports_student_id_fkey');
+            console.log('✅ Postgres Migration: Relaxed academic_reports constraints');
+        } catch (e) {
+            // Might fail if constraint name is different or doesn't exist, ignore
+        }
+
         // Check for 'name' column in users table
         const checkNameCol = await database.query(`
             SELECT column_name 

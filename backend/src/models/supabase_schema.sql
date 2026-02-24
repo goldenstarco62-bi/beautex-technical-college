@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- Academic Reports table (Student Performance)
 CREATE TABLE IF NOT EXISTS academic_reports (
   id SERIAL PRIMARY KEY,
-  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  student_id TEXT NOT NULL,
   student_name TEXT NOT NULL,
   registration_number TEXT NOT NULL,
   course_unit TEXT NOT NULL,
