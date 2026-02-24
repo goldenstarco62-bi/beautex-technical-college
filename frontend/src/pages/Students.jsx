@@ -11,7 +11,10 @@ export default function Students() {
     const navigate = useNavigate();
     const { user: currentUser } = useAuth();
     const [students, setStudents] = useState([]);
+    const [allStudents, setAllStudents] = useState([]); // FIX: master list for filtering
     const [searchQuery, setSearchQuery] = useState('');
+    const [studentsError, setStudentsError] = useState('');
+    const [studentsLoading, setStudentsLoading] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(null);
     const [editingStudent, setEditingStudent] = useState(null);
@@ -31,10 +34,16 @@ export default function Students() {
 
     const fetchStudents = async () => {
         try {
+            setStudentsLoading(true);
+            setStudentsError('');
             const { data } = await studentsAPI.getAll();
             setStudents(data);
+            setAllStudents(data); // FIX: keep master copy for filtering
         } catch (error) {
             console.error('Error fetching students:', error);
+            setStudentsError('Failed to load student records. Please refresh the page.');
+        } finally {
+            setStudentsLoading(false);
         }
     };
 
@@ -240,11 +249,26 @@ export default function Students() {
                         <p className="text-sm text-gray-400 font-medium">Manage and view all student information</p>
                     </div>
                     <div className="flex items-center gap-3 w-full sm:w-auto">
+                        {/* FIX: Export generates a CSV instead of calling window.print() */}
+                        {/* FIX: Using correct Download icon instead of Plus icon */}
                         <button
-                            onClick={() => window.print()}
+                            onClick={() => {
+                                const rows = [['Student ID', 'Name', 'Email', 'Course', 'GPA', 'Status', 'Contact']];
+                                students.forEach(s => rows.push([
+                                    s.id, s.name, s.email,
+                                    Array.isArray(s.course) ? s.course.join(' | ') : s.course,
+                                    s.gpa, s.status, s.contact || ''
+                                ]));
+                                const csv = rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+                                const blob = new Blob([csv], { type: 'text/csv' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url; a.download = 'students.csv'; a.click();
+                                URL.revokeObjectURL(url);
+                            }}
                             className="flex-1 sm:flex-none justify-center bg-gold text-maroon px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-gold-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
                         >
-                            <Plus className="w-4 h-4" /> Export
+                            <Download className="w-4 h-4" /> Export
                         </button>
                         <button
                             onClick={() => { resetForm(); setShowModal(true); }}
@@ -260,7 +284,16 @@ export default function Students() {
                     {[
                         { label: 'Total Students', value: students.length, color: 'text-gray-800' },
                         { label: 'Active', value: students.filter(s => s.status === 'Active').length, color: 'text-gray-800' },
-                        { label: 'Average GPA', value: '3.70', color: 'text-gray-800' },
+                        {
+                            label: 'Average GPA',
+                            // FIX: Calculate dynamically from real student data instead of hardcoded '3.70'
+                            value: (() => {
+                                const withGpa = students.filter(s => s.gpa > 0);
+                                if (withGpa.length === 0) return '—';
+                                return (withGpa.reduce((sum, s) => sum + parseFloat(s.gpa || 0), 0) / withGpa.length).toFixed(2);
+                            })(),
+                            color: 'text-gray-800'
+                        },
                     ].map((stat, i) => (
                         <div key={i} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-transform hover:-translate-y-1">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{stat.label}</p>
@@ -285,11 +318,13 @@ export default function Students() {
                     <select
                         onChange={(e) => {
                             const status = e.target.value;
+                            // FIX: Filter from the master allStudents list, not from the already-filtered 'students' state.
+                            // Previously, filtering 'students' in-place would discard records that couldn't be recovered
+                            // without a network request.
                             if (status === 'All Status') {
-                                fetchStudents();
+                                setStudents(allStudents);
                             } else {
-                                const filtered = students.filter(s => s.status === status);
-                                setStudents(filtered);
+                                setStudents(allStudents.filter(s => s.status === status));
                             }
                         }}
                         className="bg-gray-50/50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 outline-none"
@@ -297,6 +332,7 @@ export default function Students() {
                         <option>All Status</option>
                         <option>Active</option>
                         <option>Inactive</option>
+                        <option>Graduated</option>
                     </select>
                 </div>
 

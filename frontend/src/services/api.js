@@ -67,7 +67,8 @@ export const facultyAPI = {
 
 // Attendance
 export const attendanceAPI = {
-    getAll: (course, date) => api.get('attendance', { params: { course, date } }),
+    // FIX: Added studentId param so students can fetch only their own records server-side
+    getAll: (course, date, studentId) => api.get('attendance', { params: { course, date, student_id: studentId } }),
     mark: (data) => api.post('attendance', data),
     update: (id, data) => api.put(`attendance/${encodeURIComponent(id)}`, data),
 };
@@ -174,6 +175,19 @@ export const materialsAPI = {
         return api.post('materials', data);
     },
     delete: (id) => api.delete(`materials/${encodeURIComponent(id)}`),
+    // FIX: Downloads via the streaming endpoint instead of a raw base64 data URI.
+    // This ensures proper filename and Content-Type headers are sent by the server.
+    download: (id, fileName) => api.get(`materials/${encodeURIComponent(id)}/download`, { responseType: 'blob' })
+        .then(res => {
+            const url = URL.createObjectURL(res.data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName || 'download';
+            a.click();
+            URL.revokeObjectURL(url);
+        }),
+    // Returns the full download URL (optionally with auth token as query param for <a> hrefs)
+    getDownloadUrl: (id) => `${API_BASE_URL}materials/${encodeURIComponent(id)}/download`,
 };
 
 // Academic Master

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { academicAPI } from '../services/api';
+import { academicAPI, studentsAPI } from '../services/api';
 import { Building2, Calendar, Plus, Trash2, Edit, CheckCircle2, X, Search } from 'lucide-react';
 
 const EMPTY_DEPT = { name: '', head_of_department: '', description: '' };
@@ -373,8 +373,9 @@ export default function AcademicMaster() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                     {students.filter(s => {
                         const search = studentSearch.toLowerCase();
+                        const courseStr = Array.isArray(s.course) ? s.course.join(', ') : (s.course || '');
                         return s.name.toLowerCase().includes(search) ||
-                            s.course.toLowerCase().includes(search) ||
+                            courseStr.toLowerCase().includes(search) ||
                             s.id.toLowerCase().includes(search);
                     }).map(student => (
                         <div
@@ -396,7 +397,7 @@ export default function AcademicMaster() {
                                     {student.name}
                                 </p>
                                 <p className={`text-[9px] font-black uppercase tracking-widest ${selectedStudents.includes(student.id) ? 'text-gold/50' : 'text-maroon/30'}`}>
-                                    {student.id} • {student.course}
+                                    {student.id} • {Array.isArray(student.course) ? student.course.join(', ') : student.course}
                                 </p>
                             </div>
                             <div className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${student.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'

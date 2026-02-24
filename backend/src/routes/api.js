@@ -77,7 +77,6 @@ router.get('/auth/me', authenticateToken, authController.getMe);
 router.get('/students', authenticateToken, studentController.getAllStudents);
 router.get('/students/search', authenticateToken, studentController.searchStudents);
 router.get('/students/:id', authenticateToken, studentController.getStudent);
-router.get('/students/:id', authenticateToken, studentController.getStudent);
 router.post('/students', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('CREATE_STUDENT', 'students'), studentController.createStudent);
 router.put('/students/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('UPDATE_STUDENT', 'students'), studentController.updateStudent);
 router.delete('/students/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('DELETE_STUDENT', 'students'), studentController.deleteStudent);
@@ -176,7 +175,7 @@ router.get('/activity-reports/auto-capture', authenticateToken, authorizeRoles('
 
 
 // Dashboard Stats
-router.get('/stats/dashboard', authenticateToken, statsController.getDashboardStats);
+router.get('/stats/dashboard', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), statsController.getDashboardStats);
 
 // Finance Routes
 router.get('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFeeStructures);
@@ -200,6 +199,7 @@ router.post('/academic/promote', authenticateToken, authorizeRoles('admin', 'sup
 
 // Course Materials Routes
 router.get('/materials', authenticateToken, materialController.getMaterials);
+router.get('/materials/:id/download', authenticateToken, materialController.downloadMaterial);
 router.post('/materials', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), upload.single('file'), materialController.uploadMaterial);
 router.delete('/materials/:id', authenticateToken, materialController.deleteMaterial);
 
@@ -216,9 +216,9 @@ router.post('/interactions/:id/react', authenticateToken, interactionController.
 router.delete('/interactions/:id', authenticateToken, interactionController.deleteInteraction);
 
 // Trainer Reports
-router.get('/trainer-reports', authenticateToken, trainerReportController.getAllReports);
+router.get('/trainer-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.getAllReports);
 router.post('/trainer-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.createReport);
-router.delete('/trainer-reports/:id', authenticateToken, trainerReportController.deleteReport);
+router.delete('/trainer-reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.deleteReport);
 
 // Multer error handler (file size & type errors)
 router.use((err, req, res, next) => {

@@ -42,6 +42,14 @@ function ProtectedRoute({ children, allowedRoles }) {
     return children;
 }
 
+// FIX: SemiProtectedRoute — requires a token (so anonymous users can't access it)
+// but does NOT require a full AuthContext user (for the forced-password-change flow).
+function SemiProtectedRoute({ children }) {
+    const token = localStorage.getItem('token');
+    if (!token) return <Navigate to="/login" />;
+    return children;
+}
+
 function App() {
     return (
         <ThemeProvider>
@@ -49,7 +57,8 @@ function App() {
                 <BrowserRouter>
                     <Routes>
                         <Route path="/login" element={<Login />} />
-                        <Route path="/change-password" element={<ChangePassword />} />
+                        {/* FIX: /change-password now requires a token to prevent anonymous access */}
+                        <Route path="/change-password" element={<SemiProtectedRoute><ChangePassword /></SemiProtectedRoute>} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/debug" element={<div className="p-10 text-green-600 font-bold">Debug Route Active</div>} />
 

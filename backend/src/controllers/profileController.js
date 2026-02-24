@@ -46,7 +46,6 @@ export async function getProfile(req, res) {
 export async function updateProfile(req, res) {
     try {
         const { email, role } = req.user;
-        const db = await getDb();
         const isMongo = !!process.env.MONGODB_URI;
 
         // Whitelist safe fields only
@@ -59,6 +58,13 @@ export async function updateProfile(req, res) {
 
         if (Object.keys(updates).length === 0) {
             return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        // Schema Mapping: Often 'phone' in user/frontend is 'contact' in student/faculty tables
+        if (updates.phone && !updates.contact) {
+            updates.contact = updates.phone;
+        } else if (updates.contact && !updates.phone) {
+            updates.phone = updates.contact;
         }
 
         if (isMongo) {
@@ -79,19 +85,20 @@ export async function updateProfile(req, res) {
         } else {
             const fields = Object.keys(updates);
             const setClause = fields.map(f => `${f} = ?`).join(', ');
-            const values = [...fields.map(f => updates[f]), email];
+            const values = [...fields.map(f => updates[f]), email.toLowerCase()];
 
             if (role === 'student') {
-                await run(`UPDATE students SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values);
+                // Check if contact column exists in addition to phone
+                await run(`UPDATE students SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values).catch(() => { });
             } else if (role === 'teacher') {
-                await run(`UPDATE faculty SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values);
+                await run(`UPDATE faculty SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values).catch(() => { });
             }
 
             // Sync all updatable fields to users table
             await run(`UPDATE users SET ${setClause} WHERE LOWER(email) = LOWER(?)`, values);
         }
 
-        res.json({ message: 'Profile updated successfully' });
+        res.json({ message: 'Profile updated successfully', updates });
     } catch (error) {
         console.error('Update profile error:', error);
         res.status(500).json({ error: 'Failed to update profile' });

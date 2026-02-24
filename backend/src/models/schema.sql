@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS users (
   address TEXT,
   bio TEXT,
   must_change_password BOOLEAN DEFAULT 1,
+  reset_token TEXT,
+  reset_token_expiry DATETIME,
+  last_login DATETIME,
+  last_seen_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -368,7 +372,10 @@ CREATE TABLE IF NOT EXISTS course_materials (
   title TEXT NOT NULL,
   description TEXT,
   file_url TEXT NOT NULL,
-  uploaded_by TEXT NOT NULL, -- Trainer email
+  file_name TEXT,
+  file_size INTEGER,
+  mime_type TEXT,
+  uploaded_by TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
 );

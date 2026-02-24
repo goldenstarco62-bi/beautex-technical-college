@@ -63,30 +63,32 @@ export async function getAllAttendance(req, res) {
 
         // Students see only their own attendance records
         if (role === 'student') {
-            const sId = student_id || req.query.student_id;
-            if (!sId) {
-                // If student_id is not in token, try finding it by email
-                if (mongo) {
-                    const Student = (await import('../models/mongo/Student.js')).default;
-                    const sp = await Student.findOne({ email });
-                    if (!sp) return res.json([]);
-                    const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                    const attendance = await Attendance.find({ student_id: sp.id }).sort({ date: -1 });
-                    return res.json(attendance);
-                }
-                const sp = await queryOne('SELECT id FROM students WHERE email = ?', [email]);
-                if (!sp) return res.json([]);
-                const attendance = await query('SELECT * FROM attendance WHERE student_id = ? ORDER BY date DESC', [sp.id]);
-                return res.json(attendance);
-            }
+            const tokenStudentId = student_id;
 
             if (mongo) {
                 const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                const attendance = await Attendance.find({ student_id: String(sId) }).sort({ date: -1 });
+                const Student = (await import('../models/mongo/Student.js')).default;
+
+                let searchId = tokenStudentId;
+                if (!searchId) {
+                    const sp = await Student.findOne({ email });
+                    if (!sp) return res.json([]);
+                    searchId = sp.id;
+                }
+
+                const attendance = await Attendance.find({ student_id: String(searchId) }).sort({ date: -1 });
+                return res.json(attendance);
+            } else {
+                let searchId = tokenStudentId;
+                if (!searchId) {
+                    const sp = await queryOne('SELECT id FROM students WHERE email = ?', [email]);
+                    if (!sp) return res.json([]);
+                    searchId = sp.id;
+                }
+
+                const attendance = await query('SELECT * FROM attendance WHERE student_id = ? ORDER BY date DESC', [String(searchId)]);
                 return res.json(attendance);
             }
-            const attendance = await query('SELECT * FROM attendance WHERE student_id = ? ORDER BY date DESC', [String(sId)]);
-            return res.json(attendance);
         }
 
         res.json([]);
@@ -100,16 +102,37 @@ export async function markAttendance(req, res) {
     try {
         const { student_id, course, date, status } = req.body;
 
+        if (!student_id || !course || !date || !status) {
+            return res.status(400).json({ error: 'student_id, course, date, and status are required' });
+        }
+
         // Security check for teachers
         if (req.user.role === 'teacher') {
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
-            if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
+            const email = req.user.email;
+            let allowedCourses = [];
 
-            let coursesList = [];
-            try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+            if (await isMongo()) {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const faculty = await Faculty.findOne({ email });
+                if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
 
-            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
-            const allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+                const facultyCourses = await Course.find({
+                    $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                }).select('name');
+                allowedCourses = facultyCourses.map(c => c.name);
+            } else {
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
+
+                let coursesList = [];
+                try {
+                    coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+                } catch (e) { }
+
+                const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+            }
 
             if (!allowedCourses.includes(course)) {
                 return res.status(403).json({ error: `Security Protocol: You are not authorized to mark attendance for "${course}"` });
@@ -118,13 +141,19 @@ export async function markAttendance(req, res) {
 
         if (await isMongo()) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
-            const newAttendance = new Attendance({ student_id, course, date, status });
-            const saved = await newAttendance.save();
+            // FIX: Upsert for MongoDB — prevent duplicate records
+            const saved = await Attendance.findOneAndUpdate(
+                { student_id, course, date },
+                { $set: { status } },
+                { new: true, upsert: true, setDefaultsOnInsert: true }
+            );
             return res.status(201).json(saved);
         }
 
+        // FIX: INSERT OR REPLACE uses the UNIQUE(student_id, course, date) constraint
+        // to overwrite existing records instead of creating duplicates
         const result = await run(
-            'INSERT INTO attendance (student_id, course, date, status) VALUES (?, ?, ?, ?)',
+            'INSERT OR REPLACE INTO attendance (student_id, course, date, status) VALUES (?, ?, ?, ?)',
             [student_id, course, date, status]
         );
         const attendance = await queryOne('SELECT * FROM attendance WHERE id = ?', [result.lastID]);
@@ -141,17 +170,42 @@ export async function updateAttendance(req, res) {
 
         // Security check for teachers
         if (req.user.role === 'teacher') {
-            const record = await queryOne('SELECT course FROM attendance WHERE id = ?', [recordId]);
-            if (!record) return res.status(404).json({ error: 'Attendance record not found' });
+            const email = req.user.email;
+            let recordCourse = null;
 
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
-            let coursesList = [];
-            try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+            if (await isMongo()) {
+                const Attendance = (await import('../models/mongo/Attendance.js')).default;
+                const rec = await Attendance.findById(recordId);
+                recordCourse = rec?.course;
+            } else {
+                const rec = await queryOne('SELECT course FROM attendance WHERE id = ?', [recordId]);
+                recordCourse = rec?.course;
+            }
 
-            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
-            const allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+            if (!recordCourse) return res.status(404).json({ error: 'Attendance record not found' });
 
-            if (!allowedCourses.includes(record.course)) {
+            let allowedCourses = [];
+            if (await isMongo()) {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const faculty = await Faculty.findOne({ email });
+                if (faculty) {
+                    const facultyCourses = await Course.find({
+                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                    }).select('name');
+                    allowedCourses = facultyCourses.map(c => c.name);
+                }
+            } else {
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                if (faculty) {
+                    let coursesList = [];
+                    try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+                    const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                    allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+                }
+            }
+
+            if (!allowedCourses.includes(recordCourse)) {
                 return res.status(403).json({ error: 'Access Denied: You cannot modify records for this course.' });
             }
         }

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { trainerReportsAPI, coursesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList } from 'lucide-react';
+import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 export default function TrainerReports() {
     const { user } = useAuth();
@@ -9,6 +11,7 @@ export default function TrainerReports() {
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [printingReport, setPrintingReport] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [formData, setFormData] = useState({
         week_number: '',
@@ -74,6 +77,45 @@ export default function TrainerReports() {
         } catch (error) {
             console.error('Error deleting report:', error);
         }
+    };
+
+    const handlePrint = (report) => {
+        setPrintingReport(report);
+        setTimeout(() => { window.print(); setPrintingReport(null); }, 1500);
+    };
+
+    const handleDownload = async (report) => {
+        setPrintingReport(report);
+        setTimeout(async () => {
+            const element = document.getElementById('trainer-report-print');
+            if (!element) return;
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 3,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    windowWidth: 794
+                });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                const imgProps = pdf.getImageProperties(imgData);
+                const ratio = imgProps.height / imgProps.width;
+                const renderedHeight = pdfWidth * ratio;
+
+                // Center the image if it's smaller than A4
+                const yPos = 0;
+                pdf.addImage(imgData, 'PNG', 0, yPos, pdfWidth, Math.min(renderedHeight, pdfHeight));
+                pdf.save(`Trainer_Report_${report.trainer_name}_${report.week_number}.pdf`);
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Connection to document engine interrupted.');
+            } finally {
+                setPrintingReport(null);
+            }
+        }, 1500);
     };
 
     const filteredReports = reports.filter(r =>
@@ -151,14 +193,31 @@ export default function TrainerReports() {
                                             </div>
                                         )}
                                     </div>
-                                    {(isAdmin || report.trainer_id === user?.id) && (
+                                    <div className="flex flex-wrap gap-2 pt-4">
                                         <button
-                                            onClick={() => handleDelete(report._id || report.id)}
-                                            className="mt-6 flex items-center gap-2 text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors"
+                                            onClick={() => handleDownload(report)}
+                                            className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
+                                            title="Download PDF"
                                         >
-                                            <Trash2 className="w-4 h-4" /> Purge Record
+                                            <FileDown className="w-3.5 h-3.5" />
                                         </button>
-                                    )}
+                                        <button
+                                            onClick={() => handlePrint(report)}
+                                            className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
+                                            title="Print Report"
+                                        >
+                                            <Printer className="w-3.5 h-3.5" />
+                                        </button>
+                                        {(isAdmin || report.trainer_id === user?.id) && (
+                                            <button
+                                                onClick={() => handleDelete(report._id || report.id)}
+                                                className="p-2 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-400 group/btn"
+                                                title="Purge Record"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -282,6 +341,96 @@ export default function TrainerReports() {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Hidden Print View */}
+            {printingReport && (
+                <>
+                    <style>{`
+                        @media print {
+                            @page { size: A4; margin: 0; }
+                            body { margin: 0; padding: 0 !important; }
+                            .print-a4 { 
+                                width: 210mm !important; 
+                                height: 297mm !important; 
+                                padding: 15mm !important; 
+                                margin: 0 auto !important;
+                                box-shadow: none !important;
+                                border: 4px double #800000 !important;
+                                box-sizing: border-box !important;
+                            }
+                            #trainer-report-print { position: static !important; overflow: visible !important; }
+                        }
+                    `}</style>
+                    <div id="trainer-report-print" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
+                        <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
+                            <div>
+                                <div className="text-center mb-6 border-b-2 border-maroon pb-6">
+                                    <div className="flex flex-col items-center mb-4">
+                                        <img src="/logo.jpg" alt="College Logo" className="w-20 h-20 object-contain mb-3" />
+                                        <h1 className="text-xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
+                                        <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase italic">"Empowering minds, shaping innovations"</p>
+                                    </div>
+                                    <div className="w-16 h-0.5 bg-gold mx-auto mb-6" />
+                                    <p className="text-sm text-black font-black uppercase tracking-[0.2em]">Trainer Operational Registry Account</p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-8 mb-10 pb-8 border-b border-maroon/10">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Lead Trainer</p>
+                                        <p className="text-lg font-bold text-maroon uppercase">{printingReport.trainer_name}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Academic Cycle</p>
+                                        <p className="text-lg font-bold text-maroon uppercase">{printingReport.week_number}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Documented Date</p>
+                                        <p className="text-sm font-bold text-maroon">
+                                            {new Date(printingReport.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Module/Course</p>
+                                        <p className="text-sm font-bold text-maroon">{printingReport.course_id || 'Institutional Operations'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-10">
+                                    <div className="bg-gray-50 p-6 rounded-2xl border border-maroon/5">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <FileText className="w-4 h-4 text-maroon opacity-40" />
+                                            <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Daily Operations Report</h3>
+                                        </div>
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                                            {printingReport.daily_report}
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-maroon/[0.02] p-6 rounded-2xl border border-maroon/5">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <LayoutList className="w-4 h-4 text-maroon opacity-40" />
+                                            <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Academic Record of Work</h3>
+                                        </div>
+                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">
+                                            {printingReport.record_of_work}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-12 border-t border-maroon/10 pt-8 text-center shrink-0">
+                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">
+                                    Beautex Technical Training College - Registry Department
+                                </p>
+                                <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
+                                    Contact: 0708247557 | Email: beautexcollege01@gmail.com <br />
+                                    Location: Utawala, Geokarma behind Astrol Petrol Station | Document Verified: {new Date().toLocaleString()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

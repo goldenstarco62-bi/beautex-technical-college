@@ -1,12 +1,14 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { logActivity } from '../services/auditService.js';
+import { sendAdminResetPasswordEmail } from '../services/emailService.js';
 
 
 // Dynamic user lookup that works with both MongoDB and SQLite
 async function findUserByEmail(email) {
-    const db = await getDb();
+    await getDb();
 
     // Check if we're using MongoDB (Mongoose connection)
     if (!!process.env.MONGODB_URI) {
@@ -19,7 +21,7 @@ async function findUserByEmail(email) {
 }
 
 async function findUserById(id) {
-    const db = await getDb();
+    await getDb();
 
     if (!!process.env.MONGODB_URI) {
         const User = (await import('../models/mongo/User.js')).default;
@@ -30,7 +32,7 @@ async function findUserById(id) {
 }
 
 async function createUser(email, hashedPassword, role) {
-    const db = await getDb();
+    await getDb();
 
     if (!!process.env.MONGODB_URI) {
         const User = (await import('../models/mongo/User.js')).default;
@@ -47,23 +49,18 @@ async function createUser(email, hashedPassword, role) {
 
 export async function register(req, res) {
     try {
-        const { email, password, role, name } = req.body;
+        const { email, password, role } = req.body;
 
-        // Validate input
         if (!email || !password || !role) {
             return res.status(400).json({ error: 'Email, password, and role are required' });
         }
 
-        // Check if user exists
         const existingUser = await findUserByEmail(email);
         if (existingUser) {
             return res.status(409).json({ error: 'User already exists' });
         }
 
-        // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Create user
         const savedUser = await createUser(email, hashedPassword, role);
 
         res.status(201).json({
@@ -80,72 +77,30 @@ export async function login(req, res) {
     try {
         const { email, password } = req.body;
 
-        // Validate input
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        // Find user
         const user = await findUserByEmail(email);
 
-        // Verification - Use same timing/generic error for both "not found" and "wrong password"
+        // Padding against timing attacks
         if (!user) {
-            // Fake hash compare to prevent timing attacks
             await bcrypt.compare(password, '$2b$10$abcdefghijklmnopqrstuv');
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        // Verify password
         const validPassword = await bcrypt.compare(password, user.password);
         if (!validPassword) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        // Generate JWT
-        const userId = user._id || user.id;
-
-        // Fetch student_id if role is student
-        let student_id = null;
-        if (user.role === 'student') {
-            const db = await getDb();
-            if (!!process.env.MONGODB_URI) {
-                const Student = (await import('../models/mongo/Student.js')).default;
-                const studentProfile = await Student.findOne({ email: user.email });
-                student_id = studentProfile ? studentProfile.id : null;
-            } else {
-                const student = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [user.email]);
-                student_id = student ? student.id : null;
-            }
-        }
-
-        const token = jwt.sign(
-            { id: userId, email: user.email, role: user.role, status: user.status, student_id },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-
-        // Check if password change is required
-        if (user.must_change_password) {
-            console.log('⚠️ Password change required. Providing temporary token.');
-            return res.json({
-                requirePasswordChange: true,
-                token, // Provide token for the change-password request
-                user: {
-                    id: userId,
-                    email: user.email,
-                    role: user.role,
-                    student_id
-                }
-            });
-        }
-
-        // Check if account is active
+        // FIX: Check account status BEFORE issuing any token to prevent
+        // Inactive users with must_change_password=true from bypassing restrictions.
         if (user.status === 'Inactive') {
             return res.status(403).json({ error: 'Account restricted. Contact superadmin.' });
         }
 
-        // Check System Settings for Portal Access
-        const db = await getDb();
+        // Check System Settings for Portal Access (SQL only)
         let settings = {};
         if (!process.env.MONGODB_URI) {
             const settingsRows = await query('SELECT * FROM system_settings');
@@ -168,6 +123,59 @@ export async function login(req, res) {
             return res.status(403).json({ error: 'Faculty Portal is currently disabled.' });
         }
 
+        const userId = user._id || user.id;
+
+        // Fetch student_id if role is student
+        let student_id = null;
+        if (user.role === 'student') {
+            if (!!process.env.MONGODB_URI) {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const studentProfile = await Student.findOne({ email: user.email });
+                student_id = studentProfile ? studentProfile.id : null;
+            } else {
+                const student = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [user.email]);
+                student_id = student ? student.id : null;
+            }
+        }
+
+        const token = jwt.sign(
+            { id: userId, email: user.email, role: user.role, status: user.status, student_id },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        // Check if password change is required (AFTER status checks, token is now safe to issue)
+        if (user.must_change_password) {
+            console.log('⚠️ Password change required. Providing temporary token.');
+            return res.json({
+                requirePasswordChange: true,
+                token,
+                user: { id: userId, email: user.email, role: user.role, student_id }
+            });
+        }
+
+        // FIX: Log activity and update DB BEFORE sending response
+        // so errors are caught by the try/catch and don't become unhandled rejections.
+        const now = new Date();
+        try {
+            if (!!process.env.MONGODB_URI) {
+                const User = (await import('../models/mongo/User.js')).default;
+                await User.findByIdAndUpdate(userId, { last_login: now, last_active: now });
+            } else {
+                await run('UPDATE users SET last_login = ?, last_seen_at = ? WHERE id = ?', [now.toISOString(), now.toISOString(), userId]);
+            }
+            await logActivity({
+                userEmail: user.email,
+                action: 'Login',
+                resource: 'Auth',
+                details: `User logged in with role: ${user.role}`,
+                ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress
+            });
+        } catch (logErr) {
+            // Non-fatal — log but continue
+            console.error('⚠️ Login side-effect error (non-fatal):', logErr.message);
+        }
+
         res.json({
             token,
             user: {
@@ -181,29 +189,7 @@ export async function login(req, res) {
                 student_id
             }
         });
-
-        // Update last_login and last_seen_at
-        const now = new Date();
-        if (!!process.env.MONGODB_URI) {
-            const User = (await import('../models/mongo/User.js')).default;
-            await User.findByIdAndUpdate(userId, {
-                last_login: now,
-                last_active: now // Using last_active for Mongo
-            });
-        } else {
-            await run('UPDATE users SET last_login = ?, last_seen_at = ? WHERE id = ?', [now.toISOString(), now.toISOString(), userId]);
-        }
-
-        // Log successful login
-        await logActivity({
-            userEmail: user.email,
-            action: 'Login',
-            resource: 'Auth',
-            details: `User logged in with role: ${user.role}`,
-            ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress
-        });
     } catch (error) {
-
         console.error('Login error:', error);
         res.status(500).json({ error: 'Failed to login' });
     }
@@ -216,9 +202,7 @@ export async function getMe(req, res) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Fetch student_id if role is student
         if (user.role === 'student') {
-            const db = await getDb();
             if (!!process.env.MONGODB_URI) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 const studentProfile = await Student.findOne({ email: user.email });
@@ -238,21 +222,18 @@ export async function getMe(req, res) {
 
 export async function changePassword(req, res) {
     try {
-        const { email, currentPassword, newPassword } = req.body;
+        const { currentPassword, newPassword } = req.body;
         const userId = req.user.id;
-        const userEmail = req.user.email || email;
 
+        // FIX: Single clean validation — removed dead-code double-check
         if (!newPassword) {
             return res.status(400).json({ error: 'New password is required' });
         }
-
-        if (!userEmail && !newPassword) {
-            return res.status(400).json({ error: 'Email and new password are required' });
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
 
-        const db = await getDb();
         let user;
-
         if (!!process.env.MONGODB_URI) {
             const User = (await import('../models/mongo/User.js')).default;
             user = await User.findById(userId);
@@ -261,13 +242,10 @@ export async function changePassword(req, res) {
         }
 
         if (!user) {
-            console.log('  ❌ User not found with id:', userId);
             return res.status(404).json({ error: 'User not found' });
         }
 
-        console.log('  ✅ User found:', user.email, 'must_change_password:', user.must_change_password);
-
-        // Only check current password if it's NOT a forced change
+        // Only check current password if NOT a forced change
         if (!user.must_change_password) {
             if (!currentPassword) {
                 return res.status(400).json({ error: 'Current password is required' });
@@ -279,59 +257,134 @@ export async function changePassword(req, res) {
         }
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        console.log('  🔐 New password hashed successfully');
 
         if (!!process.env.MONGODB_URI) {
             user.password = hashedPassword;
             user.must_change_password = false;
             await user.save();
         } else {
-            await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, false, userId]);
+            await run('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?', [hashedPassword, userId]);
         }
 
-        console.log('  ✅ Password updated in database for user:', userId);
         res.json({ message: 'Password changed successfully' });
     } catch (error) {
         console.error('Change password error:', error);
-        console.error('Change password error stack:', error.stack);
         res.status(500).json({ error: 'Failed to change password' });
     }
 }
 
+/**
+ * Forgot Password — generates a reset token, saves it hashed in the DB,
+ * and emails the user the reset link.
+ */
 export async function forgotPassword(req, res) {
     try {
         const { email } = req.body;
-        const user = await findUserByEmail(email);
-
-        // Security Principle: Do not reveal if the email exists in the registry
-        if (user) {
-            // In a real app, generate a reset token and send an email
-            console.log(`📡 Security Reset requested for valid user: ${email}`);
-        } else {
-            console.log(`🛡️ Security Reset requested for NON-EXISTENT user: ${email}`);
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
         }
 
-        res.json({ message: 'If an account exists with that email, a password reset link has been dispatched.' });
+        // Always send the same response for security (don't reveal if email exists)
+        const genericResponse = { message: 'If an account exists with that email, a password reset link has been dispatched.' };
+
+        const user = await findUserByEmail(email);
+        if (!user) {
+            console.log(`🛡️ Password reset requested for non-existent user: ${email}`);
+            return res.json(genericResponse);
+        }
+
+        // Generate a cryptographically secure token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+        const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        // Save hashed token and expiry to the user record
+        if (!!process.env.MONGODB_URI) {
+            const User = (await import('../models/mongo/User.js')).default;
+            await User.findByIdAndUpdate(user._id, {
+                reset_token: resetTokenHash,
+                reset_token_expiry: resetTokenExpiry
+            });
+        } else {
+            await run(
+                'UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?',
+                [resetTokenHash, resetTokenExpiry.toISOString(), user.id]
+            );
+        }
+
+        // Send reset email
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
+
+        try {
+            await sendAdminResetPasswordEmail(email, `Your password reset link:\n${resetLink}\n\nThis link expires in 1 hour.`);
+            console.log(`📧 Password reset email sent to ${email}`);
+        } catch (emailErr) {
+            console.error('❌ Failed to send reset email:', emailErr.message);
+            // Fall through — still return generic response for security
+        }
+
+        res.json(genericResponse);
     } catch (error) {
         console.error('Forgot password error:', error);
-        res.status(500).json({ error: 'An error occurred processing the security request' });
+        res.status(500).json({ error: 'An error occurred processing the request' });
     }
 }
 
+/**
+ * Reset Password — verifies token, updates password, invalidates token.
+ */
 export async function resetPassword(req, res) {
     try {
-        const { token, newPassword } = req.body;
-        // In a real app, verify the token
-        // For now, we'll return an error if token is missing
-        if (!token) {
-            return res.status(400).json({ error: 'Reset token is required' });
+        const { token, email, newPassword } = req.body;
+
+        if (!token || !email || !newPassword) {
+            return res.status(400).json({ error: 'Token, email, and new password are required' });
+        }
+        if (newPassword.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters' });
         }
 
-        res.json({ message: 'Password reset successfully' });
+        // Hash the incoming token to compare with stored hash
+        const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+        let user;
+        if (!!process.env.MONGODB_URI) {
+            const User = (await import('../models/mongo/User.js')).default;
+            user = await User.findOne({
+                email,
+                reset_token: resetTokenHash,
+                reset_token_expiry: { $gt: new Date() }
+            });
+        } else {
+            user = await queryOne(
+                'SELECT * FROM users WHERE email = ? AND reset_token = ? AND reset_token_expiry > ?',
+                [email, resetTokenHash, new Date().toISOString()]
+            );
+        }
+
+        if (!user) {
+            return res.status(400).json({ error: 'Invalid or expired reset token. Please request a new one.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        if (!!process.env.MONGODB_URI) {
+            user.password = hashedPassword;
+            user.reset_token = null;
+            user.reset_token_expiry = null;
+            user.must_change_password = false;
+            await user.save();
+        } else {
+            await run(
+                'UPDATE users SET password = ?, reset_token = NULL, reset_token_expiry = NULL, must_change_password = 0 WHERE id = ?',
+                [hashedPassword, user.id]
+            );
+        }
+
+        res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
     }
 }
-
-

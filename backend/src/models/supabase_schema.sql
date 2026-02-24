@@ -295,6 +295,9 @@ CREATE TABLE IF NOT EXISTS course_materials (
   title TEXT NOT NULL,
   description TEXT,
   file_url TEXT NOT NULL,
+  file_name TEXT,
+  file_size INTEGER,
+  mime_type TEXT,
   uploaded_by TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

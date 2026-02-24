@@ -68,12 +68,11 @@ if (process.env.FRONTEND_URL) {
     }
 }
 
-// Always allow Vercel domains in production for this test deployment
-allowedOrigins.push('vercel.app');
-
+// FIX: Removed wildcard 'vercel.app' that allowed ANY Vercel deployment to access the API.
+// Only explicitly listed origins are permitted in production.
 app.use(cors({
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
         if (!origin) return callback(null, true);
 
         // If in development, allow all
@@ -81,11 +80,8 @@ app.use(cors({
             return callback(null, true);
         }
 
-        // If in production, check against allowedOrigins
-        const isAllowed = allowedOrigins.some(o => {
-            if (o === 'vercel.app') return origin.endsWith('.vercel.app');
-            return origin.startsWith(o);
-        });
+        // In production: check against the explicit allowedOrigins list only
+        const isAllowed = allowedOrigins.some(o => origin === o || origin.startsWith(o));
 
         if (isAllowed) {
             callback(null, true);

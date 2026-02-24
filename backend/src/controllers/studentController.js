@@ -71,8 +71,6 @@ export async function getAllStudents(req, res) {
 
             if (allTutorCourses.length === 0) return res.json([]);
 
-            if (allTutorCourses.length === 0) return res.json([]);
-
             const students = await query('SELECT * FROM students ORDER BY created_at DESC');
             const filteredStudents = students.filter(s => {
                 let sCourses = [];
@@ -111,6 +109,8 @@ export async function getAllStudents(req, res) {
 export async function getStudent(req, res) {
     try {
         if (await isMongo()) {
+            // FIX: Import Student model — was missing causing ReferenceError crash
+            const Student = (await import('../models/mongo/Student.js')).default;
             const student = await Student.findOne({ id: req.params.id }).lean();
             if (!student) return res.status(404).json({ error: 'Student not found' });
 
@@ -275,16 +275,38 @@ export async function updateStudent(req, res) {
 
 export async function deleteStudent(req, res) {
     try {
-        if (await isMongo()) {
-            const Student = (await import('../models/mongo/Student.js')).default;
-            const result = await Student.findOneAndDelete({ id: req.params.id });
-            if (!result) return res.status(404).json({ error: 'Student not found' });
-            return res.json({ message: 'Student deleted successfully' });
+        const studentId = req.params.id;
+
+        // Prevent deleting the superadmin's own account (if for some reason student_id matches)
+        if (String(req.user.id) === String(studentId)) {
+            return res.status(403).json({ error: 'You cannot delete your own account.' });
         }
 
-        const result = await run('DELETE FROM students WHERE id = ?', [req.params.id]);
+        if (await isMongo()) {
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const User = (await import('../models/mongo/User.js')).default;
+
+            const student = await Student.findOne({ id: studentId });
+            if (!student) return res.status(404).json({ error: 'Student not found' });
+
+            // Delete user first
+            await User.findOneAndDelete({ email: student.email });
+            // Delete student profile
+            await Student.findOneAndDelete({ id: studentId });
+
+            return res.json({ message: 'Student and associated user account deleted successfully' });
+        }
+
+        const student = await queryOne('SELECT email FROM students WHERE id = ?', [studentId]);
+        if (!student) return res.status(404).json({ error: 'Student not found' });
+
+        // Delete user first
+        await run('DELETE FROM users WHERE email = ?', [student.email]);
+        // Delete student profile
+        const result = await run('DELETE FROM students WHERE id = ?', [studentId]);
+
         if (result.changes === 0) return res.status(404).json({ error: 'Student not found' });
-        res.json({ message: 'Student deleted successfully' });
+        res.json({ message: 'Student and associated user account deleted successfully' });
     } catch (error) {
         console.error('Delete student error:', error);
         res.status(500).json({ error: 'Failed to delete student' });
@@ -293,12 +315,13 @@ export async function deleteStudent(req, res) {
 
 export async function searchStudents(req, res) {
     try {
-        const query = req.query.q;
+        // FIX: Use renamed variable to avoid shadowing the imported `query` DB function
+        const searchTerm = req.query.q;
 
         if (await isMongo()) {
             const Student = (await import('../models/mongo/Student.js')).default;
             // ReDoS Protection: Escape special characters in the query string
-            const safeQuery = String(req.query.q || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const safeQuery = String(searchTerm || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp(safeQuery, 'i');
             const students = await Student.find({
                 $or: [{ name: regex }, { email: regex }, { id: regex }, { course: regex }]
@@ -308,7 +331,7 @@ export async function searchStudents(req, res) {
 
         const students = await query(
             `SELECT * FROM students WHERE name LIKE ? OR email LIKE ? OR id LIKE ? OR course LIKE ? ORDER BY created_at DESC`,
-            [`%${query}%`, `%${query}%`, `%${query}%`, `%${query}%`]
+            [`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`]
         );
         res.json(students.map(s => ({
             ...s,

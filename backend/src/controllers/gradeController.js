@@ -210,14 +210,28 @@ export async function createGrade(req, res) {
 
         // Security: Trainers can only create grades for their assigned courses
         if (req.user.role === 'teacher') {
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
-            if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile not found' });
+            const email = req.user.email;
+            let allowedCourses = [];
 
-            let coursesList = [];
-            try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
-
-            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
-            const allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+            if (await isMongo()) {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const faculty = await Faculty.findOne({ email });
+                if (faculty) {
+                    const facultyCourses = await Course.find({
+                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                    }).select('name');
+                    allowedCourses = facultyCourses.map(c => c.name);
+                }
+            } else {
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                if (faculty) {
+                    let coursesList = [];
+                    try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+                    const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                    allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+                }
+            }
 
             if (!allowedCourses.includes(course)) {
                 return res.status(403).json({ error: `Security Protocol: You are not authorized to record grades for "${course}"` });
@@ -261,17 +275,42 @@ export async function updateGrade(req, res) {
 
         // Security check for teachers
         if (req.user.role === 'teacher') {
-            const currentGrade = await queryOne('SELECT course FROM grades WHERE id = ?', [gradeId]);
-            if (!currentGrade) return res.status(404).json({ error: 'Grade record not found' });
+            const email = req.user.email;
+            let gradeCourse = null;
 
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
-            let coursesList = [];
-            try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+            if (await isMongo()) {
+                const Grade = (await import('../models/mongo/Grade.js')).default;
+                const rec = await Grade.findById(gradeId);
+                gradeCourse = rec?.course;
+            } else {
+                const rec = await queryOne('SELECT course FROM grades WHERE id = ?', [gradeId]);
+                gradeCourse = rec?.course;
+            }
 
-            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
-            const allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+            if (!gradeCourse) return res.status(404).json({ error: 'Grade record not found' });
 
-            if (!allowedCourses.includes(currentGrade.course)) {
+            let allowedCourses = [];
+            if (await isMongo()) {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const faculty = await Faculty.findOne({ email });
+                if (faculty) {
+                    const facultyCourses = await Course.find({
+                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                    }).select('name');
+                    allowedCourses = facultyCourses.map(c => c.name);
+                }
+            } else {
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                if (faculty) {
+                    let coursesList = [];
+                    try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
+                    const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                    allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+                }
+            }
+
+            if (!allowedCourses.includes(gradeCourse)) {
                 return res.status(403).json({ error: 'Access Denied: You cannot modify records for this course.' });
             }
         }

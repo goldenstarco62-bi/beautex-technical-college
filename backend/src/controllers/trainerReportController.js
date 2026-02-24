@@ -7,6 +7,10 @@ export const getAllReports = async (req, res) => {
         const { role, id } = req.user;
         const mongo = await isMongo();
 
+        if (role === 'student') {
+            return res.status(403).json({ error: 'Access Denied: Students are not authorized to view internal trainer reports.' });
+        }
+
         if (mongo) {
             const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
             let filter = {};
@@ -20,8 +24,9 @@ export const getAllReports = async (req, res) => {
         let sql = 'SELECT * FROM trainer_reports ORDER BY report_date DESC';
         let params = [];
         if (role === 'teacher') {
-            sql = 'SELECT * FROM trainer_reports WHERE trainer_id = ? ORDER BY report_date DESC';
-            params = [id];
+            // FIX: Cast to string for comparison since SQLite id is INTEGER, JWT id may be string
+            sql = 'SELECT * FROM trainer_reports WHERE CAST(trainer_id AS TEXT) = ? ORDER BY report_date DESC';
+            params = [String(id)];
         }
         const reports = await query(sql, params);
         res.json(reports);
@@ -37,7 +42,7 @@ export const createReport = async (req, res) => {
         const { id, role } = req.user;
 
         if (!week_number || !report_date || !daily_report || !record_of_work) {
-            return res.status(400).json({ error: 'Required fields missing' });
+            return res.status(400).json({ error: 'Required fields missing: week_number, report_date, daily_report, record_of_work' });
         }
 
         let trainerName = 'Trainer';
@@ -70,7 +75,7 @@ export const createReport = async (req, res) => {
 
         const result = await run(
             'INSERT INTO trainer_reports (trainer_id, trainer_name, week_number, report_date, daily_report, record_of_work, course_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, trainerName, week_number, report_date, daily_report, record_of_work, course_id, 'Submitted']
+            [String(id), trainerName, week_number, report_date, daily_report, record_of_work, course_id, 'Submitted']
         );
         const report = await queryOne('SELECT * FROM trainer_reports WHERE id = ?', [result.lastID]);
         res.status(201).json(report);
@@ -91,7 +96,7 @@ export const deleteReport = async (req, res) => {
             const report = await TrainerReport.findById(id);
             if (!report) return res.status(404).json({ error: 'Report not found' });
 
-            if (role !== 'admin' && role !== 'superadmin' && report.trainer_id !== userId) {
+            if (role !== 'admin' && role !== 'superadmin' && String(report.trainer_id) !== String(userId)) {
                 return res.status(403).json({ error: 'Unauthorized' });
             }
 
@@ -102,7 +107,9 @@ export const deleteReport = async (req, res) => {
         const report = await queryOne('SELECT * FROM trainer_reports WHERE id = ?', [id]);
         if (!report) return res.status(404).json({ error: 'Report not found' });
 
-        if (role !== 'admin' && role !== 'superadmin' && report.trainer_id !== userId) {
+        // FIX: Use String() cast on both sides to prevent INTEGER vs STRING mismatch
+        // that previously always blocked teachers from deleting their own reports
+        if (role !== 'admin' && role !== 'superadmin' && String(report.trainer_id) !== String(userId)) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 

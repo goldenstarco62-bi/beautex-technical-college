@@ -8,8 +8,21 @@ import {
 
 const EMPTY_UPLOAD = { course_id: '', title: '', description: '', file: null, file_url: '', uploadMode: 'file' };
 
-// Derive a nice icon / colour per file type
-function fileIcon(name = '') {
+// Derive a nice icon / colour per file type — check mime_type first, then filename extension
+function fileIcon(name = '', mimeType = '') {
+    // Prefer mime_type for accuracy
+    if (mimeType) {
+        if (mimeType === 'application/pdf') return { label: 'PDF', color: 'bg-red-100 text-red-600' };
+        if (mimeType.includes('word')) return { label: 'DOC', color: 'bg-blue-100 text-blue-600' };
+        if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return { label: 'XLS', color: 'bg-green-100 text-green-600' };
+        if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return { label: 'PPT', color: 'bg-orange-100 text-orange-600' };
+        if (mimeType.startsWith('image/')) return { label: 'IMG', color: 'bg-purple-100 text-purple-600' };
+        if (mimeType.startsWith('video/')) return { label: 'VID', color: 'bg-pink-100 text-pink-600' };
+        if (mimeType.startsWith('audio/')) return { label: 'AUD', color: 'bg-indigo-100 text-indigo-600' };
+        if (mimeType.includes('zip')) return { label: 'ZIP', color: 'bg-yellow-100 text-yellow-700' };
+        if (mimeType === 'text/plain') return { label: 'TXT', color: 'bg-gray-100 text-gray-600' };
+    }
+    // Fallback to filename extension
     const ext = name.split('.').pop().toLowerCase();
     if (['pdf'].includes(ext)) return { label: 'PDF', color: 'bg-red-100 text-red-600' };
     if (['doc', 'docx'].includes(ext)) return { label: 'DOC', color: 'bg-blue-100 text-blue-600' };
@@ -33,6 +46,7 @@ export default function Materials() {
     const [materials, setMaterials] = useState([]);
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [downloadingId, setDownloadingId] = useState(null); // FIX: track per-card download state
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCourse, setSelectedCourse] = useState('');
     const [showUploadModal, setShowUploadModal] = useState(false);
@@ -137,6 +151,22 @@ export default function Materials() {
         }
     };
 
+    // FIX: Authenticated download — routes through the backend streaming endpoint
+    // instead of a plain <a href> which doesn't send the Authorization header
+    // and can't handle base64 data URIs as proper file downloads.
+    const handleDownload = async (m) => {
+        try {
+            setDownloadingId(m.id || m._id);
+            await materialsAPI.download(m.id || m._id, m.file_name || m.title);
+        } catch (error) {
+            // Fallback: if the file is an external URL the backend redirects, but axios blob
+            // resolves fine. Only network failures should land here.
+            alert('Download failed. Please try again.');
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
     const filteredMaterials = materials.filter(m => {
         const matchesSearch = !searchQuery ||
             m.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -217,7 +247,8 @@ export default function Materials() {
             {/* Materials Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredMaterials.map(m => {
-                    const icon = fileIcon(m.file_url || m.title || '');
+                    const icon = fileIcon(m.file_name || m.file_url || m.title || '', m.mime_type || '');
+                    const isDownloading = downloadingId === (m.id || m._id);
                     return (
                         <div key={m.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden group hover:-translate-y-1 transition-all">
                             <div className="h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-40" />
@@ -235,18 +266,24 @@ export default function Materials() {
                                     {m.description || 'Course resource. Click download to access.'}
                                 </p>
                                 <div className="flex items-center gap-3 pt-6 border-t border-gray-50">
-                                    <a
-                                        href={m.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex-1 bg-maroon text-gold h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:bg-maroon/90 transition-colors border border-gold/20"
-                                        download
+                                    {/* FIX: Download button now calls the authenticated streaming endpoint */}
+                                    {/* instead of <a href={m.file_url}> which breaks for base64 data URIs */}
+                                    <button
+                                        onClick={() => handleDownload(m)}
+                                        disabled={isDownloading}
+                                        className="flex-1 bg-maroon text-gold h-10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest hover:bg-maroon/90 transition-colors border border-gold/20 disabled:opacity-60"
+                                        title={m.file_name || 'Download'}
                                     >
-                                        <Download className="w-3 h-3" /> Download
-                                    </a>
+                                        {isDownloading ? (
+                                            <div className="w-3 h-3 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                            <Download className="w-3 h-3" />
+                                        )}
+                                        {isDownloading ? 'Downloading…' : 'Download'}
+                                    </button>
                                     {(user?.role === 'admin' || user?.role === 'superadmin' || m.uploaded_by === user?.email) && (
                                         <button
-                                            onClick={() => handleDelete(m.id)}
+                                            onClick={() => handleDelete(m.id || m._id)}
                                             className="w-10 h-10 bg-gray-50 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl flex items-center justify-center transition-colors border border-gray-100"
                                             title="Delete resource"
                                         >
@@ -336,8 +373,8 @@ export default function Materials() {
                                     type="button"
                                     onClick={() => setUploadForm({ ...uploadForm, uploadMode: 'file', file_url: '' })}
                                     className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${uploadForm.uploadMode === 'file'
-                                            ? 'bg-maroon text-gold shadow-lg border border-gold/20'
-                                            : 'text-maroon/40 hover:text-maroon hover:bg-white'
+                                        ? 'bg-maroon text-gold shadow-lg border border-gold/20'
+                                        : 'text-maroon/40 hover:text-maroon hover:bg-white'
                                         }`}
                                 >
                                     <UploadCloud className="w-3.5 h-3.5" /> Upload File
@@ -346,8 +383,8 @@ export default function Materials() {
                                     type="button"
                                     onClick={() => setUploadForm({ ...uploadForm, uploadMode: 'url', file: null })}
                                     className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${uploadForm.uploadMode === 'url'
-                                            ? 'bg-maroon text-gold shadow-lg border border-gold/20'
-                                            : 'text-maroon/40 hover:text-maroon hover:bg-white'
+                                        ? 'bg-maroon text-gold shadow-lg border border-gold/20'
+                                        : 'text-maroon/40 hover:text-maroon hover:bg-white'
                                         }`}
                                 >
                                     <Link className="w-3.5 h-3.5" /> Paste URL
@@ -364,10 +401,10 @@ export default function Materials() {
                                         onDrop={handleDrop}
                                         onClick={() => fileInputRef.current?.click()}
                                         className={`cursor-pointer border-2 border-dashed rounded-2xl p-8 text-center transition-all ${dragOver
-                                                ? 'border-maroon bg-maroon/5 scale-[1.02]'
-                                                : uploadForm.file
-                                                    ? 'border-green-400 bg-green-50'
-                                                    : 'border-gray-200 hover:border-maroon/40 hover:bg-gray-50'
+                                            ? 'border-maroon bg-maroon/5 scale-[1.02]'
+                                            : uploadForm.file
+                                                ? 'border-green-400 bg-green-50'
+                                                : 'border-gray-200 hover:border-maroon/40 hover:bg-gray-50'
                                             }`}
                                     >
                                         {uploadForm.file ? (
