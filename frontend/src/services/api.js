@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Remove trailing slash to prevent double-slash in URLs
-const rawUrl = import.meta.env.VITE_API_URL || 'https://beautexcollege-01.vercel.app/api';
+const rawUrl = import.meta.env.VITE_API_URL || 'https://beautex-technical-college.vercel.app/api';
 const API_BASE_URL = rawUrl.replace(/\/+$/, '') + '/';
 
 const api = axios.create({

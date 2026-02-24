@@ -56,7 +56,8 @@ const allowedOrigins = [
     'http://127.0.0.1:5174',
     // Deployed frontend — always allowed
     'https://bttc.vercel.app',
-    'https://beautexcollege-01.vercel.app'
+    'https://beautexcollege-01.vercel.app',
+    'https://beautex-technical-college-pvk4.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
