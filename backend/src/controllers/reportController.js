@@ -10,7 +10,7 @@ export const getAllReports = async (req, res) => {
         const { course, trainer_email } = req.query;
 
         if (await isMongo()) {
-            const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
+            const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
             let query = {};
 
             // Student isolation
@@ -22,7 +22,7 @@ export const getAllReports = async (req, res) => {
                 query.course_unit = course;
             }
 
-            const reports = await TrainerReport.find(query).sort({ created_at: -1 });
+            const reports = await AcademicReport.find(query).sort({ created_at: -1 });
             return res.json(reports);
         }
 
@@ -55,8 +55,8 @@ export const getStudentReports = async (req, res) => {
     const { studentId } = req.params;
     try {
         if (await isMongo()) {
-            const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
-            const reports = await TrainerReport.find({ student_id: studentId }).sort({ created_at: -1 });
+            const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
+            const reports = await AcademicReport.find({ student_id: studentId }).sort({ created_at: -1 });
             return res.json(reports);
         }
 
@@ -88,8 +88,8 @@ export const createReport = async (req, res) => {
 
     try {
         if (await isMongo()) {
-            const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
-            const newReport = new TrainerReport({
+            const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
+            const newReport = new AcademicReport({
                 student_id, student_name, registration_number, course_unit,
                 trainer_name, trainer_email, reporting_period,
                 total_lessons: total_lessons || 0,
@@ -134,13 +134,13 @@ export const deleteReport = async (req, res) => {
     const { id } = req.params;
     try {
         if (await isMongo()) {
-            const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
-            const report = await TrainerReport.findById(id);
+            const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
+            const report = await AcademicReport.findById(id);
             if (!report) return res.status(404).json({ error: 'Report not found' });
             if (req.user.role === 'teacher' && report.trainer_email !== req.user.email) {
                 return res.status(403).json({ error: 'Forbidden: You can only delete your own reports' });
             }
-            await TrainerReport.findByIdAndDelete(id);
+            await AcademicReport.findByIdAndDelete(id);
             return res.json({ message: 'Report deleted successfully' });
         }
 
@@ -158,15 +158,15 @@ export const updateReport = async (req, res) => {
 
     try {
         if (await isMongo()) {
-            const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
-            const report = await TrainerReport.findById(id);
+            const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
+            const report = await AcademicReport.findById(id);
             if (!report) return res.status(404).json({ error: 'Report not found' });
 
             if (req.user.role === 'teacher' && report.trainer_email !== req.user.email) {
                 return res.status(403).json({ error: 'Forbidden: You can only edit your own reports' });
             }
 
-            const updatedReport = await TrainerReport.findByIdAndUpdate(
+            const updatedReport = await AcademicReport.findByIdAndUpdate(
                 id,
                 { $set: { ...reportData, updated_at: new Date() } },
                 { new: true, runValidators: true }

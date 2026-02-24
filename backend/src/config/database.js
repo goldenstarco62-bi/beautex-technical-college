@@ -8,8 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const dbPath = path.join(__dirname, '../../database.sqlite');
-const MONGODB_URI = process.env.MONGODB_URI;
-const DATABASE_URL = process.env.DATABASE_URL;
+const MONGODB_URI = process.env.MONGODB_URI?.trim();
+const DATABASE_URL = process.env.DATABASE_URL?.trim();
 const { Pool } = pg;
 
 let db;
@@ -62,17 +62,26 @@ export async function getDb() {
 
     // 2. Check for PostgreSQL (Supabase)
     const processedUrl = getProcessedDatabaseUrl();
-    if (processedUrl) {
+    if (processedUrl && processedUrl.startsWith('postgres')) {
         if (!pgPool) {
-            pgPool = new Pool({
-                connectionString: processedUrl,
-                ssl: { rejectUnauthorized: false },
-                connectionTimeoutMillis: 10000, // 10s timeout
-            });
-            pgPool.on('error', (err) => {
-                console.error('Unexpected error on idle client', err);
-            });
-            console.log('🐘 Connected to Supabase (PostgreSQL)');
+            try {
+                pgPool = new Pool({
+                    connectionString: processedUrl,
+                    ssl: { rejectUnauthorized: false },
+                    connectionTimeoutMillis: 10000, // 10s timeout
+                });
+                pgPool.on('error', (err) => {
+                    console.error('Unexpected error on idle Postgres client', err);
+                });
+                // Test the connection
+                const client = await pgPool.connect();
+                console.log('🐘 Connected to Supabase (PostgreSQL)');
+                client.release();
+            } catch (err) {
+                console.error('❌ PostgreSQL Connection Error:', err.message);
+                pgPool = null;
+                throw err;
+            }
         }
         return pgPool;
     }
@@ -134,11 +143,17 @@ export async function initializeDatabase() {
             `);
 
             if (!checkTable.rows[0].exists) {
-                console.log('🚀 Base table "users" missing. Running full schema initialization...');
+                console.log('🚀 Base table "users" missing in PostgreSQL. Running full schema initialization...');
                 const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');
-                const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
-                await database.query(supabaseSchema);
-                console.log('✅ Full PostgreSQL schema initialized.');
+                if (fs.existsSync(supabaseSchemaPath)) {
+                    const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
+                    // Split content by semicolons to execute as individual queries if needed, 
+                    // though most PostgreSQL drivers handle multiple statements if they are simple DDL.
+                    await database.query(supabaseSchema);
+                    console.log('✅ Full PostgreSQL schema initialized.');
+                } else {
+                    console.error('❌ Critical: supabase_schema.sql not found for PostgreSQL initialization');
+                }
             } else {
                 console.log('ℹ️ Base tables present. Running safe schema patch...');
                 const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');

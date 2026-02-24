@@ -218,14 +218,21 @@ app.get('/api/db-check', ensureServices, async (req, res) => {
 });
 
 // Root route
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
+    let dbType = 'Unknown';
+    if (process.env.MONGODB_URI?.trim()) dbType = 'MongoDB';
+    else if (process.env.DATABASE_URL?.trim()) dbType = 'PostgreSQL (Supabase)';
+    else dbType = 'SQLite';
+
     res.json({
         message: 'Welcome to BTTC Management System API',
         environment: process.env.NODE_ENV,
+        active_database: dbType,
+        ver_check: '1.2.0',
         config_check: {
-            db_url_set: !!process.env.DATABASE_URL,
-            mongo_uri_set: !!process.env.MONGODB_URI,
-            jwt_secret_set: !!process.env.JWT_SECRET
+            db_url_set: !!process.env.DATABASE_URL?.trim(),
+            mongo_uri_set: !!process.env.MONGODB_URI?.trim(),
+            jwt_secret_set: !!process.env.JWT_SECRET?.trim()
         },
         timestamp: new Date()
     });
