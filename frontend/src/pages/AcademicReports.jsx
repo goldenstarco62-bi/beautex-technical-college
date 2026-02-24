@@ -110,7 +110,7 @@ export default function AcademicReports() {
 
         try {
             if (editingReport) {
-                await reportsAPI.update(editingReport.id, reportPayload);
+                await reportsAPI.update(editingReport._id || editingReport.id, reportPayload);
             } else {
                 await reportsAPI.create(reportPayload);
             }
@@ -212,7 +212,7 @@ export default function AcademicReports() {
                         </div>
                     )}
                     {reports.map((report) => (
-                        <div key={report.id} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all group">
+                        <div key={report._id || report.id} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all group">
                             <div className="h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
                             <div className="p-7">
                                 {/* Top */}
@@ -242,7 +242,7 @@ export default function AcademicReports() {
                                                     <button onClick={() => handleEdit(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors">
                                                         <Edit className="w-3.5 h-3.5 text-maroon/40" />
                                                     </button>
-                                                    <button onClick={() => handleDelete(report.id)} className="p-1.5 rounded-lg border border-red-100 hover:bg-red-50 transition-colors">
+                                                    <button onClick={() => handleDelete(report._id || report.id)} className="p-1.5 rounded-lg border border-red-100 hover:bg-red-50 transition-colors">
                                                         <Trash2 className="w-3.5 h-3.5 text-red-400" />
                                                     </button>
                                                 </>

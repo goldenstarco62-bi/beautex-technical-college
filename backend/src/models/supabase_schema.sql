@@ -128,8 +128,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Trainer Academic Reports table
-CREATE TABLE IF NOT EXISTS trainer_reports (
+-- Academic Reports table (Student Performance)
+CREATE TABLE IF NOT EXISTS academic_reports (
   id SERIAL PRIMARY KEY,
   student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   student_name TEXT NOT NULL,

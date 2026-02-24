@@ -27,15 +27,24 @@ export default function Courses() {
 
             if (isStudent && user?.email) {
                 // If student, fetch profile to find enrolled course
-                const studentsRes = await studentsAPI.getAll(); // Ideally we'd have a getMyProfile endpoint or filter by email
-                const studentProfile = studentsRes.data.find(s => s.email === user.email);
+                // Search by email or ID
+                const userEmail = String(user?.email || '').toLowerCase().trim();
+                const userSid = String(user?.student_id || user?.id || '').toLowerCase().trim();
+
+                const studentsRes = await studentsAPI.getAll();
+                const studentProfile = studentsRes.data.find(s =>
+                    String(s.email || '').toLowerCase().trim() === userEmail ||
+                    String(s.id || '').toLowerCase().trim() === userSid
+                ) || studentsRes.data[0];
 
                 if (studentProfile && studentProfile.course) {
-                    // Filter courses to show only the enrolled one
-                    const studentCourse = data.filter(c => c.name === (Array.isArray(studentProfile.course) ? studentProfile.course[0] : studentProfile.course));
-                    setCourses(studentCourse);
+                    const studentCourses = Array.isArray(studentProfile.course) ? studentProfile.course : [studentProfile.course].filter(Boolean);
+                    // Filter courses to show all enrolled ones
+                    const enrolledCourses = data.filter(c =>
+                        studentCourses.some(scName => scName && scName.toLowerCase().trim() === c.name.toLowerCase().trim())
+                    );
+                    setCourses(enrolledCourses);
                 } else {
-                    // Fallback if no enrollment found (or show empty)
                     setCourses([]);
                 }
             } else {

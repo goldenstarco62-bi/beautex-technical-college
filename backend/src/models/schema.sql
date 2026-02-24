@@ -132,8 +132,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 
--- Trainer Academic Reports table
-CREATE TABLE IF NOT EXISTS trainer_reports (
+-- Academic Reports table (Student Performance)
+CREATE TABLE IF NOT EXISTS academic_reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id TEXT NOT NULL,
   student_name TEXT NOT NULL,

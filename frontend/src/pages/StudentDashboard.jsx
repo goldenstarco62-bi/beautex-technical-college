@@ -41,7 +41,15 @@ export default function StudentDashboard() {
 
 
             // 2. Find current student profile
-            const profile = studentsRes.data.find(s => s.email === user.email);
+            // Search by email (case-insensitive) or by student ID if available
+            const userEmail = String(user?.email || '').toLowerCase().trim();
+            const userSid = String(user?.student_id || user?.id || '').toLowerCase().trim();
+
+            const profile = studentsRes.data.find(s =>
+                String(s.email || '').toLowerCase().trim() === userEmail ||
+                String(s.id || '').toLowerCase().trim() === userSid
+            ) || studentsRes.data[0]; // Fallback to first if only one profile returned
+
             setStudentProfile(profile);
             setStudentFee(feeRes.data);
 
@@ -73,12 +81,16 @@ export default function StudentDashboard() {
 
             if (profile) {
                 // 4. Find enrolled course details
-                const course = coursesRes.data.find(c => c.name === profile.course);
-                setCourseDetails(course);
+                const studentCourses = Array.isArray(profile.course) ? profile.course : [profile.course].filter(Boolean);
+                const enrolledCourses = coursesRes.data.filter(c =>
+                    studentCourses.some(scName => scName && scName.toLowerCase().trim() === c.name.toLowerCase().trim())
+                );
+
+                setCourseDetails(enrolledCourses[0] || null);
 
                 // 5. Calculate Stats
                 setStats({
-                    enrolledCourses: course ? 1 : 0,
+                    enrolledCourses: enrolledCourses.length,
                     avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
                     attendanceRate: '96%', // Placeholder
                     credits: 15 // Placeholder

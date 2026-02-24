@@ -198,6 +198,24 @@ export async function initializeDatabase() {
 
 async function runPostgresMigrations(database) {
     try {
+        // Migration: Fix clashing trainer_reports table (renaming Academic style to academic_reports)
+        const checkTrCol = await database.query(`
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='trainer_reports' AND column_name='student_id'
+        `);
+        if (checkTrCol.rows.length > 0) {
+            const checkAc = await database.query(`
+                SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'academic_reports')
+            `);
+            if (!checkAc.rows[0].exists) {
+                console.log('🔄 Postgres Migration: Renaming clashing trainer_reports to academic_reports...');
+                await database.query('ALTER TABLE trainer_reports RENAME TO academic_reports');
+            } else {
+                console.log('⚠️ Postgres Conflict: Dropping clashing trainer_reports...');
+                await database.query('DROP TABLE trainer_reports');
+            }
+        }
+
         // Check for 'name' column in users table
         const checkNameCol = await database.query(`
             SELECT column_name 
@@ -394,6 +412,18 @@ async function runPostgresMigrations(database) {
 
 async function runSqliteMigrations(database) {
     try {
+        // Migration: Fix clashing trainer_reports table (renaming Academic style to academic_reports)
+        const trInfo = await database.all("PRAGMA table_info('trainer_reports')");
+        const hasStudentId = trInfo.some(c => c.name === 'student_id');
+        const acTable = await database.all("PRAGMA table_info('academic_reports')");
+        if (hasStudentId && acTable.length === 0) {
+            console.log('🔄 SQLite Migration: Renaming clashing trainer_reports to academic_reports...');
+            await database.run('ALTER TABLE trainer_reports RENAME TO academic_reports');
+        } else if (hasStudentId && acTable.length > 0) {
+            console.log('⚠️ SQLite Conflict: Dropping clashing trainer_reports...');
+            await database.run('DROP TABLE trainer_reports');
+        }
+
         // Check for user_email in audit_logs
         const tableInfo = await database.all("PRAGMA table_info('audit_logs')");
         const hasUserEmail = tableInfo.some(col => col.name === 'user_email');

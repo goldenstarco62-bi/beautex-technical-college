@@ -208,7 +208,7 @@ export default function TrainerReports() {
                                         >
                                             <Printer className="w-3.5 h-3.5" />
                                         </button>
-                                        {(isAdmin || report.trainer_id === user?.id) && (
+                                        {(isAdmin || report.trainer_id == user?.id) && (
                                             <button
                                                 onClick={() => handleDelete(report._id || report.id)}
                                                 className="p-2 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-400 group/btn"
