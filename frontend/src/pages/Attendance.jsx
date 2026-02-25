@@ -55,17 +55,24 @@ export default function Attendance() {
                 studentsAPI.getAll(),
                 attendanceAPI.getAll(selectedCourse, selectedDate).catch(() => ({ data: [] }))
             ]);
-            const filtered = studentsRes.data.filter(s =>
-                Array.isArray(s.course)
-                    ? s.course.includes(selectedCourse)
-                    : s.course === selectedCourse
-            );
+
+            // FIX: Case-insensitive course name matching.
+            // The backend already returns only students in the teacher's courses,
+            // but we still filter by the specific selected course for the registry view.
+            const selectedCourseLower = selectedCourse.toLowerCase().trim();
+            const filtered = studentsRes.data.filter(s => {
+                const studentCourses = Array.isArray(s.course)
+                    ? s.course
+                    : [s.course].filter(Boolean);
+                return studentCourses.some(c => c && c.toLowerCase().trim() === selectedCourseLower);
+            });
+
             const existingMap = {};
             (attendanceRes.data || []).forEach(r => { existingMap[r.student_id] = r; });
             setStudents(filtered.map(s => ({
                 ...s,
                 attendance: existingMap[s.id]?.status || 'Present',
-                existingRecordId: existingMap[s.id]?.id || null
+                existingRecordId: existingMap[s.id]?.id || existingMap[s.id]?._id || null
             })));
         } catch (err) {
             console.error('Error fetching registry:', err);

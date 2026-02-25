@@ -28,7 +28,9 @@ export async function getAllAttendance(req, res) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
                 const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                const faculty = await Faculty.findOne({ email: userEmail });
+                // FIX: Case-insensitive email lookup
+                const emailRegex = new RegExp(`^${userEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
                 if (!faculty) return res.json([]);
 
                 const facultyName = faculty.name;
@@ -126,7 +128,9 @@ export async function markAttendance(req, res) {
             if (await isMongo()) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const faculty = await Faculty.findOne({ email: userEmail });
+                // FIX: Case-insensitive email lookup
+                const emailRegex = new RegExp(`^${userEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
                 if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
 
                 const facultyName = faculty.name;
@@ -210,24 +214,27 @@ export async function updateAttendance(req, res) {
             if (await isMongo()) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                // FIX: Case-insensitive email lookup
+                const emailRegex = new RegExp(`^${String(email || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
                 if (faculty) {
                     const facultyCourses = await Course.find({
-                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                        $or: [{ instructor: { $regex: new RegExp(`^${faculty.name}$`, 'i') } }, { name: { $in: faculty.courses || [] } }]
                     }).select('name');
                     allowedCourses = facultyCourses.map(c => c.name);
                 }
             } else {
-                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
                 if (faculty) {
                     let coursesList = [];
                     try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
-                    const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                    const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                     allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
                 }
             }
 
-            if (!allowedCourses.includes(recordCourse)) {
+            // FIX: Case-insensitive comparison (was exact match before)
+            if (!allowedCourses.some(ac => ac.toLowerCase().trim() === recordCourse.toLowerCase().trim())) {
                 return res.status(403).json({ error: 'Access Denied: You cannot modify records for this course.' });
             }
         }
