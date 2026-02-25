@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
     FileText, Calendar, BookOpen, CheckCircle2,
     Plus, Trash2, Printer, TrendingUp, ShieldCheck,
-    ClipboardCheck, Edit, X, Users, FileDown
+    ClipboardCheck, Edit, X, Users, FileDown, Eye
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -40,6 +40,7 @@ export default function AcademicReports() {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingReport, setEditingReport] = useState(null);
+    const [viewingReport, setViewingReport] = useState(null);
     const [printingReport, setPrintingReport] = useState(null);
     const [formData, setFormData] = useState(EMPTY_FORM);
 
@@ -234,6 +235,9 @@ export default function AcademicReports() {
                                             {report.recommendation}
                                         </span>
                                         <div className="flex gap-1.5 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => setViewingReport(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="View Full Report">
+                                                <Eye className="w-3.5 h-3.5 text-maroon/40" />
+                                            </button>
                                             <button onClick={() => handleDownload(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Download PDF">
                                                 <FileDown className="w-3.5 h-3.5 text-maroon/40" />
                                             </button>
@@ -454,6 +458,92 @@ export default function AcademicReports() {
                     </div>
                 )}
             </div>
+
+            {/* View Modal */}
+            {viewingReport && (
+                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-3xl w-full shadow-2xl overflow-hidden relative max-h-[95vh] flex flex-col">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
+
+                        <div className="flex justify-between items-center mb-8 shrink-0">
+                            <div>
+                                <h2 className="text-xl sm:text-2xl font-black text-maroon uppercase tracking-tight">Academic Report Details</h2>
+                                <div className="w-10 h-0.5 bg-gold mt-2"></div>
+                                <p className="text-[10px] text-maroon/30 font-black uppercase tracking-widest mt-1">Full Course Progress Evaluation</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleDownload(viewingReport)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                    <FileDown className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => handlePrint(viewingReport)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                    <Printer className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                                    <X className="w-6 h-6 text-maroon/30" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-8 overflow-y-auto pr-2 flex-1 pb-10">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Course / Class</p>
+                                    <p className="text-lg font-bold text-maroon uppercase">{viewingReport.course_unit || viewingReport.student_name}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Academic Week</p>
+                                    <p className="text-lg font-bold text-maroon uppercase">{viewingReport.reporting_period}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Date</p>
+                                    <p className="text-sm font-bold text-gray-800">{viewingReport.report_date || (viewingReport.created_at ? new Date(viewingReport.created_at).toLocaleDateString() : 'N/A')}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Attendance</p>
+                                    <p className="text-sm font-bold text-gray-800">{viewingReport.attended_lessons} / {viewingReport.total_lessons} lessons ({attendancePct(viewingReport)}%)</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6 pt-6 border-t border-maroon/5">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Theory Score</p>
+                                    <p className="text-sm font-black text-maroon">{viewingReport.theory_score}/100</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Skill Level</p>
+                                    <p className="text-sm font-black text-maroon uppercase">{viewingReport.skill_level}</p>
+                                </div>
+                            </div>
+
+                            <div className="pt-6 border-t border-maroon/5 space-y-6 text-left">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trainer Observations</p>
+                                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-gray-100">{viewingReport.trainer_observations || 'No observations recorded.'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Progress Summary</p>
+                                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-gray-100">{viewingReport.progress_summary || 'No summary recorded.'}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Recommendation</p>
+                                        <span className={`inline-block px-3 py-1 rounded-full font-black text-[10px] uppercase tracking-widest border ${viewingReport.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' :
+                                            viewingReport.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' :
+                                                'bg-red-50 border-red-200 text-red-600'
+                                            }`}>
+                                            {viewingReport.recommendation}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Lead Trainer</p>
+                                        <p className="text-sm font-bold text-maroon">{viewingReport.trainer_name || viewingReport.trainer_email}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Hidden Print View */}
             {printingReport && (

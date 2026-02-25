@@ -59,7 +59,7 @@ export const createDailyReport = async (req, res) => {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
             // Strip MongoDB internal/immutable fields from body before creating
             const { _id, __v, id, created_at, updated_at, ...cleanBody } = req.body;
-            const reportData = { ...cleanBody, report_type: 'daily', reported_by: req.user.email };
+            const reportData = { ...cleanBody, report_type: 'daily', reported_by: req.user.name || req.user.email };
             const newReport = new ActivityReport(reportData);
             const savedReport = await newReport.save();
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
@@ -79,7 +79,7 @@ export const createDailyReport = async (req, res) => {
              assessments_conducted, total_students_present, total_students_absent, late_arrivals, new_enrollments,
              staff_present, staff_absent, disciplinary_cases, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [report_date, req.user.email, classes_conducted, total_attendance_percentage, assessments_conducted,
+            [report_date, req.user.name || req.user.email, classes_conducted, total_attendance_percentage, assessments_conducted,
                 total_students_present, total_students_absent, late_arrivals, new_enrollments,
                 staff_present, staff_absent, disciplinary_cases || 0, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes]
         );
@@ -182,7 +182,7 @@ export const createWeeklyReport = async (req, res) => {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
             const { _id, __v, id, created_at, updated_at, ...cleanBody } = req.body;
-            const reportData = { ...cleanBody, report_type: 'weekly', reported_by: req.user.email };
+            const reportData = { ...cleanBody, report_type: 'weekly', reported_by: req.user.name || req.user.email };
             const newReport = new ActivityReport(reportData);
             const savedReport = await newReport.save();
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
@@ -197,7 +197,7 @@ export const createWeeklyReport = async (req, res) => {
              average_attendance, total_assessments, active_students, avg_student_attendance, disciplinary_cases,
              courses_completed, new_enrollments, key_achievements, challenges_faced, action_items, revenue_collected, notes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [week_start_date, week_end_date, req.user.email, total_classes_conducted, average_attendance, total_assessments,
+            [week_start_date, week_end_date, req.user.name || req.user.email, total_classes_conducted, average_attendance, total_assessments,
                 active_students, avg_student_attendance, disciplinary_cases, courses_completed, new_enrollments,
                 key_achievements, challenges_faced, action_items, revenue_collected, notes]
         );
@@ -294,7 +294,7 @@ export const createMonthlyReport = async (req, res) => {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
             const { _id, __v, id, created_at, updated_at, ...cleanBody } = req.body;
-            const reportData = { ...cleanBody, report_type: 'monthly', reported_by: req.user.email };
+            const reportData = { ...cleanBody, report_type: 'monthly', reported_by: req.user.name || req.user.email };
             const newReport = new ActivityReport(reportData);
             const savedReport = await newReport.save();
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
@@ -311,7 +311,7 @@ export const createMonthlyReport = async (req, res) => {
              total_faculty, new_hires, faculty_departures, revenue, expenses, major_achievements, challenges,
              strategic_initiatives, goals_next_month, additional_notes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [month, month_start_date, month_end_date, req.user.email, total_students, new_enrollments, graduations, dropouts,
+            [month, month_start_date, month_end_date, req.user.name || req.user.email, total_students, new_enrollments, graduations, dropouts,
                 total_classes, average_attendance, total_assessments, average_pass_rate, total_faculty, new_hires,
                 faculty_departures, revenue, expenses, major_achievements, challenges, strategic_initiatives,
                 goals_next_month, additional_notes]

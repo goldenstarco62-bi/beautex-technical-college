@@ -45,17 +45,8 @@ export const createReport = async (req, res) => {
             return res.status(400).json({ error: 'Required fields missing: week_number, report_date, daily_report, record_of_work' });
         }
 
-        let trainerName = 'Trainer';
+        let trainerName = req.user.name || req.user.email.split('@')[0];
         const mongo = await isMongo();
-
-        if (mongo) {
-            const User = (await import('../models/mongo/User.js')).default;
-            const user = await User.findById(id);
-            if (user) trainerName = user.name || user.email.split('@')[0];
-        } else {
-            const user = await queryOne('SELECT name, email FROM users WHERE id = ?', [id]);
-            if (user) trainerName = user.name || user.email.split('@')[0];
-        }
 
         if (mongo) {
             const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;

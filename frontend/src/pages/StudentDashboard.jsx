@@ -112,7 +112,7 @@ export default function StudentDashboard() {
             <div className="flex justify-between items-end mb-4">
                 <div>
                     <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tighter">Student Portal</h1>
-                    <p className="text-sm text-gray-400 font-medium">Welcome back, {studentProfile ? studentProfile.name : user?.email.split('@')[0]}</p>
+                    <p className="text-sm text-gray-400 font-medium">Welcome back, {studentProfile ? studentProfile.name : (user?.name || user?.email?.split('@')[0])}</p>
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>

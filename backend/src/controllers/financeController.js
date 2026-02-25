@@ -103,7 +103,7 @@ export async function getAllStudentFees(req, res) {
 export async function recordPayment(req, res) {
     try {
         const { student_id, amount, method, transaction_ref } = req.body;
-        const recorded_by = req.user.email;
+        const recorded_by = req.user.name || req.user.email;
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;

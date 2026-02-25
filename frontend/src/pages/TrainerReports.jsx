@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { trainerReportsAPI, coursesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown } from 'lucide-react';
+import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -11,6 +11,7 @@ export default function TrainerReports() {
     const [courses, setCourses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [viewingReport, setViewingReport] = useState(null);
     const [printingReport, setPrintingReport] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [formData, setFormData] = useState({
@@ -195,6 +196,13 @@ export default function TrainerReports() {
                                     </div>
                                     <div className="flex flex-wrap gap-2 pt-4">
                                         <button
+                                            onClick={() => setViewingReport(report)}
+                                            className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
+                                            title="View Full Report"
+                                        >
+                                            <Eye className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
                                             onClick={() => handleDownload(report)}
                                             className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
                                             title="Download PDF"
@@ -339,6 +347,66 @@ export default function TrainerReports() {
                                 <Send className="w-4 h-4" /> Finalize & Transmit to Registry
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* View Modal */}
+            {viewingReport && (
+                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-3xl w-full shadow-2xl overflow-hidden relative max-h-[95vh] flex flex-col">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
+
+                        <div className="flex justify-between items-center mb-8 shrink-0">
+                            <div>
+                                <h2 className="text-xl sm:text-2xl font-black text-maroon uppercase tracking-tight">Trainer Activity Details</h2>
+                                <div className="w-10 h-0.5 bg-gold mt-2"></div>
+                                <p className="text-[10px] text-maroon/30 font-black uppercase tracking-widest mt-1">Operational & Academic Documentation</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleDownload(viewingReport)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                    <FileDown className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => handlePrint(viewingReport)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                    <Printer className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                                    <X className="w-6 h-6 text-maroon/30" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-8 overflow-y-auto pr-2 flex-1 pb-10">
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Lead Trainer</p>
+                                    <p className="text-lg font-bold text-maroon uppercase">{viewingReport.trainer_name}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Academic Week</p>
+                                    <p className="text-lg font-bold text-maroon uppercase">{viewingReport.week_number}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Date</p>
+                                    <p className="text-sm font-bold text-gray-800">{new Date(viewingReport.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Module / Course</p>
+                                    <p className="text-sm font-bold text-gray-800">{viewingReport.course_id || 'Institutional Operations'}</p>
+                                </div>
+                            </div>
+
+                            <div className="pt-6 border-t border-maroon/5 space-y-6 text-left text-gray-700">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Daily Operations Report</p>
+                                    <p className="text-sm leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 whitespace-pre-wrap">{viewingReport.daily_report}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Record of Work</p>
+                                    <p className="text-sm leading-relaxed bg-gold/5 p-6 rounded-[2rem] border border-gold/10 italic whitespace-pre-wrap">{viewingReport.record_of_work}</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

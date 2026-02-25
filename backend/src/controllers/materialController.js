@@ -221,7 +221,7 @@ export async function downloadMaterial(req, res) {
 export async function uploadMaterial(req, res) {
     try {
         const { course_id, title, description } = req.body;
-        const uploaded_by = req.user.email;
+        const uploaded_by = req.user.name || req.user.email;
 
         if (!course_id || !title) {
             return res.status(400).json({ error: 'course_id and title are required.' });

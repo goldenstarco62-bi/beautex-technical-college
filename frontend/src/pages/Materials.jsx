@@ -293,7 +293,7 @@ export default function Materials() {
                                 </div>
                             </div>
                             <div className="px-8 py-3 bg-gray-50/50 flex justify-between items-center text-[8px] font-black text-gray-300 uppercase tracking-widest border-t border-gray-50">
-                                <span>By: {(m.uploaded_by || '').split('@')[0]}</span>
+                                <span>By: {m.uploaded_by || 'Unknown'}</span>
                                 <span>{m.created_at ? new Date(m.created_at).toLocaleDateString() : '—'}</span>
                             </div>
                         </div>

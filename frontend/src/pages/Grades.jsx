@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { gradesAPI, coursesAPI, studentsAPI, reportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History, Users, CheckCircle, Printer, FileDown, MessageSquare } from 'lucide-react';
+import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History, Users, CheckCircle, Printer, FileDown, MessageSquare, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import Interactions from '../components/shared/Interactions';
@@ -29,6 +29,7 @@ export default function Grades() {
     const [batchMarks, setBatchMarks] = useState({}); // { studentId: score }
     const [submittingBatch, setSubmittingBatch] = useState(false);
     const [printingStudentReport, setPrintingStudentReport] = useState(null); // { student, grades }
+    const [viewingReport, setViewingReport] = useState(null); // { student, grades }
 
     const [formData, setFormData] = useState({
         student_id: '',
@@ -217,6 +218,18 @@ export default function Grades() {
             window.print();
             setPrintingStudentReport(null);
         }, 1500);
+    };
+
+    const handleViewReport = (studentId) => {
+        const student = students.find(s => String(s.id).trim().toLowerCase() === String(studentId).trim().toLowerCase());
+        const studentGrades = grades.filter(g => String(g.student_id).trim().toLowerCase() === String(studentId).trim().toLowerCase());
+
+        if (!student) {
+            alert('Student profile not found.');
+            return;
+        }
+
+        setViewingReport({ student, grades: studentGrades });
     };
 
     const handleDownloadReport = async (studentId) => {
@@ -507,6 +520,13 @@ export default function Grades() {
                                                     <td className="px-10 py-8">
                                                         <div className="flex justify-center gap-3">
                                                             <button
+                                                                onClick={() => handleViewReport(grade.student_id)}
+                                                                className="p-3 hover:bg-maroon/5 rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon/40"
+                                                                title="View Performance Summary"
+                                                            >
+                                                                <Eye className="w-4 h-4" />
+                                                            </button>
+                                                            <button
                                                                 onClick={() => handleDownloadReport(grade.student_id)}
                                                                 className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
                                                                 title="Download Performance Statement"
@@ -599,8 +619,15 @@ export default function Grades() {
                                                     <td className="px-10 py-8">
                                                         <div className="flex justify-center">
                                                             <button
+                                                                onClick={() => handleViewReport(report.student_id)}
+                                                                className="p-3 hover:bg-maroon/5 rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon/40"
+                                                                title="View Performance Summary"
+                                                            >
+                                                                <Eye className="w-4 h-4" />
+                                                            </button>
+                                                            <button
                                                                 onClick={() => handleDownloadReport(report.student_id)}
-                                                                className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
+                                                                className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon ml-3"
                                                                 title="Download Performance Statement"
                                                             >
                                                                 <FileDown className="w-4 h-4" />
@@ -880,11 +907,126 @@ export default function Grades() {
                         </div>
                     </div>
                 )}
-            </div>
-            {/* Performance Report Printing View */}
-            {printingStudentReport && (
-                <>
-                    <style>{`
+
+                {/* Performance View Modal */}
+                {viewingReport && (
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-[110]">
+                        <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-6 sm:p-10 max-w-4xl w-full shadow-2xl relative max-h-[95vh] flex flex-col overflow-hidden">
+                            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
+                            <div className="flex justify-between items-center mb-8 shrink-0">
+                                <div>
+                                    <h2 className="text-2xl font-black text-black uppercase tracking-tight">Performance Statement</h2>
+                                    <div className="w-10 h-0.5 bg-gold mt-2" />
+                                    <p className="text-[10px] text-black/30 font-black uppercase tracking-widest mt-1">Official Academic Registry Review</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleDownloadReport(viewingReport.student.id)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                        <FileDown className="w-5 h-5" />
+                                    </button>
+                                    <button onClick={() => handlePrintStudentReport(viewingReport.student.id)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                        <Printer className="w-5 h-5" />
+                                    </button>
+                                    <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                                        <X className="w-6 h-6 text-black/30" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-8 overflow-y-auto pr-2 custom-scrollbar pb-10">
+                                <div className="flex flex-col sm:flex-row gap-8 items-center sm:items-start border-b border-black/5 pb-8">
+                                    <div className="w-24 h-24 rounded-3xl bg-maroon text-gold flex items-center justify-center text-3xl font-black shadow-xl shrink-0">
+                                        {viewingReport.student.name.charAt(0)}
+                                    </div>
+                                    <div className="text-center sm:text-left space-y-2">
+                                        <h3 className="text-2xl font-black text-black uppercase tracking-tight">{viewingReport.student.name}</h3>
+                                        <p className="text-xs font-bold text-black/40 uppercase tracking-widest flex items-center justify-center sm:justify-start gap-2">
+                                            <Users className="w-3 h-3 text-maroon" /> Student ID: {viewingReport.student.id}
+                                        </p>
+                                        <p className="text-[10px] font-black text-maroon uppercase tracking-widest bg-maroon/5 px-3 py-1 rounded-full inline-block">
+                                            {viewingReport.student.course || 'Independent Enrollment'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-4">
+                                        <p className="text-[10px] font-black text-black/40 uppercase tracking-widest px-2">Assessment Timeline</p>
+                                        <div className="space-y-3">
+                                            {viewingReport.grades.map((g, i) => (
+                                                <div key={i} className="bg-gray-50/50 p-5 rounded-2xl border border-black/5 flex justify-between items-center group hover:bg-white transition-all">
+                                                    <div>
+                                                        <p className="text-xs font-black text-black uppercase">{g.assignment}</p>
+                                                        <p className="text-[10px] text-black/30 font-bold uppercase">{g.month} {g.year || ''}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm font-black text-maroon">{Math.round((g.score / (g.max_score || 100)) * 100)}%</div>
+                                                        <div className="text-[9px] text-black/20 font-bold uppercase">{g.score}/{g.max_score || 100}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {viewingReport.grades.length === 0 && (
+                                                <div className="py-10 text-center text-[10px] font-black text-black/20 uppercase tracking-widest border border-dashed border-black/10 rounded-2xl">
+                                                    No assessment records found
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div className="bg-maroon text-gold p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 p-6 opacity-10">
+                                                <TrendingUp className="w-20 h-20" />
+                                            </div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Cumulative Average</p>
+                                            <h4 className="text-5xl font-black tracking-tighter">
+                                                {viewingReport.grades.length > 0
+                                                    ? Math.round((viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100)
+                                                    : 0}%
+                                            </h4>
+                                            <div className="mt-4 pt-4 border-t border-gold/20 flex justify-between items-end">
+                                                <div>
+                                                    <p className="text-[9px] font-black uppercase opacity-60">Academic Standing</p>
+                                                    <p className="text-xs font-black uppercase">
+                                                        {(() => {
+                                                            const avg = viewingReport.grades.length > 0
+                                                                ? (viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100
+                                                                : 0;
+                                                            return avg >= 70 ? 'Distinction' : avg >= 60 ? 'Credit' : avg >= 50 ? 'Pass' : viewingReport.grades.length > 0 ? 'Refer' : 'N/A';
+                                                        })()}
+                                                    </p>
+                                                </div>
+                                                <CheckCircle className="w-6 h-6 opacity-40" />
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-gray-50 p-6 rounded-[2rem] border border-black/5">
+                                            <p className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-4">Registry Integrity</p>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center gap-3 text-[10px] font-bold text-black/60 uppercase">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                                    Verified by Academic Registrar
+                                                </div>
+                                                <div className="flex items-center gap-3 text-[10px] font-bold text-black/60 uppercase">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                                    Digitally Signed Protocol
+                                                </div>
+                                                <div className="flex items-center gap-3 text-[10px] font-bold text-black/60 uppercase">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-maroon" />
+                                                    Certified on {new Date().toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Performance Report Printing View */}
+                {printingStudentReport && (
+                    <>
+                        <style>{`
                         @media print {
                             @page { size: A4; margin: 0; }
                             body { margin: 0; padding: 0 !important; }
@@ -900,136 +1042,137 @@ export default function Grades() {
                             #printable-report { position: static !important; overflow: visible !important; }
                         }
                     `}</style>
-                    <div id="printable-report" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
-                        <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
-                            <div className="text-center mb-6 border-b-2 border-maroon pb-6">
-                                <div className="flex flex-col items-center mb-6">
-                                    <img src="/logo.jpg" alt="College Logo" className="w-24 h-24 object-contain mb-4" />
-                                    <h1 className="text-2xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
-                                    <p className="text-[11px] font-bold text-gray-500 tracking-[0.2em] uppercase mb-2 text-center italic">"Empowering minds, shaping innovations"</p>
-                                </div>
-                                <div className="w-24 h-0.5 bg-gold mx-auto mb-6" />
-                                <h2 className="text-lg font-black text-black uppercase tracking-widest mb-4">Official Student Performance Statement</h2>
-
-                                <div className="flex justify-between items-end mt-10 text-left px-4">
-                                    <div>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Student Details</p>
-                                        <p className="text-xl font-black text-black uppercase">{printingStudentReport.student.name}</p>
-                                        <p className="text-[11px] font-bold text-gray-600">Admission No: {printingStudentReport.student.id}</p>
-                                        <p className="text-[11px] font-bold text-gray-600">Academic Program: {printingStudentReport.student.course}</p>
+                        <div id="printable-report" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
+                            <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
+                                <div className="text-center mb-6 border-b-2 border-maroon pb-6">
+                                    <div className="flex flex-col items-center mb-6">
+                                        <img src="/logo.jpg" alt="College Logo" className="w-24 h-24 object-contain mb-4" />
+                                        <h1 className="text-2xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
+                                        <p className="text-[11px] font-bold text-gray-500 tracking-[0.2em] uppercase mb-2 text-center italic">"Empowering minds, shaping innovations"</p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Registry Information</p>
-                                        <p className="text-[11px] font-bold text-black uppercase">Cycle: 2025/2026 Academic Year</p>
-                                        <p className="text-[11px] font-bold text-black uppercase">Printed: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                                    <div className="w-24 h-0.5 bg-gold mx-auto mb-6" />
+                                    <h2 className="text-lg font-black text-black uppercase tracking-widest mb-4">Official Student Performance Statement</h2>
+
+                                    <div className="flex justify-between items-end mt-10 text-left px-4">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Student Details</p>
+                                            <p className="text-xl font-black text-black uppercase">{printingStudentReport.student.name}</p>
+                                            <p className="text-[11px] font-bold text-gray-600">Admission No: {printingStudentReport.student.id}</p>
+                                            <p className="text-[11px] font-bold text-gray-600">Academic Program: {printingStudentReport.student.course}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Registry Information</p>
+                                            <p className="text-[11px] font-bold text-black uppercase">Cycle: 2025/2026 Academic Year</p>
+                                            <p className="text-[11px] font-bold text-black uppercase">Printed: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="px-4">
-                                <table className="w-full text-left border-collapse mb-10">
-                                    <thead>
-                                        <tr className="bg-maroon/5 border-b-2 border-maroon">
-                                            <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Assessment Module</th>
-                                            <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Period</th>
-                                            <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest text-center">Marks</th>
-                                            <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest text-center">Score %</th>
-                                            <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Quality Assessment</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-maroon/10">
-                                        {printingStudentReport.grades.map((g, i) => (
-                                            <tr key={i}>
-                                                <td className="py-4 px-3">
-                                                    <p className="text-xs font-black text-black uppercase">{g.assignment}</p>
-                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{g.course}</p>
-                                                </td>
-                                                <td className="py-4 px-3 text-xs font-bold text-gray-600 uppercase italic">{g.month}</td>
-                                                <td className="py-4 px-3 text-xs font-black text-black text-center">{g.score} / {g.max_score || 100}</td>
-                                                <td className="py-4 px-3 text-xs font-black text-maroon text-center">{Math.round((g.score / (g.max_score || 100)) * 100)}%</td>
-                                                <td className="py-4 px-3 text-[10px] font-medium text-gray-500 italic leading-tight">
-                                                    {g.remarks ? `"${g.remarks}"` : 'Progress satisfactory. Competency levels met.'}
-                                                </td>
+                                <div className="px-4">
+                                    <table className="w-full text-left border-collapse mb-10">
+                                        <thead>
+                                            <tr className="bg-maroon/5 border-b-2 border-maroon">
+                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Assessment Module</th>
+                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Period</th>
+                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest text-center">Marks</th>
+                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest text-center">Score %</th>
+                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Quality Assessment</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-maroon/10">
+                                            {printingStudentReport.grades.map((g, i) => (
+                                                <tr key={i}>
+                                                    <td className="py-4 px-3">
+                                                        <p className="text-xs font-black text-black uppercase">{g.assignment}</p>
+                                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{g.course}</p>
+                                                    </td>
+                                                    <td className="py-4 px-3 text-xs font-bold text-gray-600 uppercase italic">{g.month}</td>
+                                                    <td className="py-4 px-3 text-xs font-black text-black text-center">{g.score} / {g.max_score || 100}</td>
+                                                    <td className="py-4 px-3 text-xs font-black text-maroon text-center">{Math.round((g.score / (g.max_score || 100)) * 100)}%</td>
+                                                    <td className="py-4 px-3 text-[10px] font-medium text-gray-500 italic leading-tight">
+                                                        {g.remarks ? `"${g.remarks}"` : 'Progress satisfactory. Competency levels met.'}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
 
-                                <div className="grid grid-cols-2 gap-12 mt-12 bg-gray-50 p-8 rounded-2xl border border-gray-100">
-                                    <div>
-                                        <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em] mb-4">Cumulative Summary</h3>
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center text-xs border-b border-black/5 pb-2">
-                                                <span className="font-bold text-gray-500 uppercase">Average Percentage</span>
-                                                <span className="text-base font-black text-black">
-                                                    {printingStudentReport.grades.length > 0
-                                                        ? Math.round((printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) * 100)
-                                                        : 0}%
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-xs border-b border-black/5 pb-2">
-                                                <span className="font-bold text-gray-500 uppercase">Total Assessments</span>
-                                                <span className="font-black text-black">{printingStudentReport.grades.length} Recorded Units</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="font-bold text-gray-500 uppercase">Overall Standing</span>
-                                                <span className="font-black text-maroon uppercase tracking-widest">
-                                                    {printingStudentReport.grades.length > 0 &&
-                                                        (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) >= 0.7
-                                                        ? 'Excellent Performance'
-                                                        : (printingStudentReport.grades.length > 0 && (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) >= 0.5
-                                                            ? 'Good Progress'
-                                                            : 'Conditional Pass')}
-                                                </span>
+                                    <div className="grid grid-cols-2 gap-12 mt-12 bg-gray-50 p-8 rounded-2xl border border-gray-100">
+                                        <div>
+                                            <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em] mb-4">Cumulative Summary</h3>
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center text-xs border-b border-black/5 pb-2">
+                                                    <span className="font-bold text-gray-500 uppercase">Average Percentage</span>
+                                                    <span className="text-base font-black text-black">
+                                                        {printingStudentReport.grades.length > 0
+                                                            ? Math.round((printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) * 100)
+                                                            : 0}%
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs border-b border-black/5 pb-2">
+                                                    <span className="font-bold text-gray-500 uppercase">Total Assessments</span>
+                                                    <span className="font-black text-black">{printingStudentReport.grades.length} Recorded Units</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs">
+                                                    <span className="font-bold text-gray-500 uppercase">Overall Standing</span>
+                                                    <span className="font-black text-maroon uppercase tracking-widest">
+                                                        {printingStudentReport.grades.length > 0 &&
+                                                            (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) >= 0.7
+                                                            ? 'Excellent Performance'
+                                                            : (printingStudentReport.grades.length > 0 && (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) >= 0.5
+                                                                ? 'Good Progress'
+                                                                : 'Conditional Pass')}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="text-center flex flex-col justify-end items-center">
-                                        <div className="w-16 h-16 border-2 border-maroon rounded-full flex items-center justify-center mb-6 opacity-20">
-                                            <Award className="w-8 h-8 text-maroon" />
+                                        <div className="text-center flex flex-col justify-end items-center">
+                                            <div className="w-16 h-16 border-2 border-maroon rounded-full flex items-center justify-center mb-6 opacity-20">
+                                                <Award className="w-8 h-8 text-maroon" />
+                                            </div>
+                                            <div className="w-56 border-b border-black mb-2"></div>
+                                            <p className="text-[9px] font-black text-black uppercase tracking-widest">Registrar / Exams Officer</p>
+                                            <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">Beautex Training Centre Seal of Authenticity</p>
                                         </div>
-                                        <div className="w-56 border-b border-black mb-2"></div>
-                                        <p className="text-[9px] font-black text-black uppercase tracking-widest">Registrar / Exams Officer</p>
-                                        <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">Beautex Training Centre Seal of Authenticity</p>
                                     </div>
-                                </div>
 
-                                <div className="mt-8 text-center border-t border-maroon/10 pt-6">
-                                    <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">
-                                        Beautex Technical Training College
-                                    </p>
-                                    <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
-                                        Contact: 0708247557 | Email: beautexcollege01@gmail.com <br />
-                                        Location: Utawala, Geokarma behind Astrol Petrol Station | www.beautex.ac.ke
-                                    </p>
-                                    <p className="text-[7px] text-gray-300 uppercase tracking-[0.2em] mt-4">
-                                        Verified Registry Document • Beautex College Management System • © {new Date().getFullYear()}
-                                    </p>
+                                    <div className="mt-8 text-center border-t border-maroon/10 pt-6">
+                                        <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">
+                                            Beautex Technical Training College
+                                        </p>
+                                        <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
+                                            Contact: 0708247557 | Email: beautexcollege01@gmail.com <br />
+                                            Location: Utawala, Geokarma behind Astrol Petrol Station | www.beautex.ac.ke
+                                        </p>
+                                        <p className="text-[7px] text-gray-300 uppercase tracking-[0.2em] mt-4">
+                                            Verified Registry Document • Beautex College Management System • © {new Date().getFullYear()}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </>
-            )}
-            {/* Discourse Panel */}
-            {discussionEntity && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-end">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-500" onClick={() => setDiscussionEntity(null)}></div>
-                    <div className="relative w-full max-w-xl h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 overflow-y-auto p-8 sm:p-12 custom-scrollbar">
-                        <div className="flex justify-between items-start mb-8">
-                            <div>
-                                <h2 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight leading-none">{discussionEntity.title}</h2>
-                                <p className="text-[10px] text-maroon/40 font-bold uppercase tracking-[0.3em] mt-3 italic">Registry Discourse Module</p>
+                    </>
+                )}
+                {/* Discourse Panel */}
+                {discussionEntity && (
+                    <div className="fixed inset-0 z-[120] flex items-center justify-end">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-500" onClick={() => setDiscussionEntity(null)}></div>
+                        <div className="relative w-full max-w-xl h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 overflow-y-auto p-8 sm:p-12 custom-scrollbar">
+                            <div className="flex justify-between items-start mb-8">
+                                <div>
+                                    <h2 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight leading-none">{discussionEntity.title}</h2>
+                                    <p className="text-[10px] text-maroon/40 font-bold uppercase tracking-[0.3em] mt-3 italic">Registry Discourse Module</p>
+                                </div>
+                                <button onClick={() => setDiscussionEntity(null)} className="p-3 bg-gray-50 hover:bg-black hover:text-white rounded-2xl transition-all shadow-sm">
+                                    <X className="w-5 h-5" />
+                                </button>
                             </div>
-                            <button onClick={() => setDiscussionEntity(null)} className="p-3 bg-gray-50 hover:bg-black hover:text-white rounded-2xl transition-all shadow-sm">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
 
-                        <Interactions entityType={discussionEntity.type} entityId={discussionEntity.id} />
+                            <Interactions entityType={discussionEntity.type} entityId={discussionEntity.id} />
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }

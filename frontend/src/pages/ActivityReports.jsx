@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { FileText, Plus, Calendar, TrendingUp, BarChart3, X, Trash2, Edit, Printer, RefreshCw, Zap } from 'lucide-react';
+import { FileText, Plus, Calendar, TrendingUp, BarChart3, X, Trash2, Edit, Printer, RefreshCw, Zap, Eye, FileDown } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import { activityReportsAPI } from '../services/api';
 
 export default function ActivityReports() {
@@ -10,6 +12,8 @@ export default function ActivityReports() {
     const [showModal, setShowModal] = useState(false);
     const [modalMode, setModalMode] = useState('create'); // 'create' or 'edit'
     const [editingReport, setEditingReport] = useState(null);
+    const [viewingReport, setViewingReport] = useState(null);
+    const [printingReport, setPrintingReport] = useState(null);
     const [loading, setLoading] = useState(false);
 
     // Daily Report Form State
@@ -381,6 +385,48 @@ export default function ActivityReports() {
             setLoading(false);
         }
     };
+    const handlePrint = (report) => {
+        setPrintingReport(report);
+        const type = activeTab;
+        setTimeout(() => {
+            window.print();
+            setPrintingReport(null);
+        }, 1000);
+    };
+
+    const handleDownload = async (report) => {
+        setPrintingReport(report);
+        const type = activeTab;
+        setTimeout(async () => {
+            const element = document.getElementById('report-print-capture');
+            if (!element) return;
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 3,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    windowWidth: 794
+                });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                const imgProps = pdf.getImageProperties(imgData);
+                const ratio = imgProps.height / imgProps.width;
+                const renderedHeight = pdfWidth * ratio;
+
+                // Center the image if it's smaller than A4
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(renderedHeight, pdfHeight));
+                pdf.save(`${type.charAt(0).toUpperCase() + type.slice(1)}_Activity_Report_${report.report_date || report.week_start_date || report.month}.pdf`);
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Portal Warning: Connection to document engine interrupted.');
+            } finally {
+                setPrintingReport(null);
+            }
+        }, 1000);
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -456,6 +502,13 @@ export default function ActivityReports() {
                                                 <p className="text-xs text-gray-400 font-bold mt-1">Reported by {report.reported_by}</p>
                                             </div>
                                             <div className="flex gap-2 print:hidden">
+                                                <button
+                                                    onClick={() => setViewingReport(report)}
+                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                                    title="View Full Report"
+                                                >
+                                                    <Eye className="w-4 h-4 text-gray-600" />
+                                                </button>
                                                 <button
                                                     onClick={() => openEditModal(report)}
                                                     className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
@@ -533,6 +586,13 @@ export default function ActivityReports() {
                                             </div>
                                             <div className="flex gap-2 print:hidden">
                                                 <button
+                                                    onClick={() => setViewingReport(report)}
+                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                                    title="View Full Report"
+                                                >
+                                                    <Eye className="w-4 h-4 text-gray-600" />
+                                                </button>
+                                                <button
                                                     onClick={() => openEditModal(report)}
                                                     className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
                                                     title="Edit"
@@ -596,6 +656,13 @@ export default function ActivityReports() {
                                                 <p className="text-xs text-gray-400 font-bold mt-1">Reported by {report.reported_by}</p>
                                             </div>
                                             <div className="flex gap-2 print:hidden">
+                                                <button
+                                                    onClick={() => setViewingReport(report)}
+                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                                    title="View Full Report"
+                                                >
+                                                    <Eye className="w-4 h-4 text-gray-600" />
+                                                </button>
                                                 <button
                                                     onClick={() => openEditModal(report)}
                                                     className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
@@ -1085,6 +1152,429 @@ export default function ActivityReports() {
                     </div>
                 </div>
             )}
+            {/* View Modal */}
+            {viewingReport && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
+                    <div className="bg-white border border-gray-100 rounded-[2.5rem] p-8 max-w-4xl w-full shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
+                        <div className="flex justify-between items-center mb-8 sticky top-0 bg-white/80 backdrop-blur-sm py-2">
+                            <div>
+                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">Full Activity Report</h2>
+                                <div className="w-10 h-0.5 bg-gold mt-2"></div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Detailed Operational Documentation</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleDownload(viewingReport)}
+                                    className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm"
+                                    title="Download PDF"
+                                >
+                                    <FileDown className="w-5 h-5" />
+                                </button>
+                                <button
+                                    onClick={() => handlePrint(viewingReport)}
+                                    className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm"
+                                    title="Print Report"
+                                >
+                                    <Printer className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                                    <X className="w-6 h-6 text-maroon/30" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-8">
+                            {/* Daily Details */}
+                            {activeTab === 'daily' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Date</p>
+                                            <p className="text-lg font-bold text-gray-800">{new Date(viewingReport.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Classes Conducted</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.classes_conducted}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Avg Attendance</p>
+                                                <p className="text-xl font-black text-maroon">{parseFloat(viewingReport.total_attendance_percentage || 0).toFixed(1)}%</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Students Present</p>
+                                                <p className="text-xl font-black text-green-600">{viewingReport.total_students_present}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Students Absent</p>
+                                                <p className="text-xl font-black text-red-600">{viewingReport.total_students_absent}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported By</p>
+                                            <p className="text-lg font-bold text-gray-800">{viewingReport.reported_by}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Late Arrivals</p>
+                                                <p className="text-xl font-black text-amber-600">{viewingReport.late_arrivals || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">New Enrollments</p>
+                                                <p className="text-xl font-black text-blue-600">{viewingReport.new_enrollments || 0}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Disciplinary Cases</p>
+                                                <p className="text-xl font-black text-red-500">{viewingReport.disciplinary_cases || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Attendance</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.staff_present || 0} / {(parseInt(viewingReport.staff_present || 0) + parseInt(viewingReport.staff_absent || 0))}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-6">
+                                        {viewingReport.notable_events && (
+                                            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">Notable Events</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.notable_events}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.achievements && (
+                                            <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
+                                                <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Achievements</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.achievements}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.incidents && (
+                                            <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                                                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Incidents / Issues</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.incidents}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.facilities_issues && (
+                                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Facilities / Equipment Issues</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.facilities_issues}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.additional_notes && (
+                                            <div className="p-4 bg-gray-50/50 rounded-2xl border border-maroon/5">
+                                                <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-1">Additional Notes</p>
+                                                <p className="text-sm text-gray-600 italic leading-relaxed">{viewingReport.additional_notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Weekly Details */}
+                            {activeTab === 'weekly' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reporting Period</p>
+                                            <p className="text-lg font-bold text-gray-800">{new Date(viewingReport.week_start_date).toLocaleDateString()} - {new Date(viewingReport.week_end_date).toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Classes</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.total_classes_conducted}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Avg Attendance</p>
+                                                <p className="text-xl font-black text-maroon">{parseFloat(viewingReport.average_attendance || 0).toFixed(1)}%</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Active Students</p>
+                                                <p className="text-xl font-black text-green-600">{viewingReport.active_students}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Assessments</p>
+                                                <p className="text-xl font-black text-blue-600">{viewingReport.total_assessments}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported By</p>
+                                            <p className="text-lg font-bold text-gray-800">{viewingReport.reported_by}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Revenue Collected</p>
+                                                <p className="text-xl font-black text-emerald-600">KES {parseFloat(viewingReport.revenue_collected || 0).toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">New Enrollments</p>
+                                                <p className="text-xl font-black text-blue-600">{viewingReport.new_enrollments || 0}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Disciplinary Cases</p>
+                                                <p className="text-xl font-black text-red-500">{viewingReport.disciplinary_cases || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Courses Completed</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.courses_completed || 0}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-6">
+                                        {viewingReport.key_achievements && (
+                                            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Key Achievements</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.key_achievements}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.challenges_faced && (
+                                            <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                                                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Challenges Faced</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.challenges_faced}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.action_items && (
+                                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Action Items (Next Week)</p>
+                                                <p className="text-sm text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{viewingReport.action_items}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.notes && (
+                                            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">General Notes</p>
+                                                <p className="text-sm text-gray-600 whitespace-pre-wrap">{viewingReport.notes}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Monthly Details */}
+                            {activeTab === 'monthly' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reporting Month</p>
+                                            <p className="text-lg font-bold text-gray-800 uppercase">{viewingReport.month}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Classes</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.total_classes}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Avg Attendance</p>
+                                                <p className="text-xl font-black text-maroon">{parseFloat(viewingReport.average_attendance || 0).toFixed(1)}%</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Students</p>
+                                                <p className="text-xl font-black text-green-600">{viewingReport.total_students}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Graduations</p>
+                                                <p className="text-xl font-black text-gold">{viewingReport.graduations || 0}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Finance: Revenue</p>
+                                                <p className="text-xl font-black text-emerald-600">KES {parseFloat(viewingReport.revenue || 0).toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Finance: Expenses</p>
+                                                <p className="text-xl font-black text-red-500">KES {parseFloat(viewingReport.expenses || 0).toLocaleString()}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-6">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported By</p>
+                                            <p className="text-lg font-bold text-gray-800">{viewingReport.reported_by}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">New Enrollments</p>
+                                                <p className="text-xl font-black text-blue-600">{viewingReport.new_enrollments || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Avg Pass Rate</p>
+                                                <p className="text-xl font-black text-maroon">{viewingReport.average_pass_rate || 0}%</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Faculty</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.total_faculty || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Personnel Flux</p>
+                                                <p className="text-sm font-bold text-gray-600">+{viewingReport.new_hires || 0} / -{viewingReport.faculty_departures || 0}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Assessments</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.total_assessments || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Dropouts</p>
+                                                <p className="text-xl font-black text-red-400">{viewingReport.dropouts || 0}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-2 space-y-6 pt-4 border-t border-gray-50">
+                                        {viewingReport.major_achievements && (
+                                            <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
+                                                <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Major Achievements</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.major_achievements}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.challenges && (
+                                            <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
+                                                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Critical Challenges</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.challenges}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.strategic_initiatives && (
+                                            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Strategic Initiatives</p>
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingReport.strategic_initiatives}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.goals_next_month && (
+                                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Goals for Next Month</p>
+                                                <p className="text-sm text-gray-700 font-bold whitespace-pre-wrap">{viewingReport.goals_next_month}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hidden Print View */}
+            {printingReport && (
+                <>
+                    <style>{`
+                        @media print {
+                            @page { size: A4; margin: 0; }
+                            body { margin: 0; padding: 0 !important; }
+                            .print-a4 { 
+                                width: 210mm !important; 
+                                height: 297mm !important; 
+                                padding: 15mm !important; 
+                                margin: 0 auto !important;
+                                box-shadow: none !important;
+                                border: 4px double #800000 !important;
+                                box-sizing: border-box !important;
+                            }
+                            #report-print-capture { position: static !important; overflow: visible !important; }
+                        }
+                    `}</style>
+                    <div id="report-print-capture" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
+                        <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
+                            <div>
+                                <div className="text-center mb-6 border-b-2 border-maroon pb-6">
+                                    <div className="flex flex-col items-center mb-4">
+                                        <img src="/logo.jpg" alt="College Logo" className="w-20 h-20 object-contain mb-3" />
+                                        <h1 className="text-xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
+                                        <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase italic">"Empowering minds, shaping innovations"</p>
+                                    </div>
+                                    <div className="w-16 h-0.5 bg-gold mx-auto mb-6" />
+                                    <p className="text-sm text-black font-black uppercase tracking-[0.2em]">Institutional Activity Report ({activeTab})</p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-8 mb-8 pb-8 border-b border-maroon/10">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date/Period</p>
+                                        <p className="text-base font-bold text-maroon uppercase">
+                                            {activeTab === 'daily' ? new Date(printingReport.report_date).toLocaleDateString() :
+                                                activeTab === 'weekly' ? `${new Date(printingReport.week_start_date).toLocaleDateString()} - ${new Date(printingReport.week_end_date).toLocaleDateString()}` :
+                                                    printingReport.month}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported By</p>
+                                        <p className="text-base font-bold text-maroon uppercase">{printingReport.reported_by}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-y-6 gap-x-12">
+                                    {activeTab === 'daily' ? (
+                                        <>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Classes</p><p className="font-bold">{printingReport.classes_conducted}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Attendance</p><p className="font-bold">{printingReport.total_attendance_percentage}%</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Students Present</p><p className="font-bold text-green-600">{printingReport.total_students_present}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Students Absent</p><p className="font-bold text-red-600">{printingReport.total_students_absent}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">New Enrollments</p><p className="font-bold text-blue-600">{printingReport.new_enrollments || 0}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Disciplinary</p><p className="font-bold">{printingReport.disciplinary_cases || 0}</p></div>
+                                            <div className="col-span-2 border-t pt-4">
+                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Notable Events / Incidents</p>
+                                                <p className="text-sm">{printingReport.incidents || printingReport.notable_events || 'None documented.'}</p>
+                                            </div>
+                                        </>
+                                    ) : activeTab === 'weekly' ? (
+                                        <>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Classes</p><p className="font-bold">{printingReport.total_classes_conducted}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Avg Attendance</p><p className="font-bold">{printingReport.average_attendance}%</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Active Students</p><p className="font-bold">{printingReport.active_students}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Assessments</p><p className="font-bold">{printingReport.total_assessments}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Revenue Collected</p><p className="font-bold">KES {parseFloat(printingReport.revenue_collected || 0).toLocaleString()}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">New Enrollments</p><p className="font-bold">{printingReport.new_enrollments || 0}</p></div>
+                                            <div className="col-span-2 border-t pt-4">
+                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Key Achievements</p>
+                                                <p className="text-sm">{printingReport.key_achievements || 'None documented.'}</p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Students</p><p className="font-bold">{printingReport.total_students}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Avg Attendance</p><p className="font-bold">{printingReport.average_attendance}%</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Revenue</p><p className="font-bold">KES {parseFloat(printingReport.revenue || 0).toLocaleString()}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Month Graduations</p><p className="font-bold">{printingReport.graduations || 0}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">New Enrollments</p><p className="font-bold">{printingReport.new_enrollments || 0}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Faculty Count</p><p className="font-bold">{printingReport.total_faculty || 0}</p></div>
+                                            <div className="col-span-2 border-t pt-4">
+                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Strategic Initiatives</p>
+                                                <p className="text-sm italic">{printingReport.strategic_initiatives || 'None documented.'}</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="mt-12 border-t border-maroon/10 pt-8 text-center shrink-0">
+                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">
+                                    Beautex Technical Training College - Registry Operations
+                                </p>
+                                <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
+                                    Location: Utawala, Geokarma behind Astrol Petrol Station | Contact: 0708247557 <br />
+                                    Verified Institutional Document | Generated: {new Date().toLocaleString()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }
+

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { financeAPI, studentsAPI } from '../services/api';
-import { CreditCard, TrendingUp, AlertCircle, CheckCircle, Download, Plus, X, DollarSign, Printer } from 'lucide-react';
+import { CreditCard, TrendingUp, AlertCircle, CheckCircle, Download, Plus, X, DollarSign, Printer, Eye, FileDown } from 'lucide-react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const EMPTY_PAYMENT = { student_id: '', amount: '', method: 'M-Pesa', transaction_ref: '' };
 
@@ -17,6 +19,8 @@ export default function Finance() {
     const [paymentForm, setPaymentForm] = useState(EMPTY_PAYMENT);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('payments');
+    const [viewingReport, setViewingReport] = useState(null);
+    const [printingReport, setPrintingReport] = useState(null);
 
     useEffect(() => {
         if (user?.role === 'student') {
@@ -84,26 +88,44 @@ export default function Finance() {
         }
     };
 
-    const handleExportReport = () => {
-        const rows = [
-            ['Student', 'Reference', 'Method', 'Recorded By', 'Amount (KSh)', 'Date'],
-            ...payments.map(p => [
-                p.student_name || p.student_id,
-                p.transaction_ref,
-                p.method,
-                p.recorded_by,
-                p.amount,
-                new Date(p.payment_date).toLocaleDateString()
-            ])
-        ];
-        const csv = rows.map(r => r.join(',')).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `finance-report-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+    const handlePrint = (data, title) => {
+        setPrintingReport({ data, title });
+        setTimeout(() => {
+            window.print();
+            setPrintingReport(null);
+        }, 1000);
+    };
+
+    const handleDownload = async (data, title) => {
+        setPrintingReport({ data, title });
+        setTimeout(async () => {
+            const element = document.getElementById('finance-report-capture');
+            if (!element) return;
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 3,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    windowWidth: 794
+                });
+                const imgData = canvas.toDataURL('image/png');
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+
+                const imgProps = pdf.getImageProperties(imgData);
+                const ratio = imgProps.height / imgProps.width;
+                const renderedHeight = pdfWidth * ratio;
+
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(renderedHeight, pdfHeight));
+                pdf.save(`${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+            } catch (error) {
+                console.error('Download failed:', error);
+                alert('Portal Warning: Connection to document engine interrupted.');
+            } finally {
+                setPrintingReport(null);
+            }
+        }, 1000);
     };
 
     if (loading) return (
@@ -222,10 +244,10 @@ export default function Finance() {
                 </div>
                 <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
                     <button
-                        onClick={handleExportReport}
+                        onClick={() => handleDownload(activeTab === 'payments' ? payments : studentFees, activeTab === 'payments' ? 'Global Payment Registry' : 'Student Fee Accounts')}
                         className="flex-1 sm:flex-none bg-white border border-gray-200 text-maroon px-4 sm:px-6 py-3 rounded-2xl flex items-center justify-center gap-2 shadow-sm hover:bg-gray-50 transition-all font-black text-[10px] uppercase tracking-widest"
                     >
-                        <Download className="w-4 h-4" /> Export CSV
+                        <FileDown className="w-4 h-4" /> Download Report
                     </button>
                     <button
                         onClick={() => setShowModal(true)}
@@ -285,6 +307,7 @@ export default function Finance() {
                                     <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Recorded By</th>
                                     <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</th>
                                     <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center no-print">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -303,6 +326,15 @@ export default function Finance() {
                                         <td className="px-8 py-4 text-[10px] font-bold text-gray-400">{p.recorded_by}</td>
                                         <td className="px-8 py-4 text-[10px] font-bold text-gray-400">{new Date(p.payment_date).toLocaleDateString()}</td>
                                         <td className="px-8 py-4 text-xs font-black text-gray-800 text-right">KSh {Number(p.amount).toLocaleString()}</td>
+                                        <td className="px-8 py-4 text-center no-print">
+                                            <button
+                                                onClick={() => setViewingReport({ type: 'payment', ...p })}
+                                                className="p-2 hover:bg-maroon/5 rounded-xl transition-colors"
+                                                title="View Transaction Receipt"
+                                            >
+                                                <Eye className="w-4 h-4 text-maroon/40" />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                                 {payments.length === 0 && (
@@ -332,6 +364,7 @@ export default function Finance() {
                                     <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Paid</th>
                                     <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Balance</th>
                                     <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center no-print">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -342,11 +375,20 @@ export default function Finance() {
                                         <td className="px-8 py-4 text-xs font-bold text-gray-700 text-right">KSh {Number(f.total_due || 0).toLocaleString()}</td>
                                         <td className="px-8 py-4 text-xs font-bold text-green-600 text-right">KSh {Number(f.total_paid || 0).toLocaleString()}</td>
                                         <td className="px-8 py-4 text-xs font-bold text-red-500 text-right">KSh {Number(f.balance || 0).toLocaleString()}</td>
-                                        <td className="px-8 py-4">
+                                        <td className="px-8 py-4 text-center">
                                             <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${f.status === 'Paid' ? 'bg-green-100 text-green-700' :
                                                 f.status === 'Partial' ? 'bg-yellow-100 text-yellow-700' :
                                                     'bg-red-100 text-red-700'
                                                 }`}>{f.status || 'Unpaid'}</span>
+                                        </td>
+                                        <td className="px-8 py-4 text-center no-print">
+                                            <button
+                                                onClick={() => setViewingReport({ type: 'account', ...f })}
+                                                className="p-2 hover:bg-maroon/5 rounded-xl transition-colors"
+                                                title="View Account Summary"
+                                            >
+                                                <Eye className="w-4 h-4 text-maroon/40" />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -443,6 +485,177 @@ export default function Finance() {
                     </div>
                 </div>
             )}
+
+            {/* View Report Modal */}
+            {viewingReport && (
+                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-6 sm:p-10 max-w-2xl w-full shadow-2xl relative max-h-[95vh] flex flex-col overflow-hidden">
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">{viewingReport.type === 'payment' ? 'Transaction Receipt' : 'Account Statement'}</h2>
+                                <div className="w-10 h-0.5 bg-gold mt-2" />
+                                <p className="text-[10px] text-maroon/30 font-black uppercase tracking-widest mt-1">Official Finance Registry Document</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleDownload(viewingReport, viewingReport.type === 'payment' ? 'Receipt' : 'Statement')} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                    <FileDown className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => handlePrint(viewingReport, viewingReport.type === 'payment' ? 'Receipt' : 'Statement')} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                    <Printer className="w-5 h-5" />
+                                </button>
+                                <button onClick={() => setViewingReport(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                                    <X className="w-6 h-6 text-maroon/30" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="flex flex-col items-center mb-6 pb-6 border-b border-maroon/5">
+                                <img src="/logo.jpg" alt="Logo" className="w-16 h-16 mb-4 object-contain" />
+                                <h3 className="text-sm font-black text-maroon uppercase text-center">Beautex Technical Training College</h3>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Finance Department</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Student Name</p>
+                                    <p className="text-sm font-black text-gray-800 uppercase">{viewingReport.student_name || viewingReport.student_id}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Student ID</p>
+                                    <p className="text-sm font-black text-maroon">{viewingReport.student_id}</p>
+                                </div>
+                                {viewingReport.type === 'payment' ? (
+                                    <>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reference No.</p>
+                                            <p className="text-sm font-mono font-black text-gray-800 uppercase">{viewingReport.transaction_ref}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Payment Method</p>
+                                            <p className="text-sm font-bold text-gray-800">{viewingReport.method}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Payment Date</p>
+                                            <p className="text-sm font-bold text-gray-800">{new Date(viewingReport.payment_date).toLocaleDateString()}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Recorded By</p>
+                                            <p className="text-sm font-bold text-gray-800">{viewingReport.recorded_by}</p>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Course Program</p>
+                                            <p className="text-sm font-bold text-gray-800 uppercase">{viewingReport.course}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
+                                            <p className={`text-sm font-black ${viewingReport.status === 'Paid' ? 'text-green-600' : 'text-orange-500'}`}>{viewingReport.status}</p>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="bg-maroon/[0.02] p-6 rounded-2xl border border-maroon/5 mt-6">
+                                <div className="flex justify-between items-center">
+                                    <p className="text-[10px] font-black text-maroon uppercase tracking-widest">
+                                        {viewingReport.type === 'payment' ? 'Amount Received' : 'Current Balance'}
+                                    </p>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-[10px] font-black text-maroon/40 uppercase">KSh</span>
+                                        <span className="text-3xl font-black text-maroon">
+                                            {Number(viewingReport.type === 'payment' ? viewingReport.amount : viewingReport.balance).toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mt-8 pt-8 border-t border-maroon/5 text-center">
+                                <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
+                                    Contact: 0708247557 | Email: beautexcollege01@gmail.com <br />
+                                    This is a computer-generated document. © {new Date().getFullYear()}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Hidden Capture Area */}
+            {printingReport && (
+                <div className="fixed inset-0 bg-white z-[-1] pointer-events-none opacity-0">
+                    <div id="finance-report-capture" className="p-10 w-[210mm] min-h-[297mm] bg-white text-maroon font-serif">
+                        <div className="border-4 border-double border-maroon p-10 min-h-full flex flex-col justify-between">
+                            <div>
+                                <div className="text-center mb-10 pb-10 border-b-2 border-maroon">
+                                    <img src="/logo.jpg" alt="Logo" className="w-24 h-24 mx-auto mb-4 object-contain" />
+                                    <h1 className="text-2xl font-black uppercase tracking-widest">Beautex Technical Training College</h1>
+                                    <p className="text-xs font-bold text-gray-500 tracking-[0.3em] uppercase mt-2 italic">Official Finance Document</p>
+                                </div>
+
+                                <div className="mb-10">
+                                    <h2 className="text-xl font-black uppercase mb-6">{printingReport.title}</h2>
+                                    <div className="grid grid-cols-2 gap-8">
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Generated Date</p>
+                                            <p className="text-sm font-bold">{new Date().toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reference</p>
+                                            <p className="text-sm font-bold uppercase">BTTC-FIN-{Math.random().toString(36).substring(7).toUpperCase()}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {Array.isArray(printingReport.data) ? (
+                                    <table className="w-full text-left border-collapse border border-maroon/10">
+                                        <thead>
+                                            <tr className="bg-maroon/5 font-serif">
+                                                {Object.keys(printingReport.data[0] || {}).filter(k => !['_id', 'id', 'student_id', 'type'].includes(k)).map(key => (
+                                                    <th key={key} className="p-3 border border-maroon/10 text-[10px] font-black uppercase">{key.replace('_', ' ')}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {printingReport.data.map((row, i) => (
+                                                <tr key={i} className="font-serif">
+                                                    {Object.entries(row).filter(([k]) => !['_id', 'id', 'student_id', 'type'].includes(k)).map(([k, v]) => (
+                                                        <td key={k} className="p-3 border border-maroon/10 text-[10px]">{typeof v === 'string' && v.includes('T') && !isNaN(Date.parse(v)) ? new Date(v).toLocaleDateString() : (typeof v === 'number' ? v.toLocaleString() : v)}</td>
+                                                    ))}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-2 gap-8 py-6 border-y border-maroon/10">
+                                            {Object.entries(printingReport.data).filter(([k]) => !['_id', 'id', 'student_id', 'type'].includes(k)).map(([k, v]) => (
+                                                <div key={k}>
+                                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{k.replace('_', ' ')}</p>
+                                                    <p className="text-sm font-bold uppercase">{typeof v === 'string' && v.includes('T') && !isNaN(Date.parse(v)) ? new Date(v).toLocaleDateString() : (typeof v === 'number' ? v.toLocaleString() : v)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="bg-maroon/5 p-8 text-center border-2 border-maroon border-dashed">
+                                            <p className="text-[10px] font-black uppercase mb-2">Total Amount</p>
+                                            <p className="text-4xl font-black">KSh {Number(printingReport.data.amount || printingReport.data.balance || 0).toLocaleString()}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="text-center pt-10 border-t border-maroon mt-10">
+                                <p className="text-xs font-black uppercase tracking-widest mb-2">Beautex Technical Training College</p>
+                                <p className="text-[8px] text-gray-400 uppercase tracking-[0.2em]">Contact: 0708247557 | Email: beautexcollege01@gmail.com | © {new Date().getFullYear()}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

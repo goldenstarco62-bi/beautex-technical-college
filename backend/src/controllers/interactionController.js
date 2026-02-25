@@ -60,21 +60,19 @@ export const createInteraction = async (req, res) => {
             return res.status(400).json({ error: 'entity_type, entity_id, and content are required' });
         }
 
-        let name = 'Unknown User';
+        let name = req.user.name || req.user.email.split('@')[0];
         let photo = null;
 
         const mongo = await isMongo();
         if (mongo) {
             const User = (await import('../models/mongo/User.js')).default;
-            const user = await User.findById(id);
+            const user = await User.findById(id).select('photo');
             if (user) {
-                name = user.name || user.email.split('@')[0];
                 photo = user.photo;
             }
         } else {
-            const user = await queryOne('SELECT name, photo, email FROM users WHERE id = ?', [id]);
+            const user = await queryOne('SELECT photo FROM users WHERE id = ?', [id]);
             if (user) {
-                name = user.name || user.email.split('@')[0];
                 photo = user.photo;
             }
         }
