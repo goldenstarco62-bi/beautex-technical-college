@@ -139,7 +139,15 @@ export const createReport = async (req, res) => {
         res.status(201).json(report);
     } catch (error) {
         console.error('Error creating report:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        // Surface the real DB error message to help diagnose missing-table issues in production
+        const msg = error.message || 'Internal server error';
+        const isTableMissing = msg.includes('does not exist') || msg.includes('no such table');
+        res.status(500).json({
+            error: isTableMissing
+                ? 'Database table missing. Run migration 003_add_missing_report_tables.sql in Supabase SQL Editor.'
+                : 'Internal server error',
+            detail: process.env.NODE_ENV !== 'production' ? msg : undefined
+        });
     }
 };
 
@@ -175,7 +183,7 @@ export const updateReport = async (req, res) => {
             const report = await AcademicReport.findById(id);
             if (!report) return res.status(404).json({ error: 'Report not found' });
 
-            if (req.user.role === 'teacher' && report.trainer_email !== req.user.email) {
+            if (req.user.role === 'teacher' && String(report.trainer_email || '').toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()) {
                 return res.status(403).json({ error: 'Forbidden: You can only edit your own reports' });
             }
 

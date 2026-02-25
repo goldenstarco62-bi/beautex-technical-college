@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 const academicReportSchema = new mongoose.Schema({
     student_id: { type: String, required: true },
-    student_name: { type: String, required: true },
-    registration_number: { type: String, required: true },
+    student_name: { type: String, default: '' },
+    registration_number: { type: String, default: '' },
     course_unit: { type: String, required: true },
     trainer_name: { type: String, required: true },
     trainer_email: { type: String, required: true },
