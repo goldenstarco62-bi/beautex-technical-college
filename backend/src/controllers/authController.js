@@ -9,15 +9,16 @@ import { sendAdminResetPasswordEmail } from '../services/emailService.js';
 // Dynamic user lookup that works with both MongoDB and SQLite
 async function findUserByEmail(email) {
     await getDb();
+    const normalizedEmail = String(email || '').toLowerCase().trim();
 
     // Check if we're using MongoDB (Mongoose connection)
     if (!!process.env.MONGODB_URI) {
         const User = (await import('../models/mongo/User.js')).default;
-        return await User.findOne({ email });
+        return await User.findOne({ email: normalizedEmail });
     }
 
     // SQLite / PostgreSQL query
-    return await queryOne('SELECT * FROM users WHERE email = ?', [email]);
+    return await queryOne('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [normalizedEmail]);
 }
 
 async function findUserById(id) {
@@ -130,7 +131,9 @@ export async function login(req, res) {
         if (user.role === 'student') {
             if (!!process.env.MONGODB_URI) {
                 const Student = (await import('../models/mongo/Student.js')).default;
-                const studentProfile = await Student.findOne({ email: user.email });
+                // FIX: Case-insensitive email lookup in case stored email has different casing
+                const emailRegex = new RegExp(`^${user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const studentProfile = await Student.findOne({ email: { $regex: emailRegex } });
                 student_id = studentProfile ? studentProfile.id : null;
             } else {
                 const student = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [user.email]);
@@ -205,7 +208,9 @@ export async function getMe(req, res) {
         if (user.role === 'student') {
             if (!!process.env.MONGODB_URI) {
                 const Student = (await import('../models/mongo/Student.js')).default;
-                const studentProfile = await Student.findOne({ email: user.email });
+                // FIX: Case-insensitive email lookup
+                const emailRegex = new RegExp(`^${user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const studentProfile = await Student.findOne({ email: { $regex: emailRegex } });
                 user.student_id = studentProfile ? studentProfile.id : null;
             } else {
                 const student = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [user.email]);

@@ -10,29 +10,31 @@ export async function getProfile(req, res) {
 
         let profileData = {};
 
+        const userEmail = String(email || '').toLowerCase().trim();
+
         if (isMongo) {
             if (role === 'student') {
                 const Student = (await import('../models/mongo/Student.js')).default;
-                profileData = await Student.findOne({ email });
+                profileData = await Student.findOne({ email: userEmail });
             } else if (role === 'teacher') {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
-                profileData = await Faculty.findOne({ email });
+                profileData = await Faculty.findOne({ email: userEmail });
             } else {
                 const User = (await import('../models/mongo/User.js')).default;
-                profileData = await User.findOne({ email }).select('-password');
+                profileData = await User.findOne({ email: userEmail }).select('-password');
             }
         } else {
             if (role === 'student') {
-                profileData = await queryOne('SELECT * FROM students WHERE LOWER(email) = LOWER(?)', [email]);
+                profileData = await queryOne('SELECT * FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
             } else if (role === 'teacher') {
-                profileData = await queryOne('SELECT * FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
+                profileData = await queryOne('SELECT * FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             } else {
-                profileData = await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+                profileData = await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE LOWER(email) = LOWER(?)', [userEmail]);
             }
 
             // Fallback to user table
             if (!profileData) {
-                profileData = await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+                profileData = await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio FROM users WHERE LOWER(email) = LOWER(?)', [userEmail]);
             }
         }
 
@@ -67,8 +69,10 @@ export async function updateProfile(req, res) {
             updates.phone = updates.contact;
         }
 
+        const userEmail = String(email || '').toLowerCase().trim();
+
         if (isMongo) {
-            const query = { email: email.toLowerCase() };
+            const query = { email: userEmail };
             const options = { new: true };
 
             if (role === 'student') {
@@ -85,7 +89,7 @@ export async function updateProfile(req, res) {
         } else {
             const fields = Object.keys(updates);
             const setClause = fields.map(f => `${f} = ?`).join(', ');
-            const values = [...fields.map(f => updates[f]), email.toLowerCase()];
+            const values = [...fields.map(f => updates[f]), userEmail];
 
             if (role === 'student') {
                 // Check if contact column exists in addition to phone

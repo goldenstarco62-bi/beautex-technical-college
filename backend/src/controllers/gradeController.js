@@ -30,10 +30,16 @@ export async function getAllGrades(req, res) {
             } else if (userRole === 'teacher') {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const faculty = await Faculty.findOne({ email: req.user.email });
+                const userEmail = String(req.user.email || '').toLowerCase().trim();
+                const faculty = await Faculty.findOne({ email: userEmail });
                 if (faculty) {
+                    const facultyName = faculty.name;
+                    const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
                     const instructorCourses = await Course.find({
-                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }],
+                        $or: [
+                            { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
+                            { name: { $in: facultyCourses } }
+                        ],
                         status: 'Active'
                     }).select('name');
                     tutorCourseNames = instructorCourses.map(c => c.name);
@@ -90,14 +96,19 @@ export async function getAllGrades(req, res) {
             params.push(String(studentId).trim());
             console.log(`🔍 Applied student filter: ${studentId}`);
         } else if (userRole === 'teacher') {
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [req.user.email]);
+            const userEmail = String(req.user.email || '').toLowerCase().trim();
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (faculty) {
                 let coursesList = [];
                 try {
-                    coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+                    if (faculty.courses && String(faculty.courses).startsWith('[')) {
+                        coursesList = JSON.parse(faculty.courses);
+                    } else if (faculty.courses) {
+                        coursesList = faculty.courses.split(',').map(s => s.trim());
+                    }
                 } catch (e) { }
 
-                const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                 const allTutorCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
 
                 if (allTutorCourses.length > 0) {
@@ -110,7 +121,7 @@ export async function getAllGrades(req, res) {
                     return res.json([]);
                 }
             } else {
-                console.warn(`⚠️ Faculty profile not found for teacher: ${req.user.email}. Role: ${userRole}`);
+                console.warn(`⚠️ Faculty profile not found for teacher: ${userEmail}. Role: ${userRole}`);
                 return res.json([]);
             }
         } else if (isAdmin) {
@@ -210,30 +221,41 @@ export async function createGrade(req, res) {
 
         // Security: Trainers can only create grades for their assigned courses
         if (req.user.role === 'teacher') {
-            const email = req.user.email;
+            const userEmail = String(req.user.email || '').toLowerCase().trim();
             let allowedCourses = [];
 
             if (await isMongo()) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                const faculty = await Faculty.findOne({ email: userEmail });
                 if (faculty) {
-                    const facultyCourses = await Course.find({
-                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                    const facultyName = faculty.name;
+                    const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+                    const instructorCourses = await Course.find({
+                        $or: [
+                            { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
+                            { name: { $in: facultyCourses } }
+                        ]
                     }).select('name');
-                    allowedCourses = facultyCourses.map(c => c.name);
+                    allowedCourses = instructorCourses.map(c => c.name);
                 }
             } else {
-                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (faculty) {
                     let coursesList = [];
-                    try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
-                    const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                    try {
+                        if (faculty.courses && String(faculty.courses).startsWith('[')) {
+                            coursesList = JSON.parse(faculty.courses);
+                        } else if (faculty.courses) {
+                            coursesList = faculty.courses.split(',').map(s => s.trim());
+                        }
+                    } catch (e) { }
+                    const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                     allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
                 }
             }
 
-            if (!allowedCourses.includes(course)) {
+            if (!allowedCourses.some(ac => ac.toLowerCase().trim() === course.toLowerCase().trim())) {
                 return res.status(403).json({ error: `Security Protocol: You are not authorized to record grades for "${course}"` });
             }
         }
@@ -275,7 +297,7 @@ export async function updateGrade(req, res) {
 
         // Security check for teachers
         if (req.user.role === 'teacher') {
-            const email = req.user.email;
+            const userEmail = String(req.user.email || '').toLowerCase().trim();
             let gradeCourse = null;
 
             if (await isMongo()) {
@@ -293,24 +315,35 @@ export async function updateGrade(req, res) {
             if (await isMongo()) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                const faculty = await Faculty.findOne({ email: userEmail });
                 if (faculty) {
-                    const facultyCourses = await Course.find({
-                        $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                    const facultyName = faculty.name;
+                    const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+                    const instructorCourses = await Course.find({
+                        $or: [
+                            { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
+                            { name: { $in: facultyCourses } }
+                        ]
                     }).select('name');
-                    allowedCourses = facultyCourses.map(c => c.name);
+                    allowedCourses = instructorCourses.map(c => c.name);
                 }
             } else {
-                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (faculty) {
                     let coursesList = [];
-                    try { coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []); } catch (e) { }
-                    const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                    try {
+                        if (faculty.courses && String(faculty.courses).startsWith('[')) {
+                            coursesList = JSON.parse(faculty.courses);
+                        } else if (faculty.courses) {
+                            coursesList = faculty.courses.split(',').map(s => s.trim());
+                        }
+                    } catch (e) { }
+                    const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                     allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
                 }
             }
 
-            if (!allowedCourses.includes(gradeCourse)) {
+            if (!allowedCourses.some(ac => ac.toLowerCase().trim() === gradeCourse.toLowerCase().trim())) {
                 return res.status(403).json({ error: 'Access Denied: You cannot modify records for this course.' });
             }
         }

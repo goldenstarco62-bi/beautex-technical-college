@@ -14,12 +14,16 @@ export const getAllReports = async (req, res) => {
             let query = {};
 
             // Student isolation
-            if (req.user?.role === 'student' && req.user?.student_id) {
-                query.student_id = req.user.student_id;
+            if (req.user?.role === 'student') {
+                const studentId = req.user?.student_id || req.user?.id;
+                query.student_id = String(studentId);
             } else if (trainer_email) {
-                query.trainer_email = trainer_email;
+                query.trainer_email = String(trainer_email).toLowerCase().trim();
             } else if (course) {
                 query.course_unit = course;
+            } else if (req.user?.role === 'teacher') {
+                // Teachers see only their own reports by default if no filter
+                query.trainer_email = String(req.user.email || '').toLowerCase().trim();
             }
 
             const reports = await AcademicReport.find(query).sort({ created_at: -1 });
@@ -31,15 +35,19 @@ export const getAllReports = async (req, res) => {
         let conditions = [];
 
         // Student isolation
-        if (req.user?.role === 'student' && req.user?.student_id) {
-            conditions.push('student_id = ?');
-            params.push(req.user.student_id);
+        if (req.user?.role === 'student') {
+            const studentId = req.user?.student_id || req.user?.id;
+            conditions.push('LOWER(TRIM(student_id)) = LOWER(TRIM(?))');
+            params.push(String(studentId));
         } else if (trainer_email) {
-            conditions.push('trainer_email = ?');
-            params.push(trainer_email);
+            conditions.push('LOWER(TRIM(trainer_email)) = LOWER(TRIM(?))');
+            params.push(String(trainer_email).toLowerCase().trim());
         } else if (course) {
             conditions.push('course_unit = ?');
             params.push(course);
+        } else if (req.user?.role === 'teacher') {
+            conditions.push('LOWER(TRIM(trainer_email)) = LOWER(TRIM(?))');
+            params.push(String(req.user.email || '').toLowerCase().trim());
         }
 
         if (conditions.length > 0) {
@@ -142,7 +150,7 @@ export const deleteReport = async (req, res) => {
             const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
             const report = await AcademicReport.findById(id);
             if (!report) return res.status(404).json({ error: 'Report not found' });
-            if (req.user.role === 'teacher' && report.trainer_email !== req.user.email) {
+            if (req.user.role === 'teacher' && String(report.trainer_email || '').toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()) {
                 return res.status(403).json({ error: 'Forbidden: You can only delete your own reports' });
             }
             await AcademicReport.findByIdAndDelete(id);
@@ -182,7 +190,7 @@ export const updateReport = async (req, res) => {
         const report = await queryOne('SELECT * FROM academic_reports WHERE id = ?', [id]);
         if (!report) return res.status(404).json({ error: 'Report not found' });
 
-        if (req.user.role === 'teacher' && report.trainer_email !== req.user.email) {
+        if (req.user.role === 'teacher' && String(report.trainer_email || '').toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()) {
             return res.status(403).json({ error: 'Forbidden: You can only edit your own reports' });
         }
 

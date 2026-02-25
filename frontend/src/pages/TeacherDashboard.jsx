@@ -31,36 +31,42 @@ export default function TeacherDashboard() {
             const name = teacherProfile ? teacherProfile.name : (user.name || user.email);
             setTeacherName(name);
 
-            // 2. Filter Courses
-            // A course belongs to a teacher if:
-            // a) The course instructor matches the teacher's name
-            // b) The course name is in the teacher's 'courses' JSON array
-            let assignedCourseNames = [];
-            if (teacherProfile && teacherProfile.courses) {
+            // 2. The backend already filters courses to only those belonging to the logged-in teacher.
+            //    We trust those results directly. If the backend returned courses, use them as-is.
+            //    Only apply client-side fallback filtering if needed (e.g. admin accidentally included more).
+            let myCoursesList = coursesRes.data || [];
+
+            // Secondary client-side filter: only applies if backend may have returned more than needed
+            // (e.g. admin role mistakenly served, or there's an edge case). This ensures correctness
+            // without breaking the primary case where backend already returns the right subset.
+            if (myCoursesList.length > 0 && teacherProfile) {
+                let assignedCourseNames = [];
                 try {
                     if (typeof teacherProfile.courses === 'string') {
                         if (teacherProfile.courses.startsWith('[')) {
                             assignedCourseNames = JSON.parse(teacherProfile.courses);
                         } else {
-                            // Handle comma-separated string
                             assignedCourseNames = teacherProfile.courses.split(',').map(s => s.trim());
                         }
-                    } else {
+                    } else if (Array.isArray(teacherProfile.courses)) {
                         assignedCourseNames = teacherProfile.courses;
                     }
                 } catch (e) {
                     console.error('Error parsing faculty courses:', e);
                 }
+
+                const filtered = myCoursesList.filter(c => {
+                    const isInstructor = c.instructor && name && c.instructor.toLowerCase() === name.toLowerCase();
+                    const isAssigned = assignedCourseNames.some(an => an.toLowerCase() === c.name.toLowerCase());
+                    return isInstructor || isAssigned;
+                });
+                // Only use the frontend-filtered subset if it has results; otherwise trust backend list
+                if (filtered.length > 0) {
+                    myCoursesList = filtered;
+                }
             }
 
-            const filteredCourses = coursesRes.data.filter(c => {
-                const isInstructor = c.instructor && name && c.instructor.toLowerCase() === name.toLowerCase();
-                const isAssigned = assignedCourseNames.some(assignedName =>
-                    assignedName.toLowerCase() === c.name.toLowerCase()
-                );
-                return isInstructor || isAssigned;
-            });
-            setMyCourses(filteredCourses);
+            setMyCourses(myCoursesList);
 
             // 3. Filter Sessions (where teacher_email matches - Case-insensitive)
             const filteredSessions = sessionsRes.data.filter(s => s.teacher_email?.toLowerCase() === user.email?.toLowerCase());

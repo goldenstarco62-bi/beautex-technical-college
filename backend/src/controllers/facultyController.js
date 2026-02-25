@@ -76,7 +76,8 @@ export async function getFaculty(req, res) {
 
 export async function createFaculty(req, res) {
     try {
-        const { id, name, email, department, position, specialization, courses, contact, passport, id_number, photo, status, category } = req.body;
+        const { id, name, department, position, specialization, courses, contact, passport, id_number, photo, status, category } = req.body;
+        const email = String(req.body.email || '').toLowerCase().trim();
         const idNumber = id_number || passport; // Support both field names
 
         if (!id || !name || !email || !department) {
@@ -177,6 +178,9 @@ export async function updateFaculty(req, res) {
         const values = fields.map(f => {
             if (f === 'courses' && typeof req.body[f] !== 'string') {
                 return JSON.stringify(req.body[f]);
+            }
+            if (f === 'email') {
+                return String(req.body[f] || '').toLowerCase().trim();
             }
             return req.body[f];
         });

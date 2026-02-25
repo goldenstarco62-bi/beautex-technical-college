@@ -81,10 +81,17 @@ export default function StudentDashboard() {
 
             if (profile) {
                 // 4. Find enrolled course details
-                const studentCourses = Array.isArray(profile.course) ? profile.course : [profile.course].filter(Boolean);
-                const enrolledCourses = coursesRes.data.filter(c =>
-                    studentCourses.some(scName => scName && scName.toLowerCase().trim() === c.name.toLowerCase().trim())
-                );
+                // The backend now filters courses specifically for the logged-in student.
+                // coursesRes.data should already be the student's courses only.
+                let enrolledCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
+
+                // Fallback: if backend returned nothing, filter locally using profile's course field
+                if (enrolledCourses.length === 0 && profile.course) {
+                    const studentCourses = Array.isArray(profile.course) ? profile.course : [profile.course].filter(Boolean);
+                    // We don't have the full course list here since backend only returned student-filtered ones,
+                    // so just mark enrolled count from profile info
+                    console.warn('No courses returned from API for student. Possible backend lookup failure.');
+                }
 
                 setCourseDetails(enrolledCourses[0] || null);
 

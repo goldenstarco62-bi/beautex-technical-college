@@ -45,7 +45,9 @@ export async function getAllStudents(req, res) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
                 const Student = (await import('../models/mongo/Student.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                // FIX: Case-insensitive email lookup
+                const emailRegex = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
                 if (!faculty) return res.json([]);
 
                 const facultyCourses = await Course.find({
@@ -58,7 +60,8 @@ export async function getAllStudents(req, res) {
                 return res.json(students);
             }
 
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+            const userEmail = String(email || '').toLowerCase().trim();
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!faculty) return res.json([]);
 
             let coursesList = [];
@@ -87,12 +90,15 @@ export async function getAllStudents(req, res) {
 
         // Students only see themselves
         if (role === 'student') {
+            const userEmail = String(email || '').toLowerCase().trim();
             if (mongo) {
                 const Student = (await import('../models/mongo/Student.js')).default;
-                const students = await Student.find({ email }).lean();
+                // FIX: Case-insensitive email lookup to handle any casing mismatches
+                const emailRegex = new RegExp(`^${userEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const students = await Student.find({ email: { $regex: emailRegex } }).lean();
                 return res.json(students.map(s => ({ ...s, course: Array.isArray(s.course) ? s.course : [s.course].filter(Boolean) })));
             }
-            const students = await query('SELECT * FROM students WHERE email = ?', [email]);
+            const students = await query('SELECT * FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
             return res.json(students.map(s => ({
                 ...s,
                 course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
@@ -115,7 +121,7 @@ export async function getStudent(req, res) {
             if (!student) return res.status(404).json({ error: 'Student not found' });
 
             // IDOR Protection: Check if user is authorized to view this profile
-            if (req.user.role === 'student' && req.user.student_id !== student.id) {
+            if (req.user.role === 'student' && String(req.user.student_id) !== String(student.id)) {
                 return res.status(403).json({ error: 'Access denied. You can only view your own profile.' });
             }
 
@@ -129,7 +135,7 @@ export async function getStudent(req, res) {
         if (!student) return res.status(404).json({ error: 'Student not found' });
 
         // IDOR Protection: Check if user is authorized to view this profile
-        if (req.user.role === 'student' && req.user.student_id !== student.id) {
+        if (req.user.role === 'student' && String(req.user.student_id) !== String(student.id)) {
             return res.status(403).json({ error: 'Access denied. You can only view your own profile.' });
         }
 
@@ -145,7 +151,9 @@ export async function getStudent(req, res) {
 
 export async function createStudent(req, res) {
     try {
-        const { id, name, email, course, intake, contact, photo, dob, address, guardian_name, guardian_contact, blood_group } = req.body;
+        const { id, name, intake, contact, photo, dob, address, guardian_name, guardian_contact, blood_group } = req.body;
+        const email = String(req.body.email || '').toLowerCase().trim();
+        const course = req.body.course;
 
         if (!id || !name || !email || !course) {
             return res.status(400).json({ error: 'ID, name, email, and course are required' });

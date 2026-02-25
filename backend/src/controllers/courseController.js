@@ -39,7 +39,8 @@ export async function getAllCourses(req, res) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
                 const Student = (await import('../models/mongo/Student.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                // FIX: Case-insensitive email lookup to handle any casing mismatches
+                const faculty = await Faculty.findOne({ email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
                 if (!faculty) return res.json([]);
 
                 const courses = await Course.find({
@@ -83,25 +84,56 @@ export async function getAllCourses(req, res) {
             return res.json(courses);
         }
 
-        // Students see their enrolled course
+        // Students see their enrolled courses
         if (role === 'student') {
             if (mongo) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const studentProfile = await Student.findOne({ email });
+                // FIX: Case-insensitive email lookup to handle any casing mismatches
+                const studentProfile = await Student.findOne({ email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
                 if (!studentProfile) return res.json([]);
 
-                const courses = await Course.find({ name: studentProfile.course, status: 'Active' }).lean();
+                // Support array of courses
+                const studentCourses = Array.isArray(studentProfile.course)
+                    ? studentProfile.course
+                    : [studentProfile.course].filter(Boolean);
+
+                if (studentCourses.length === 0) return res.json([]);
+
+                // FIX: Case-insensitive course name matching
+                const courses = await Course.find({
+                    name: { $in: studentCourses.map(c => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')) },
+                    status: 'Active'
+                }).lean();
+
                 for (const course of courses) {
                     course.enrolled = await Student.countDocuments({ course: course.name });
                 }
                 return res.json(courses);
             }
 
-            const studentProfile = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
+            const studentProfile = await queryOne('SELECT course FROM students WHERE LOWER(email) = LOWER(?)', [email]);
             if (!studentProfile) return res.json([]);
 
-            const courses = await query(`SELECT ${sqlSelect} FROM courses c WHERE c.name = ? AND c.status = 'Active'`, [studentProfile.course]);
+            // Support JSON array strings or single course strings
+            let studentCourses = [];
+            try {
+                if (studentProfile.course && String(studentProfile.course).startsWith('[')) {
+                    studentCourses = JSON.parse(studentProfile.course);
+                } else if (studentProfile.course) {
+                    studentCourses = [studentProfile.course];
+                }
+            } catch (e) {
+                studentCourses = [studentProfile.course].filter(Boolean);
+            }
+
+            if (studentCourses.length === 0) return res.json([]);
+
+            const placeholders = studentCourses.map(() => '?').join(',');
+            const courses = await query(`
+                SELECT ${sqlSelect} FROM courses c 
+                WHERE c.name IN (${placeholders}) AND c.status = 'Active'
+            `, studentCourses);
             return res.json(courses);
         }
 

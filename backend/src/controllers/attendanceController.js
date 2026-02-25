@@ -23,31 +23,42 @@ export async function getAllAttendance(req, res) {
 
         // Teachers see attendance for their courses
         if (role === 'teacher') {
+            const userEmail = String(email || '').toLowerCase().trim();
             if (mongo) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
                 const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                const faculty = await Faculty.findOne({ email: userEmail });
                 if (!faculty) return res.json([]);
 
-                const facultyCourses = await Course.find({
-                    $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                const facultyName = faculty.name;
+                const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+
+                const matchedCourses = await Course.find({
+                    $or: [
+                        { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
+                        { name: { $in: facultyCourses } }
+                    ]
                 }).select('name');
-                const courseNames = facultyCourses.map(c => c.name);
+                const courseNames = matchedCourses.map(c => c.name);
 
                 const attendance = await Attendance.find({ course: { $in: courseNames } }).sort({ date: -1 });
                 return res.json(attendance);
             }
 
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!faculty) return res.json([]);
 
             let coursesList = [];
             try {
-                coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+                if (faculty.courses && String(faculty.courses).startsWith('[')) {
+                    coursesList = JSON.parse(faculty.courses);
+                } else if (faculty.courses) {
+                    coursesList = faculty.courses.split(',').map(s => s.trim());
+                }
             } catch (e) { }
 
-            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+            const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
             const allTutorCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
 
             if (allTutorCourses.length === 0) return res.json([]);
@@ -64,6 +75,7 @@ export async function getAllAttendance(req, res) {
         // Students see only their own attendance records
         if (role === 'student') {
             const tokenStudentId = student_id;
+            const userEmail = String(email || '').toLowerCase().trim();
 
             if (mongo) {
                 const Attendance = (await import('../models/mongo/Attendance.js')).default;
@@ -71,7 +83,7 @@ export async function getAllAttendance(req, res) {
 
                 let searchId = tokenStudentId;
                 if (!searchId) {
-                    const sp = await Student.findOne({ email });
+                    const sp = await Student.findOne({ email: userEmail });
                     if (!sp) return res.json([]);
                     searchId = sp.id;
                 }
@@ -81,7 +93,7 @@ export async function getAllAttendance(req, res) {
             } else {
                 let searchId = tokenStudentId;
                 if (!searchId) {
-                    const sp = await queryOne('SELECT id FROM students WHERE email = ?', [email]);
+                    const sp = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
                     if (!sp) return res.json([]);
                     searchId = sp.id;
                 }
@@ -108,33 +120,43 @@ export async function markAttendance(req, res) {
 
         // Security check for teachers
         if (req.user.role === 'teacher') {
-            const email = req.user.email;
+            const userEmail = String(req.user.email || '').toLowerCase().trim();
             let allowedCourses = [];
 
             if (await isMongo()) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const faculty = await Faculty.findOne({ email });
+                const faculty = await Faculty.findOne({ email: userEmail });
                 if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
 
-                const facultyCourses = await Course.find({
-                    $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }]
+                const facultyName = faculty.name;
+                const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+
+                const matchedCourses = await Course.find({
+                    $or: [
+                        { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
+                        { name: { $in: facultyCourses } }
+                    ]
                 }).select('name');
-                allowedCourses = facultyCourses.map(c => c.name);
+                allowedCourses = matchedCourses.map(c => c.name);
             } else {
-                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+                const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (!faculty) return res.status(403).json({ error: 'Access Denied: Trainer profile missing' });
 
                 let coursesList = [];
                 try {
-                    coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+                    if (faculty.courses && String(faculty.courses).startsWith('[')) {
+                        coursesList = JSON.parse(faculty.courses);
+                    } else if (faculty.courses) {
+                        coursesList = faculty.courses.split(',').map(s => s.trim());
+                    }
                 } catch (e) { }
 
-                const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
+                const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                 allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
             }
 
-            if (!allowedCourses.includes(course)) {
+            if (!allowedCourses.some(ac => ac.toLowerCase().trim() === course.toLowerCase().trim())) {
                 return res.status(403).json({ error: `Security Protocol: You are not authorized to mark attendance for "${course}"` });
             }
         }

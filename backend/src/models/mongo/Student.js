@@ -21,6 +21,7 @@ const studentSchema = new mongoose.Schema({
         type: [String],
         required: true
     },
+    intake: String,
     semester: String,
     gpa: {
         type: Number,

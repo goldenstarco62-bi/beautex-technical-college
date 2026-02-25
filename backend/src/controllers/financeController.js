@@ -52,7 +52,7 @@ export async function getStudentFees(req, res) {
         const { studentId } = req.params;
 
         // IDOR Protection: Students can only view their own fees
-        if (req.user.role === 'student' && req.user.student_id !== studentId) {
+        if (req.user.role === 'student' && String(req.user.student_id) !== String(studentId)) {
             return res.status(403).json({ error: 'Access denied. You can only view your own fee records.' });
         }
 
@@ -178,7 +178,7 @@ export async function getPayments(req, res) {
         // IDOR Protection: Students can only view their own payments
         if (req.user.role === 'student') {
             const effectiveId = studentId || req.user.student_id;
-            if (effectiveId !== req.user.student_id) {
+            if (String(effectiveId) !== String(req.user.student_id)) {
                 return res.status(403).json({ error: 'Access denied. You can only view your own payment records.' });
             }
         }

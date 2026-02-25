@@ -23,28 +23,51 @@ export async function getAllSessions(req, res) {
 
         // Teachers see sessions they teach
         if (role === 'teacher') {
+            const userEmail = String(email || '').toLowerCase().trim();
             if (mongo) {
                 const Session = (await import('../models/mongo/Session.js')).default;
-                const sessions = await Session.find({ teacher_email: email }).sort({ day: 1, time: 1 });
+                const sessions = await Session.find({ teacher_email: userEmail }).sort({ day: 1, time: 1 });
                 return res.json(sessions);
             }
-            const sessions = await query('SELECT * FROM sessions WHERE teacher_email = ? ORDER BY day, time', [email]);
+            const sessions = await query('SELECT * FROM sessions WHERE LOWER(teacher_email) = LOWER(?) ORDER BY day, time', [userEmail]);
             return res.json(sessions);
         }
 
         // Students see sessions for their enrolled course
         if (role === 'student') {
+            const userEmail = String(email || '').toLowerCase().trim();
             if (mongo) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 const Session = (await import('../models/mongo/Session.js')).default;
-                const sp = await Student.findOne({ email });
+                const sp = await Student.findOne({ email: userEmail });
                 if (!sp) return res.json([]);
-                const sessions = await Session.find({ course: sp.course }).sort({ day: 1, time: 1 });
+
+                const studentCourses = Array.isArray(sp.course) ? sp.course : [sp.course].filter(Boolean);
+                const sessions = await Session.find({ course: { $in: studentCourses } }).sort({ day: 1, time: 1 });
                 return res.json(sessions);
             }
-            const sp = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
+            const sp = await queryOne('SELECT course FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!sp) return res.json([]);
-            const sessions = await query('SELECT * FROM sessions WHERE course = ? ORDER BY day, time', [sp.course]);
+
+            let studentCourses = [];
+            try {
+                if (sp.course && String(sp.course).startsWith('[')) {
+                    studentCourses = JSON.parse(sp.course);
+                } else if (sp.course) {
+                    studentCourses = [sp.course];
+                }
+            } catch (e) {
+                studentCourses = [sp.course].filter(Boolean);
+            }
+
+            if (studentCourses.length === 0) return res.json([]);
+
+            const placeholders = studentCourses.map(() => '?').join(',');
+            const sessions = await query(`
+                SELECT * FROM sessions 
+                WHERE course IN (${placeholders}) 
+                ORDER BY day, time
+            `, studentCourses);
             return res.json(sessions);
         }
 

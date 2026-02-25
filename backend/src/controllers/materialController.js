@@ -23,20 +23,26 @@ export async function getMaterials(req, res) {
 
             if (role === 'teacher') {
                 // Only materials for courses this teacher is assigned to
-                const faculty = await Faculty.findOne({ email });
+                const userEmail = String(email || '').toLowerCase().trim();
+                const faculty = await Faculty.findOne({ email: userEmail });
                 if (!faculty) return res.json([]);
+
+                // Extract name safely (handles cases where name might be missing or in different format)
+                const facultyName = faculty.name;
+                const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
 
                 const teacherCourses = await Course.find({
                     $or: [
-                        { instructor: faculty.name },
-                        { name: { $in: Array.isArray(faculty.courses) ? faculty.courses : [] } }
+                        { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
+                        { name: { $in: facultyCourses } }
                     ]
                 }).select('_id name');
                 const courseIds = teacherCourses.map(c => String(c._id));
                 filter.course_id = { $in: courseIds };
             } else if (role === 'student') {
-                // FIX: Students can be enrolled in multiple courses (array)
-                const student = await Student.findOne({ email });
+                // Students can be enrolled in multiple courses (array)
+                const userEmail = String(email || '').toLowerCase().trim();
+                const student = await Student.findOne({ email: userEmail });
                 if (!student) return res.json([]);
 
                 const studentCourses = Array.isArray(student.course)
@@ -89,7 +95,8 @@ export async function getMaterials(req, res) {
         const conditions = [];
 
         if (role === 'teacher') {
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE email = ?', [email]);
+            const userEmail = String(email || '').toLowerCase().trim();
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!faculty) return res.json([]);
 
             let coursesList = [];
@@ -99,8 +106,9 @@ export async function getMaterials(req, res) {
                     : (faculty.courses || []);
             } catch (e) { }
 
+            const placeholders = coursesList.length > 0 ? coursesList.map(() => '?').join(',') : "''";
             const tutorCourses = await query(
-                `SELECT id FROM courses WHERE instructor = ? OR name IN (${coursesList.length > 0 ? coursesList.map(() => '?').join(',') : "''"})`
+                `SELECT id FROM courses WHERE LOWER(instructor) = LOWER(?) OR name IN (${placeholders})`
                 , [faculty.name, ...coursesList]);
             const validCourseIds = tutorCourses.map(c => String(c.id));
             if (validCourseIds.length === 0) return res.json([]);
@@ -109,17 +117,19 @@ export async function getMaterials(req, res) {
             params.push(...validCourseIds);
 
         } else if (role === 'student') {
-            // FIX: Handle multi-course student enrollments
-            const student = await queryOne('SELECT course FROM students WHERE email = ?', [email]);
+            const userEmail = String(email || '').toLowerCase().trim();
+            const student = await queryOne('SELECT course FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!student) return res.json([]);
 
             let studentCourses = [];
             try {
-                studentCourses = typeof student.course === 'string'
-                    ? JSON.parse(student.course)
-                    : student.course;
+                if (student.course && String(student.course).startsWith('[')) {
+                    studentCourses = JSON.parse(student.course);
+                } else if (student.course) {
+                    studentCourses = [student.course];
+                }
             } catch {
-                studentCourses = [student.course];
+                studentCourses = [student.course].filter(Boolean);
             }
             if (!Array.isArray(studentCourses)) studentCourses = [studentCourses];
             studentCourses = studentCourses.filter(Boolean);

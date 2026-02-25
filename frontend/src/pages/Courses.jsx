@@ -25,27 +25,32 @@ export default function Courses() {
         try {
             const { data } = await coursesAPI.getAll();
 
-            if (isStudent && user?.email) {
-                // If student, fetch profile to find enrolled course
-                // Search by email or ID
-                const userEmail = String(user?.email || '').toLowerCase().trim();
-                const userSid = String(user?.student_id || user?.id || '').toLowerCase().trim();
-
-                const studentsRes = await studentsAPI.getAll();
-                const studentProfile = studentsRes.data.find(s =>
-                    String(s.email || '').toLowerCase().trim() === userEmail ||
-                    String(s.id || '').toLowerCase().trim() === userSid
-                ) || studentsRes.data[0];
-
-                if (studentProfile && studentProfile.course) {
-                    const studentCourses = Array.isArray(studentProfile.course) ? studentProfile.course : [studentProfile.course].filter(Boolean);
-                    // Filter courses to show all enrolled ones
-                    const enrolledCourses = data.filter(c =>
-                        studentCourses.some(scName => scName && scName.toLowerCase().trim() === c.name.toLowerCase().trim())
-                    );
-                    setCourses(enrolledCourses);
+            if (isStudent) {
+                // Backend now filters courses for students, but we'll double check profile 
+                // ONLY if the backend returned more than expected or if we need specific profile data.
+                // For now, trusting the backend is safer as it handles complex course name formats.
+                if (data.length > 0) {
+                    setCourses(data);
                 } else {
-                    setCourses([]);
+                    // Fallback: Check if student has courses listed in profile that backend might have missed
+                    const userEmail = String(user?.email || '').toLowerCase().trim();
+                    const userSid = String(user?.student_id || user?.id || '').toLowerCase().trim();
+
+                    const studentsRes = await studentsAPI.getAll();
+                    const studentProfile = studentsRes.data.find(s =>
+                        String(s.email || '').toLowerCase().trim() === userEmail ||
+                        String(s.id || '').toLowerCase().trim() === userSid
+                    ) || studentsRes.data[0];
+
+                    if (studentProfile && studentProfile.course) {
+                        const studentCourses = Array.isArray(studentProfile.course) ? studentProfile.course : [studentProfile.course].filter(Boolean);
+                        const enrolledCourses = data.filter(c =>
+                            studentCourses.some(scName => scName && scName.toLowerCase().trim() === c.name.toLowerCase().trim())
+                        );
+                        setCourses(enrolledCourses);
+                    } else {
+                        setCourses([]);
+                    }
                 }
             } else {
                 // Admin/Teacher sees all
