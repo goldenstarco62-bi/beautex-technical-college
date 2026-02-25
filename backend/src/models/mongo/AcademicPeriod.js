@@ -6,6 +6,10 @@ const AcademicPeriodSchema = new mongoose.Schema({
     end_date: { type: Date, required: true },
     is_active: { type: Boolean, default: false },
     status: { type: String, enum: ['Upcoming', 'Ongoing', 'Completed'], default: 'Upcoming' }
-}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+}, {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
+});
 
 export default mongoose.models.AcademicPeriod || mongoose.model('AcademicPeriod', AcademicPeriodSchema);

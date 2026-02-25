@@ -57,7 +57,9 @@ export const createDailyReport = async (req, res) => {
     try {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
-            const reportData = { ...req.body, report_type: 'daily', reported_by: req.user.email };
+            // Strip MongoDB internal/immutable fields from body before creating
+            const { _id, __v, id, created_at, updated_at, ...cleanBody } = req.body;
+            const reportData = { ...cleanBody, report_type: 'daily', reported_by: req.user.email };
             const newReport = new ActivityReport(reportData);
             const savedReport = await newReport.save();
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
@@ -95,10 +97,12 @@ export const updateDailyReport = async (req, res) => {
 
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
-            const updateData = { ...req.body, updated_at: new Date() };
+            // Strip immutable MongoDB fields to avoid MongoServerError
+            const { _id, __v, id: bodyId, created_at, updated_at, ...cleanBody } = req.body;
+            const updateData = { ...cleanBody, updated_at: new Date() };
             if (report_date) updateData.report_date = new Date(report_date);
 
-            const updatedReport = await ActivityReport.findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true });
+            const updatedReport = await ActivityReport.findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: false });
             if (!updatedReport) return res.status(404).json({ success: false, error: 'Report not found' });
             return res.json({ success: true, message: 'Report updated successfully' });
         }
@@ -177,7 +181,8 @@ export const createWeeklyReport = async (req, res) => {
     try {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
-            const reportData = { ...req.body, report_type: 'weekly', reported_by: req.user.email };
+            const { _id, __v, id, created_at, updated_at, ...cleanBody } = req.body;
+            const reportData = { ...cleanBody, report_type: 'weekly', reported_by: req.user.email };
             const newReport = new ActivityReport(reportData);
             const savedReport = await newReport.save();
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
@@ -208,7 +213,8 @@ export const updateWeeklyReport = async (req, res) => {
         const { id } = req.params;
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
-            const updatedReport = await ActivityReport.findByIdAndUpdate(id, { $set: { ...req.body, updated_at: new Date() } }, { new: true, runValidators: true });
+            const { _id, __v, id: bodyId, created_at, updated_at, ...cleanBody } = req.body;
+            const updatedReport = await ActivityReport.findByIdAndUpdate(id, { $set: { ...cleanBody, updated_at: new Date() } }, { new: true, runValidators: false });
             if (!updatedReport) return res.status(404).json({ success: false, error: 'Report not found' });
             return res.json({ success: true, message: 'Report updated successfully' });
         }
@@ -287,7 +293,8 @@ export const createMonthlyReport = async (req, res) => {
     try {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
-            const reportData = { ...req.body, report_type: 'monthly', reported_by: req.user.email };
+            const { _id, __v, id, created_at, updated_at, ...cleanBody } = req.body;
+            const reportData = { ...cleanBody, report_type: 'monthly', reported_by: req.user.email };
             const newReport = new ActivityReport(reportData);
             const savedReport = await newReport.save();
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
@@ -321,7 +328,8 @@ export const updateMonthlyReport = async (req, res) => {
         const { id } = req.params;
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
-            const updatedReport = await ActivityReport.findByIdAndUpdate(id, { $set: { ...req.body, updated_at: new Date() } }, { new: true, runValidators: true });
+            const { _id, __v, id: bodyId, created_at, updated_at, ...cleanBody } = req.body;
+            const updatedReport = await ActivityReport.findByIdAndUpdate(id, { $set: { ...cleanBody, updated_at: new Date() } }, { new: true, runValidators: false });
             if (!updatedReport) return res.status(404).json({ success: false, error: 'Report not found' });
             return res.json({ success: true, message: 'Report updated successfully' });
         }

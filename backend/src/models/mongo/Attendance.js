@@ -19,7 +19,9 @@ const attendanceSchema = new mongoose.Schema({
         required: true
     }
 }, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 // Unique compound index for student_id, course, and date

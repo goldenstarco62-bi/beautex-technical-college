@@ -42,7 +42,9 @@ const interactionSchema = new mongoose.Schema({
         default: null
     }
 }, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 const Interaction = mongoose.model('Interaction', interactionSchema);

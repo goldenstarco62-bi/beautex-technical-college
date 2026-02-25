@@ -28,7 +28,9 @@ const announcementSchema = new mongoose.Schema({
         default: Date.now
     }
 }, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 const Announcement = mongoose.model('Announcement', announcementSchema);

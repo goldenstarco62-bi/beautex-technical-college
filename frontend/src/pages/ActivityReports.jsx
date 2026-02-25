@@ -210,6 +210,7 @@ export default function ActivityReports() {
             new_enrollments: 0,
             staff_present: 0,
             staff_absent: 0,
+            disciplinary_cases: 0,
             facilities_issues: '',
             equipment_maintenance: '',
             notable_events: '',
@@ -478,7 +479,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.total_attendance_percentage ? report.total_attendance_percentage.toFixed(1) + '%' : '—'}</p>
+                                                <p className="text-2xl font-black text-gray-800">{report.total_attendance_percentage != null && report.total_attendance_percentage !== '' ? parseFloat(report.total_attendance_percentage).toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present</p>
@@ -554,7 +555,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance ? report.average_attendance.toFixed(1) + '%' : '—'}</p>
+                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Assessments</p>
@@ -618,11 +619,11 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance ? report.average_attendance.toFixed(1) + '%' : '—'}</p>
+                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pass Rate</p>
-                                                <p className="text-2xl font-black text-gray-800">{(report.average_pass_rate || 0).toFixed(1)}%</p>
+                                                <p className="text-2xl font-black text-gray-800">{parseFloat(report.average_pass_rate || 0).toFixed(1)}%</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Faculty</p>
@@ -692,7 +693,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.classes_conducted}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                                 required
                                             />
@@ -713,7 +714,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.assessments_conducted}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, assessments_conducted: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, assessments_conducted: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -722,7 +723,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.total_students_present}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, total_students_present: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, total_students_present: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -731,7 +732,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.total_students_absent}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, total_students_absent: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, total_students_absent: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -740,7 +741,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.late_arrivals}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, late_arrivals: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, late_arrivals: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -749,7 +750,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.new_enrollments}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, new_enrollments: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, new_enrollments: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -758,7 +759,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.staff_present}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -767,7 +768,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={dailyForm.disciplinary_cases}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) })}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -856,7 +857,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={weeklyForm.total_classes_conducted}
-                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, total_classes_conducted: parseInt(e.target.value) })}
+                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, total_classes_conducted: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -875,7 +876,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={weeklyForm.new_enrollments}
-                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, new_enrollments: parseInt(e.target.value) })}
+                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, new_enrollments: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -884,7 +885,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={weeklyForm.disciplinary_cases}
-                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, disciplinary_cases: parseInt(e.target.value) })}
+                                                onChange={(e) => setWeeklyForm({ ...weeklyForm, disciplinary_cases: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -974,7 +975,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={monthlyForm.total_students}
-                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, total_students: parseInt(e.target.value) })}
+                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, total_students: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -983,7 +984,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={monthlyForm.new_enrollments}
-                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, new_enrollments: parseInt(e.target.value) })}
+                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, new_enrollments: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -992,7 +993,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={monthlyForm.graduations}
-                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, graduations: parseInt(e.target.value) })}
+                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, graduations: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -1012,7 +1013,7 @@ export default function ActivityReports() {
                                                 type="number"
                                                 step="0.1"
                                                 value={monthlyForm.average_pass_rate}
-                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, average_pass_rate: parseFloat(e.target.value) })}
+                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, average_pass_rate: parseFloat(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>
@@ -1021,7 +1022,7 @@ export default function ActivityReports() {
                                             <input
                                                 type="number"
                                                 value={monthlyForm.total_faculty}
-                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, total_faculty: parseInt(e.target.value) })}
+                                                onChange={(e) => setMonthlyForm({ ...monthlyForm, total_faculty: parseInt(e.target.value) || 0 })}
                                                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
                                             />
                                         </div>

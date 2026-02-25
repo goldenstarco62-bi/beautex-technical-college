@@ -30,7 +30,9 @@ const gradeSchema = new mongoose.Schema({
         required: false
     }
 }, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 const Grade = mongoose.model('Grade', gradeSchema);

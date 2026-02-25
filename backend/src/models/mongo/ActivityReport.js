@@ -21,6 +21,7 @@ const activityReportSchema = new mongoose.Schema({
     new_enrollments: Number,
     staff_present: Number,
     staff_absent: Number,
+    disciplinary_cases: Number,
     facilities_issues: String,
     equipment_maintenance: String,
     notable_events: String,
@@ -63,7 +64,9 @@ const activityReportSchema = new mongoose.Schema({
     strategic_initiatives: String,
     goals_next_month: String
 }, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 const ActivityReport = mongoose.model('ActivityReport', activityReportSchema);

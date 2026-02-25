@@ -23,7 +23,9 @@ const sessionSchema = new mongoose.Schema({
     },
     teacher_email: String
 }, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
 const Session = mongoose.model('Session', sessionSchema);
