@@ -56,16 +56,30 @@ export default function Attendance() {
                 attendanceAPI.getAll(selectedCourse, selectedDate).catch(() => ({ data: [] }))
             ]);
 
+            const allStudents = Array.isArray(studentsRes.data) ? studentsRes.data : [];
+
             // FIX: Case-insensitive course name matching.
-            // The backend already returns only students in the teacher's courses,
-            // but we still filter by the specific selected course for the registry view.
             const selectedCourseLower = selectedCourse.toLowerCase().trim();
-            const filtered = studentsRes.data.filter(s => {
+            let filtered = allStudents.filter(s => {
                 const studentCourses = Array.isArray(s.course)
                     ? s.course
                     : [s.course].filter(Boolean);
                 return studentCourses.some(c => c && c.toLowerCase().trim() === selectedCourseLower);
             });
+
+            // SMART FALLBACK: If no students matched the course filter but the backend
+            // returned students (already scoped to this teacher by the server), there's a
+            // course name casing/spelling mismatch. Show all returned students so the
+            // registry isn't blank. Console warning helps diagnose the root data issue.
+            if (filtered.length === 0 && allStudents.length > 0) {
+                console.warn(
+                    `[Attendance] Course name mismatch — selectedCourse="${selectedCourse}" ` +
+                    `didn't match any student course values. Showing all ${allStudents.length} ` +
+                    `teacher-scoped students. Student courses: ` +
+                    JSON.stringify([...new Set(allStudents.flatMap(s => Array.isArray(s.course) ? s.course : [s.course]))])
+                );
+                filtered = allStudents;
+            }
 
             const existingMap = {};
             (attendanceRes.data || []).forEach(r => { existingMap[r.student_id] = r; });

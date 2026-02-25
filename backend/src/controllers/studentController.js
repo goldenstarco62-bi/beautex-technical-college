@@ -50,14 +50,27 @@ export async function getAllStudents(req, res) {
                 const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
                 if (!faculty) return res.json([]);
 
+                // FIX: Case-insensitive instructor name match
                 const facultyCourses = await Course.find({
-                    $or: [{ instructor: faculty.name }, { name: { $in: faculty.courses || [] } }],
+                    $or: [
+                        { instructor: { $regex: new RegExp(`^${faculty.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+                        { name: { $in: faculty.courses || [] } }
+                    ],
                     status: 'Active'
                 }).select('name');
                 const courseNames = facultyCourses.map(c => c.name);
 
-                const students = await Student.find({ course: { $in: courseNames } }).sort({ created_at: -1 });
-                return res.json(students);
+                if (courseNames.length === 0) return res.json([]);
+
+                // FIX: Case-insensitive course name matching in student query
+                // MongoDB $in on an array field is case-sensitive by default;
+                // use regex per course name to handle casing mismatches.
+                const courseRegexes = courseNames.map(n => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+                const students = await Student.find({ course: { $in: courseRegexes } }).sort({ created_at: -1 }).lean();
+                return res.json(students.map(s => ({
+                    ...s,
+                    course: Array.isArray(s.course) ? s.course : [s.course].filter(Boolean)
+                })));
             }
 
             const userEmail = String(email || '').toLowerCase().trim();
@@ -69,8 +82,9 @@ export async function getAllStudents(req, res) {
                 coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
             } catch (e) { }
 
-            const instructorCourses = await query('SELECT name FROM courses WHERE instructor = ?', [faculty.name]);
-            const allTutorCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
+            // FIX: Case-insensitive instructor course lookup
+            const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
+            const allTutorCourses = [...new Set([...coursesList.map(c => c.toLowerCase().trim()), ...instructorCourses.map(c => c.name.toLowerCase().trim())])];
 
             if (allTutorCourses.length === 0) return res.json([]);
 
@@ -80,7 +94,8 @@ export async function getAllStudents(req, res) {
                 try {
                     sCourses = typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean);
                 } catch (e) { sCourses = [s.course].filter(Boolean); }
-                return sCourses.some(sc => allTutorCourses.includes(sc));
+                // FIX: Case-insensitive comparison
+                return sCourses.some(sc => sc && allTutorCourses.includes(sc.toLowerCase().trim()));
             }).map(s => ({
                 ...s,
                 course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
