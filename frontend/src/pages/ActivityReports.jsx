@@ -744,152 +744,230 @@ export default function ActivityReports() {
                         <div className="p-6">
                             {activeTab === 'daily' && (
                                 <form onSubmit={handleSubmitDaily} className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Report Date</label>
-                                            <input
-                                                type="date"
-                                                value={dailyForm.report_date}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, report_date: e.target.value })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                                required
-                                            />
+                                    {/* Section 1: Core Metrics & Attendance */}
+                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                                            <div className="w-8 h-8 bg-maroon/10 rounded-lg flex items-center justify-center">
+                                                <Calendar className="w-4 h-4 text-maroon" />
+                                            </div>
+                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">General & Attendance</h3>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Classes Conducted</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.classes_conducted}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                                required
-                                            />
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Report Date</label>
+                                                <input
+                                                    type="date"
+                                                    value={dailyForm.report_date}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, report_date: e.target.value })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Staff Present</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.staff_present}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Staff Absent</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.staff_absent}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, staff_absent: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Attendance % (Auto)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                value={dailyForm.total_attendance_percentage}
-                                                readOnly
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-100 bg-gray-50 text-maroon font-black outline-none cursor-not-allowed"
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Assessments</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.assessments_conducted}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, assessments_conducted: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Students Present</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.total_students_present}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, total_students_present: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Students Absent</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.total_students_absent}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, total_students_absent: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Late Arrivals</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.late_arrivals}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, late_arrivals: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">New Enrollments</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.new_enrollments}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, new_enrollments: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Staff Present</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.staff_present}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Disciplinary Cases</label>
-                                            <input
-                                                type="number"
-                                                value={dailyForm.disciplinary_cases}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) || 0 })}
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors"
-                                            />
+
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Students Present</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.total_students_present}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, total_students_present: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-green-600"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Students Absent</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.total_students_absent}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, total_students_absent: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-red-600"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Late Arrivals</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.late_arrivals}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, late_arrivals: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-amber-600"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Attendance %</label>
+                                                <div className="w-full px-5 py-3.5 bg-gray-100 rounded-2xl border border-gray-200 font-black text-maroon flex items-center justify-between">
+                                                    <span>{dailyForm.total_attendance_percentage}%</span>
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-maroon animate-pulse" />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Notable Events</label>
-                                        <textarea
-                                            value={dailyForm.notable_events}
-                                            onChange={(e) => setDailyForm({ ...dailyForm, notable_events: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
-                                        />
+                                    {/* Section 2: Academic Operations */}
+                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                                            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                                                <TrendingUp className="w-4 h-4 text-blue-600" />
+                                            </div>
+                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Academic Operations</h3>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Classes Conducted</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.classes_conducted}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Assessments</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.assessments_conducted}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, assessments_conducted: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">New Enrollments</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.new_enrollments}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, new_enrollments: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Achievements</label>
-                                        <textarea
-                                            value={dailyForm.achievements}
-                                            onChange={(e) => setDailyForm({ ...dailyForm, achievements: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
-                                        />
+                                    {/* Section 3: Facilities & Logistics */}
+                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                                            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
+                                                <Zap className="w-4 h-4 text-amber-600" />
+                                            </div>
+                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Facilities & Discipline</h3>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Disciplinary Cases</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.disciplinary_cases}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-red-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Facilities Issues</label>
+                                                <input
+                                                    type="text"
+                                                    value={dailyForm.facilities_issues}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, facilities_issues: e.target.value })}
+                                                    placeholder="Any infrastructure concerns?"
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300"
+                                                />
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Equipment Maintenance</label>
+                                                <input
+                                                    type="text"
+                                                    value={dailyForm.equipment_maintenance}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, equipment_maintenance: e.target.value })}
+                                                    placeholder="Status of laboratory/classroom equipment..."
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Incidents</label>
-                                        <textarea
-                                            value={dailyForm.incidents}
-                                            onChange={(e) => setDailyForm({ ...dailyForm, incidents: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
-                                        />
+                                    {/* Section 4: Qualitative Observations */}
+                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                                            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
+                                                <FileText className="w-4 h-4 text-green-600" />
+                                            </div>
+                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Detailed Observations</h3>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Notable Events</label>
+                                                <textarea
+                                                    value={dailyForm.notable_events}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, notable_events: e.target.value })}
+                                                    placeholder="Workshops, visitors, guest lectures..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 h-28 resize-none shadow-inner"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Achievements</label>
+                                                <textarea
+                                                    value={dailyForm.achievements}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, achievements: e.target.value })}
+                                                    placeholder="Success stories from students or faculty..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 h-28 resize-none shadow-inner"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-500">Incidents</label>
+                                                <textarea
+                                                    value={dailyForm.incidents}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, incidents: e.target.value })}
+                                                    placeholder="Any accidents, security breaches, or emergencies..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-red-100 focus:border-red-500 focus:ring-4 focus:ring-red-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-red-200 h-28 resize-none shadow-inner"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Additional Notes</label>
+                                                <textarea
+                                                    value={dailyForm.additional_notes}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, additional_notes: e.target.value })}
+                                                    placeholder="Miscellaneous observations..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 h-28 resize-none shadow-inner"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Additional Notes</label>
-                                        <textarea
-                                            value={dailyForm.additional_notes}
-                                            onChange={(e) => setDailyForm({ ...dailyForm, additional_notes: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
-                                        />
-                                    </div>
-
-                                    <div className="flex gap-3 justify-end">
+                                    <div className="flex gap-4 justify-end pt-6">
                                         <button
                                             type="button"
                                             onClick={() => setShowModal(false)}
-                                            className="px-6 py-3 rounded-xl border-2 border-gray-200 font-black text-xs uppercase tracking-widest text-gray-600 hover:bg-gray-50 transition-all"
+                                            className="px-8 py-4 rounded-2xl border border-gray-200 font-black text-[10px] uppercase tracking-widest text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all active:scale-95"
                                         >
-                                            Cancel
+                                            Cancel Entry
                                         </button>
                                         <button
                                             type="submit"
-                                            className="px-6 py-3 rounded-xl bg-maroon text-white font-black text-xs uppercase tracking-widest hover:bg-[#600000] transition-all shadow-lg"
+                                            className="px-8 py-4 rounded-2xl bg-maroon text-gold font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon/90 transition-all shadow-xl hover:-translate-y-1 active:scale-95 border border-gold/20"
                                         >
-                                            {modalMode === 'create' ? 'Create' : 'Update'} Report
+                                            {modalMode === 'create' ? 'Seal & Submit' : 'Update Record'}
                                         </button>
                                     </div>
                                 </form>
@@ -1231,12 +1309,12 @@ export default function ActivityReports() {
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Disciplinary Cases</p>
-                                                <p className="text-xl font-black text-red-500">{viewingReport.disciplinary_cases || 0}</p>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Present</p>
+                                                <p className="text-xl font-black text-gray-800">{viewingReport.staff_present || 0}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Attendance</p>
-                                                <p className="text-xl font-black text-gray-800">{viewingReport.staff_present || 0} / {(parseInt(viewingReport.staff_present || 0) + parseInt(viewingReport.staff_absent || 0))}</p>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Absent</p>
+                                                <p className="text-xl font-black text-gray-400">{viewingReport.staff_absent || 0}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -1262,8 +1340,14 @@ export default function ActivityReports() {
                                         )}
                                         {viewingReport.facilities_issues && (
                                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Facilities / Equipment Issues</p>
+                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Facilities Issues</p>
                                                 <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.facilities_issues}</p>
+                                            </div>
+                                        )}
+                                        {viewingReport.equipment_maintenance && (
+                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Equipment Maintenance</p>
+                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.equipment_maintenance}</p>
                                             </div>
                                         )}
                                         {viewingReport.additional_notes && (
@@ -1524,11 +1608,14 @@ export default function ActivityReports() {
                                             <div><p className="text-[10px] text-gray-400 uppercase">Attendance</p><p className="font-bold">{printingReport.total_attendance_percentage}%</p></div>
                                             <div><p className="text-[10px] text-gray-400 uppercase">Students Present</p><p className="font-bold text-green-600">{printingReport.total_students_present}</p></div>
                                             <div><p className="text-[10px] text-gray-400 uppercase">Students Absent</p><p className="font-bold text-red-600">{printingReport.total_students_absent}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">New Enrollments</p><p className="font-bold text-blue-600">{printingReport.new_enrollments || 0}</p></div>
+                                            <div><p className="text-[10px] text-gray-400 uppercase">Staff Presence</p><p className="font-bold">{printingReport.staff_present || 0} / {(parseInt(printingReport.staff_present || 0) + parseInt(printingReport.staff_absent || 0))}</p></div>
                                             <div><p className="text-[10px] text-gray-400 uppercase">Disciplinary</p><p className="font-bold">{printingReport.disciplinary_cases || 0}</p></div>
                                             <div className="col-span-2 border-t pt-4">
-                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Notable Events / Incidents</p>
-                                                <p className="text-sm">{printingReport.incidents || printingReport.notable_events || 'None documented.'}</p>
+                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Activities & Observations</p>
+                                                <p className="text-xs mb-2"><strong>Events:</strong> {printingReport.notable_events || 'None documented.'}</p>
+                                                <p className="text-xs mb-2"><strong>Incidents:</strong> {printingReport.incidents || 'None documented.'}</p>
+                                                <p className="text-xs mb-2"><strong>Facilities:</strong> {printingReport.facilities_issues || 'No issues reported.'}</p>
+                                                <p className="text-xs"><strong>Equipment:</strong> {printingReport.equipment_maintenance || 'No maintenance reported.'}</p>
                                             </div>
                                         </>
                                     ) : activeTab === 'weekly' ? (

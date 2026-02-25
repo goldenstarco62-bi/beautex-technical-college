@@ -392,14 +392,28 @@ async function runPostgresMigrations(database) {
             console.log('✅ user_email column added to audit_logs');
         }
 
-        // Add disciplinary_cases to daily_activity_reports
-        const dailyCols = await database.query(`
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name='daily_activity_reports' AND column_name='disciplinary_cases'
+        // Add missing columns to daily_activity_reports
+        const dailyFields = await database.query(`
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name='daily_activity_reports'
         `);
-        if (dailyCols.rows.length === 0) {
+        const existingDailyCols = dailyFields.rows.map(r => r.column_name);
+
+        if (!existingDailyCols.includes('disciplinary_cases')) {
             await database.query('ALTER TABLE daily_activity_reports ADD COLUMN disciplinary_cases INTEGER DEFAULT 0');
             console.log('✅ disciplinary_cases column added to daily_activity_reports');
+        }
+        if (!existingDailyCols.includes('staff_absent')) {
+            await database.query('ALTER TABLE daily_activity_reports ADD COLUMN staff_absent INTEGER DEFAULT 0');
+            console.log('✅ staff_absent column added to daily_activity_reports');
+        }
+        if (!existingDailyCols.includes('facilities_issues')) {
+            await database.query('ALTER TABLE daily_activity_reports ADD COLUMN facilities_issues TEXT');
+            console.log('✅ facilities_issues column added to daily_activity_reports');
+        }
+        if (!existingDailyCols.includes('equipment_maintenance')) {
+            await database.query('ALTER TABLE daily_activity_reports ADD COLUMN equipment_maintenance TEXT');
+            console.log('✅ equipment_maintenance column added to daily_activity_reports');
         }
 
         // Check for reset_token columns (for forgot-password flow)
@@ -500,11 +514,25 @@ async function runSqliteMigrations(database) {
             console.log('✅ reset_token columns added to SQLite users');
         }
 
-        // Daily activity reports - add disciplinary_cases
+        // Daily activity reports - add missing columns
         const dailyInfo = await database.all("PRAGMA table_info('daily_activity_reports')");
-        if (!dailyInfo.some(col => col.name === 'disciplinary_cases')) {
+        const existingDailySQLite = dailyInfo.map(col => col.name);
+
+        if (!existingDailySQLite.includes('disciplinary_cases')) {
             await database.run('ALTER TABLE daily_activity_reports ADD COLUMN disciplinary_cases INTEGER DEFAULT 0');
             console.log('✅ disciplinary_cases column added to daily_activity_reports');
+        }
+        if (!existingDailySQLite.includes('staff_absent')) {
+            await database.run('ALTER TABLE daily_activity_reports ADD COLUMN staff_absent INTEGER DEFAULT 0');
+            console.log('✅ staff_absent column added to daily_activity_reports');
+        }
+        if (!existingDailySQLite.includes('facilities_issues')) {
+            await database.run('ALTER TABLE daily_activity_reports ADD COLUMN facilities_issues TEXT');
+            console.log('✅ facilities_issues column added to daily_activity_reports');
+        }
+        if (!existingDailySQLite.includes('equipment_maintenance')) {
+            await database.run('ALTER TABLE daily_activity_reports ADD COLUMN equipment_maintenance TEXT');
+            console.log('✅ equipment_maintenance column added to daily_activity_reports');
         }
 
         // course_materials — add file metadata columns (file_name, file_size, mime_type)

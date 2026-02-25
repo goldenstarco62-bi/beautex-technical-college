@@ -76,7 +76,7 @@ export const getStudentReports = async (req, res) => {
 export const createReport = async (req, res) => {
     const reportData = req.body;
     const trainer_email = req.user.email;
-    const trainer_name = req.user.name || (trainer_email ? trainer_email.split('@')[0] : 'Trainer');
+    const trainer_name = reportData.trainer_name || req.user.name || (trainer_email ? trainer_email.split('@')[0] : 'Trainer');
 
     const {
         student_id, student_name, registration_number, course_unit, reporting_period,
@@ -186,7 +186,7 @@ export const updateReport = async (req, res) => {
             return res.status(403).json({ error: 'Forbidden: You can only edit your own reports' });
         }
 
-        const fields = Object.keys(reportData).filter(k => !['id', 'created_at', 'updated_at', 'trainer_email', 'trainer_name'].includes(k));
+        const fields = Object.keys(reportData).filter(k => !['id', 'created_at', 'updated_at', 'trainer_email'].includes(k));
         if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
         const setClause = fields.map(f => `${f} = ?`).join(', ');

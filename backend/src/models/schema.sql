@@ -191,6 +191,7 @@ CREATE TABLE IF NOT EXISTS daily_activity_reports (
   -- Staff & Faculty
   staff_present INTEGER DEFAULT 0,
   staff_absent INTEGER DEFAULT 0,
+  disciplinary_cases INTEGER DEFAULT 0,
   
   -- Facilities & Resources
   facilities_issues TEXT,

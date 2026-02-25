@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { reportsAPI } from '../services/api';
+import { reportsAPI, coursesAPI, facultyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
     FileText, Calendar, BookOpen, CheckCircle2,
@@ -9,11 +9,7 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-const ALL_COURSES = [
-    'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Computer Packages',
-    'Website Development', 'Cyber Security', 'Makeup', 'Sista Locks',
-    'Braiding, Plaiting & Crotcheting', 'Weaving & Wig Installation', 'Nail Technology'
-];
+// dynamic courses will be used
 
 const EMPTY_FORM = {
     course_name: '',
@@ -31,18 +27,81 @@ const EMPTY_FORM = {
     discipline_issues: '',
     trainer_observations: '',
     progress_summary: '',
-    recommendation: 'Proceed'
+    recommendation: 'Proceed',
+    trainer_name: ''
 };
 
 export default function AcademicReports() {
     const { user } = useAuth();
     const [reports, setReports] = useState([]);
+    const [courses, setCourses] = useState([]);
+    const [trainers, setTrainers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingReport, setEditingReport] = useState(null);
     const [viewingReport, setViewingReport] = useState(null);
     const [printingReport, setPrintingReport] = useState(null);
     const [formData, setFormData] = useState(EMPTY_FORM);
+    const [theoryRows, setTheoryRows] = useState([{ topic: '', content: '' }]);
+    const [practicalRows, setPracticalRows] = useState([{ task: '', equipment: '' }]);
+
+    const renderTheoryTopics = (data) => {
+        try {
+            const rows = JSON.parse(data);
+            if (!Array.isArray(rows)) throw new Error();
+            return (
+                <div className="overflow-x-auto rounded-2xl border border-maroon/5 bg-maroon/[0.02]">
+                    <table className="w-full text-xs">
+                        <thead>
+                            <tr className="bg-maroon/5 text-[9px] font-black text-maroon uppercase tracking-widest text-left">
+                                <th className="px-4 py-2">Topic</th>
+                                <th className="px-4 py-2">Content Depth</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-maroon/5">
+                            {rows.map((r, i) => (
+                                <tr key={i}>
+                                    <td className="px-4 py-2 font-bold text-maroon">{r.topic}</td>
+                                    <td className="px-4 py-2 text-gray-600">{r.content}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        } catch (e) {
+            return <p className="text-sm text-gray-600 bg-gray-100 p-4 rounded-2xl border border-gray-200 italic">{data || 'No theory topics recorded.'}</p>;
+        }
+    };
+
+    const renderPracticalTasks = (data) => {
+        try {
+            const rows = JSON.parse(data);
+            if (!Array.isArray(rows)) throw new Error();
+            return (
+                <div className="overflow-x-auto rounded-2xl border border-gold/10 bg-gold/5">
+                    <table className="w-full text-xs">
+                        <thead>
+                            <tr className="bg-gold/10 text-[9px] font-black text-maroon uppercase tracking-widest text-left">
+                                <th className="px-4 py-2">Practical Task</th>
+                                <th className="px-4 py-2">Equipment Used</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gold/10">
+                            {rows.map((r, i) => (
+                                <tr key={i}>
+                                    <td className="px-4 py-2 font-bold text-maroon">{r.task}</td>
+                                    <td className="px-4 py-2 text-gray-600">{r.equipment}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        } catch (e) {
+            return <p className="text-sm text-gray-600 bg-gray-100 p-4 rounded-2xl border border-gray-200 italic">{data || 'No practical tasks recorded.'}</p>;
+        }
+    };
 
     const fetchReports = async (silent = false) => {
         try {
@@ -58,7 +117,29 @@ export default function AcademicReports() {
         }
     };
 
-    useEffect(() => { fetchReports(); }, []);
+    const fetchCourses = async () => {
+        try {
+            const { data } = await coursesAPI.getAll();
+            setCourses(data);
+        } catch (error) {
+            console.error('Error fetching courses:', error);
+        }
+    };
+
+    const fetchTrainers = async () => {
+        try {
+            const { data } = await facultyAPI.getAll();
+            setTrainers(data || []);
+        } catch (error) {
+            console.error('Error fetching trainers:', error);
+        }
+    };
+
+    useEffect(() => {
+        fetchReports();
+        fetchCourses();
+        fetchTrainers();
+    }, []);
 
     const handlePrint = (report) => {
         setPrintingReport(report);
@@ -101,6 +182,8 @@ export default function AcademicReports() {
         e.preventDefault();
         const reportPayload = {
             ...formData,
+            theory_topics: JSON.stringify(theoryRows),
+            practical_tasks: JSON.stringify(practicalRows),
             // Map to backend fields — course_name is the "class" identifier
             student_name: formData.course_name,          // reuse student_name column for course/class
             course_unit: formData.course_name,
@@ -118,7 +201,9 @@ export default function AcademicReports() {
             setShowModal(false);
             setEditingReport(null);
             setFormData(EMPTY_FORM);
-            fetchReports(true);
+            fetchReports(true); // Changed 'silent' to 'true' as it's a boolean
+            setTheoryRows([{ topic: '', content: '' }]);
+            setPracticalRows([{ task: '', equipment: '' }]);
         } catch (error) {
             alert(error.response?.data?.error || 'Failed to submit report');
         }
@@ -142,8 +227,24 @@ export default function AcademicReports() {
             discipline_issues: report.discipline_issues,
             trainer_observations: report.trainer_observations,
             progress_summary: report.progress_summary,
-            recommendation: report.recommendation
+            recommendation: report.recommendation,
+            trainer_name: report.trainer_name || ''
         });
+
+        try {
+            const tRows = JSON.parse(report.theory_topics);
+            setTheoryRows(Array.isArray(tRows) ? tRows : [{ topic: '', content: '' }]);
+        } catch (e) {
+            setTheoryRows([{ topic: report.theory_topics || '', content: '' }]);
+        }
+
+        try {
+            const pRows = JSON.parse(report.practical_tasks);
+            setPracticalRows(Array.isArray(pRows) ? pRows : [{ task: '', equipment: '' }]);
+        } catch (e) {
+            setPracticalRows([{ task: report.practical_tasks || '', equipment: report.equipment_used || '' }]);
+        }
+
         setShowModal(true);
     };
 
@@ -159,7 +260,12 @@ export default function AcademicReports() {
 
     const openNew = () => {
         setEditingReport(null);
-        setFormData(EMPTY_FORM);
+        setFormData({
+            ...EMPTY_FORM,
+            trainer_name: user?.name || ''
+        });
+        setTheoryRows([{ topic: '', content: '' }]);
+        setPracticalRows([{ task: '', equipment: '' }]);
         setShowModal(true);
     };
 
@@ -312,30 +418,44 @@ export default function AcademicReports() {
                                 </button>
                             </div>
 
-                            <form onSubmit={handleSubmit} className="space-y-6 overflow-y-auto pr-2 flex-1">
+                            <form onSubmit={handleSubmit} className="space-y-8 overflow-y-auto pr-2 flex-1">
                                 {/* Course / Class */}
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Course / Class</label>
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Module / Course (Required)</label>
                                     <select
                                         value={formData.course_name}
                                         onChange={(e) => setFormData({ ...formData, course_name: e.target.value })}
                                         className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
                                         required
                                     >
-                                        <option value="">Select Course / Class</option>
-                                        {ALL_COURSES.map(c => <option key={c} value={c}>{c}</option>)}
+                                        <option value="">Select Module/Course</option>
+                                        {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    </select>
+                                </div>
+
+                                {/* Lead Trainer Selection */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Lead Trainer Name</label>
+                                    <select
+                                        value={formData.trainer_name}
+                                        onChange={(e) => setFormData({ ...formData, trainer_name: e.target.value })}
+                                        className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                        required
+                                    >
+                                        <option value="">Select Trainer</option>
+                                        {trainers.map(t => <option key={t.id || t._id} value={t.name}>{t.name}</option>)}
                                     </select>
                                 </div>
 
                                 {/* Period + Lessons */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Academic Week</label>
                                         <input
                                             type="text"
                                             value={formData.reporting_period}
                                             onChange={(e) => setFormData({ ...formData, reporting_period: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10"
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 text-xs"
                                             placeholder="e.g. Week 5"
                                             required
                                         />
@@ -346,7 +466,7 @@ export default function AcademicReports() {
                                             type="date"
                                             value={formData.report_date}
                                             onChange={(e) => setFormData({ ...formData, report_date: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs"
                                             required
                                         />
                                     </div>
@@ -354,62 +474,129 @@ export default function AcademicReports() {
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Total Lessons</label>
                                         <input type="number" min="1" value={formData.total_lessons}
                                             onChange={(e) => setFormData({ ...formData, total_lessons: parseInt(e.target.value) })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10" />
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs" />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Lessons Attended</label>
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Attended</label>
                                         <input type="number" min="0" max={formData.total_lessons} value={formData.attended_lessons}
                                             onChange={(e) => setFormData({ ...formData, attended_lessons: parseInt(e.target.value) })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Attendance % (Auto)</label>
-                                        <div className="w-full px-5 py-4 bg-maroon/5 border border-maroon/10 rounded-2xl text-maroon font-black flex items-center justify-between">
-                                            <span>{formData.total_lessons > 0 ? ((formData.attended_lessons / formData.total_lessons) * 100).toFixed(1) + '%' : '—'}</span>
-                                            <ShieldCheck className="w-4 h-4 text-maroon/20" />
-                                        </div>
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs" />
                                     </div>
                                 </div>
 
-                                {/* Theory */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Theory Topics Covered</label>
-                                        <input type="text" placeholder="e.g. Hair anatomy, Color theory" value={formData.theory_topics}
-                                            onChange={(e) => setFormData({ ...formData, theory_topics: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10" />
+                                {/* Theory Coverage Section */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center bg-maroon/5 p-4 rounded-2xl">
+                                        <div>
+                                            <p className="text-[10px] font-black text-maroon uppercase tracking-widest">Theory Coverage</p>
+                                            <p className="text-[8px] text-maroon/40 font-bold uppercase mt-0.5">List curriculum topics & depths</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTheoryRows([...theoryRows, { topic: '', content: '' }])}
+                                            className="bg-maroon text-gold px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest hover:scale-105 transition-all shadow-sm"
+                                        >
+                                            + Add Topic
+                                        </button>
                                     </div>
+                                    <div className="grid gap-3">
+                                        {theoryRows.map((row, idx) => (
+                                            <div key={idx} className="flex gap-3 group animate-in slide-in-from-right-2">
+                                                <input
+                                                    placeholder="Topic"
+                                                    value={row.topic}
+                                                    onChange={(e) => {
+                                                        const newRows = [...theoryRows];
+                                                        newRows[idx].topic = e.target.value;
+                                                        setTheoryRows(newRows);
+                                                    }}
+                                                    className="w-1/3 bg-gray-50 px-4 py-3 rounded-xl text-xs font-bold text-maroon border border-maroon/5 outline-none focus:border-maroon/20"
+                                                />
+                                                <input
+                                                    placeholder="Content details..."
+                                                    value={row.content}
+                                                    onChange={(e) => {
+                                                        const newRows = [...theoryRows];
+                                                        newRows[idx].content = e.target.value;
+                                                        setTheoryRows(newRows);
+                                                    }}
+                                                    className="flex-1 bg-gray-50 px-4 py-3 rounded-xl text-xs font-bold text-maroon border border-maroon/5 outline-none focus:border-maroon/20"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => theoryRows.length > 1 ? setTheoryRows(theoryRows.filter((_, i) => i !== idx)) : setTheoryRows([{ topic: '', content: '' }])}
+                                                    className="p-3 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Practical Assessment Section */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center bg-gold/5 p-4 rounded-2xl">
+                                        <div>
+                                            <p className="text-[10px] font-black text-maroon uppercase tracking-widest">Practical Tasks</p>
+                                            <p className="text-[8px] text-maroon/40 font-bold uppercase mt-0.5">Hands-on activities & equipment</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPracticalRows([...practicalRows, { task: '', equipment: '' }])}
+                                            className="bg-maroon text-gold px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest hover:scale-105 transition-all shadow-sm"
+                                        >
+                                            + Add Task
+                                        </button>
+                                    </div>
+                                    <div className="grid gap-3">
+                                        {practicalRows.map((row, idx) => (
+                                            <div key={idx} className="flex gap-3 group animate-in slide-in-from-right-2">
+                                                <input
+                                                    placeholder="Practical Task"
+                                                    value={row.task}
+                                                    onChange={(e) => {
+                                                        const newRows = [...practicalRows];
+                                                        newRows[idx].task = e.target.value;
+                                                        setPracticalRows(newRows);
+                                                    }}
+                                                    className="w-1/3 bg-gray-50 px-4 py-3 rounded-xl text-xs font-bold text-maroon border border-maroon/5 outline-none focus:border-maroon/20"
+                                                />
+                                                <input
+                                                    placeholder="Equipment used..."
+                                                    value={row.equipment}
+                                                    onChange={(e) => {
+                                                        const newRows = [...practicalRows];
+                                                        newRows[idx].equipment = e.target.value;
+                                                        setPracticalRows(newRows);
+                                                    }}
+                                                    className="flex-1 bg-gray-50 px-4 py-3 rounded-xl text-xs font-bold text-maroon border border-maroon/5 outline-none focus:border-maroon/20"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => practicalRows.length > 1 ? setPracticalRows(practicalRows.filter((_, i) => i !== idx)) : setPracticalRows([{ task: '', equipment: '' }])}
+                                                    className="p-3 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Metrics */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-maroon/5">
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Theory Score (Class Avg)</label>
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Theory Score (%)</label>
                                         <input type="number" min="0" max="100" value={formData.theory_score}
                                             onChange={(e) => setFormData({ ...formData, theory_score: parseFloat(e.target.value) })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10" />
-                                    </div>
-                                </div>
-
-                                {/* Practical */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Practical Tasks Done</label>
-                                        <input type="text" placeholder="e.g. Blow-dry, Braiding demo" value={formData.practical_tasks}
-                                            onChange={(e) => setFormData({ ...formData, practical_tasks: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10" />
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs" />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Equipment Used</label>
-                                        <input type="text" placeholder="e.g. Curling iron, Mannequin" value={formData.equipment_used}
-                                            onChange={(e) => setFormData({ ...formData, equipment_used: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10" />
-                                    </div>
-                                </div>
-
-                                {/* Skill + Safety + Discipline */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                                    <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Overall Skill Level</label>
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Skill Level</label>
                                         <select value={formData.skill_level}
                                             onChange={(e) => setFormData({ ...formData, skill_level: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10">
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs">
                                             {['Excellent', 'Good', 'Average', 'Needs Improvement'].map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
                                     </div>
@@ -417,41 +604,43 @@ export default function AcademicReports() {
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Safety Compliance</label>
                                         <select value={formData.safety_compliance}
                                             onChange={(e) => setFormData({ ...formData, safety_compliance: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10">
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs">
                                             <option value="Yes">Yes — Compliant</option>
                                             <option value="No">No — Issues Noted</option>
                                         </select>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Recommendation</label>
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Final Verdict</label>
                                         <select value={formData.recommendation}
                                             onChange={(e) => setFormData({ ...formData, recommendation: e.target.value })}
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10">
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 text-xs">
                                             <option value="Proceed">Proceed</option>
-                                            <option value="Improve">Needs Improvement</option>
+                                            <option value="Improve">Improve</option>
                                             <option value="Repeat">Repeat Module</option>
                                         </select>
                                     </div>
                                 </div>
 
-                                {/* Observations + Summary */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Trainer Observations</label>
-                                    <textarea value={formData.trainer_observations}
-                                        onChange={(e) => setFormData({ ...formData, trainer_observations: e.target.value })}
-                                        placeholder="General observations about the class performance, engagement, challenges..."
-                                        className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 h-28 resize-none" />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Progress Summary</label>
-                                    <textarea value={formData.progress_summary}
-                                        onChange={(e) => setFormData({ ...formData, progress_summary: e.target.value })}
-                                        placeholder="Summary of overall class progress this period..."
-                                        className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 h-24 resize-none" />
+                                {/* Observations */}
+                                <div className="space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Trainer Observations</label>
+                                        <textarea value={formData.trainer_observations}
+                                            onChange={(e) => setFormData({ ...formData, trainer_observations: e.target.value })}
+                                            placeholder="General performance and engagement..."
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 h-24 resize-none text-xs" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Progress Summary</label>
+                                        <textarea value={formData.progress_summary}
+                                            onChange={(e) => setFormData({ ...formData, progress_summary: e.target.value })}
+                                            placeholder="Summary of progress for this period..."
+                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 h-20 resize-none text-xs" />
+                                    </div>
                                 </div>
 
-                                <button type="submit" className="w-full bg-maroon text-gold py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:bg-maroon/90 shadow-xl transition-all border border-gold/20">
-                                    {editingReport ? 'Update Report' : 'Submit Class Report'}
+                                <button type="submit" className="w-full bg-maroon text-gold py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] hover:bg-maroon/90 shadow-2xl transition-all border border-gold/20 flex items-center justify-center gap-3">
+                                    <ClipboardCheck className="w-4 h-4" /> {editingReport ? 'Finalize Updates' : 'Commit Academic Report to Portal'}
                                 </button>
                             </form>
                         </div>
@@ -516,6 +705,14 @@ export default function AcademicReports() {
                             </div>
 
                             <div className="pt-6 border-t border-maroon/5 space-y-6 text-left">
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Theory Coverage</p>
+                                    {renderTheoryTopics(viewingReport.theory_topics)}
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Practical Tasks</p>
+                                    {renderPracticalTasks(viewingReport.practical_tasks)}
+                                </div>
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trainer Observations</p>
                                     <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-gray-100">{viewingReport.trainer_observations || 'No observations recorded.'}</p>
@@ -584,6 +781,14 @@ export default function AcademicReports() {
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Theory Score</p><p className="font-bold text-maroon">{printingReport.theory_score}/100</p></div>
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Skill Level</p><p className="font-bold text-maroon">{printingReport.skill_level}</p></div>
                                     <div><p className="text-xs font-black text-gray-400 uppercase">Recommendation</p><p className="font-bold text-maroon">{printingReport.recommendation}</p></div>
+                                </div>
+                                <div className="mt-6">
+                                    <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-2">Theory Coverage</p>
+                                    {renderTheoryTopics(printingReport.theory_topics)}
+                                </div>
+                                <div className="mt-4">
+                                    <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-2">Practical Tasks</p>
+                                    {renderPracticalTasks(printingReport.practical_tasks)}
                                 </div>
                                 {printingReport.trainer_observations && (
                                     <div className="mt-4 p-4 border border-gray-200 rounded-xl">

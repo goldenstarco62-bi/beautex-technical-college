@@ -22,6 +22,10 @@ export default function TrainerReports() {
         course_id: ''
     });
 
+    const [recordOfWorkRows, setRecordOfWorkRows] = useState([
+        { week: '', day: '', topic: '', content: '', theory_hours: '', practical_hours: '', remarks: '' }
+    ]);
+
     const isTrainer = user?.role === 'teacher';
     const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
@@ -46,6 +50,10 @@ export default function TrainerReports() {
         try {
             const { data } = await coursesAPI.getAll();
             setCourses(data);
+            // If it's a trainer and there's exactly one course, pre-select it
+            if (isTrainer && data.length === 1) {
+                setFormData(prev => ({ ...prev, course_id: data[0].name }));
+            }
         } catch (error) {
             console.error('Error fetching courses:', error);
         }
@@ -54,7 +62,11 @@ export default function TrainerReports() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await trainerReportsAPI.create(formData);
+            const payload = {
+                ...formData,
+                record_of_work: JSON.stringify(recordOfWorkRows)
+            };
+            await trainerReportsAPI.create(payload);
             setShowModal(false);
             fetchReports();
             setFormData({
@@ -64,6 +76,9 @@ export default function TrainerReports() {
                 record_of_work: '',
                 course_id: ''
             });
+            setRecordOfWorkRows([
+                { week: '', day: '', topic: '', content: '', theory_hours: '', practical_hours: '', remarks: '' }
+            ]);
         } catch (error) {
             console.error('Error submitting report:', error);
             alert('Failed to submit report');
@@ -123,6 +138,49 @@ export default function TrainerReports() {
         r.trainer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.daily_report?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const renderRecordOfWork = (record, isPrint = false) => {
+        try {
+            const rows = JSON.parse(record);
+            if (!Array.isArray(rows)) throw new Error('Not an array');
+            return (
+                <div className={`overflow-x-auto rounded-3xl border border-maroon/10 ${isPrint ? 'bg-white' : 'bg-white/50'}`}>
+                    <table className="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                            <tr className="bg-maroon/5 text-[9px] font-black text-maroon uppercase tracking-widest">
+                                <th className="px-4 py-3 border-b border-maroon/10">Week</th>
+                                <th className="px-4 py-3 border-b border-maroon/10">Day</th>
+                                <th className="px-4 py-3 border-b border-maroon/10">Topic covered</th>
+                                <th className="px-4 py-3 border-b border-maroon/10">Specific content</th>
+                                <th className="px-4 py-3 border-b border-maroon/10">Theory</th>
+                                <th className="px-4 py-3 border-b border-maroon/10">Prac</th>
+                                <th className="px-4 py-3 border-b border-maroon/10">Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-maroon/5">
+                            {rows.map((row, idx) => (
+                                <tr key={idx} className="text-[11px] text-gray-700">
+                                    <td className="px-4 py-3 font-bold">{row.week}</td>
+                                    <td className="px-4 py-3">{row.day}</td>
+                                    <td className="px-4 py-3 font-black text-maroon">{row.topic}</td>
+                                    <td className="px-4 py-3 whitespace-pre-wrap leading-relaxed">{row.content}</td>
+                                    <td className="px-4 py-3 font-black text-center">{row.theory_hours || 0}h</td>
+                                    <td className="px-4 py-3 font-black text-center">{row.practical_hours || 0}h</td>
+                                    <td className="px-4 py-3 italic text-gray-400 leading-relaxed">{row.remarks}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        } catch (e) {
+            return (
+                <p className={`text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap italic ${isPrint ? '' : 'bg-gold/5 p-6 rounded-3xl border border-gold/10'}`}>
+                    {record}
+                </p>
+            );
+        }
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -238,14 +296,14 @@ export default function TrainerReports() {
                                             {report.daily_report}
                                         </p>
                                     </div>
-                                    <div className="bg-gold/5 rounded-3xl p-6 border border-gold/20">
-                                        <div className="flex items-center gap-2 mb-4">
+                                    <div className="bg-gold/5 rounded-3xl p-6 border border-gold/20 flex flex-col">
+                                        <div className="flex items-center gap-2 mb-4 shrink-0">
                                             <LayoutList className="w-4 h-4 text-maroon opacity-40" />
                                             <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Academic Record of Work</h3>
                                         </div>
-                                        <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap italic">
-                                            {report.record_of_work}
-                                        </p>
+                                        <div className="flex-1 overflow-auto max-h-[300px] custom-scrollbar">
+                                            {renderRecordOfWork(report.record_of_work)}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -314,30 +372,165 @@ export default function TrainerReports() {
                                 />
                             </div>
 
-                            <div className="space-y-2 text-left">
-                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-1">Record of Work</label>
-                                <textarea
-                                    required
-                                    rows="4"
-                                    value={formData.record_of_work}
-                                    onChange={(e) => setFormData({ ...formData, record_of_work: e.target.value })}
-                                    placeholder="Detail curriculum coverage, topics taught, and academic progress..."
-                                    className="w-full px-6 py-4 bg-gold/5 border border-gold/10 rounded-3xl text-sm font-medium text-gray-700 outline-none focus:ring-4 focus:ring-gold/5 transition-all min-h-[120px] shadow-inner"
-                                />
+                            <div className="space-y-4 text-left">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-1">Record of Work</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRecordOfWorkRows([...recordOfWorkRows, { week: '', day: '', topic: '', content: '', theory_hours: '', practical_hours: '', remarks: '' }])}
+                                        className="text-[10px] font-black text-maroon hover:text-white hover:bg-maroon uppercase tracking-widest bg-maroon/5 px-3 py-1 rounded-lg transition-all"
+                                    >
+                                        + Add Row
+                                    </button>
+                                </div>
+
+                                <div className="overflow-x-auto rounded-3xl border border-gold/10 bg-gold/5">
+                                    <table className="w-full text-xs min-w-[800px]">
+                                        <thead>
+                                            <tr className="bg-maroon/5 text-[8px] font-black text-maroon uppercase tracking-widest">
+                                                <th className="px-4 py-3 text-left">Week</th>
+                                                <th className="px-4 py-3 text-left">Day</th>
+                                                <th className="px-4 py-3 text-left">Topic covered</th>
+                                                <th className="px-4 py-3 text-left">Specific content</th>
+                                                <th className="px-4 py-3 text-left">Theory (Hrs)</th>
+                                                <th className="px-4 py-3 text-left">Practical (Hrs)</th>
+                                                <th className="px-4 py-3 text-left">Remarks</th>
+                                                <th className="px-4 py-3 text-center"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-maroon/5">
+                                            {recordOfWorkRows.map((row, index) => (
+                                                <tr key={index}>
+                                                    <td className="p-1">
+                                                        <input
+                                                            value={row.week}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].week = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Week"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input
+                                                            value={row.day}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].day = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Day"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input
+                                                            value={row.topic}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].topic = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Topic"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input
+                                                            value={row.content}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].content = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Content"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input
+                                                            type="number"
+                                                            value={row.theory_hours}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].theory_hours = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Theory Hrs"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input
+                                                            type="number"
+                                                            value={row.practical_hours}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].practical_hours = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Prac Hrs"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1">
+                                                        <input
+                                                            value={row.remarks}
+                                                            onChange={(e) => {
+                                                                const newRows = [...recordOfWorkRows];
+                                                                newRows[index].remarks = e.target.value;
+                                                                setRecordOfWorkRows(newRows);
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-2 text-xs font-bold outline-none"
+                                                            placeholder="Remarks"
+                                                        />
+                                                    </td>
+                                                    <td className="p-1 text-center">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (recordOfWorkRows.length > 1) {
+                                                                    setRecordOfWorkRows(recordOfWorkRows.filter((_, i) => i !== index));
+                                                                } else {
+                                                                    setRecordOfWorkRows([{ week: '', day: '', topic: '', content: '', theory_hours: '', practical_hours: '', remarks: '' }]);
+                                                                }
+                                                            }}
+                                                            className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-xl transition-all"
+                                                            title={recordOfWorkRows.length > 1 ? "Delete Row" : "Clear Row"}
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
 
                             <div className="space-y-2 text-left">
-                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-1">Associated Program (Optional)</label>
+                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-1">Module / Course (Required)</label>
                                 <select
+                                    required
                                     value={formData.course_id}
                                     onChange={(e) => setFormData({ ...formData, course_id: e.target.value })}
                                     className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold text-maroon outline-none focus:ring-4 focus:ring-maroon/5 transition-all"
                                 >
-                                    <option value="">N/A - General Operations</option>
+                                    <option value="">Select a Registered Module/Course</option>
+                                    {isTrainer && courses.length === 0 && (
+                                        <option disabled value="">No courses assigned to your profile</option>
+                                    )}
                                     {courses.map(course => (
                                         <option key={course.id} value={course.name}>{course.name}</option>
                                     ))}
                                 </select>
+                                {isTrainer && courses.length === 0 && (
+                                    <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider ml-1 mt-1">
+                                        Warning: No courses found assigned to your trainer profile. Please contact Admin.
+                                    </p>
+                                )}
                             </div>
 
                             <button
@@ -402,8 +595,8 @@ export default function TrainerReports() {
                                     <p className="text-sm leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 whitespace-pre-wrap">{viewingReport.daily_report}</p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Record of Work</p>
-                                    <p className="text-sm leading-relaxed bg-gold/5 p-6 rounded-[2rem] border border-gold/10 italic whitespace-pre-wrap">{viewingReport.record_of_work}</p>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Record of Work</p>
+                                    {renderRecordOfWork(viewingReport.record_of_work)}
                                 </div>
                             </div>
                         </div>
@@ -480,9 +673,7 @@ export default function TrainerReports() {
                                             <LayoutList className="w-4 h-4 text-maroon opacity-40" />
                                             <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Academic Record of Work</h3>
                                         </div>
-                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap italic">
-                                            {printingReport.record_of_work}
-                                        </p>
+                                        {renderRecordOfWork(printingReport.record_of_work, true)}
                                     </div>
                                 </div>
                             </div>
