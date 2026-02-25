@@ -89,8 +89,12 @@ export async function getMaterials(req, res) {
         }
 
         // ── SQLite / PostgreSQL path ──────────────────────────────────────────
-        let sql = `SELECT m.id, m.course_id, m.title, m.description, m.uploaded_by, m.file_name, m.file_size, m.mime_type, m.created_at, c.name as course_name FROM course_materials m LEFT JOIN courses c ON m.course_id = c.id`;
+        // FIX: Build two query variants — full (with optional columns) and minimal (guaranteed columns).
+        // If the production DB doesn't have file_name/file_size/mime_type yet, the minimal query is used.
+        const fullSelectCols = `m.id, m.course_id, m.title, m.description, m.uploaded_by, m.file_name, m.file_size, m.mime_type, m.created_at, c.name as course_name`;
+        const minimalSelectCols = `m.id, m.course_id, m.title, m.description, m.uploaded_by, m.created_at, c.name as course_name`;
         // NOTE: file_url deliberately excluded from SELECT to avoid sending massive base64 in list
+        let sql = `SELECT ${fullSelectCols} FROM course_materials m LEFT JOIN courses c ON m.course_id = c.id`;
         let params = [];
         const conditions = [];
 
@@ -158,7 +162,26 @@ export async function getMaterials(req, res) {
         }
         sql += ` ORDER BY m.created_at DESC`;
 
-        const materials = await query(sql, params);
+        let materials;
+        try {
+            materials = await query(sql, params);
+        } catch (queryErr) {
+            // If the full query fails due to missing optional columns, retry with minimal columns
+            const missingCol = queryErr.message && (
+                queryErr.message.includes('file_name') ||
+                queryErr.message.includes('file_size') ||
+                queryErr.message.includes('mime_type') ||
+                queryErr.message.includes('does not exist') ||
+                queryErr.message.includes('no such column')
+            );
+            if (missingCol) {
+                console.warn('⚠️ getMaterials: schema drift — falling back to minimal SELECT. Run the migration to add file_name/file_size/mime_type columns.');
+                const fallbackSql = sql.replace(fullSelectCols, minimalSelectCols);
+                materials = await query(fallbackSql, params);
+            } else {
+                throw queryErr;
+            }
+        }
 
         // Attach download_url to each record for the frontend to use
         const enriched = materials.map(m => ({
@@ -285,11 +308,35 @@ export async function uploadMaterial(req, res) {
         }
 
         // SQL: store extra metadata columns
-        const result = await run(
-            `INSERT INTO course_materials (course_id, title, description, file_url, file_name, file_size, mime_type, uploaded_by) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [course_id, title, description || '', file_url, file_name, file_size, mime_type, uploaded_by]
-        );
+        // FIX: Try the full INSERT first; if columns like file_name/file_size/mime_type
+        // don't exist yet in the production DB (schema drift), fall back to core columns only.
+        let result;
+        try {
+            result = await run(
+                `INSERT INTO course_materials (course_id, title, description, file_url, file_name, file_size, mime_type, uploaded_by) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [course_id, title, description || '', file_url, file_name, file_size, mime_type, uploaded_by]
+            );
+        } catch (insertErr) {
+            // If the error is about a missing column, retry with the minimal column set
+            const missingColumn = insertErr.message && (
+                insertErr.message.includes('file_name') ||
+                insertErr.message.includes('file_size') ||
+                insertErr.message.includes('mime_type') ||
+                insertErr.message.includes('does not exist') ||
+                insertErr.message.includes('no such column')
+            );
+            if (missingColumn) {
+                console.warn('⚠️ course_materials schema drift detected — falling back to minimal INSERT. Run the migration SQL to add file_name/file_size/mime_type columns.');
+                result = await run(
+                    `INSERT INTO course_materials (course_id, title, description, file_url, uploaded_by) 
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [course_id, title, description || '', file_url, uploaded_by]
+                );
+            } else {
+                throw insertErr;
+            }
+        }
 
         res.status(201).json({
             message: 'Material uploaded successfully',
