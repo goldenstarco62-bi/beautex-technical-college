@@ -1,8 +1,6 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 
-async function isMongo() {
-    return !!process.env.MONGODB_URI;
-}
+const isMongo = async () => !!process.env.MONGODB_URI;
 
 export async function getAllGrades(req, res) {
     try {

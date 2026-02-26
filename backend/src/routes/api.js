@@ -179,12 +179,21 @@ router.get('/activity-reports/auto-capture', authenticateToken, authorizeRoles('
 router.get('/stats/dashboard', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), statsController.getDashboardStats);
 
 // Finance Routes
+router.post('/finance/sync', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.syncAllFees);
 router.get('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFeeStructures);
 router.post('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), feeValidation, financeController.createFeeStructure);
+router.put('/finance/fees/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.updateFeeStructure);
+router.delete('/finance/fees/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.deleteFeeStructure);
 router.get('/finance/student-fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getAllStudentFees);
 router.get('/finance/student-fees/:studentId', authenticateToken, financeController.getStudentFees);
+router.put('/finance/student-fees/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.updateStudentFee);
+
 router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), paymentValidation, financeController.recordPayment);
 router.get('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getPayments);
+router.put('/finance/payments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.updatePayment);
+router.delete('/finance/payments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.deletePayment);
+
+router.post('/finance/mpesa-callback', financeController.mpesaCallback);
 router.get('/finance/analytics', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFinanceAnalytics);
 
 // Academic Master Routes

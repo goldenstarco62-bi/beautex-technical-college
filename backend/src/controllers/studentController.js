@@ -15,10 +15,7 @@ function generatePassword(length = 12) {
 }
 
 // Helper to check if using MongoDB
-async function isMongo() {
-    const db = await getDb();
-    return db.constructor.name === 'NativeConnection';
-}
+const isMongo = async () => !!process.env.MONGODB_URI;
 
 export async function getAllStudents(req, res) {
     try {

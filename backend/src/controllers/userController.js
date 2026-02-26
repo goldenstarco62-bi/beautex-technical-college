@@ -3,10 +3,7 @@ import crypto from 'crypto';
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { sendAdminResetPasswordEmail } from '../services/emailService.js';
 
-async function isMongo() {
-    const db = await getDb();
-    return db.constructor.name === 'NativeConnection';
-}
+const isMongo = async () => !!process.env.MONGODB_URI;
 
 /**
  * Compute presence based on last_seen_at timestamp.

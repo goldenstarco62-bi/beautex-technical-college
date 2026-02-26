@@ -14,10 +14,7 @@ function generatePassword(length = 12) {
     }
     return password;
 }
-async function isMongo() {
-    const db = await getDb();
-    return db.constructor.name === 'NativeConnection';
-}
+const isMongo = async () => !!process.env.MONGODB_URI;
 
 export async function getAllFaculty(req, res) {
     try {

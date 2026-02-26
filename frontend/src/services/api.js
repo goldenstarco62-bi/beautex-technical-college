@@ -148,11 +148,17 @@ export const activityReportsAPI = {
 // Finance
 export const financeAPI = {
     getFeeStructures: () => api.get('finance/fees'),
+    updateFeeStructure: (id, data) => api.put(`finance/fees/${encodeURIComponent(id)}`, data),
+    deleteFeeStructure: (id) => api.delete(`finance/fees/${encodeURIComponent(id)}`),
     getStudentFees: (studentId) => api.get(`finance/student-fees/${encodeURIComponent(studentId)}`),
     getAllStudentFees: () => api.get('finance/student-fees'),
+    updateStudentFee: (id, data) => api.put(`finance/student-fees/${encodeURIComponent(id)}`, data),
     getPayments: (studentId) => api.get('finance/payments', { params: studentId ? { studentId } : {} }),
     recordPayment: (data) => api.post('finance/payments', data),
+    updatePayment: (id, data) => api.put(`finance/payments/${encodeURIComponent(id)}`, data),
+    deletePayment: (id) => api.delete(`finance/payments/${encodeURIComponent(id)}`),
     getAnalytics: () => api.get('finance/analytics'),
+    syncLedger: () => api.post('finance/sync'),
     createFeeStructure: (data) => api.post('finance/fees', data),
 };
 

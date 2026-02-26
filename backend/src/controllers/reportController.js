@@ -1,9 +1,6 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 
-async function isMongo() {
-    const db = await getDb();
-    return db.constructor.name === 'NativeConnection';
-}
+const isMongo = async () => !!process.env.MONGODB_URI;
 
 export const getAllReports = async (req, res) => {
     try {
@@ -139,14 +136,13 @@ export const createReport = async (req, res) => {
         res.status(201).json(report);
     } catch (error) {
         console.error('Error creating report:', error);
-        // Surface the real DB error message to help diagnose missing-table issues in production
         const msg = error.message || 'Internal server error';
         const isTableMissing = msg.includes('does not exist') || msg.includes('no such table');
         res.status(500).json({
             error: isTableMissing
                 ? 'Database table missing. Run migration 003_add_missing_report_tables.sql in Supabase SQL Editor.'
-                : 'Internal server error',
-            detail: process.env.NODE_ENV !== 'production' ? msg : undefined
+                : msg, // Surface the actual error message to trainers for debugging
+            detail: msg
         });
     }
 };

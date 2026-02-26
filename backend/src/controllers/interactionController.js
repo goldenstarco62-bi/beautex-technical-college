@@ -1,9 +1,6 @@
 import { getDb, query, run, queryOne } from '../config/database.js';
 
-async function isMongo() {
-    const db = await getDb();
-    return db.constructor.name === 'NativeConnection';
-}
+const isMongo = async () => !!process.env.MONGODB_URI;
 
 export const getInteractions = async (req, res) => {
     try {
