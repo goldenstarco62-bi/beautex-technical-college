@@ -427,6 +427,27 @@ async function runPostgresMigrations(database) {
             console.log('✅ reset_token columns added to users');
         }
 
+        // --- Payments Table Migrations ---
+        const paymentCols = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='payments'
+        `);
+        const existingPaymentCols = paymentCols.rows.map(r => r.column_name);
+
+        const newPaymentCols = [
+            { name: 'category', type: "TEXT DEFAULT 'Tuition Fee'" },
+            { name: 'semester', type: 'TEXT' },
+            { name: 'academic_year', type: 'TEXT' },
+            { name: 'remarks', type: 'TEXT' }
+        ];
+
+        for (const col of newPaymentCols) {
+            if (!existingPaymentCols.includes(col.name)) {
+                console.log(`🔄 Postgres Migration: Adding ${col.name} to payments table...`);
+                await database.query(`ALTER TABLE payments ADD COLUMN ${col.name} ${col.type}`);
+            }
+        }
+
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
     }
@@ -455,6 +476,23 @@ async function runSqliteMigrations(database) {
             console.log('🔄 Applying SQLite migration: Adding user_email to audit_logs...');
             await database.run('ALTER TABLE audit_logs ADD COLUMN user_email TEXT');
             console.log('✅ user_email column added to SQLite audit_logs');
+        }
+
+        // --- Payments Table Migrations ---
+        const payInfo = await database.all("PRAGMA table_info('payments')");
+        const existingPayCols = payInfo.map(c => c.name);
+
+        if (!existingPayCols.includes('category')) {
+            await database.run("ALTER TABLE payments ADD COLUMN category TEXT DEFAULT 'Tuition Fee'");
+        }
+        if (!existingPayCols.includes('semester')) {
+            await database.run("ALTER TABLE payments ADD COLUMN semester TEXT");
+        }
+        if (!existingPayCols.includes('academic_year')) {
+            await database.run("ALTER TABLE payments ADD COLUMN academic_year TEXT");
+        }
+        if (!existingPayCols.includes('remarks')) {
+            await database.run("ALTER TABLE payments ADD COLUMN remarks TEXT");
         }
 
         // Check for department and level in students
@@ -599,7 +637,14 @@ export async function run(sql, params = []) {
         }
 
         // Add RETURNING id if it's an INSERT statement and doesn't have one
-        if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.toUpperCase().includes('RETURNING')) {
+        // Skip for tables known to not have an 'id' column (e.g. student_fees)
+        const noIdTables = ['student_fees', 'system_settings'];
+        const tableNameMatch = pgSql.match(/INSERT\s+INTO\s+(\w+)/i);
+        const tableName = tableNameMatch ? tableNameMatch[1].toLowerCase() : '';
+
+        if (pgSql.trim().toUpperCase().startsWith('INSERT') &&
+            !pgSql.toUpperCase().includes('RETURNING') &&
+            !noIdTables.includes(tableName)) {
             pgSql += ' RETURNING id';
         }
 

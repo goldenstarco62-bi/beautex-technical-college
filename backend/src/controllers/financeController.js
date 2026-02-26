@@ -102,29 +102,36 @@ export async function getAllStudentFees(req, res) {
 // Payments
 export async function recordPayment(req, res) {
     try {
-        const { student_id, amount, method, transaction_ref } = req.body;
+        const {
+            student_id, amount, method, transaction_ref,
+            category, semester, academic_year, remarks,
+            manual_total_due, manual_total_paid, manual_balance
+        } = req.body;
         const recorded_by = req.user.name || req.user.email;
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
 
-            // Save payment
-            const newPayment = new Payment({ student_id, amount, method, transaction_ref, recorded_by });
+            const newPayment = new Payment({
+                student_id, amount, method, transaction_ref, recorded_by,
+                category, semester, academic_year, remarks
+            });
             await newPayment.save();
 
-            // Update student_fees summary
             const fee = await StudentFee.findOne({ student_id });
-            if (fee) {
-                const newPaid = (fee.total_paid || 0) + parseFloat(amount);
-                const newBalance = (fee.total_due || 0) - newPaid;
-                const newStatus = newBalance <= 0 ? 'Paid' : 'Partial';
+            const finalTotalDue = manual_total_due !== undefined && manual_total_due !== '' ? parseFloat(manual_total_due) : (fee?.total_due || 0);
+            const finalTotalPaid = manual_total_paid !== undefined && manual_total_paid !== '' ? parseFloat(manual_total_paid) : ((fee?.total_paid || 0) + parseFloat(amount));
+            const finalBalance = manual_balance !== undefined && manual_balance !== '' ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
+            const newStatus = finalBalance <= 0 ? 'Paid' : 'Partial';
 
+            if (fee) {
                 await StudentFee.findOneAndUpdate(
                     { student_id },
                     {
-                        total_paid: newPaid,
-                        balance: newBalance,
+                        total_due: finalTotalDue,
+                        total_paid: finalTotalPaid,
+                        balance: finalBalance,
                         status: newStatus,
                         last_payment_date: new Date()
                     }
@@ -132,9 +139,10 @@ export async function recordPayment(req, res) {
             } else {
                 await new StudentFee({
                     student_id,
-                    total_paid: amount,
-                    balance: -amount,
-                    status: 'Partial',
+                    total_due: finalTotalDue,
+                    total_paid: finalTotalPaid,
+                    balance: finalBalance,
+                    status: newStatus,
                     last_payment_date: new Date()
                 }).save();
             }
@@ -143,25 +151,25 @@ export async function recordPayment(req, res) {
 
         // SQLite / PG path
         await run(
-            'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by) VALUES (?, ?, ?, ?, ?)',
-            [student_id, amount, method, transaction_ref, recorded_by]
+            'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks]
         );
 
-        // Update student_fees summary
         const fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [student_id]);
-        if (fee) {
-            const newPaid = fee.total_paid + parseFloat(amount);
-            const newBalance = fee.total_due - newPaid;
-            const newStatus = newBalance <= 0 ? 'Paid' : 'Partial';
+        const finalTotalDue = manual_total_due !== undefined && manual_total_due !== '' ? parseFloat(manual_total_due) : (fee?.total_due || 0);
+        const finalTotalPaid = manual_total_paid !== undefined && manual_total_paid !== '' ? parseFloat(manual_total_paid) : ((fee?.total_paid || 0) + parseFloat(amount));
+        const finalBalance = manual_balance !== undefined && manual_balance !== '' ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
+        const newStatus = finalBalance <= 0 ? 'Paid' : 'Partial';
 
+        if (fee) {
             await run(
-                'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
-                [newPaid, newBalance, newStatus, student_id]
+                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
+                [finalTotalDue, finalTotalPaid, finalBalance, newStatus, student_id]
             );
         } else {
             await run(
-                'INSERT INTO student_fees (student_id, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                [student_id, amount, -amount, 'Partial']
+                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                [student_id, finalTotalDue, finalTotalPaid, finalBalance, newStatus]
             );
         }
 

@@ -285,6 +285,10 @@ CREATE TABLE IF NOT EXISTS payments (
   transaction_ref TEXT UNIQUE,
   payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   recorded_by TEXT,
+  category TEXT DEFAULT 'Tuition Fee',
+  semester TEXT,
+  academic_year TEXT,
+  remarks TEXT,
   status TEXT DEFAULT 'Completed'
 );
 

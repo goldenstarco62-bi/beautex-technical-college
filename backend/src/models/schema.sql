@@ -361,6 +361,10 @@ CREATE TABLE IF NOT EXISTS payments (
   transaction_ref TEXT UNIQUE,
   payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
   recorded_by TEXT, -- Admin email
+  category TEXT DEFAULT 'Tuition Fee',
+  semester TEXT,
+  academic_year TEXT,
+  remarks TEXT,
   status TEXT DEFAULT 'Completed' CHECK(status IN ('Completed', 'Pending', 'Failed')),
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
