@@ -51,6 +51,24 @@ export default function DailyStudentLogs() {
     const isTeacher = user?.role === 'teacher';
     const isStudent = user?.role === 'student';
 
+    const formatCourse = (course) => {
+        if (!course) return '';
+        // If it looks like a Postgres array string e.g. {"Computer Packages"}
+        if (typeof course === 'string' && course.startsWith('{') && course.endsWith('}')) {
+            return course.slice(1, -1).replace(/"/g, '');
+        }
+        // If it's a JSON array string e.g. ["Computer Packages"]
+        if (typeof course === 'string' && course.startsWith('[') && course.endsWith(']')) {
+            try {
+                const parsed = JSON.parse(course);
+                return Array.isArray(parsed) ? parsed.join(', ') : parsed;
+            } catch (e) {
+                return course;
+            }
+        }
+        return course;
+    };
+
     useEffect(() => {
         fetchInitialData();
     }, []);
@@ -268,7 +286,7 @@ export default function DailyStudentLogs() {
                                                 </div>
                                                 <div>
                                                     <p className="text-xs font-black text-gray-800 uppercase leading-none mb-1">{log.student_name}</p>
-                                                    <p className="text-[10px] text-gray-400 font-bold tracking-widest">{log.student_id} • {log.course}</p>
+                                                    <p className="text-[10px] text-gray-400 font-bold tracking-widest">{log.student_id} • {formatCourse(log.course)}</p>
                                                 </div>
                                             </div>
                                         </td>
@@ -358,7 +376,7 @@ export default function DailyStudentLogs() {
                                 <div className="space-y-1">
                                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Student Information</p>
                                     <p className="text-sm font-black text-gray-800 uppercase">{viewingLog.student_name}</p>
-                                    <p className="text-[10px] font-bold text-gray-400">{viewingLog.student_id} • {viewingLog.course}</p>
+                                    <p className="text-[10px] font-bold text-gray-400">{viewingLog.student_id} • {formatCourse(viewingLog.course)}</p>
                                 </div>
                                 <div className="space-y-1 text-right">
                                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Session Date</p>
@@ -435,7 +453,7 @@ export default function DailyStudentLogs() {
                                     </div>
                                     <div>
                                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Module / Course</p>
-                                        <p className="text-sm font-black text-black uppercase">{printingLog.course}</p>
+                                        <p className="text-sm font-black text-black uppercase">{formatCourse(printingLog.course)}</p>
                                     </div>
                                 </div>
                                 <div className="space-y-4 text-right">

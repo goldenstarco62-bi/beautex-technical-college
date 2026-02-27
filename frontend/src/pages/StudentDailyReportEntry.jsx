@@ -21,6 +21,23 @@ import { toast } from 'react-hot-toast';
 
 export default function StudentDailyReportEntry() {
     const { user } = useAuth();
+
+    const formatCourse = (course) => {
+        if (!course) return '';
+        if (typeof course === 'string' && course.startsWith('{') && course.endsWith('}')) {
+            return course.slice(1, -1).replace(/"/g, '');
+        }
+        if (typeof course === 'string' && course.startsWith('[') && course.endsWith(']')) {
+            try {
+                const parsed = JSON.parse(course);
+                return Array.isArray(parsed) ? parsed.join(', ') : parsed;
+            } catch (e) {
+                return course;
+            }
+        }
+        return course;
+    };
+
     const [students, setStudents] = useState([]);
     const [myCourses, setMyCourses] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -438,7 +455,7 @@ export default function StudentDailyReportEntry() {
                                                     <div className="flex flex-col">
                                                         <span className="text-[9px] font-black text-maroon uppercase tracking-widest">{new Date(report.report_date).toLocaleDateString()}</span>
                                                         <h3 className="font-black text-gray-800 uppercase text-sm mt-1">{report.student_name}</h3>
-                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{report.course}</span>
+                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{formatCourse(report.course)}</span>
                                                     </div>
                                                     <div className="flex gap-2 h-fit">
                                                         <button

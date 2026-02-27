@@ -62,7 +62,16 @@ export const getAllDailyReports = async (req, res) => {
         sql += ' ORDER BY report_date DESC';
 
         const reports = await query(sql, params);
-        res.json(reports);
+
+        // FIX: Clean up Postgres array format if present (e.g., {"Computer Packages"} -> Computer Packages)
+        const cleanedReports = reports.map(r => ({
+            ...r,
+            course: typeof r.course === 'string' && r.course.startsWith('{') && r.course.endsWith('}')
+                ? r.course.slice(1, -1).replace(/"/g, '')
+                : r.course
+        }));
+
+        res.json(cleanedReports);
     } catch (error) {
         console.error('Error fetching student daily reports:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -70,9 +79,19 @@ export const getAllDailyReports = async (req, res) => {
 };
 
 export const createDailyReport = async (req, res) => {
-    const { student_id, student_name, course, report_date, topics_covered, trainer_remarks } = req.body;
+    let { student_id, student_name, course, report_date, topics_covered, trainer_remarks } = req.body;
     const trainer_name = req.user.name || 'Trainer';
     const trainer_email = req.user.email;
+
+    // FIX: If course is passed as an array (common in this app), take the first item or join them.
+    if (Array.isArray(course)) {
+        course = course.length > 0 ? course[0] : 'General';
+    } else if (typeof course === 'string' && course.startsWith('[') && course.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(course);
+            course = Array.isArray(parsed) ? (parsed[0] || 'General') : parsed;
+        } catch (e) { }
+    }
 
     if (!student_id || !course || !report_date || !topics_covered) {
         return res.status(400).json({ error: 'Missing required fields' });
