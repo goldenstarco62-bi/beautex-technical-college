@@ -38,7 +38,7 @@ const navigation = [
     { name: 'Schedule', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['teacher', 'admin', 'superadmin'] },
     { name: 'Student Daily Reports', path: '/student-daily-reports', icon: FileStack, roles: ['teacher', 'admin', 'superadmin'] },
-    { name: 'Daily Student Ledger', path: '/daily-student-logs', icon: History, roles: ['teacher', 'admin', 'superadmin'] },
+    { name: 'Daily Student Ledger', path: '/daily-student-logs', icon: History, roles: ['teacher', 'admin', 'superadmin', 'student'] },
     { name: 'Activity Reports', path: '/activity-reports', icon: BarChart3, roles: ['admin', 'superadmin'] },
     { name: 'Audit Trail', path: '/audit-logs', icon: History, roles: ['superadmin'] },
     { name: 'Trainer Reports', path: '/trainer-reports', icon: LayoutList, roles: ['admin', 'teacher', 'superadmin'] },

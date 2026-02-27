@@ -9,7 +9,11 @@ import {
     ChevronRight,
     Search,
     ShieldCheck,
-    History
+    History,
+    CheckCircle2,
+    AlertCircle,
+    Activity,
+    CheckCircle
 } from 'lucide-react';
 import { studentsAPI, coursesAPI, studentDailyReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -76,6 +80,13 @@ export default function StudentDailyReportEntry() {
         }
     };
 
+    const hasReportForDate = (studentId, date) => {
+        return recentReports.some(r =>
+            r.student_id === studentId &&
+            new Date(r.report_date).toISOString().split('T')[0] === date
+        );
+    };
+
     const filteredStudents = students.filter(s => {
         const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             s.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -83,14 +94,18 @@ export default function StudentDailyReportEntry() {
         return matchesSearch && matchesCourse;
     });
 
+    const completionRate = students.length > 0
+        ? Math.round((students.filter(s => hasReportForDate(s.id, reportForm.report_date)).length / students.length) * 100)
+        : 0;
+
     const handleStudentSelect = (student) => {
         setSelectedStudent(student);
         setViewMode('entry');
 
-        // Check if there's already a report for this student today
+        // Check if there's already a report for this student on the selected date
         const existing = recentReports.find(r =>
             r.student_id === student.id &&
-            r.report_date === reportForm.report_date
+            new Date(r.report_date).toISOString().split('T')[0] === reportForm.report_date
         );
 
         if (existing) {
@@ -99,7 +114,7 @@ export default function StudentDailyReportEntry() {
                 topics_covered: existing.topics_covered,
                 trainer_remarks: existing.trainer_remarks || ''
             });
-            toast.success('Loaded existing report for today');
+            toast.success('Loaded existing record');
         } else {
             setReportForm({
                 ...reportForm,
@@ -132,7 +147,6 @@ export default function StudentDailyReportEntry() {
             const reportsRes = await studentDailyReportsAPI.getAll({ trainer_email: user.email });
             setRecentReports(reportsRes.data || []);
 
-            // Don't clear student, maybe trainer wants to edit
         } catch (error) {
             console.error('Error saving report:', error);
             toast.error(error.response?.data?.error || 'Failed to save report');
@@ -146,12 +160,13 @@ export default function StudentDailyReportEntry() {
     return (
         <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {/* Header Area */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm relative overflow-hidden">
+                <Activity className="absolute -right-4 -top-4 w-32 h-32 text-maroon/[0.03] rotate-12" />
                 <div>
                     <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tighter">Student Academic Journal</h1>
                     <p className="text-sm text-gray-400 font-medium">Daily Progress Recording Protocol • {user.name || user.email}</p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 z-10">
                     <button
                         onClick={() => setViewMode('entry')}
                         className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${viewMode === 'entry' ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
@@ -170,10 +185,33 @@ export default function StudentDailyReportEntry() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Left Side: Student Registry */}
                 <div className="lg:col-span-4 space-y-6">
+                    {/* Progress Overview Card */}
+                    <div className="bg-maroon text-gold p-6 rounded-[2rem] shadow-xl relative overflow-hidden group">
+                        <div className="absolute right-0 bottom-0 opacity-10 translate-x-1/4 translate-y-1/4 group-hover:scale-110 transition-transform duration-700">
+                            <CheckCircle2 className="w-40 h-40" />
+                        </div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Daily Progress Sync</p>
+                        <div className="flex items-end gap-2 mb-4">
+                            <span className="text-4xl font-black">{completionRate}%</span>
+                            <span className="text-[10px] font-bold uppercase mb-1.5 opacity-80">Students Logged</span>
+                        </div>
+                        <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden mb-4">
+                            <div className="bg-gold h-full transition-all duration-1000" style={{ width: `${completionRate}%` }}></div>
+                        </div>
+                        <p className="text-[9px] font-bold uppercase tracking-widest opacity-60 flex items-center gap-2">
+                            <Activity className="w-3 h-3" /> {students.filter(s => hasReportForDate(s.id, reportForm.report_date)).length} of {students.length} Students Documentation Complete
+                        </p>
+                    </div>
+
                     <div className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
-                        <div className="flex items-center gap-2 mb-6">
-                            <Users className="w-5 h-5 text-maroon" />
-                            <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Course Registry</h2>
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-2">
+                                <Users className="w-5 h-5 text-maroon" />
+                                <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Course Registry</h2>
+                            </div>
+                            <span className="px-3 py-1 bg-gray-50 text-[8px] font-black text-gray-400 rounded-full uppercase tracking-widest border border-gray-100">
+                                {filteredStudents.length} Students
+                            </span>
                         </div>
 
                         {/* Search & Filter */}
@@ -199,26 +237,41 @@ export default function StudentDailyReportEntry() {
                         </div>
 
                         {/* Student List */}
-                        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                             {filteredStudents.length > 0 ? (
-                                filteredStudents.map(student => (
-                                    <button
-                                        key={student.id}
-                                        onClick={() => handleStudentSelect(student)}
-                                        className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group ${selectedStudent?.id === student.id ? 'bg-maroon text-white border-maroon shadow-lg shadow-maroon/20' : 'bg-white text-gray-600 border-gray-50 hover:border-maroon/20 hover:bg-gray-50'}`}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${selectedStudent?.id === student.id ? 'bg-white/20' : 'bg-maroon/5 text-maroon'}`}>
-                                                {student.name.charAt(0)}
+                                filteredStudents.map(student => {
+                                    const documented = hasReportForDate(student.id, reportForm.report_date);
+                                    return (
+                                        <button
+                                            key={student.id}
+                                            onClick={() => handleStudentSelect(student)}
+                                            className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all border group relative ${selectedStudent?.id === student.id ? 'bg-maroon text-white border-maroon shadow-lg shadow-maroon/20' : 'bg-white text-gray-600 border-gray-50 hover:border-maroon/20 hover:bg-gray-50'}`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="relative">
+                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${selectedStudent?.id === student.id ? 'bg-white/20' : 'bg-maroon/5 text-maroon'}`}>
+                                                        {student.name.charAt(0)}
+                                                    </div>
+                                                    {documented && (
+                                                        <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-0.5 border-2 border-white shadow-sm scale-75">
+                                                            <CheckCircle className="w-3 h-3" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-black text-[11px] uppercase line-clamp-1">{student.name}</p>
+                                                    <p className={`text-[8px] font-bold uppercase tracking-widest ${selectedStudent?.id === student.id ? 'text-white/60' : 'text-gray-400'}`}>{student.id}</p>
+                                                </div>
                                             </div>
-                                            <div className="text-left">
-                                                <p className="font-black text-[11px] uppercase line-clamp-1">{student.name}</p>
-                                                <p className={`text-[8px] font-bold uppercase tracking-widest ${selectedStudent?.id === student.id ? 'text-white/60' : 'text-gray-400'}`}>{student.id}</p>
+                                            <div className="flex items-center gap-2">
+                                                {documented && selectedStudent?.id !== student.id && (
+                                                    <span className="text-[7px] font-black text-green-500 uppercase tracking-widest bg-green-50 px-2 py-1 rounded-md border border-green-100">Logged</span>
+                                                )}
+                                                <ChevronRight className={`w-4 h-4 transition-transform ${selectedStudent?.id === student.id ? 'translate-x-1' : 'opacity-0 group-hover:opacity-100'}`} />
                                             </div>
-                                        </div>
-                                        <ChevronRight className={`w-4 h-4 transition-transform ${selectedStudent?.id === student.id ? 'translate-x-1' : 'opacity-0 group-hover:opacity-100'}`} />
-                                    </button>
-                                ))
+                                        </button>
+                                    );
+                                })
                             ) : (
                                 <div className="text-center py-12">
                                     <Users className="w-12 h-12 text-gray-100 mx-auto mb-4" />
@@ -234,18 +287,25 @@ export default function StudentDailyReportEntry() {
                     {viewMode === 'entry' ? (
                         <div className="space-y-6">
                             {selectedStudent ? (
-                                <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden">
+                                <form onSubmit={handleSubmit} className="bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-500">
                                     {/* Form Header */}
-                                    <div className="bg-gray-50/80 px-10 py-8 border-b border-gray-100 flex justify-between items-center">
+                                    <div className="bg-gray-50/80 px-10 py-8 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-gray-50 to-white">
                                         <div>
                                             <h2 className="text-xl font-black text-maroon uppercase tracking-tight">Record Daily Coverage</h2>
                                             <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em] flex items-center gap-2">
                                                 Drafting for: {selectedStudent.name} <span className="w-1 h-1 bg-gray-300 rounded-full"></span> {selectedStudent.course}
                                             </p>
                                         </div>
-                                        <div className="px-4 py-2 bg-white rounded-xl border border-gray-200 text-[10px] font-black text-maroon uppercase flex items-center gap-2 shadow-sm">
-                                            <Calendar className="w-3 h-3" />
-                                            {new Date(reportForm.report_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                        <div className="flex flex-col items-end gap-1">
+                                            <div className="px-4 py-2 bg-white rounded-xl border border-gray-200 text-[10px] font-black text-maroon uppercase flex items-center gap-2 shadow-sm">
+                                                <Calendar className="w-3 h-3" />
+                                                {new Date(reportForm.report_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                            </div>
+                                            {hasReportForDate(selectedStudent.id, reportForm.report_date) && (
+                                                <span className="text-[7px] font-black text-green-600 uppercase tracking-widest flex items-center gap-1">
+                                                    <CheckCircle2 className="w-2.5 h-2.5" /> Previously Documented
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
 
@@ -318,16 +378,20 @@ export default function StudentDailyReportEntry() {
                                     </div>
 
                                     {/* Action Bar */}
-                                    <div className="px-10 py-8 bg-gray-50/50 border-t border-gray-100">
+                                    <div className="px-10 py-8 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+                                        <div className="hidden md:block">
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-[0.2em]">Auth: {user.name || user.email}</p>
+                                            <p className="text-[7px] font-bold text-gray-300 uppercase">System Time: {new Date().toLocaleTimeString()}</p>
+                                        </div>
                                         <button
                                             type="submit"
                                             disabled={saving}
-                                            className="w-full group bg-maroon text-gold py-6 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.3em] hover:bg-maroon-dark shadow-2xl shadow-maroon/20 transition-all border border-gold/20 disabled:opacity-60 relative overflow-hidden flex items-center justify-center gap-3"
+                                            className="w-full md:w-auto min-w-[300px] group bg-maroon text-gold py-6 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.3em] hover:bg-maroon-dark shadow-2xl shadow-maroon/20 transition-all border border-gold/20 disabled:opacity-60 relative overflow-hidden flex items-center justify-center gap-3"
                                         >
                                             {saving ? (
                                                 <>
                                                     <div className="animate-spin w-5 h-5 border-2 border-gold/40 border-t-gold rounded-full" />
-                                                    <span>Synchronising Log...</span>
+                                                    <span>Synchronising...</span>
                                                 </>
                                             ) : (
                                                 <>
@@ -383,7 +447,7 @@ export default function StudentDailyReportEntry() {
                                                                 if (s) {
                                                                     setSelectedStudent(s);
                                                                     setReportForm({
-                                                                        report_date: report.report_date.split('T')[0],
+                                                                        report_date: new Date(report.report_date).toISOString().split('T')[0],
                                                                         topics_covered: report.topics_covered,
                                                                         trainer_remarks: report.trainer_remarks || ''
                                                                     });
@@ -425,4 +489,5 @@ export default function StudentDailyReportEntry() {
         </div>
     );
 }
+
 
