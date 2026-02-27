@@ -159,7 +159,9 @@ export default function Attendance() {
             setSuccessMsg('');
 
             // 1. Save Attendance Records
-            await Promise.all(students.map(s => {
+            // Using a sequential loop instead of Promise.all to prevent "database is locked" 
+            // errors in SQLite when processing multiple records concurrently.
+            for (const s of students) {
                 const record = {
                     student_id: s.id,
                     course: selectedCourse,
@@ -167,16 +169,16 @@ export default function Attendance() {
                     status: s.attendance || 'Absent'
                 };
                 if (s.existingRecordId) {
-                    return attendanceAPI.update(s.existingRecordId, record);
+                    await attendanceAPI.update(s.existingRecordId, record);
                 } else {
-                    return attendanceAPI.mark(record);
+                    await attendanceAPI.mark(record);
                 }
-            }));
+            }
 
             // 2. Save Daily Progress Reports (Topics Covered & Remarks)
             // We save a report for every student in the registry
             if (topicsCovered) {
-                await Promise.all(students.map(s => {
+                for (const s of students) {
                     const report = {
                         student_id: s.id,
                         student_name: s.name,
@@ -185,8 +187,8 @@ export default function Attendance() {
                         topics_covered: topicsCovered,
                         trainer_remarks: trainerRemarks
                     };
-                    return studentDailyReportsAPI.create(report);
-                }));
+                    await studentDailyReportsAPI.create(report);
+                }
             }
 
             setSuccessMsg('Attendance Registry and Daily Academic Log saved successfully!');
