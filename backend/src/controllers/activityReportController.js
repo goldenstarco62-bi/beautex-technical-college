@@ -410,32 +410,42 @@ export const getAutoCaptureStats = async (req, res) => {
         // SQLite / PostgreSQL logic
         const start = startDate;
         const end = endDate;
-        const isPostgres = !!(await import('../config/database.js')).getProcessedDatabaseUrl();
+        // Use env var directly to avoid a broken dynamic re-import
+        const isPostgres = !!process.env.DATABASE_URL;
 
+        // Use query() (not queryOne()) so we get an array we can .find() on
         const attendanceRows = await query(
-            `SELECT status, COUNT(*) as count FROM attendance WHERE date BETWEEN ? AND ? GROUP BY status`,
+            isPostgres
+                ? 'SELECT status, COUNT(*) as count FROM attendance WHERE date BETWEEN $1 AND $2 GROUP BY status'
+                : 'SELECT status, COUNT(*) as count FROM attendance WHERE date BETWEEN ? AND ? GROUP BY status',
             [start, end]
         );
 
         const enrollments = await queryOne(
-            'SELECT COUNT(*) as count FROM students WHERE enrolled_date BETWEEN ? AND ?',
+            isPostgres
+                ? 'SELECT COUNT(*) as count FROM students WHERE enrolled_date BETWEEN $1 AND $2'
+                : 'SELECT COUNT(*) as count FROM students WHERE enrolled_date BETWEEN ? AND ?',
             [start, end]
         );
 
         // Date casting varies between SQLite and PostgreSQL
         const dateCast = isPostgres ? 'CAST(payment_date AS DATE)' : 'DATE(payment_date)';
+        const paymentPlaceholders = isPostgres ? '$1 AND $2' : '? AND ?';
         const payments = await queryOne(
-            `SELECT SUM(amount) as total FROM payments WHERE ${dateCast} BETWEEN ? AND ? AND status = 'Completed'`,
+            `SELECT SUM(amount) as total FROM payments WHERE ${dateCast} BETWEEN ${paymentPlaceholders} AND status = 'Completed'`,
             [start, end]
         );
 
-        const faculty = await queryOne('SELECT COUNT(*) as count FROM faculty');
+        const faculty = await queryOne(
+            isPostgres ? 'SELECT COUNT(*) as count FROM faculty' : 'SELECT COUNT(*) as count FROM faculty'
+        );
 
+        const rows = Array.isArray(attendanceRows) ? attendanceRows : [];
         const stats = {
             attendance: {
-                Present: attendanceRows.find(r => r.status === 'Present')?.count || 0,
-                Absent: attendanceRows.find(r => r.status === 'Absent')?.count || 0,
-                Late: attendanceRows.find(r => r.status === 'Late')?.count || 0
+                Present: rows.find(r => r.status === 'Present')?.count || 0,
+                Absent: rows.find(r => r.status === 'Absent')?.count || 0,
+                Late: rows.find(r => r.status === 'Late')?.count || 0
             },
             new_enrollments: enrollments?.count || 0,
             revenue_collected: parseFloat(payments?.total || 0),

@@ -8,22 +8,22 @@ export const getAllReports = async (req, res) => {
 
         if (await isMongo()) {
             const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
-            let query = {};
+            let mongoFilter = {};
 
             // Student isolation
             if (req.user?.role === 'student') {
                 const studentId = req.user?.student_id || req.user?.id;
-                query.student_id = String(studentId);
+                mongoFilter.student_id = String(studentId);
             } else if (trainer_email) {
-                query.trainer_email = String(trainer_email).toLowerCase().trim();
+                mongoFilter.trainer_email = String(trainer_email).toLowerCase().trim();
             } else if (course) {
-                query.course_unit = course;
+                mongoFilter.course_unit = course;
             } else if (req.user?.role === 'teacher') {
                 // Teachers see only their own reports by default if no filter
-                query.trainer_email = String(req.user.email || '').toLowerCase().trim();
+                mongoFilter.trainer_email = String(req.user.email || '').toLowerCase().trim();
             }
 
-            const reports = await AcademicReport.find(query).sort({ created_at: -1 });
+            const reports = await AcademicReport.find(mongoFilter).sort({ created_at: -1 });
             return res.json(reports);
         }
 
