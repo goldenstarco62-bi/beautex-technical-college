@@ -196,7 +196,9 @@ export default function Attendance() {
             await fetchRegistry();
         } catch (err) {
             console.error('Error saving attendance/reports:', err);
-            setError('Failed to save registry data. Please try again.');
+            // Detailed diagnostic log for the trainer
+            const errorDetail = err.response?.data?.error || err.message || 'Unknown Server Error';
+            setError(`Failed to save: ${errorDetail}. Please try again.`);
         } finally {
             setSaving(false);
         }
