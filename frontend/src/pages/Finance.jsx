@@ -13,7 +13,7 @@ import html2canvas from 'html2canvas';
 const EMPTY_PAYMENT = {
     student_id: '',
     amount: '',
-    method: 'M-Pesa',
+    method: 'Cash',
     transaction_ref: '',
     category: 'Tuition Fee',
     semester: '',
@@ -83,10 +83,10 @@ function StudentFinanceView({ studentFee, payments }) {
                         <Printer className="w-4 h-4" /> Print Statement
                     </button>
                     <button
-                        onClick={() => alert('M-Pesa: Dial *334# → Paybill 123456\nAccount: Your Student ID')}
+                        onClick={() => alert('Official Payment Instructions:\n1. Visit the College Registry/Finance Office\n2. Pay via Cash, Cheque or Bank Transfer\n3. Collect an official receipt\n\nEnsure ALL fee balances are cleared on time.')}
                         className="flex-1 md:flex-none bg-maroon text-gold px-8 py-3.5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-2xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[10px] uppercase tracking-widest"
                     >
-                        <CreditCard className="w-4 h-4" /> Make Payment
+                        <CreditCard className="w-4 h-4" /> Payment Info
                     </button>
                 </div>
             </div>
@@ -201,7 +201,8 @@ function StudentFinanceView({ studentFee, payments }) {
                                     <div>
                                         <p className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-none">Status: Arrears Detected</p>
                                         <p className="text-[9px] font-bold text-white/40 mt-2 uppercase leading-relaxed">
-                                            Balance of <span className="text-white font-black">KSh {fmt(balance)}</span> must be settled promptly.
+                                            A balance of <span className="text-white font-black">KSh {fmt(balance)}</span> remains. <br />
+                                            <span className="text-gold font-black">Please ensure this is cleared on time</span> to avoid academic disruption.
                                         </p>
                                     </div>
                                 </div>
@@ -955,26 +956,7 @@ export default function Finance() {
                                     </div>
                                 </div>
 
-                                {paymentForm.method === 'M-Pesa' && (
-                                    <div className="p-8 bg-emerald-50 rounded-[2.5rem] border border-emerald-100 animate-in zoom-in-95 duration-300">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="w-10 h-10 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                                                <Activity className="w-5 h-5 animate-pulse" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-black text-emerald-900 uppercase">M-Pesa STK Push Integration</p>
-                                                <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">Enter donor/student phone for PIN prompt</p>
-                                            </div>
-                                        </div>
-                                        <input
-                                            type="text"
-                                            value={paymentForm.phone}
-                                            onChange={e => setPaymentForm({ ...paymentForm, phone: e.target.value })}
-                                            className="w-full px-8 py-5 bg-white border-2 border-emerald-100 rounded-[2rem] text-sm font-black text-emerald-900 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-emerald-200"
-                                            placeholder="2547XXXXXXXX"
-                                        />
-                                    </div>
-                                )}
+                                {/* M-Pesa STK Push Block (Removed for manual entry) */}
 
                                 <div className="space-y-3">
                                     <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Network Reference / Protocol ID</label>
@@ -1034,7 +1016,7 @@ export default function Finance() {
                             >
                                 <span className={`flex items-center justify-center gap-3 transition-all duration-500 ${saving ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}`}>
                                     <ShieldCheck className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                                    {paymentForm.method === 'M-Pesa' ? 'Execute PIN Prompt' : 'Commit to Ledger'}
+                                    Commit to Ledger
                                 </span>
                                 {saving && (
                                     <div className="absolute inset-0 flex items-center justify-center gap-3 bg-maroon">

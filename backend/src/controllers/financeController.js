@@ -176,7 +176,8 @@ export async function recordPayment(req, res) {
         } = req.body;
         const recorded_by = req.user.name || req.user.email;
 
-        // M-Pesa STK Push Integration (Africa's Talking)
+        // M-Pesa STK Push Integration (Removed as per user request for manual entry only)
+        /* 
         if (method === 'M-Pesa') {
             const { initiateMpesaCheckout } = await import('../services/paymentService.js');
             try {
@@ -201,13 +202,12 @@ export async function recordPayment(req, res) {
                 }
             } catch (err) {
                 console.error('❌ M-Pesa Prompt Failed:', err.message);
-                // We show error but if the push failed due to user cancellation/etc it might not reach here immediately
-                // However if it's a structural error (missing credentials/invalid phone), we abort.
                 if (err.message.includes('not configured') || err.message.includes('Invalid phone')) {
                     return res.status(400).json({ error: err.message });
                 }
             }
         }
+        */
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
