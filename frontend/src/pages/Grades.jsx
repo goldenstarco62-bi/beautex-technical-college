@@ -315,27 +315,41 @@ export default function Grades() {
     // Also include any unlisted assignment types
     filteredGradesDisplay.forEach(g => { if (!catColumns.includes(g.assignment)) catColumns.push(g.assignment); });
 
-    // Group by student for admin/teacher view
+    // Group by student + course for academic clarity
     const matrixRowsAdmin = {};
     filteredGradesDisplay.forEach(g => {
         const sid = String(g.student_id).trim();
-        if (!matrixRowsAdmin[sid]) {
+        const course = String(g.course || 'Unknown').trim();
+        const combinedKey = `${sid}|${course}`;
+
+        if (!matrixRowsAdmin[combinedKey]) {
             const student = students.find(s => String(s.id).trim().toLowerCase() === sid.toLowerCase());
-            matrixRowsAdmin[sid] = { studentId: sid, studentName: student?.name || g.student_name || sid, grades: {} };
+            matrixRowsAdmin[combinedKey] = {
+                studentId: sid,
+                studentName: student?.name || g.student_name || sid,
+                course: course,
+                grades: {}
+            };
         }
-        // If multiple entries for same CAT+course, keep latest
+        // If multiple entries for same CAT, keep latest
         const key = g.assignment;
-        if (!matrixRowsAdmin[sid].grades[key] || g.id > matrixRowsAdmin[sid].grades[key].id) {
-            matrixRowsAdmin[sid].grades[key] = g;
+        if (!matrixRowsAdmin[combinedKey].grades[key] || g.id > matrixRowsAdmin[combinedKey].grades[key].id) {
+            matrixRowsAdmin[combinedKey].grades[key] = g;
         }
     });
     const matrixRows = Object.values(matrixRowsAdmin).sort((a, b) => a.studentName.localeCompare(b.studentName));
 
-    // For student view: group by course
+    // For student view: also ensure name and course are present if needed, but primarily group by course
     const matrixRowsStudent = {};
     filteredGradesDisplay.forEach(g => {
         const course = g.course || 'Unknown';
-        if (!matrixRowsStudent[course]) matrixRowsStudent[course] = { course, grades: {} };
+        if (!matrixRowsStudent[course]) {
+            matrixRowsStudent[course] = {
+                course,
+                studentName: user?.name,
+                grades: {}
+            };
+        }
         const key = g.assignment;
         if (!matrixRowsStudent[course].grades[key] || g.id > matrixRowsStudent[course].grades[key].id) {
             matrixRowsStudent[course].grades[key] = g;
@@ -584,9 +598,10 @@ export default function Grades() {
                                                         <tr key={i} className="hover:bg-maroon/[0.015] transition-colors group">
                                                             <td className="px-6 py-5 sticky left-0 bg-white group-hover:bg-maroon/[0.015] z-10 border-r border-black/5">
                                                                 <p className="text-sm font-black text-black uppercase tracking-tight">
-                                                                    {isStudent ? row.course : row.studentName}
+                                                                    {row.studentName}
                                                                 </p>
-                                                                {!isStudent && <p className="text-[9px] font-bold text-black/30 uppercase">{row.studentId}</p>}
+                                                                <p className="text-[10px] font-bold text-maroon uppercase tracking-widest mt-0.5">{row.course}</p>
+                                                                {!isStudent && <p className="text-[8px] font-bold text-black/30 uppercase mt-0.5">{row.studentId}</p>}
                                                             </td>
                                                             {catColumns.map(cat => (
                                                                 <td key={cat} className="px-4 py-5 text-center">
