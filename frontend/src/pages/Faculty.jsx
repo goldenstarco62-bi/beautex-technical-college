@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { facultyAPI, usersAPI } from '../services/api';
+import { facultyAPI, usersAPI, coursesAPI } from '../services/api';
 import { Plus, Search, Edit, Trash2, X, Printer, Mail, Phone, BookOpen, Award, MapPin, Key, Download } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -20,15 +20,30 @@ export default function Faculty() {
     const [printingFaculty, setPrintingFaculty] = useState(null);
     const [filteredFaculty, setFilteredFaculty] = useState([]);
 
-    useEffect(() => { fetchFaculty(); }, []);
+    const [availableCourses, setAvailableCourses] = useState([]);
+    const [selectedCourses, setSelectedCourses] = useState([]);
+
+    useEffect(() => {
+        fetchFaculty();
+        fetchAvailableCourses();
+    }, []);
 
     const fetchFaculty = async () => {
         try {
             const { data } = await facultyAPI.getAll();
-            setFaculty(data);
-            setFilteredFaculty(data);
+            setFaculty(data || []);
+            setFilteredFaculty(data || []);
         } catch (error) {
             console.error('Error fetching faculty:', error);
+        }
+    };
+
+    const fetchAvailableCourses = async () => {
+        try {
+            const { data } = await coursesAPI.getAll();
+            setAvailableCourses(data || []);
+        } catch (error) {
+            console.error('Error fetching courses:', error);
         }
     };
 
@@ -62,6 +77,7 @@ export default function Faculty() {
             setShowModal(false);
             setEditingFaculty(null);
             fetchFaculty();
+            setSelectedCourses([]);
             resetForm();
         } catch (error) {
             console.error('Error saving faculty:', error);
@@ -77,11 +93,26 @@ export default function Faculty() {
             specialization: member.specialization || '', contact: member.contact || '',
             passport: member.passport || '', courses: member.courses || '', status: member.status || 'Active', category: member.category || 'Trainer'
         });
+
+        // Parse courses for selection
+        let initialCourses = [];
+        if (member.courses) {
+            try {
+                // Try JSON first
+                const parsed = JSON.parse(member.courses);
+                initialCourses = Array.isArray(parsed) ? parsed : [parsed];
+            } catch (e) {
+                // Fallback to comma separated
+                initialCourses = member.courses.split(',').map(s => s.trim()).filter(Boolean);
+            }
+        }
+        setSelectedCourses(initialCourses);
         setShowModal(true);
     };
 
     const resetForm = () => {
         setFormData({ id: '', name: '', email: '', department: '', position: '', specialization: '', contact: '', passport: '', courses: '', status: 'Active', category: 'Trainer' });
+        setSelectedCourses([]);
     };
 
     const handlePhotoUpload = (e) => {
@@ -380,7 +411,6 @@ export default function Faculty() {
                                     { label: 'Specialization', key: 'specialization', type: 'text', placeholder: 'e.g. Advanced Cosmetology' },
                                     { label: 'Contact Number', key: 'contact', type: 'text', placeholder: '+254 700 000 000' },
                                     { label: 'Passport / ID No.', key: 'passport', type: 'text', placeholder: 'A1234567' },
-                                    { label: 'Courses Assigned', key: 'courses', type: 'text', placeholder: 'e.g. Cosmetology, Makeup' },
                                 ].map(({ label, key, type, placeholder, required }) => (
                                     <div key={key} className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">{label}</label>
@@ -394,6 +424,33 @@ export default function Faculty() {
                                         />
                                     </div>
                                 ))}
+
+                                {/* Multi-select Courses */}
+                                <div className="sm:col-span-2 space-y-3">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Assign Courses (Select multiple)</label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-gray-50 p-4 rounded-3xl border border-gray-100 max-h-48 overflow-y-auto custom-scrollbar">
+                                        {availableCourses.map(course => (
+                                            <label key={course.id} className="flex items-center gap-2 p-2 rounded-xl hover:bg-white transition-all cursor-pointer group">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedCourses.includes(course.name)}
+                                                    onChange={(e) => {
+                                                        const newSelected = e.target.checked
+                                                            ? [...selectedCourses, course.name]
+                                                            : selectedCourses.filter(c => c !== course.name);
+                                                        setSelectedCourses(newSelected);
+                                                        setFormData({ ...formData, courses: newSelected.join(', ') });
+                                                    }}
+                                                    className="w-4 h-4 rounded-lg border-maroon/20 text-maroon focus:ring-maroon/10"
+                                                />
+                                                <span className="text-[10px] font-bold text-maroon/70 group-hover:text-maroon truncate">{course.name}</span>
+                                            </label>
+                                        ))}
+                                        {availableCourses.length === 0 && (
+                                            <p className="col-span-full text-center py-4 text-[10px] font-black text-maroon/20 uppercase">No courses found in registry</p>
+                                        )}
+                                    </div>
+                                </div>
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
                                     <select
