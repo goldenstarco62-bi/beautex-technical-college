@@ -21,6 +21,7 @@ export default function Grades() {
     const [discussionEntity, setDiscussionEntity] = useState(null);
     const [viewType, setViewType] = useState('CAT'); // 'CAT' or 'REPORTS'
     const [searchTerm, setSearchTerm] = useState('');
+    const [catCourseFilter, setCatCourseFilter] = useState(''); // filter matrix by course
     const [showBatchModal, setShowBatchModal] = useState(false);
     const [batchCourse, setBatchCourse] = useState('');
     const [batchAssignment, setBatchAssignment] = useState('CAT 1');
@@ -292,10 +293,12 @@ export default function Grades() {
         const student = students.find(s => String(s.id).trim().toLowerCase() === String(g.student_id).trim().toLowerCase());
         const studentName = (student?.name || g.student_name || '').toLowerCase();
         const search = searchTerm.toLowerCase().trim();
-        return studentName.includes(search) ||
+        const matchSearch = studentName.includes(search) ||
             String(g.student_id).toLowerCase().includes(search) ||
             String(g.course).toLowerCase().includes(search) ||
             String(g.assignment).toLowerCase().includes(search);
+        const matchCourse = !catCourseFilter || g.course === catCourseFilter;
+        return matchSearch && matchCourse;
     });
 
     const filteredReportsDisplay = allRecords.filter(r => {
@@ -304,6 +307,62 @@ export default function Grades() {
             (r.student_id || '').toLowerCase().includes(search) ||
             (r.course_unit || '').toLowerCase().includes(search);
     });
+
+    // --- CAT Comparison Matrix logic ---
+    // Determine distinct ordered CAT columns from the filtered grades
+    const catOrder = ['CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6', 'Practical Assessment', 'Final Exam'];
+    const catColumns = catOrder.filter(cat => filteredGradesDisplay.some(g => g.assignment === cat));
+    // Also include any unlisted assignment types
+    filteredGradesDisplay.forEach(g => { if (!catColumns.includes(g.assignment)) catColumns.push(g.assignment); });
+
+    // Group by student for admin/teacher view
+    const matrixRowsAdmin = {};
+    filteredGradesDisplay.forEach(g => {
+        const sid = String(g.student_id).trim();
+        if (!matrixRowsAdmin[sid]) {
+            const student = students.find(s => String(s.id).trim().toLowerCase() === sid.toLowerCase());
+            matrixRowsAdmin[sid] = { studentId: sid, studentName: student?.name || g.student_name || sid, grades: {} };
+        }
+        // If multiple entries for same CAT+course, keep latest
+        const key = g.assignment;
+        if (!matrixRowsAdmin[sid].grades[key] || g.id > matrixRowsAdmin[sid].grades[key].id) {
+            matrixRowsAdmin[sid].grades[key] = g;
+        }
+    });
+    const matrixRows = Object.values(matrixRowsAdmin).sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+    // For student view: group by course
+    const matrixRowsStudent = {};
+    filteredGradesDisplay.forEach(g => {
+        const course = g.course || 'Unknown';
+        if (!matrixRowsStudent[course]) matrixRowsStudent[course] = { course, grades: {} };
+        const key = g.assignment;
+        if (!matrixRowsStudent[course].grades[key] || g.id > matrixRowsStudent[course].grades[key].id) {
+            matrixRowsStudent[course].grades[key] = g;
+        }
+    });
+    const matrixRowsStudentArr = Object.values(matrixRowsStudent);
+
+    const scoreChip = (grade) => {
+        if (!grade) return <span className="text-[11px] font-black text-black/10">—</span>;
+        const pct = Math.round((grade.score / (grade.max_score || 100)) * 100);
+        const color = pct >= 70 ? 'bg-green-50 text-green-700 border-green-200'
+            : pct >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-red-50 text-red-600 border-red-200';
+        return (
+            <div className={`inline-flex flex-col items-center px-3 py-1.5 rounded-xl border font-black text-xs ${color}`}>
+                <span>{pct}%</span>
+                <span className="text-[8px] font-bold opacity-60">{grade.score}/{grade.max_score || 100}</span>
+            </div>
+        );
+    };
+
+    const rowAvg = (gradesMap) => {
+        const vals = Object.values(gradesMap).filter(Boolean);
+        if (vals.length === 0) return null;
+        const avg = vals.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / vals.length;
+        return Math.round(avg * 100);
+    };
 
     const stats = {
         totalRecords: grades.length,
@@ -409,7 +468,7 @@ export default function Grades() {
                                     onClick={() => setViewType('CAT')}
                                     className={`px-4 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'CAT' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
                                 >
-                                    CAT Marks ({filteredGradesDisplay.length})
+                                    CAT Comparison
                                 </button>
                                 {!isStudent && (
                                     <button
@@ -420,12 +479,25 @@ export default function Grades() {
                                     </button>
                                 )}
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                                {/* Course filter for CAT matrix */}
+                                {viewType === 'CAT' && (
+                                    <select
+                                        value={catCourseFilter}
+                                        onChange={e => setCatCourseFilter(e.target.value)}
+                                        className="bg-white border border-black/10 rounded-2xl px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black outline-none shadow-sm"
+                                    >
+                                        <option value="">All Courses</option>
+                                        {[...new Set(grades.map(g => g.course).filter(Boolean))].sort().map(c => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                )}
                                 <div className="flex-1 flex items-center gap-3 bg-white border border-black/5 p-2 px-4 sm:px-6 rounded-2xl shadow-sm">
                                     <Search className="w-4 h-4 text-maroon shrink-0" />
                                     <input
                                         type="text"
-                                        placeholder="Search registry..."
+                                        placeholder="Search students..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-full sm:w-36"
@@ -441,9 +513,11 @@ export default function Grades() {
                             </div>
                         </div>
                         <div>
-                            <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">Official Results Registry</h3>
+                            <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">CAT Comparison Matrix</h3>
                             <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">
-                                {viewType === 'CAT' ? `Archive contains ${grades.length} marks` : `Archive contains ${allRecords.length} evaluations`}
+                                {viewType === 'CAT'
+                                    ? `${isStudent ? matrixRowsStudentArr.length : matrixRows.length} ${isStudent ? 'courses' : 'students'} • ${catColumns.length} assessment${catColumns.length !== 1 ? 's' : ''} • ${grades.length} total marks`
+                                    : `Archive contains ${allRecords.length} evaluations`}
                             </p>
                         </div>
                     </div>
@@ -472,97 +546,77 @@ export default function Grades() {
                     <div className="table-container custom-scrollbar">
                         {viewType === 'CAT' ? (
                             <>
-                                {filteredGradesDisplay.length > 0 ? (
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="bg-black/[0.01]">
-                                                <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Student Detail</th>
-                                                <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">CAT & Period</th>
-                                                <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Marks</th>
-                                                <th className="px-10 py-6 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Performance Remarks</th>
-                                                <th className="px-10 py-6 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-black/5">
-                                            {filteredGradesDisplay.map((grade) => (
-                                                <tr key={grade.id} className="hover:bg-maroon/[0.02] transition-colors group">
-                                                    <td className="px-10 py-8">
-                                                        <div className="flex items-center gap-5">
-                                                            <div>
-                                                                <p className="text-sm font-black text-black uppercase tracking-tight">
-                                                                    {students.find(s => String(s.id).trim().toLowerCase() === String(grade.student_id).trim().toLowerCase())?.name || grade.student_name || 'Unknown Student'}
-                                                                </p>
-                                                                <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{grade.student_id}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-10 py-8">
-                                                        <div>
-                                                            <p className="text-sm font-black text-black uppercase tracking-tight">{grade.assignment}</p>
-                                                            <p className="text-[10px] font-bold text-black/30 uppercase tracking-widest">{grade.month || '-'}</p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-10 py-8 text-center">
-                                                        <div className="inline-block px-5 py-2 bg-white text-black rounded-xl font-black text-lg shadow-xl border border-black/5">
-                                                            {Math.round((grade.score / (grade.max_score || 100)) * 100)}%
-                                                            <span className="block text-[8px] text-black/30 uppercase tracking-widest leading-none mt-1">
-                                                                {grade.score} / {grade.max_score || 100}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-10 py-8">
-                                                        <div className="max-w-xs">
-                                                            <p className="text-xs font-bold text-black/60 italic leading-relaxed">
-                                                                {grade.remarks ? `"${grade.remarks}"` : 'No official remarks provided.'}
-                                                            </p>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-10 py-8">
-                                                        <div className="flex justify-center gap-3">
-                                                            <button
-                                                                onClick={() => handleViewReport(grade.student_id)}
-                                                                className="p-3 hover:bg-maroon/5 rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon/40"
-                                                                title="View Performance Summary"
-                                                            >
-                                                                <Eye className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDownloadReport(grade.student_id)}
-                                                                className="p-3 hover:bg-gold hover:text-maroon rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
-                                                                title="Download Performance Statement"
-                                                            >
-                                                                <FileDown className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setDiscussionEntity({
-                                                                    type: 'grade',
-                                                                    id: grade.id || grade._id,
-                                                                    title: `${grade.assignment} - ${students.find(s => String(s.id) === String(grade.student_id))?.name || 'Academic Result'}`
-                                                                })}
-                                                                className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon"
-                                                                title="Discuss This Result"
-                                                            >
-                                                                <MessageSquare className="w-4 h-4" />
-                                                            </button>
-                                                            {canManage && (
-                                                                <>
-                                                                    <button onClick={() => handleEdit(grade)} className="p-3 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon">
-                                                                        <Edit className="w-4 h-4" />
-                                                                    </button>
-                                                                    <button onClick={() => handleDelete(grade.id)} className="p-3 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm border border-maroon/5 text-maroon hover:border-red-600">
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </td>
+                                {catColumns.length > 0 ? (
+                                    <div className="overflow-x-auto">
+                                        {/* Legend */}
+                                        <div className="flex gap-4 px-6 py-3 bg-black/[0.01] border-b border-black/5 text-[9px] font-black uppercase tracking-widest">
+                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block" /> ≥70% Distinction</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-200 inline-block" /> 50–69% Pass</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200 inline-block" /> &lt;50% Refer</span>
+                                        </div>
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-maroon/[0.03] border-b border-black/5">
+                                                    <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em] sticky left-0 bg-maroon/[0.03] z-10 min-w-[180px]">
+                                                        {isStudent ? 'Course' : 'Student'}
+                                                    </th>
+                                                    {catColumns.map(cat => (
+                                                        <th key={cat} className="px-4 py-5 text-center text-[10px] font-black text-maroon uppercase tracking-[0.15em] min-w-[110px]">
+                                                            {cat}
+                                                        </th>
+                                                    ))}
+                                                    <th className="px-5 py-5 text-center text-[10px] font-black text-black/60 uppercase tracking-[0.15em] min-w-[90px] border-l border-black/10">
+                                                        Average
+                                                    </th>
+                                                    {!isStudent && (
+                                                        <th className="px-4 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.15em] min-w-[100px]">Actions</th>
+                                                    )}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                            </thead>
+                                            <tbody className="divide-y divide-black/5">
+                                                {(isStudent ? matrixRowsStudentArr : matrixRows).map((row, i) => {
+                                                    const avg = rowAvg(row.grades);
+                                                    const avgColor = avg === null ? 'text-black/20'
+                                                        : avg >= 70 ? 'text-green-700 bg-green-50'
+                                                            : avg >= 50 ? 'text-amber-700 bg-amber-50'
+                                                                : 'text-red-600 bg-red-50';
+                                                    return (
+                                                        <tr key={i} className="hover:bg-maroon/[0.015] transition-colors group">
+                                                            <td className="px-6 py-5 sticky left-0 bg-white group-hover:bg-maroon/[0.015] z-10 border-r border-black/5">
+                                                                <p className="text-sm font-black text-black uppercase tracking-tight">
+                                                                    {isStudent ? row.course : row.studentName}
+                                                                </p>
+                                                                {!isStudent && <p className="text-[9px] font-bold text-black/30 uppercase">{row.studentId}</p>}
+                                                            </td>
+                                                            {catColumns.map(cat => (
+                                                                <td key={cat} className="px-4 py-5 text-center">
+                                                                    {scoreChip(row.grades[cat])}
+                                                                </td>
+                                                            ))}
+                                                            <td className="px-5 py-5 text-center border-l border-black/10">
+                                                                {avg !== null ? (
+                                                                    <span className={`inline-block px-3 py-1.5 rounded-xl text-sm font-black ${avgColor}`}>
+                                                                        {avg}%
+                                                                    </span>
+                                                                ) : <span className="text-black/20 font-black">—</span>}
+                                                            </td>
+                                                            {!isStudent && (
+                                                                <td className="px-4 py-5">
+                                                                    <div className="flex justify-center gap-2">
+                                                                        <button onClick={() => handleViewReport(row.studentId)} className="p-2 hover:bg-maroon/5 rounded-xl transition-all border border-maroon/5 text-maroon/40" title="View Summary"><Eye className="w-3.5 h-3.5" /></button>
+                                                                        <button onClick={() => handleDownloadReport(row.studentId)} className="p-2 hover:bg-gold hover:text-maroon rounded-xl transition-all border border-maroon/5 text-maroon" title="Download PDF"><FileDown className="w-3.5 h-3.5" /></button>
+                                                                    </div>
+                                                                </td>
+                                                            )}
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 ) : (
                                     <div className="py-24 text-center">
-                                        <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No matching assessment records found in the registry.</p>
+                                        <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No assessment records found. Use Batch Entry or Record CAT Result to add marks.</p>
                                     </div>
                                 )}
                             </>
