@@ -583,6 +583,24 @@ async function runSqliteMigrations(database) {
             console.log('✅ file_name/file_size/mime_type columns added to course_materials');
         }
 
+        // Migration: Ensure student_daily_reports table exists
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS student_daily_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                student_name TEXT NOT NULL,
+                course TEXT NOT NULL,
+                report_date DATE NOT NULL,
+                topics_covered TEXT NOT NULL,
+                trainer_remarks TEXT,
+                trainer_name TEXT NOT NULL,
+                trainer_email TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+            )
+        `);
+
     } catch (error) {
         console.error('⚠️ SQLite migration warning:', error.message);
     }

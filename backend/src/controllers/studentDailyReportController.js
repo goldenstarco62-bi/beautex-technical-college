@@ -99,7 +99,7 @@ export const createDailyReport = async (req, res) => {
             return res.status(201).json(report);
         }
 
-        const existing = await queryOne('SELECT id FROM student_daily_reports WHERE student_id = ? AND report_date = ?', [student_id, report_date]);
+        const existing = await queryOne('SELECT id FROM student_daily_reports WHERE student_id = ? AND report_date = ? AND course = ?', [student_id, report_date, course]);
 
         if (existing) {
             await run(

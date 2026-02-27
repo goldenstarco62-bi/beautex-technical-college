@@ -4,105 +4,82 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 
 export async function getAllAttendance(req, res) {
     try {
-        const { role, email, student_id } = req.user;
+        const { role, email } = req.user;
+        const { course, date, student_id } = req.query;
         const mongo = await isMongo();
 
-        // Admin and Superadmin see everything
-        if (role === 'admin' || role === 'superadmin') {
-            if (mongo) {
-                const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                const attendance = await Attendance.find().sort({ date: -1 });
-                return res.json(attendance);
-            }
-            const attendance = await query('SELECT * FROM attendance ORDER BY date DESC LIMIT 1000');
-            return res.json(attendance);
-        }
+        let conditions = [];
+        let params = [];
 
-        // Teachers see attendance for their courses
-        if (role === 'teacher') {
+        // Base restriction by role
+        if (role === 'student') {
+            const sid = student_id || req.user.student_id || req.user.id;
+            conditions.push(mongo ? { student_id: String(sid) } : 'student_id = ?');
+            if (!mongo) params.push(String(sid));
+        } else if (role === 'teacher') {
             const userEmail = String(email || '').toLowerCase().trim();
+            let teacherCourses = [];
+
             if (mongo) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
-                const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                // FIX: Case-insensitive email lookup
-                const emailRegex = new RegExp(`^${userEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-                const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
-                if (!faculty) return res.json([]);
-
-                const facultyName = faculty.name;
-                const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
-
-                const matchedCourses = await Course.find({
-                    $or: [
-                        { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
-                        { name: { $in: facultyCourses } }
-                    ]
-                }).select('name');
-                const courseNames = matchedCourses.map(c => c.name);
-
-                const attendance = await Attendance.find({ course: { $in: courseNames } }).sort({ date: -1 });
-                return res.json(attendance);
+                const fac = await Faculty.findOne({ email: { $regex: new RegExp(`^${userEmail}$`, 'i') } });
+                if (fac) {
+                    const matched = await Course.find({
+                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: fac.courses || [] } }]
+                    }).select('name');
+                    teacherCourses = matched.map(c => c.name);
+                }
+            } else {
+                const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+                if (fac) {
+                    let list = [];
+                    try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                    const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
+                    teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
+                }
             }
 
-            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
-            if (!faculty) return res.json([]);
+            if (course) {
+                const target = String(course).toLowerCase().trim();
+                const matched = teacherCourses.find(tc => tc.toLowerCase().trim() === target);
+                if (!matched) return res.json([]); // Requesting course teacher doesn't own
+                conditions.push(mongo ? { course: matched } : 'course = ?');
+                if (!mongo) params.push(matched);
+            } else {
+                conditions.push(mongo ? { course: { $in: teacherCourses } } : `course IN (${teacherCourses.map(() => '?').join(',')})`);
+                if (!mongo) params.push(...teacherCourses);
+            }
+        } else if (student_id) {
+            conditions.push(mongo ? { student_id: String(student_id) } : 'student_id = ?');
+            if (!mongo) params.push(String(student_id));
+        }
 
-            let coursesList = [];
-            try {
-                if (faculty.courses && String(faculty.courses).startsWith('[')) {
-                    coursesList = JSON.parse(faculty.courses);
-                } else if (faculty.courses) {
-                    coursesList = faculty.courses.split(',').map(s => s.trim());
-                }
-            } catch (e) { }
+        // Additional filters from query params
+        if (course && (role === 'admin' || role === 'superadmin' || role === 'student')) {
+            conditions.push(mongo ? { course } : 'course = ?');
+            if (!mongo) params.push(course);
+        }
+        if (date) {
+            conditions.push(mongo ? { date } : 'date = ?');
+            if (!mongo) params.push(date);
+        }
 
-            const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
-            const allTutorCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
-
-            if (allTutorCourses.length === 0) return res.json([]);
-
-            const placeholders = allTutorCourses.map(() => '?').join(',');
-            const attendance = await query(`
-                SELECT * FROM attendance 
-                WHERE course IN (${placeholders})
-                ORDER BY date DESC
-            `, allTutorCourses);
+        if (mongo) {
+            const Attendance = (await import('../models/mongo/Attendance.js')).default;
+            const finalQuery = conditions.length > 0 ? { $and: conditions } : {};
+            const attendance = await Attendance.find(finalQuery).sort({ date: -1 }).limit(1000);
             return res.json(attendance);
         }
 
-        // Students see only their own attendance records
-        if (role === 'student') {
-            const tokenStudentId = student_id;
-            const userEmail = String(email || '').toLowerCase().trim();
-
-            if (mongo) {
-                const Attendance = (await import('../models/mongo/Attendance.js')).default;
-                const Student = (await import('../models/mongo/Student.js')).default;
-
-                let searchId = tokenStudentId;
-                if (!searchId) {
-                    const sp = await Student.findOne({ email: userEmail });
-                    if (!sp) return res.json([]);
-                    searchId = sp.id;
-                }
-
-                const attendance = await Attendance.find({ student_id: String(searchId) }).sort({ date: -1 });
-                return res.json(attendance);
-            } else {
-                let searchId = tokenStudentId;
-                if (!searchId) {
-                    const sp = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
-                    if (!sp) return res.json([]);
-                    searchId = sp.id;
-                }
-
-                const attendance = await query('SELECT * FROM attendance WHERE student_id = ? ORDER BY date DESC', [String(searchId)]);
-                return res.json(attendance);
-            }
+        let sql = 'SELECT * FROM attendance';
+        if (conditions.length > 0) {
+            sql += ' WHERE ' + conditions.join(' AND ');
         }
+        sql += ' ORDER BY date DESC LIMIT 1000';
 
-        res.json([]);
+        const attendance = await query(sql, params);
+        res.json(attendance);
     } catch (error) {
         console.error('Get attendance error:', error);
         res.status(500).json({ error: 'Failed to fetch attendance' });
