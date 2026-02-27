@@ -172,42 +172,9 @@ export async function recordPayment(req, res) {
             student_id, amount, method, transaction_ref,
             category, semester, academic_year, remarks,
             manual_total_due, manual_total_paid, manual_balance,
-            phone
+            payment_date
         } = req.body;
         const recorded_by = req.user.name || req.user.email;
-
-        // M-Pesa STK Push Integration (Removed as per user request for manual entry only)
-        /* 
-        if (method === 'M-Pesa') {
-            const { initiateMpesaCheckout } = await import('../services/paymentService.js');
-            try {
-                let targetPhone = phone;
-                if (!targetPhone) {
-                    if (isMongo()) {
-                        const Student = (await import('../models/mongo/Student.js')).default;
-                        const s = await Student.findOne({ id: student_id });
-                        targetPhone = s?.contact || s?.phone;
-                    } else {
-                        const s = await queryOne('SELECT contact, phone FROM students WHERE id = ?', [student_id]);
-                        targetPhone = s?.contact || s?.phone;
-                    }
-                }
-
-                if (targetPhone) {
-                    await initiateMpesaCheckout(targetPhone, amount, 'KES', {
-                        studentId: student_id,
-                        category,
-                        recordedBy: recorded_by
-                    });
-                }
-            } catch (err) {
-                console.error('❌ M-Pesa Prompt Failed:', err.message);
-                if (err.message.includes('not configured') || err.message.includes('Invalid phone')) {
-                    return res.status(400).json({ error: err.message });
-                }
-            }
-        }
-        */
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
@@ -215,7 +182,8 @@ export async function recordPayment(req, res) {
 
             const newPayment = new Payment({
                 student_id, amount, method, transaction_ref, recorded_by,
-                category, semester, academic_year, remarks
+                category, semester, academic_year, remarks,
+                payment_date: payment_date || new Date()
             });
             await newPayment.save();
 
@@ -228,31 +196,18 @@ export async function recordPayment(req, res) {
             if (fee) {
                 await StudentFee.findOneAndUpdate(
                     { student_id },
-                    {
-                        total_due: finalTotalDue,
-                        total_paid: finalTotalPaid,
-                        balance: finalBalance,
-                        status: newStatus,
-                        last_payment_date: new Date()
-                    }
+                    { total_due: finalTotalDue, total_paid: finalTotalPaid, balance: finalBalance, status: newStatus, last_payment_date: new Date() }
                 );
             } else {
-                await new StudentFee({
-                    student_id,
-                    total_due: finalTotalDue,
-                    total_paid: finalTotalPaid,
-                    balance: finalBalance,
-                    status: newStatus,
-                    last_payment_date: new Date()
-                }).save();
+                await new StudentFee({ student_id, total_due: finalTotalDue, total_paid: finalTotalPaid, balance: finalBalance, status: newStatus, last_payment_date: new Date() }).save();
             }
             return res.status(201).json({ message: 'Payment recorded successfully' });
         }
 
         // SQLite / PG path
         await run(
-            'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks]
+            'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date()]
         );
 
         const fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [student_id]);
@@ -475,20 +430,20 @@ export async function mpesaCallback(req, res) {
 export async function updatePayment(req, res) {
     try {
         const { id } = req.params;
-        const { amount, method, transaction_ref, category, semester, academic_year, remarks } = req.body;
+        const { amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date } = req.body;
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
             const updated = await Payment.findByIdAndUpdate(id, {
-                amount, method, transaction_ref, category, semester, academic_year, remarks
+                amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date
             }, { new: true });
             if (!updated) return res.status(404).json({ error: 'Payment record not found' });
             return res.json({ message: 'Payment updated successfully', data: updated });
         }
 
         await run(
-            'UPDATE payments SET amount = ?, method = ?, transaction_ref = ?, category = ?, semester = ?, academic_year = ?, remarks = ? WHERE id = ?',
-            [amount, method, transaction_ref, category, semester, academic_year, remarks, id]
+            'UPDATE payments SET amount = ?, method = ?, transaction_ref = ?, category = ?, semester = ?, academic_year = ?, remarks = ?, payment_date = ? WHERE id = ?',
+            [amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date || new Date(), id]
         );
         res.json({ message: 'Payment updated successfully' });
     } catch (error) {
@@ -528,19 +483,26 @@ export async function updateStudentFee(req, res) {
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const updated = await StudentFee.findOneAndUpdate(
-                { $or: [{ _id: id }, { student_id: id }] },
-                { total_due, total_paid, balance, status },
-                { new: true }
+                { student_id: id },
+                { total_due, total_paid, balance: total_due - total_paid, status },
+                { new: true, upsert: true }
             );
-            if (!updated) return res.status(404).json({ error: 'Fee record not found' });
-            return res.json({ message: 'Fee record updated successfully', data: updated });
+            return res.json({ message: 'Fee record synchronized successfully', data: updated });
         }
 
-        await run(
-            'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ? WHERE id = ? OR student_id = ?',
-            [total_due, total_paid, balance, status, id, id]
-        );
-        res.json({ message: 'Fee record updated successfully' });
+        const existing = await queryOne('SELECT student_id FROM student_fees WHERE student_id = ?', [id]);
+        if (existing) {
+            await run(
+                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ? WHERE student_id = ?',
+                [total_due, total_paid, total_due - total_paid, status, id]
+            );
+        } else {
+            await run(
+                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
+                [id, total_due, total_paid, total_due - total_paid, status]
+            );
+        }
+        res.json({ message: 'Fee record synchronized successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

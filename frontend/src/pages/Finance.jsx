@@ -12,14 +12,9 @@ import html2canvas from 'html2canvas';
 
 const EMPTY_PAYMENT = {
     student_id: '',
-    amount: '',
-    method: 'Cash',
-    transaction_ref: '',
-    category: 'Tuition Fee',
-    semester: '',
-    academic_year: new Date().getFullYear().toString(),
-    remarks: '',
-    phone: ''
+    total_due: '',
+    total_paid: '',
+    remarks: ''
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -132,15 +127,15 @@ function StudentFinanceView({ studentFee, payments }) {
 
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-4 border-t border-maroon/5">
                             <div>
-                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Fee</p>
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Total fee for the course</p>
                                 <p className="text-sm font-black text-gray-800 tracking-tight leading-none">KSh {fmt(totalDue)}</p>
                             </div>
                             <div>
-                                <p className="text-[9px] font-black text-emerald-600/60 uppercase tracking-widest mb-1">Paid</p>
+                                <p className="text-[9px] font-black text-emerald-600/60 uppercase tracking-widest mb-1">Fee paid so far</p>
                                 <p className="text-sm font-black text-emerald-600 tracking-tight leading-none">KSh {fmt(totalPaid)}</p>
                             </div>
                             <div className="col-span-2 sm:col-span-1 border-t sm:border-t-0 sm:border-l border-maroon/10 pt-4 sm:pt-0 sm:pl-6">
-                                <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Balance</p>
+                                <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Fee balance remaining</p>
                                 <p className={`text-lg font-black tracking-tighter leading-none ${balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>KSh {fmt(balance)}</p>
                             </div>
                         </div>
@@ -364,10 +359,10 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                     {/* Key Metrics */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
-                            { label: 'Projected Revenue', value: summary.total_revenue_expected, sub: 'Gross Obligations', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
-                            { label: 'Net Collected', value: summary.total_revenue_collected, sub: `${collectionRate}% Success Rate`, icon: Banknote, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                            { label: 'Total Receivables', value: summary.total_outstanding, sub: 'Outstanding Balances', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
-                            { label: 'Active Debtors', value: summary.pending_accounts || 0, sub: 'Incomplete Accounts', icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', noFmt: true },
+                            { label: 'Total Fee Required', value: summary.total_revenue_expected, sub: 'Global Obligations', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
+                            { label: 'Fee Paid So Far', value: summary.total_revenue_collected, sub: `${collectionRate}% Success Rate`, icon: Banknote, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                            { label: 'Total Fee Balance', value: summary.total_outstanding, sub: 'Outstanding Receivables', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
+                            { label: 'Active Students', value: summary.pending_accounts || 0, sub: 'Total Registry Entries', icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', noFmt: true },
                         ].map((stat, i) => (
                             <div key={i} className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-xl relative overflow-hidden group">
                                 <div className={`absolute top-0 right-0 w-24 h-24 ${stat.bg} opacity-20 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150 duration-700`} />
@@ -760,19 +755,31 @@ export default function Finance() {
 
     const handleRecordPayment = async (e) => {
         e.preventDefault();
-        if (!paymentForm.student_id || !paymentForm.amount || !paymentForm.transaction_ref) {
-            alert('Please fill in all required fields.');
+        const { student_id, total_due, total_paid } = paymentForm;
+        if (!student_id || total_due === '' || total_paid === '') {
+            alert('Please fill in all financial fields.');
             return;
         }
+
         try {
             setSaving(true);
-            await financeAPI.recordPayment({ ...paymentForm, amount: parseFloat(paymentForm.amount) });
+            const due = parseFloat(total_due);
+            const paid = parseFloat(total_paid);
+            const bal = due - paid;
+
+            await financeAPI.updateStudentFee(student_id, {
+                total_due: due,
+                total_paid: paid,
+                balance: bal,
+                status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending')
+            });
+
             setShowModal(false);
             setPaymentForm(EMPTY_PAYMENT);
             fetchAdminData();
-            alert('Payment recorded successfully!');
+            alert('Student financial ledger updated successfully!');
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to record payment.');
+            alert(error.response?.data?.error || 'Failed to update ledger.');
         } finally { setSaving(false); }
     };
 
@@ -882,125 +889,115 @@ export default function Finance() {
 
                         <div className="flex-1 overflow-y-auto px-10 py-10">
                             <form onSubmit={handleRecordPayment} className="space-y-8">
-                                {/* Student Selection & Health Check */}
-                                <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-2">Secure Student Identification</label>
+                                {/* --- SECTION 1: STUDENT SELECTION --- */}
+                                <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-6 h-6 bg-maroon/10 text-maroon rounded-lg flex items-center justify-center">
+                                            <Users className="w-3.5 h-3.5" />
+                                        </div>
+                                        <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Student Registry Search</h3>
+                                    </div>
+
                                     <div className="relative group">
-                                        <Users className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 group-focus-within:text-maroon transition-colors" />
                                         <select
                                             value={paymentForm.student_id}
-                                            onChange={e => setPaymentForm({ ...paymentForm, student_id: e.target.value })}
-                                            className="w-full pl-16 pr-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all appearance-none cursor-pointer"
+                                            onChange={e => {
+                                                const id = e.target.value;
+                                                const fee = studentFees.find(f => f.student_id === id);
+                                                setPaymentForm({
+                                                    ...paymentForm,
+                                                    student_id: id,
+                                                    total_due: fee ? fee.total_due.toString() : '',
+                                                    total_paid: fee ? fee.total_paid.toString() : ''
+                                                });
+                                            }}
+                                            className="w-full pl-8 pr-12 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all appearance-none cursor-pointer shadow-sm"
                                             required
                                         >
-                                            <option value="">Search Registry for Student ID...</option>
+                                            <option value="">Select Student...</option>
                                             {allStudents.map(s => (
-                                                <option key={s.id} value={s.id}>{s.name} — {s.id}</option>
+                                                <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
                                             ))}
                                         </select>
-                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none">
-                                            <div className="w-6 h-6 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 rotate-90">
-                                                <Receipt className="w-3 h-3" />
-                                            </div>
+                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                            <ChevronRight className="w-4 h-4 rotate-90" />
                                         </div>
                                     </div>
 
                                     {paymentForm.student_id && (() => {
-                                        const fee = studentFees.find(f => f.student_id === paymentForm.student_id);
-                                        if (!fee) return null;
+                                        const student = allStudents.find(s => s.id === paymentForm.student_id);
                                         return (
-                                            <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-4 duration-500">
-                                                <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100/50 backdrop-blur-sm">
-                                                    <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest mb-1 leading-none">Net Outstanding</p>
-                                                    <p className="text-xl font-black text-emerald-700 tracking-tighter">KSh {fmt(fee.balance)}</p>
+                                            <div className="px-6 py-4 bg-maroon/5 rounded-[1.5rem] flex items-center justify-between border border-maroon/10 animate-in slide-in-from-top-2 duration-300">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-2 h-2 bg-maroon rounded-full animate-pulse" />
+                                                    <p className="text-[9px] font-black text-maroon uppercase tracking-widest">Selected Profile</p>
                                                 </div>
-                                                <div className="p-6 bg-maroon/5 rounded-3xl border border-maroon/10">
-                                                    <p className="text-[8px] font-black text-maroon/60 uppercase tracking-widest mb-1 leading-none">Clearance Status</p>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                                                            <div className="bg-maroon h-full" style={{ width: `${fee.total_due > 0 ? (fee.total_paid / fee.total_due) * 100 : 0}%` }} />
-                                                        </div>
-                                                        <span className="text-[10px] font-black text-maroon">{fee.total_due > 0 ? ((fee.total_paid / fee.total_due) * 100).toFixed(0) : 0}%</span>
-                                                    </div>
-                                                </div>
+                                                <p className="text-[9px] font-bold text-maroon/60 uppercase truncate">{student?.course || 'Registered Student'}</p>
                                             </div>
                                         );
                                     })()}
                                 </div>
 
-                                {/* Transaction Parameters */}
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Allocation Amount</label>
-                                        <div className="relative">
-                                            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-xs font-black text-gray-400">KSh</span>
+                                {/* --- SECTION 2: FINANCIAL BALANCING --- */}
+                                <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                                            <Wallet className="w-3.5 h-3.5" />
+                                        </div>
+                                        <h3 className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.2em]">Ledger Balancing</h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-3">
+                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Total fee required (KSh)</label>
                                             <input
-                                                type="number" min="1"
-                                                value={paymentForm.amount}
-                                                onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                                                className="w-full pl-16 pr-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all"
+                                                type="number"
+                                                value={paymentForm.total_due}
+                                                onChange={e => setPaymentForm({ ...paymentForm, total_due: e.target.value })}
+                                                className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                placeholder="0.00"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-3">
+                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far (KSh)</label>
+                                            <input
+                                                type="number"
+                                                value={paymentForm.total_paid}
+                                                onChange={e => setPaymentForm({ ...paymentForm, total_paid: e.target.value })}
+                                                className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
                                                 placeholder="0.00"
                                                 required
                                             />
                                         </div>
                                     </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Payment Protocol</label>
-                                        <select
-                                            value={paymentForm.method}
-                                            onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}
-                                            className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all appearance-none cursor-pointer"
-                                        >
-                                            {['M-Pesa', 'Bank Transfer', 'Cash', 'Cheque'].map(m => <option key={m}>{m}</option>)}
-                                        </select>
-                                    </div>
+
+                                    {paymentForm.total_due !== '' && paymentForm.total_paid !== '' && (
+                                        <div className="p-8 bg-maroon rounded-3xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500">
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl" />
+                                            <div className="relative z-10 flex justify-between items-center">
+                                                <div>
+                                                    <p className="text-[10px] font-black text-gold/60 uppercase tracking-widest mb-1">Calculated Ledger Balance</p>
+                                                    <h4 className="text-2xl font-black text-white tracking-tighter">KSh {fmt(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0))}</h4>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[9px] font-black text-gold/60 uppercase tracking-widest mb-1">Account Protocol</p>
+                                                    <p className="text-[10px] font-black text-white uppercase bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+                                                        {(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0)) <= 0 ? 'Fully Cleared' : 'Deficit Detected'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* M-Pesa STK Push Block (Removed for manual entry) */}
-
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Network Reference / Protocol ID</label>
-                                    <input
-                                        type="text"
-                                        value={paymentForm.transaction_ref}
-                                        onChange={e => setPaymentForm({ ...paymentForm, transaction_ref: e.target.value })}
-                                        className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-sm font-black font-mono text-gray-800 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all text-center tracking-widest"
-                                        placeholder="e.g. BTC-992-XPA"
-                                        required
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Fee Category</label>
-                                        <select
-                                            value={paymentForm.category}
-                                            onChange={e => setPaymentForm({ ...paymentForm, category: e.target.value })}
-                                            className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all appearance-none cursor-pointer"
-                                        >
-                                            {['Tuition Fee', 'Registration', 'Exam Fee', 'Uniform', 'Hostel', 'Graduation', 'Library', 'Other'].map(c => <option key={c}>{c}</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Session Identifier</label>
-                                        <input
-                                            type="text"
-                                            value={paymentForm.semester}
-                                            onChange={e => setPaymentForm({ ...paymentForm, semester: e.target.value })}
-                                            className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all"
-                                            placeholder="Term 3 / Sem 1"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Ledger Annotations & Remarks</label>
+                                <div className="space-y-3 px-2">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Institutional Remarks (Optional)</label>
                                     <textarea
                                         value={paymentForm.remarks}
                                         onChange={e => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
-                                        className="w-full px-8 py-5 bg-gray-50 border-2 border-transparent rounded-[2.5rem] text-xs font-bold text-gray-600 outline-none focus:border-maroon/10 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all min-h-[120px] resize-none"
-                                        placeholder="Add any administrative context or bank details..."
+                                        className="w-full px-8 py-5 bg-gray-50 border border-gray-100 rounded-[1.5rem] text-xs font-bold text-gray-600 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all min-h-[100px] shadow-inner"
+                                        placeholder="Add any verification notes or registry references..."
                                     />
                                 </div>
                             </form>
@@ -1031,417 +1028,489 @@ export default function Finance() {
             )}
 
             {/* Edit Record Modal */}
-            {editingRecord && (
-                <div className="fixed inset-0 bg-maroon/60 backdrop-blur-xl flex items-center justify-center p-4 z-50">
-                    <div className="bg-white border border-white/20 rounded-[3.5rem] max-h-[92vh] max-w-2xl w-full shadow-2xl relative flex flex-col overflow-hidden">
-                        <div className="px-10 py-8 flex justify-between items-center bg-gray-50/50 border-b border-gray-100">
-                            <div>
-                                <h2 className="text-xl font-black text-maroon uppercase tracking-tight">Edit Financial Record</h2>
-                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em]">
-                                    Registry Adjustment Protocol
-                                    {editingRecord.data.student_name && ` • ${editingRecord.data.student_name} (${editingRecord.data.student_id})`}
-                                </p>
-                            </div>
-                            <button onClick={() => setEditingRecord(null)} className="p-4 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-3xl transition-all">
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-10 py-10">
-                            <form onSubmit={handleUpdateRecord} className="space-y-6">
-                                {editingRecord.type === 'payment' ? (
-                                    <>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Amount</label>
-                                                <input
-                                                    type="number"
-                                                    value={editingRecord.data.amount}
-                                                    onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, amount: e.target.value } })}
-                                                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Protocol</label>
-                                                <select
-                                                    value={editingRecord.data.method}
-                                                    onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, method: e.target.value } })}
-                                                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                                >
-                                                    {['M-Pesa', 'Bank Transfer', 'Cash', 'Cheque'].map(m => <option key={m}>{m}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Category</label>
-                                            <select
-                                                value={editingRecord.data.category}
-                                                onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, category: e.target.value } })}
-                                                className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                            >
-                                                {['Tuition Fee', 'Registration', 'Exam Fee', 'Uniform', 'Hostel', 'Graduation', 'Library', 'Other'].map(c => <option key={c}>{c}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Reference</label>
-                                            <input
-                                                type="text"
-                                                value={editingRecord.data.transaction_ref}
-                                                onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, transaction_ref: e.target.value } })}
-                                                className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black font-mono outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Remarks</label>
-                                            <textarea
-                                                value={editingRecord.data.remarks}
-                                                onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, remarks: e.target.value } })}
-                                                className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-xs font-bold min-h-[100px] outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all resize-none"
-                                            />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Total Due</label>
-                                                <input
-                                                    type="number"
-                                                    value={editingRecord.data.total_due}
-                                                    onChange={e => {
-                                                        const due = parseFloat(e.target.value) || 0;
-                                                        setEditingRecord({
-                                                            ...editingRecord,
-                                                            data: {
-                                                                ...editingRecord.data,
-                                                                total_due: due,
-                                                                balance: due - (editingRecord.data.total_paid || 0)
-                                                            }
-                                                        });
-                                                    }}
-                                                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Total Paid</label>
-                                                <input
-                                                    type="number"
-                                                    value={editingRecord.data.total_paid}
-                                                    onChange={e => {
-                                                        const paid = parseFloat(e.target.value) || 0;
-                                                        setEditingRecord({
-                                                            ...editingRecord,
-                                                            data: {
-                                                                ...editingRecord.data,
-                                                                total_paid: paid,
-                                                                balance: (editingRecord.data.total_due || 0) - paid
-                                                            }
-                                                        });
-                                                    }}
-                                                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Net Balance</label>
-                                                <input
-                                                    type="number"
-                                                    value={editingRecord.data.balance}
-                                                    readOnly
-                                                    className="w-full px-6 py-4 bg-gray-100 rounded-2xl text-sm font-black text-gray-500 outline-none"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Account Status</label>
-                                                <select
-                                                    value={editingRecord.data.status}
-                                                    onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, status: e.target.value } })}
-                                                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl text-sm font-black outline-none focus:ring-2 focus:ring-maroon/10 focus:bg-white transition-all"
-                                                >
-                                                    {['Paid', 'Partial', 'Pending', 'Overdue'].map(s => <option key={s}>{s}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                                <div className="pt-6 border-t border-gray-100">
-                                    <button
-                                        type="submit"
-                                        disabled={saving}
-                                        className="w-full bg-maroon text-gold py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-maroon/90 transition-all border border-gold/10 disabled:opacity-50"
-                                    >
-                                        {saving ? 'Processing adjustment...' : 'Confirm Adjustments'}
-                                    </button>
+            {
+                editingRecord && (
+                    <div className="fixed inset-0 bg-maroon/60 backdrop-blur-xl flex items-center justify-center p-4 z-50">
+                        <div className="bg-white border border-white/20 rounded-[3.5rem] max-h-[92vh] max-w-2xl w-full shadow-2xl relative flex flex-col overflow-hidden">
+                            <div className="px-10 py-8 flex justify-between items-center bg-gray-50/50 border-b border-gray-100">
+                                <div>
+                                    <h2 className="text-xl font-black text-maroon uppercase tracking-tight">Edit Financial Record</h2>
+                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em]">
+                                        Registry Adjustment Protocol
+                                        {editingRecord.data.student_name && ` • ${editingRecord.data.student_name} (${editingRecord.data.student_id})`}
+                                    </p>
                                 </div>
-                            </form>
+                                <button onClick={() => setEditingRecord(null)} className="p-4 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-3xl transition-all">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto px-10 py-10">
+                                <form onSubmit={handleUpdateRecord} className="space-y-6">
+                                    {editingRecord.type === 'payment' ? (
+                                        <>
+                                            {/* Transaction Context Section */}
+                                            <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                                                        <DollarSign className="w-3.5 h-3.5" />
+                                                    </div>
+                                                    <h3 className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Financial Parameters</h3>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Amount (KSh)</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editingRecord.data.amount}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, amount: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Payment Method</label>
+                                                        <select
+                                                            value={editingRecord.data.method}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, method: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm cursor-pointer"
+                                                        >
+                                                            {['Cash', 'Bank Transfer', 'M-Pesa', 'Cheque'].map(m => <option key={m}>{m}</option>)}
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Transaction Date</label>
+                                                        <input
+                                                            type="date"
+                                                            value={editingRecord.data.payment_date ? new Date(editingRecord.data.payment_date).toISOString().split('T')[0] : ''}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, payment_date: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Reference ID</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editingRecord.data.transaction_ref}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, transaction_ref: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black font-mono text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Academic Period Section */}
+                                            <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-6 h-6 bg-amber-50 text-amber-600 rounded-lg flex items-center justify-center">
+                                                        <BarChart3 className="w-3.5 h-3.5" />
+                                                    </div>
+                                                    <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Academic Period</h3>
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee Category</label>
+                                                        <select
+                                                            value={editingRecord.data.category}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, category: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm cursor-pointer"
+                                                        >
+                                                            {['Tuition Fee', 'Registration', 'Exam Fee', 'Uniform', 'Hostel', 'Graduation', 'Library', 'Other'].map(c => <option key={c}>{c}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Semester/Term</label>
+                                                        <input
+                                                            type="text"
+                                                            value={editingRecord.data.semester}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, semester: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Academic Year</label>
+                                                    <input
+                                                        type="text"
+                                                        value={editingRecord.data.academic_year}
+                                                        onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, academic_year: e.target.value } })}
+                                                        className="w-full px-6 py-4 bg-white border border-gray-100 rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 px-2">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Registry Remarks</label>
+                                                <textarea
+                                                    value={editingRecord.data.remarks}
+                                                    onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, remarks: e.target.value } })}
+                                                    className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-3xl text-xs font-bold text-gray-600 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all min-h-[80px] resize-none shadow-inner"
+                                                />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-6 h-6 bg-maroon/10 text-maroon rounded-lg flex items-center justify-center">
+                                                        <Activity className="w-3.5 h-3.5" />
+                                                    </div>
+                                                    <h3 className="text-[10px] font-black text-maroon uppercase tracking-widest">Full Ledger Adjustment</h3>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Total fee required</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editingRecord.data.total_due}
+                                                            onChange={e => {
+                                                                const due = parseFloat(e.target.value) || 0;
+                                                                setEditingRecord({
+                                                                    ...editingRecord,
+                                                                    data: {
+                                                                        ...editingRecord.data,
+                                                                        total_due: due,
+                                                                        balance: due - (editingRecord.data.total_paid || 0)
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editingRecord.data.total_paid}
+                                                            onChange={e => {
+                                                                const paid = parseFloat(e.target.value) || 0;
+                                                                setEditingRecord({
+                                                                    ...editingRecord,
+                                                                    data: {
+                                                                        ...editingRecord.data,
+                                                                        total_paid: paid,
+                                                                        balance: (editingRecord.data.total_due || 0) - paid
+                                                                    }
+                                                                });
+                                                            }}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Account Status Override</label>
+                                                        <select
+                                                            value={editingRecord.data.status}
+                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, status: e.target.value } })}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm cursor-pointer"
+                                                        >
+                                                            {['Paid', 'Partial', 'Pending', 'Overdue'].map(s => <option key={s}>{s}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee balance</label>
+                                                        <div className={`px-6 py-4 rounded-2xl text-sm font-black flex items-center justify-between shadow-inner ${editingRecord.data.balance > 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                            <span>KSh</span>
+                                                            <span>{fmt(editingRecord.data.balance)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p className="text-[9px] font-bold text-gray-300 uppercase text-center px-10 leading-relaxed italic">
+                                                Warning: Adjusting the balance manually overrides the current registry totals for this student. Use with institutional authorization only.
+                                            </p>
+                                        </div>
+                                    )}
+                                    <div className="pt-6 border-t border-gray-100">
+                                        <button
+                                            type="submit"
+                                            disabled={saving}
+                                            className="w-full bg-maroon text-gold py-5 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-maroon/90 transition-all border border-gold/10 disabled:opacity-50"
+                                        >
+                                            {saving ? 'Processing adjustment...' : 'Confirm Adjustments'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* View Report Modal */}
-            {viewingReport && (
-                <div className="fixed inset-0 bg-maroon/40 backdrop-blur-xl flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[3rem] max-w-2xl w-full shadow-2xl relative max-h-[90vh] flex flex-col overflow-hidden border border-white/20">
-                        {/* Modal Header Controls */}
-                        <div className="px-10 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-maroon text-gold rounded-2xl flex items-center justify-center shadow-lg">
-                                    <ShieldCheck className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-maroon uppercase tracking-widest leading-none">
-                                        {viewingReport.type === 'payment' ? 'Official Receipt' : 'Account Statement'}
-                                    </h3>
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-1">Registry No: {viewingReport._id || viewingReport.id}</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => handleDownload(viewingReport, viewingReport.type === 'payment' ? 'Receipt' : 'Statement')}
-                                    className="p-3 bg-white hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm text-maroon border border-gray-100"
-                                    title="Download Document"
-                                >
-                                    <FileDown className="w-5 h-5" />
-                                </button>
-                                <button
-                                    onClick={() => setViewingReport(null)}
-                                    className="p-3 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-2xl transition-all"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Document Area */}
-                        <div id="printable-report" className="flex-1 overflow-y-auto p-12 sm:p-16 bg-white relative">
-                            {/* Watermark Overlay */}
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] rotate-[-35deg] select-none">
-                                <span className="text-9xl font-black text-maroon uppercase tracking-[0.2em] border-[20px] border-maroon p-10 rounded-[5rem]">VERIFIED</span>
-                            </div>
-
-                            <div className="space-y-12 relative z-10">
-                                {/* Institutional Identity */}
-                                <div className="text-center mb-12">
-                                    <p className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.6em] mb-2 leading-none">Beautex Technical College</p>
-                                    <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Financial Services Division</h2>
-                                    <div className="w-16 h-1 bg-gold mx-auto mt-4 rounded-full" />
-                                </div>
-
-                                {/* Summary Grid */}
-                                <div className="grid grid-cols-2 gap-12">
-                                    <div className="space-y-8">
-                                        <div>
-                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Recipient Account</p>
-                                            <p className="text-sm font-black text-gray-800 uppercase leading-none">{viewingReport.student_name || viewingReport.student_id}</p>
-                                            <p className="text-[10px] font-bold text-maroon uppercase mt-1">ID: {viewingReport.student_id}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Academic Cycle</p>
-                                            <p className="text-[10px] font-black text-gray-700 uppercase leading-none">{viewingReport.semester || 'Official Period'}</p>
-                                            <p className="text-[10px] font-black text-gray-500 uppercase mt-1">{viewingReport.academic_year || '2024'}</p>
-                                        </div>
+            {
+                viewingReport && (
+                    <div className="fixed inset-0 bg-maroon/40 backdrop-blur-xl flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+                        <div className="bg-white rounded-[3rem] max-w-2xl w-full shadow-2xl relative max-h-[90vh] flex flex-col overflow-hidden border border-white/20">
+                            {/* Modal Header Controls */}
+                            <div className="px-10 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-maroon text-gold rounded-2xl flex items-center justify-center shadow-lg">
+                                        <ShieldCheck className="w-5 h-5" />
                                     </div>
-                                    <div className="text-right space-y-8">
-                                        <div>
-                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Transaction Protocol</p>
-                                            <p className="text-[10px] font-black font-mono text-gray-800 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-lg inline-block border border-gray-100 leading-none">
-                                                {viewingReport.transaction_ref}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Issuance Date</p>
-                                            <p className="text-[10px] font-black text-gray-700 uppercase leading-none">
-                                                {new Date(viewingReport.payment_date || new Date()).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                            </p>
-                                        </div>
+                                    <div>
+                                        <h3 className="text-sm font-black text-maroon uppercase tracking-widest leading-none">
+                                            {viewingReport.type === 'payment' ? 'Official Receipt' : 'Account Statement'}
+                                        </h3>
+                                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-1">Registry No: {viewingReport._id || viewingReport.id}</p>
                                     </div>
                                 </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => handleDownload(viewingReport, viewingReport.type === 'payment' ? 'Receipt' : 'Statement')}
+                                        className="p-3 bg-white hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm text-maroon border border-gray-100"
+                                        title="Download Document"
+                                    >
+                                        <FileDown className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                        onClick={() => setViewingReport(null)}
+                                        className="p-3 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-2xl transition-all"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            </div>
 
-                                {/* Financial Detail Table */}
-                                <div className="border-t-2 border-b-2 border-gray-50 py-10">
-                                    <div className="flex justify-between items-center mb-8">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-serif italic">Description of Services / Charges</p>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aggregate Amount</p>
+                            {/* Document Area */}
+                            <div id="printable-report" className="flex-1 overflow-y-auto p-12 sm:p-16 bg-white relative">
+                                {/* Watermark Overlay */}
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] rotate-[-35deg] select-none">
+                                    <span className="text-9xl font-black text-maroon uppercase tracking-[0.2em] border-[20px] border-maroon p-10 rounded-[5rem]">VERIFIED</span>
+                                </div>
+
+                                <div className="space-y-12 relative z-10">
+                                    {/* Institutional Identity */}
+                                    <div className="text-center mb-12">
+                                        <p className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.6em] mb-2 leading-none">Beautex Technical College</p>
+                                        <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Financial Services Division</h2>
+                                        <div className="w-16 h-1 bg-gold mx-auto mt-4 rounded-full" />
                                     </div>
-                                    <div className="flex justify-between items-end">
-                                        <div className="space-y-2">
-                                            <h4 className="text-lg font-black text-gray-800 uppercase tracking-tight leading-none">{viewingReport.category || 'Tuition Fee'}</h4>
-                                            <div className="flex gap-3">
-                                                <span className="text-[9px] font-black px-2 py-1 bg-maroon/5 text-maroon rounded-lg uppercase">Method: {viewingReport.method}</span>
-                                                <span className="text-[9px] font-black px-2 py-1 bg-gray-50 text-gray-400 rounded-lg uppercase">Auth: {viewingReport.recorded_by || 'System'}</span>
+
+                                    {/* Summary Grid */}
+                                    <div className="grid grid-cols-2 gap-12">
+                                        <div className="space-y-8">
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Recipient Account</p>
+                                                <p className="text-sm font-black text-gray-800 uppercase leading-none">{viewingReport.student_name || viewingReport.student_id}</p>
+                                                <p className="text-[10px] font-bold text-maroon uppercase mt-1">ID: {viewingReport.student_id}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Academic Cycle</p>
+                                                <p className="text-[10px] font-black text-gray-700 uppercase leading-none">{viewingReport.semester || 'Official Period'}</p>
+                                                <p className="text-[10px] font-black text-gray-500 uppercase mt-1">{viewingReport.academic_year || '2024'}</p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-3xl font-black text-emerald-600 tracking-tighter leading-none">
-                                                <span className="text-sm mr-1">KSh</span>
-                                                {fmt(viewingReport.type === 'payment' ? viewingReport.amount : viewingReport.balance)}
+                                        <div className="text-right space-y-8">
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Transaction Protocol</p>
+                                                <p className="text-[10px] font-black font-mono text-gray-800 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-lg inline-block border border-gray-100 leading-none">
+                                                    {viewingReport.transaction_ref}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Issuance Date</p>
+                                                <p className="text-[10px] font-black text-gray-700 uppercase leading-none">
+                                                    {new Date(viewingReport.payment_date || new Date()).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Financial Detail Table */}
+                                    <div className="border-t-2 border-b-2 border-gray-50 py-10">
+                                        <div className="flex justify-between items-center mb-8">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-serif italic">Description of Services / Charges</p>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Aggregate Amount</p>
+                                        </div>
+                                        <div className="flex justify-between items-end">
+                                            <div className="space-y-2">
+                                                <h4 className="text-lg font-black text-gray-800 uppercase tracking-tight leading-none">{viewingReport.category || 'Tuition Fee'}</h4>
+                                                <div className="flex gap-3">
+                                                    <span className="text-[9px] font-black px-2 py-1 bg-maroon/5 text-maroon rounded-lg uppercase">Method: {viewingReport.method}</span>
+                                                    <span className="text-[9px] font-black px-2 py-1 bg-gray-50 text-gray-400 rounded-lg uppercase">Auth: {viewingReport.recorded_by || 'System'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-3xl font-black text-emerald-600 tracking-tighter leading-none">
+                                                    <span className="text-sm mr-1">KSh</span>
+                                                    {fmt(viewingReport.type === 'payment' ? viewingReport.amount : viewingReport.balance)}
+                                                </p>
+                                                <p className="text-[8px] font-black text-emerald-600/50 uppercase tracking-widest mt-2">{viewingReport.type === 'payment' ? 'Credit Applied' : 'Balance Outstanding'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Remarks & Metadata */}
+                                    {viewingReport.remarks && (
+                                        <div className="p-6 bg-gray-50/50 rounded-[2rem] border border-gray-100 flex items-start gap-4">
+                                            <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-gray-400 shrink-0 border border-gray-100">
+                                                <Activity className="w-4 h-4" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 leading-none">Internal Registry Remarks</p>
+                                                <p className="text-[10px] font-bold text-gray-600 italic leading-relaxed">{viewingReport.remarks}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Institutional Validation */}
+                                    <div className="flex flex-col sm:flex-row justify-between items-end gap-10 pt-10">
+                                        <div className="space-y-4 max-w-xs">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                                <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Statistically Validated</p>
+                                            </div>
+                                            <p className="text-[8px] font-bold text-gray-300 uppercase leading-relaxed tracking-wider">
+                                                This document is generated by the BTTC automated finance registry. Total verified through secure banking protocols. Accuracy is guaranteed as of generation time.
                                             </p>
-                                            <p className="text-[8px] font-black text-emerald-600/50 uppercase tracking-widest mt-2">{viewingReport.type === 'payment' ? 'Credit Applied' : 'Balance Outstanding'}</p>
                                         </div>
-                                    </div>
-                                </div>
-
-                                {/* Remarks & Metadata */}
-                                {viewingReport.remarks && (
-                                    <div className="p-6 bg-gray-50/50 rounded-[2rem] border border-gray-100 flex items-start gap-4">
-                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-gray-400 shrink-0 border border-gray-100">
-                                            <Activity className="w-4 h-4" />
+                                        <div className="text-right">
+                                            <div className="mb-4 inline-block relative">
+                                                <div className="font-serif italic text-3xl text-maroon/10 select-none pb-2">Institutional-Seal</div>
+                                                <div className="absolute bottom-0 right-0 w-24 h-0.5 bg-maroon/10" />
+                                            </div>
+                                            <p className="text-[9px] font-black text-gray-800 uppercase tracking-[0.3em] leading-none">Registrar of Accounts</p>
+                                            <p className="text-[8px] font-bold text-maroon/30 mt-2 tracking-tighter italic font-mono uppercase">
+                                                {viewingReport.id?.substring(0, 8) || 'SYSTEM'}-AUTH-SECURE
+                                            </p>
                                         </div>
-                                        <div>
-                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1 leading-none">Internal Registry Remarks</p>
-                                            <p className="text-[10px] font-bold text-gray-600 italic leading-relaxed">{viewingReport.remarks}</p>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Institutional Validation */}
-                                <div className="flex flex-col sm:flex-row justify-between items-end gap-10 pt-10">
-                                    <div className="space-y-4 max-w-xs">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                            <p className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Statistically Validated</p>
-                                        </div>
-                                        <p className="text-[8px] font-bold text-gray-300 uppercase leading-relaxed tracking-wider">
-                                            This document is generated by the BTTC automated finance registry. Total verified through secure banking protocols. Accuracy is guaranteed as of generation time.
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="mb-4 inline-block relative">
-                                            <div className="font-serif italic text-3xl text-maroon/10 select-none pb-2">Institutional-Seal</div>
-                                            <div className="absolute bottom-0 right-0 w-24 h-0.5 bg-maroon/10" />
-                                        </div>
-                                        <p className="text-[9px] font-black text-gray-800 uppercase tracking-[0.3em] leading-none">Registrar of Accounts</p>
-                                        <p className="text-[8px] font-bold text-maroon/30 mt-2 tracking-tighter italic font-mono uppercase">
-                                            {viewingReport.id?.substring(0, 8) || 'SYSTEM'}-AUTH-SECURE
-                                        </p>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Modal Footer Actions */}
-                        <div className="px-10 py-8 border-t border-gray-100 flex gap-4 bg-gray-50/50">
-                            <button
-                                onClick={() => setViewingReport(null)}
-                                className="flex-1 px-8 py-4 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:text-red-500 hover:border-red-100 transition-all"
-                            >
-                                Close Ledger
-                            </button>
-                            <button
-                                onClick={() => handleDownload(viewingReport, viewingReport.type === 'payment' ? 'Receipt' : 'Statement')}
-                                className="flex-1 px-8 py-4 bg-maroon text-gold rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-maroon/90 hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
-                            >
-                                <Printer className="w-4 h-4" /> Finalize & Export
-                            </button>
+                            {/* Modal Footer Actions */}
+                            <div className="px-10 py-8 border-t border-gray-100 flex gap-4 bg-gray-50/50">
+                                <button
+                                    onClick={() => setViewingReport(null)}
+                                    className="flex-1 px-8 py-4 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:text-red-500 hover:border-red-100 transition-all"
+                                >
+                                    Close Ledger
+                                </button>
+                                <button
+                                    onClick={() => handleDownload(viewingReport, viewingReport.type === 'payment' ? 'Receipt' : 'Statement')}
+                                    className="flex-1 px-8 py-4 bg-maroon text-gold rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-maroon/90 hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Printer className="w-4 h-4" /> Finalize & Export
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Hidden Institutional Document Capture Area */}
-            {printingReport && (
-                <div className="fixed inset-0 bg-white z-[-1] pointer-events-none opacity-0 overflow-hidden">
-                    <div id="finance-report-capture" className="w-[800px] bg-white text-[#1a1a1a] font-sans p-[60px] relative">
-                        {/* Decorative Institutional Border */}
-                        <div className="absolute inset-0 border-[20px] border-gray-50 opacity-50" />
-                        <div className="absolute top-10 left-10 right-10 bottom-10 border border-maroon/10" />
+            {
+                printingReport && (
+                    <div className="fixed inset-0 bg-white z-[-1] pointer-events-none opacity-0 overflow-hidden">
+                        <div id="finance-report-capture" className="w-[800px] bg-white text-[#1a1a1a] font-sans p-[60px] relative">
+                            {/* Decorative Institutional Border */}
+                            <div className="absolute inset-0 border-[20px] border-gray-50 opacity-50" />
+                            <div className="absolute top-10 left-10 right-10 bottom-10 border border-maroon/10" />
 
-                        <div className="relative z-10 h-full flex flex-col">
-                            {/* Document Header */}
-                            <div className="flex justify-between items-start mb-[60px] pb-[40px] border-b-2 border-maroon">
-                                <div className="flex items-center gap-[20px]">
-                                    <img src="/logo.jpg" alt="Logo" className="w-[80px] h-[80px] object-contain" />
-                                    <div>
-                                        <h1 className="text-[20px] font-black uppercase tracking-[0.2em] text-maroon leading-tight">Beautex Technical<br />Training College</h1>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mt-2">Department of Financial Registry</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="bg-maroon text-gold px-6 py-3 rounded-xl inline-block mb-3">
-                                        <p className="text-[12px] font-black uppercase tracking-widest">{printingReport.title}</p>
-                                    </div>
-                                    <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Verified Document</p>
-                                </div>
-                            </div>
-
-                            {/* Document Meta */}
-                            <div className="grid grid-cols-2 gap-[40px] mb-[60px]">
-                                <div className="space-y-[20px]">
-                                    <div>
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Authenticated Recipient</p>
-                                        <p className="text-[16px] font-black text-gray-800 uppercase">{printingReport.data.student_name || 'Registry Entity'}</p>
-                                        <p className="text-[11px] font-bold text-maroon uppercase mt-1">ID: {printingReport.data.student_id}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Protocol Reference</p>
-                                        <p className="text-[12px] font-black font-mono text-gray-800 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">{printingReport.data.transaction_ref || 'INTERNAL-RECORD'}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right space-y-[20px]">
-                                    <div>
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Issuance Context</p>
-                                        <p className="text-[11px] font-black text-gray-800 uppercase">{printingReport.data.semester || 'Official Period'}</p>
-                                        <p className="text-[11px] font-black text-gray-500 uppercase mt-1">{printingReport.data.academic_year || '2024 Cycle'}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Transmission Date</p>
-                                        <p className="text-[11px] font-black text-gray-800 uppercase">{new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Financial Core Breakdown */}
-                            <div className="flex-1">
-                                <div className="border-t-2 border-b-2 border-gray-50 py-[40px] mb-[40px]">
-                                    <div className="flex justify-between items-center mb-[20px]">
-                                        <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] italic font-serif">Financial Allocation Category</p>
-                                        <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Validated Amount</p>
-                                    </div>
-                                    <div className="flex justify-between items-end">
+                            <div className="relative z-10 h-full flex flex-col">
+                                {/* Document Header */}
+                                <div className="flex justify-between items-start mb-[60px] pb-[40px] border-b-2 border-maroon">
+                                    <div className="flex items-center gap-[20px]">
+                                        <img src="/logo.jpg" alt="Logo" className="w-[80px] h-[80px] object-contain" />
                                         <div>
-                                            <p className="text-[18px] font-black text-gray-900 uppercase tracking-tight">{printingReport.data.category || 'Institutional Obligations'}</p>
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Method: {printingReport.data.method || 'Internal Transfer'}</p>
+                                            <h1 className="text-[20px] font-black uppercase tracking-[0.2em] text-maroon leading-tight">Beautex Technical<br />Training College</h1>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mt-2">Department of Financial Registry</p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-[32px] font-black text-emerald-600 tracking-tighter leading-none"><span className="text-[14px] mr-1">KSh</span>{fmt(printingReport.data.amount || printingReport.data.balance || 0)}</p>
-                                            <p className="text-[9px] font-black text-emerald-600/50 uppercase tracking-widest mt-2">Authenticated Receipt</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="bg-maroon text-gold px-6 py-3 rounded-xl inline-block mb-3">
+                                            <p className="text-[12px] font-black uppercase tracking-widest">{printingReport.title}</p>
+                                        </div>
+                                        <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest">Verified Document</p>
+                                    </div>
+                                </div>
+
+                                {/* Document Meta */}
+                                <div className="grid grid-cols-2 gap-[40px] mb-[60px]">
+                                    <div className="space-y-[20px]">
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Authenticated Recipient</p>
+                                            <p className="text-[16px] font-black text-gray-800 uppercase">{printingReport.data.student_name || 'Registry Entity'}</p>
+                                            <p className="text-[11px] font-bold text-maroon uppercase mt-1">ID: {printingReport.data.student_id}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Protocol Reference</p>
+                                            <p className="text-[12px] font-black font-mono text-gray-800 uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">{printingReport.data.transaction_ref || 'INTERNAL-RECORD'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right space-y-[20px]">
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Issuance Context</p>
+                                            <p className="text-[11px] font-black text-gray-800 uppercase">{printingReport.data.semester || 'Official Period'}</p>
+                                            <p className="text-[11px] font-black text-gray-500 uppercase mt-1">{printingReport.data.academic_year || '2024 Cycle'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Transmission Date</p>
+                                            <p className="text-[11px] font-black text-gray-800 uppercase">{new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                                         </div>
                                     </div>
                                 </div>
 
-                                {printingReport.data.remarks && (
-                                    <div className="p-6 bg-gray-50/50 rounded-2xl border border-gray-100 mb-[40px]">
-                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Official Annotated Remarks</p>
-                                        <p className="text-[11px] font-bold text-gray-600 italic leading-relaxed">"{printingReport.data.remarks}"</p>
+                                {/* Financial Core Breakdown */}
+                                <div className="flex-1">
+                                    <div className="border-t-2 border-b-2 border-gray-50 py-[40px] mb-[40px]">
+                                        <div className="flex justify-between items-center mb-[20px]">
+                                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] italic font-serif">Financial Allocation Category</p>
+                                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Validated Amount</p>
+                                        </div>
+                                        <div className="flex justify-between items-end">
+                                            <div>
+                                                <p className="text-[18px] font-black text-gray-900 uppercase tracking-tight">{printingReport.data.category || 'Institutional Obligations'}</p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Method: {printingReport.data.method || 'Internal Transfer'}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[32px] font-black text-emerald-600 tracking-tighter leading-none"><span className="text-[14px] mr-1">KSh</span>{fmt(printingReport.data.amount || printingReport.data.balance || 0)}</p>
+                                                <p className="text-[9px] font-black text-emerald-600/50 uppercase tracking-widest mt-2">Authenticated Receipt</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-                            </div>
 
-                            {/* Verification Footer */}
-                            <div className="pt-[40px] border-t border-maroon/20 flex justify-between items-end">
-                                <div className="max-w-[300px]">
-                                    <p className="text-[8px] font-bold text-gray-300 uppercase leading-relaxed tracking-wider mb-4">
-                                        This is a computer-verified institutional document. Total sums been audited through the College Central Registry Service.
-                                        Accuracy of this document is guaranteed as of the transmission date provided.
-                                    </p>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Secure Registry Entry Verified</p>
-                                    </div>
+                                    {printingReport.data.remarks && (
+                                        <div className="p-6 bg-gray-50/50 rounded-2xl border border-gray-100 mb-[40px]">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Official Annotated Remarks</p>
+                                            <p className="text-[11px] font-bold text-gray-600 italic leading-relaxed">"{printingReport.data.remarks}"</p>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="text-right">
-                                    <div className="mb-4">
-                                        <p className="font-serif italic text-[24px] text-maroon/10 select-none border-b border-maroon/10 inline-block px-10 pb-2">RegistrarSeal</p>
+
+                                {/* Verification Footer */}
+                                <div className="pt-[40px] border-t border-maroon/20 flex justify-between items-end">
+                                    <div className="max-w-[300px]">
+                                        <p className="text-[8px] font-bold text-gray-300 uppercase leading-relaxed tracking-wider mb-4">
+                                            This is a computer-verified institutional document. Total sums been audited through the College Central Registry Service.
+                                            Accuracy of this document is guaranteed as of the transmission date provided.
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Secure Registry Entry Verified</p>
+                                        </div>
                                     </div>
-                                    <p className="text-[10px] font-black text-gray-800 uppercase tracking-[0.3em] leading-none">Office of the Registrar</p>
-                                    <p className="text-[8px] font-bold text-maroon/30 mt-2 tracking-tighter italic font-mono uppercase">BTTC-FIN-SECURE-{Math.random().toString(36).substr(2, 6).toUpperCase()}</p>
+                                    <div className="text-right">
+                                        <div className="mb-4">
+                                            <p className="font-serif italic text-[24px] text-maroon/10 select-none border-b border-maroon/10 inline-block px-10 pb-2">RegistrarSeal</p>
+                                        </div>
+                                        <p className="text-[10px] font-black text-gray-800 uppercase tracking-[0.3em] leading-none">Office of the Registrar</p>
+                                        <p className="text-[8px] font-bold text-maroon/30 mt-2 tracking-tighter italic font-mono uppercase">BTTC-FIN-SECURE-{Math.random().toString(36).substr(2, 6).toUpperCase()}</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
         </>
     );
 }
