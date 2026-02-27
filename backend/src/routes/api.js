@@ -20,6 +20,7 @@ import * as materialController from '../controllers/materialController.js';
 import * as profileController from '../controllers/profileController.js';
 import * as interactionController from '../controllers/interactionController.js';
 import * as trainerReportController from '../controllers/trainerReportController.js';
+import * as studentDailyReportController from '../controllers/studentDailyReportController.js';
 import { authorizeRoles } from '../middleware/auth.js';
 
 
@@ -229,6 +230,11 @@ router.delete('/interactions/:id', authenticateToken, interactionController.dele
 router.get('/trainer-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.getAllReports);
 router.post('/trainer-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.createReport);
 router.delete('/trainer-reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerReportController.deleteReport);
+
+// Student Daily Progress Reports
+router.get('/student-daily-reports', authenticateToken, studentDailyReportController.getAllDailyReports);
+router.post('/student-daily-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentDailyReportController.createDailyReport);
+router.delete('/student-daily-reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentDailyReportController.deleteDailyReport);
 
 // Multer error handler (file size & type errors)
 router.use((err, req, res, next) => {

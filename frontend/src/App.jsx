@@ -23,6 +23,8 @@ import AcademicMaster from './pages/AcademicMaster';
 import Materials from './pages/Materials';
 import Profile from './pages/Profile';
 import TrainerReports from './pages/TrainerReports';
+import StudentDailyReportEntry from './pages/StudentDailyReportEntry';
+import DailyStudentLogs from './pages/DailyStudentLogs';
 
 
 
@@ -79,9 +81,11 @@ function App() {
                         <Route path="/finance" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'student']}><Layout><Finance /></Layout></ProtectedRoute>} />
                         <Route path="/materials" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Materials /></Layout></ProtectedRoute>} />
                         <Route path="/activity-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><ActivityReports /></Layout></ProtectedRoute>} />
+                        <Route path="/daily-student-logs" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><DailyStudentLogs /></Layout></ProtectedRoute>} />
 
                         <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><AuditLogs /></Layout></ProtectedRoute>} />
                         <Route path="/trainer-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><TrainerReports /></Layout></ProtectedRoute>} />
+                        <Route path="/student-daily-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><StudentDailyReportEntry /></Layout></ProtectedRoute>} />
 
 
                         <Route path="/" element={<Navigate to="/login" />} />

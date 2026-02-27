@@ -370,3 +370,19 @@ CREATE TABLE IF NOT EXISTS trainer_reports (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Student Daily Progress Reports
+CREATE TABLE IF NOT EXISTS student_daily_reports (
+  id SERIAL PRIMARY KEY,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  student_name TEXT NOT NULL,
+  course TEXT NOT NULL,
+  report_date DATE NOT NULL,
+  topics_covered TEXT NOT NULL,
+  trainer_remarks TEXT,
+  trainer_name TEXT NOT NULL,
+  trainer_email TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+

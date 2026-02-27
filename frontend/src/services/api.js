@@ -231,5 +231,12 @@ export const trainerReportsAPI = {
     delete: (id) => api.delete(`trainer-reports/${id}`),
 };
 
+// Student Daily Progress Reports
+export const studentDailyReportsAPI = {
+    getAll: (params) => api.get('student-daily-reports', { params }),
+    create: (data) => api.post('student-daily-reports', data),
+    delete: (id) => api.delete(`student-daily-reports/${id}`),
+};
+
 export default api;
 

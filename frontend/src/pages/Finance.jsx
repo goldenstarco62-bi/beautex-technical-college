@@ -115,7 +115,7 @@ function StudentFinanceView({ studentFee, payments }) {
                             <div>
                                 <StatusBadge status={status} />
                                 <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight mt-3">Account Liquidity</h3>
-                                <p className="text-xs text-gray-400 font-bold">Total financial obligation summary</p>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Student Fee Status</p>
                             </div>
                             <div className="text-right hidden md:block">
                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Last Payment</p>
@@ -1074,7 +1074,7 @@ export default function Finance() {
                                                             onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, method: e.target.value } })}
                                                             className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm cursor-pointer"
                                                         >
-                                                            {['Cash', 'Bank Transfer', 'M-Pesa', 'Cheque'].map(m => <option key={m}>{m}</option>)}
+                                                            {['Cash', 'Bank Transfer', 'Cheque', 'Other'].map(m => <option key={m}>{m}</option>)}
                                                         </select>
                                                     </div>
                                                 </div>

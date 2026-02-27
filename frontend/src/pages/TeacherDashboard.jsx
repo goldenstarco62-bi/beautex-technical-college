@@ -160,6 +160,9 @@ export default function TeacherDashboard() {
                             <a href="/attendance" className="flex items-center justify-center gap-3 bg-maroon text-white px-6 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon-dark transition-all shadow-xl hover:-translate-y-1">
                                 <ClipboardCheck className="w-4 h-4 text-gold" /> Mark Attendance
                             </a>
+                            <a href="/student-daily-reports" className="flex items-center justify-center gap-3 bg-white text-maroon border-2 border-maroon px-6 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon hover:text-white transition-all shadow-xl hover:-translate-y-1">
+                                <FileText className="w-4 h-4" /> Daily Student Report
+                            </a>
                             <a href="/grades" className="flex items-center justify-center gap-3 bg-gold text-maroon px-6 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-gold-dark transition-all shadow-xl hover:-translate-y-1">
                                 <FileText className="w-4 h-4" /> Post Grades
                             </a>
