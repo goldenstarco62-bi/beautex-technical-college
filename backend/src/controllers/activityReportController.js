@@ -51,6 +51,13 @@ export const getDailyReport = async (req, res) => {
 };
 
 export const createDailyReport = async (req, res) => {
+    // Sanitize numeric inputs for SQL compatibility
+    const parseNum = (val) => {
+        if (val === '' || val === null || val === undefined) return 0;
+        const num = parseFloat(val);
+        return isNaN(num) ? 0 : num;
+    };
+
     try {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
@@ -76,14 +83,31 @@ export const createDailyReport = async (req, res) => {
              assessments_conducted, total_students_present, total_students_absent, late_arrivals, new_enrollments,
              staff_present, staff_absent, disciplinary_cases, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [report_date, req.user.name || req.user.email, classes_conducted, total_attendance_percentage, assessments_conducted,
-                total_students_present, total_students_absent, late_arrivals, new_enrollments,
-                staff_present, staff_absent, disciplinary_cases || 0, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes]
+            [
+                report_date,
+                req.user.name || req.user.email,
+                parseNum(classes_conducted),
+                parseNum(total_attendance_percentage),
+                parseNum(assessments_conducted),
+                parseNum(total_students_present),
+                parseNum(total_students_absent),
+                parseNum(late_arrivals),
+                parseNum(new_enrollments),
+                parseNum(staff_present),
+                parseNum(staff_absent),
+                parseNum(disciplinary_cases),
+                facilities_issues,
+                equipment_maintenance,
+                notable_events,
+                incidents,
+                achievements,
+                additional_notes
+            ]
         );
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
         console.error('Error creating daily report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message, detail: error.stack });
     }
 };
 
@@ -175,6 +199,12 @@ export const getWeeklyReport = async (req, res) => {
 };
 
 export const createWeeklyReport = async (req, res) => {
+    const parseNum = (val) => {
+        if (val === '' || val === null || val === undefined) return 0;
+        const num = parseFloat(val);
+        return isNaN(num) ? 0 : num;
+    };
+
     try {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
@@ -194,14 +224,29 @@ export const createWeeklyReport = async (req, res) => {
              average_attendance, total_assessments, active_students, avg_student_attendance, disciplinary_cases,
              courses_completed, new_enrollments, key_achievements, challenges_faced, action_items, revenue_collected, notes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [week_start_date, week_end_date, req.user.name || req.user.email, total_classes_conducted, average_attendance, total_assessments,
-                active_students, avg_student_attendance, disciplinary_cases, courses_completed, new_enrollments,
-                key_achievements, challenges_faced, action_items, revenue_collected, notes]
+            [
+                week_start_date,
+                week_end_date,
+                req.user.name || req.user.email,
+                parseNum(total_classes_conducted),
+                parseNum(average_attendance),
+                parseNum(total_assessments),
+                parseNum(active_students),
+                parseNum(avg_student_attendance),
+                parseNum(disciplinary_cases),
+                parseNum(courses_completed),
+                parseNum(new_enrollments),
+                key_achievements,
+                challenges_faced,
+                action_items,
+                parseNum(revenue_collected),
+                notes
+            ]
         );
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
         console.error('Error creating weekly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message, detail: error.stack });
     }
 };
 
@@ -287,6 +332,12 @@ export const getMonthlyReport = async (req, res) => {
 };
 
 export const createMonthlyReport = async (req, res) => {
+    const parseNum = (val) => {
+        if (val === '' || val === null || val === undefined) return 0;
+        const num = parseFloat(val);
+        return isNaN(num) ? 0 : num;
+    };
+
     try {
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
@@ -308,15 +359,20 @@ export const createMonthlyReport = async (req, res) => {
              total_faculty, new_hires, faculty_departures, revenue, expenses, major_achievements, challenges,
              strategic_initiatives, goals_next_month, additional_notes)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [month, month_start_date, month_end_date, req.user.name || req.user.email, total_students, new_enrollments, graduations, dropouts,
-                total_classes, average_attendance, total_assessments, average_pass_rate, total_faculty, new_hires,
-                faculty_departures, revenue, expenses, major_achievements, challenges, strategic_initiatives,
-                goals_next_month, additional_notes]
+            [
+                month, month_start_date, month_end_date, req.user.name || req.user.email,
+                parseNum(total_students), parseNum(new_enrollments), parseNum(graduations), parseNum(dropouts),
+                parseNum(total_classes), parseNum(average_attendance), parseNum(total_assessments), parseNum(average_pass_rate),
+                parseNum(total_faculty), parseNum(new_hires), parseNum(faculty_departures),
+                parseNum(revenue), parseNum(expenses),
+                major_achievements, challenges, strategic_initiatives,
+                goals_next_month, additional_notes
+            ]
         );
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
         console.error('Error creating monthly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message, detail: error.stack });
     }
 };
 

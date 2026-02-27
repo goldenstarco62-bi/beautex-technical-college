@@ -96,16 +96,25 @@ export const createReport = async (req, res) => {
         return res.status(400).json({ error: 'Student ID, Course, and Reporting Period are required' });
     }
 
+    // Sanitize numeric inputs for SQL compatibility
+    const parseNum = (val) => {
+        if (val === '' || val === null || val === undefined) return 0;
+        const num = parseFloat(val);
+        return isNaN(num) ? 0 : num;
+    };
+
     try {
         if (await isMongo()) {
             const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
             const newReport = new AcademicReport({
                 student_id, student_name, registration_number, course_unit,
                 trainer_name, trainer_email, reporting_period,
-                total_lessons: total_lessons || 0,
-                attended_lessons: attended_lessons || 0,
-                attendance_percentage: attendance_percentage || 0,
-                theory_topics, theory_score, theory_remarks,
+                total_lessons: parseNum(total_lessons),
+                attended_lessons: parseNum(attended_lessons),
+                attendance_percentage: parseNum(attendance_percentage),
+                theory_topics,
+                theory_score: parseNum(theory_score),
+                theory_remarks,
                 practical_tasks, equipment_used, skill_level, safety_compliance,
                 discipline_issues, trainer_observations,
                 progress_summary, recommendation
@@ -124,13 +133,15 @@ export const createReport = async (req, res) => {
                 discipline_issues, trainer_observations,
                 progress_summary, recommendation
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [student_id, student_name, registration_number, course_unit,
+            [
+                student_id, student_name, registration_number, course_unit,
                 trainer_name, trainer_email, reporting_period,
-                total_lessons || 0, attended_lessons || 0, attendance_percentage || 0,
-                theory_topics, theory_score, theory_remarks,
+                parseNum(total_lessons), parseNum(attended_lessons), parseNum(attendance_percentage),
+                theory_topics, parseNum(theory_score), theory_remarks,
                 practical_tasks, equipment_used, skill_level, safety_compliance,
                 discipline_issues, trainer_observations,
-                progress_summary, recommendation]
+                progress_summary, recommendation
+            ]
         );
         const report = await queryOne('SELECT * FROM academic_reports WHERE id = ?', [result.lastID]);
         res.status(201).json(report);
@@ -141,7 +152,7 @@ export const createReport = async (req, res) => {
         res.status(500).json({
             error: isTableMissing
                 ? 'Database table missing. Run migration 003_add_missing_report_tables.sql in Supabase SQL Editor.'
-                : msg, // Surface the actual error message to trainers for debugging
+                : msg,
             detail: msg
         });
     }

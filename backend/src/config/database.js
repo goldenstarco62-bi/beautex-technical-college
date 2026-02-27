@@ -593,13 +593,14 @@ async function runSqliteMigrations(database) {
  */
 export async function query(sql, params = []) {
     const database = await getDb();
+    const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
         const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
-        const result = await database.query(pgSql, params);
+        const result = await database.query(pgSql, sanitizedParams);
         return result.rows;
     }
-    return database.all(sql, params);
+    return database.all(sql, sanitizedParams);
 }
 
 /**
@@ -607,13 +608,14 @@ export async function query(sql, params = []) {
  */
 export async function queryOne(sql, params = []) {
     const database = await getDb();
+    const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
         const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
-        const result = await database.query(pgSql, params);
+        const result = await database.query(pgSql, sanitizedParams);
         return result.rows[0];
     }
-    return database.get(sql, params);
+    return database.get(sql, sanitizedParams);
 }
 
 /**
@@ -621,6 +623,7 @@ export async function queryOne(sql, params = []) {
  */
 export async function run(sql, params = []) {
     const database = await getDb();
+    const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
         let pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
@@ -648,13 +651,13 @@ export async function run(sql, params = []) {
             pgSql += ' RETURNING id';
         }
 
-        const result = await database.query(pgSql, params);
+        const result = await database.query(pgSql, sanitizedParams);
 
         // For Postgres, the result of RETURNING id is in result.rows[0].id
         const lastID = (result.rows && result.rows[0]) ? result.rows[0].id : null;
         return { lastID, changes: result.rowCount };
     }
-    return database.run(sql, params);
+    return database.run(sql, sanitizedParams);
 }
 
 export default { getDb, query, queryOne, run };
