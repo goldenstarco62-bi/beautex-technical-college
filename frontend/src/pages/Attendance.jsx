@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { studentsAPI, coursesAPI, attendanceAPI } from '../services/api';
+import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Calendar, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
@@ -15,6 +15,9 @@ export default function Attendance() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
+    const [topicsCovered, setTopicsCovered] = useState('');
+    const [trainerRemarks, setTrainerRemarks] = useState('');
+    const [dailyReports, setDailyReports] = useState([]);
 
     useEffect(() => {
         fetchInitialData();
@@ -51,9 +54,10 @@ export default function Attendance() {
         }
         try {
             setError('');
-            const [studentsRes, attendanceRes] = await Promise.all([
+            const [studentsRes, attendanceRes, reportsRes] = await Promise.all([
                 studentsAPI.getAll(),
-                attendanceAPI.getAll(selectedCourse, selectedDate).catch(() => ({ data: [] }))
+                attendanceAPI.getAll(selectedCourse, selectedDate).catch(() => ({ data: [] })),
+                studentDailyReportsAPI.getAll({ course: selectedCourse, date: selectedDate }).catch(() => ({ data: [] }))
             ]);
 
             const allStudents = Array.isArray(studentsRes.data) ? studentsRes.data : [];
@@ -83,6 +87,19 @@ export default function Attendance() {
 
             const existingMap = {};
             (attendanceRes.data || []).forEach(r => { existingMap[r.student_id] = r; });
+
+            const reportsData = reportsRes.data || [];
+            setDailyReports(reportsData);
+
+            // Pre-populate topics/remarks if we have existing reports for this class/day
+            if (reportsData.length > 0) {
+                setTopicsCovered(reportsData[0].topics_covered || '');
+                setTrainerRemarks(reportsData[0].trainer_remarks || '');
+            } else {
+                setTopicsCovered('');
+                setTrainerRemarks('');
+            }
+
             setStudents(filtered.map(s => ({
                 ...s,
                 attendance: existingMap[s.id]?.status || 'Present',
@@ -98,10 +115,24 @@ export default function Attendance() {
         try {
             setError('');
             const studentId = user.student_id || user.id;
-            // FIX: Pass student_id to the API so only this student's records are fetched
-            // instead of fetching all records and filtering client-side (privacy & performance)
-            const { data } = await attendanceAPI.getAll(null, null, studentId);
-            setStudents(Array.isArray(data) ? data : []);
+            const [attendanceRes, reportsRes] = await Promise.all([
+                attendanceAPI.getAll(null, null, studentId),
+                studentDailyReportsAPI.getAll({ student_id: studentId }).catch(() => ({ data: [] }))
+            ]);
+
+            const attData = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
+            const repData = Array.isArray(reportsRes.data) ? reportsRes.data : [];
+
+            // Merge reports into attendance for display
+            const enriched = attData.map(record => {
+                const report = repData.find(r =>
+                    r.student_id === record.student_id &&
+                    new Date(r.report_date).toISOString().split('T')[0] === record.date
+                );
+                return { ...record, report };
+            });
+
+            setStudents(enriched);
         } catch (err) {
             console.error('Error fetching student history:', err);
             setStudents([]);
@@ -127,8 +158,7 @@ export default function Attendance() {
             setError('');
             setSuccessMsg('');
 
-            // FIX: Use upsert logic — update existing records, insert only new ones.
-            // Previous code always inserted, causing duplicate records.
+            // 1. Save Attendance Records
             await Promise.all(students.map(s => {
                 const record = {
                     student_id: s.id,
@@ -143,12 +173,28 @@ export default function Attendance() {
                 }
             }));
 
-            setSuccessMsg('Daily Registry Portfolio saved successfully!');
-            // Refresh to get updated record IDs
+            // 2. Save Daily Progress Reports (Topics Covered & Remarks)
+            // We save a report for every student in the registry
+            if (topicsCovered) {
+                await Promise.all(students.map(s => {
+                    const report = {
+                        student_id: s.id,
+                        student_name: s.name,
+                        course: selectedCourse,
+                        report_date: selectedDate,
+                        topics_covered: topicsCovered,
+                        trainer_remarks: trainerRemarks
+                    };
+                    return studentDailyReportsAPI.create(report);
+                }));
+            }
+
+            setSuccessMsg('Attendance Registry and Daily Academic Log saved successfully!');
+            // Refresh to get updated record IDs and reports
             await fetchRegistry();
         } catch (err) {
-            console.error('Error saving attendance:', err);
-            setError('Failed to save attendance registry. Please try again.');
+            console.error('Error saving attendance/reports:', err);
+            setError('Failed to save registry data. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -197,33 +243,69 @@ export default function Attendance() {
             )}
 
             {!isStudent && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                    <div className="sm:col-span-2 card-light p-3">
-                        <select
-                            value={selectedCourse}
-                            onChange={(e) => setSelectedCourse(e.target.value)}
-                            className="w-full h-full py-3 bg-parchment-100 border-none rounded-xl text-xs font-black uppercase tracking-widest text-maroon/60 px-4 focus:ring-2 focus:ring-maroon/5 outline-none"
+                <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                        <div className="sm:col-span-2 card-light p-3">
+                            <select
+                                value={selectedCourse}
+                                onChange={(e) => setSelectedCourse(e.target.value)}
+                                className="w-full h-full py-3 bg-parchment-100 border-none rounded-xl text-xs font-black uppercase tracking-widest text-maroon/60 px-4 focus:ring-2 focus:ring-maroon/5 outline-none"
+                            >
+                                <option value="">Select Academic Program</option>
+                                {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="card-light p-3 flex gap-2 items-center">
+                            <Calendar className="w-4 h-4 text-maroon/20 ml-2" />
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="flex-1 bg-transparent border-none text-xs font-black uppercase tracking-widest text-maroon/60 py-3 outline-none"
+                            />
+                        </div>
+                        <button
+                            onClick={fetchRegistry}
+                            className="bg-maroon text-gold px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-elite-maroon transition-all"
                         >
-                            <option value="">Select Academic Program</option>
-                            {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                        </select>
+                            Load Registry
+                        </button>
                     </div>
-                    <div className="card-light p-3 flex gap-2 items-center">
-                        <Calendar className="w-4 h-4 text-maroon/20 ml-2" />
-                        <input
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="flex-1 bg-transparent border-none text-xs font-black uppercase tracking-widest text-maroon/60 py-3 outline-none"
-                        />
+
+                    {/* Daily Academic Record Section */}
+                    <div className="bg-white p-8 rounded-[2rem] border border-maroon/5 shadow-xl space-y-6">
+                        <div className="flex items-center gap-3 border-b border-maroon/5 pb-4">
+                            <div className="w-8 h-8 bg-maroon text-gold rounded-xl flex items-center justify-center shadow-lg transform -rotate-12">
+                                <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-black text-maroon uppercase tracking-widest">Daily Academic Log</h2>
+                                <p className="text-[8px] text-maroon/40 font-bold uppercase tracking-[0.2em]">Record of work and trainer remarks for today's session</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Topics Covered Today</label>
+                                <textarea
+                                    value={topicsCovered}
+                                    onChange={(e) => setTopicsCovered(e.target.value)}
+                                    placeholder="Outline the modules or topics discussed in this session..."
+                                    className="w-full px-6 py-5 bg-parchment-100/50 border-none rounded-2xl text-xs font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5 transition-all min-h-[120px] resize-none"
+                                />
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Session Remarks</label>
+                                <textarea
+                                    value={trainerRemarks}
+                                    onChange={(e) => setTrainerRemarks(e.target.value)}
+                                    placeholder="Add overall class performance remarks or specific student milestone notes..."
+                                    className="w-full px-6 py-5 bg-parchment-100/50 border-none rounded-2xl text-xs font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5 transition-all min-h-[120px] resize-none"
+                                />
+                            </div>
+                        </div>
                     </div>
-                    <button
-                        onClick={fetchRegistry}
-                        className="bg-maroon text-gold px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-elite-maroon transition-all"
-                    >
-                        Load Registry
-                    </button>
-                </div>
+                </>
             )}
 
             <div className="table-container custom-scrollbar overflow-x-auto">
@@ -231,7 +313,7 @@ export default function Attendance() {
                     <thead>
                         <tr className="bg-maroon/5">
                             {isStudent ? (
-                                ['Date', 'Subject/Course', 'Status', 'Recorded At'].map(header => (
+                                ['Date', 'Subject/Course', 'Topics Covered', 'Status', 'Recorded At'].map(header => (
                                     <th key={header} className="px-6 py-5 text-left text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em]">{header}</th>
                                 ))
                             ) : (
@@ -259,12 +341,17 @@ export default function Attendance() {
                                     <>
                                         <td className="px-6 py-5 text-[10px] font-black text-maroon uppercase tracking-widest">{student.date}</td>
                                         <td className="px-6 py-5 text-sm font-bold text-maroon">{student.course}</td>
+                                        <td className="px-6 py-5 max-w-xs">
+                                            <p className="text-[11px] font-bold text-maroon/60 line-clamp-2">{student.report?.topics_covered || '—'}</p>
+                                            {student.report?.trainer_remarks && (
+                                                <p className="text-[9px] font-bold text-maroon/30 italic mt-1 truncate">"{student.report.trainer_remarks}"</p>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-5">
                                             <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.status === 'Present' ? 'bg-green-100 text-green-700' : student.status === 'Late' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-50 text-red-600'}`}>
                                                 {student.status}
                                             </span>
                                         </td>
-                                        {/* FIX: Display actual recorded time instead of hardcoded "10:24 AM" */}
                                         <td className="px-6 py-5 text-[10px] font-bold text-maroon/30 italic">
                                             {formatLogTime(student)}
                                         </td>
