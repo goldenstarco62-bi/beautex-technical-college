@@ -475,7 +475,7 @@ export default function Grades() {
                                         onClick={() => setViewType('REPORTS')}
                                         className={`px-4 sm:px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${viewType === 'REPORTS' ? 'bg-white text-maroon shadow-sm' : 'text-gray-400 hover:text-black'}`}
                                     >
-                                        Eval Reports ({filteredReportsDisplay.length})
+                                        Overall Report ({filteredReportsDisplay.length})
                                     </button>
                                 )}
                             </div>
@@ -517,7 +517,7 @@ export default function Grades() {
                             <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">
                                 {viewType === 'CAT'
                                     ? `${isStudent ? matrixRowsStudentArr.length : matrixRows.length} ${isStudent ? 'courses' : 'students'} • ${catColumns.length} assessment${catColumns.length !== 1 ? 's' : ''} • ${grades.length} total marks`
-                                    : `Archive contains ${allRecords.length} evaluations`}
+                                    : `Archive contains ${allRecords.length} overall reports`}
                             </p>
                         </div>
                     </div>
@@ -705,7 +705,7 @@ export default function Grades() {
                                     </table>
                                 ) : (
                                     <div className="py-24 text-center">
-                                        <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No matching evaluation reports found in the archive.</p>
+                                        <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No matching overall reports found in the archive.</p>
                                     </div>
                                 )}
                             </>
