@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, Award, Clock, Zap, FileText, UserCheck, GraduationCap, CreditCard, FileStack } from 'lucide-react';
-import { coursesAPI, gradesAPI, announcementsAPI, attendanceAPI, studentsAPI, reportsAPI } from '../services/api';
+import { coursesAPI, gradesAPI, announcementsAPI, attendanceAPI, studentsAPI, reportsAPI, materialsAPI } from '../services/api';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -14,7 +14,7 @@ export default function StudentDashboard() {
         enrolledCourses: 0,
         avgGrade: 'N/A',
         attendanceRate: '0%',
-        credits: 0
+        studyMaterials: 0
     });
     const [recentAnnouncements, setRecentAnnouncements] = useState([]);
     const [recentGrades, setRecentGrades] = useState([]);
@@ -31,12 +31,13 @@ export default function StudentDashboard() {
     const fetchData = async () => {
         try {
             // 1. Fetch all data needed
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes] = await Promise.all([
+            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, materialsRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 announcementsAPI.getAll(),
                 gradesAPI.getAll(),
-                api.get(`/finance/student-fees/${user.student_id || user.id}`).catch(() => ({ data: null }))
+                api.get(`/finance/student-fees/${user.student_id || user.id}`).catch(() => ({ data: null })),
+                materialsAPI.getAll().catch(() => ({ data: [] }))
             ]);
 
 
@@ -100,7 +101,7 @@ export default function StudentDashboard() {
                     enrolledCourses: enrolledCourses.length,
                     avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
                     attendanceRate: '96%', // Placeholder
-                    credits: 15 // Placeholder
+                    studyMaterials: Array.isArray(materialsRes.data) ? materialsRes.data.length : 0
                 });
             }
 
@@ -129,9 +130,9 @@ export default function StudentDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {[
                     { title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen },
-                    { title: 'Fee Balance', value: `KSh ${(studentFee?.balance || 0).toLocaleString()}`, icon: CreditCard },
+                    { title: 'Fee Balance Remaining', value: `KSh ${(studentFee?.balance || 0).toLocaleString()}`, icon: CreditCard },
                     { title: 'Attendance', value: stats.attendanceRate, icon: UserCheck },
-                    { title: 'Study Materials', value: '12+', icon: FileStack },
+                    { title: 'Study Materials', value: stats.studyMaterials, icon: FileStack },
                 ].map((stat, index) => {
 
                     const Icon = stat.icon;
