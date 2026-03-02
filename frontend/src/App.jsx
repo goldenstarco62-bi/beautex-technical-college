@@ -25,6 +25,7 @@ import Profile from './pages/Profile';
 import TrainerReports from './pages/TrainerReports';
 import StudentDailyReportEntry from './pages/StudentDailyReportEntry';
 import DailyStudentLogs from './pages/DailyStudentLogs';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 
 
@@ -56,6 +57,7 @@ function App() {
     return (
         <ThemeProvider>
             <AuthProvider>
+                <PWAInstallPrompt />
                 <BrowserRouter>
                     <Routes>
                         <Route path="/login" element={<Login />} />

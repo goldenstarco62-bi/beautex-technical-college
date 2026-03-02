@@ -21,8 +21,8 @@ export default function MobileBottomNav({ onMenuClick }) {
     });
 
     return (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-[100] px-4 pb-4 mobile-bottom-nav">
-            <div className="bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-white/20 shadow-[0_-8px_30px_rgb(0,0,0,0.12)] rounded-[2rem] flex items-center justify-around h-16 px-2 overflow-hidden">
+        <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] z-[100] mobile-bottom-nav">
+            <div className="bg-white/90 dark:bg-black/90 backdrop-blur-2xl border border-white/40 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.15)] rounded-[2.5rem] flex items-center justify-around h-18 px-4 py-2 overflow-hidden transition-all duration-300">
                 {filteredItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.path;
@@ -31,16 +31,18 @@ export default function MobileBottomNav({ onMenuClick }) {
                         <Link
                             key={item.path}
                             to={item.path}
-                            className={`flex flex-col items-center justify-center p-2 rounded-2xl transition-all duration-300 relative group ${isActive ? 'text-maroon scale-110' : 'text-gray-400 hover:text-maroon'
+                            className={`flex flex-col items-center justify-center p-3 rounded-2xl transition-all duration-500 relative group ${isActive ? 'text-maroon' : 'text-gray-400 hover:text-maroon/60'
                                 }`}
                         >
-                            <Icon className={`w-5 h-5 ${isActive ? 'text-maroon animate-pulse' : ''}`} />
-                            <span className={`text-[8px] font-black uppercase tracking-tighter mt-1 ${isActive ? 'opacity-100' : 'opacity-40'}`}>
+                            <div className={`relative p-2 rounded-xl transition-all duration-500 ${isActive ? 'bg-maroon/5 scale-110' : ''}`}>
+                                <Icon className={`w-5 h-5 ${isActive ? 'text-maroon animate-pulse' : ''}`} />
+                                {isActive && (
+                                    <div className="absolute -inset-1 bg-maroon/5 rounded-xl blur-sm -z-10 animate-pulse"></div>
+                                )}
+                            </div>
+                            <span className={`text-[8px] font-black uppercase tracking-widest mt-1 transition-all duration-300 ${isActive ? 'opacity-100 translate-y-0' : 'opacity-40 translate-y-0.5'}`}>
                                 {item.name}
                             </span>
-                            {isActive && (
-                                <div className="absolute -bottom-1 w-1 h-1 bg-maroon rounded-full"></div>
-                            )}
                         </Link>
                     );
                 })}
@@ -48,10 +50,12 @@ export default function MobileBottomNav({ onMenuClick }) {
                 {/* Menu trigger for sidebar */}
                 <button
                     onClick={onMenuClick}
-                    className="flex flex-col items-center justify-center p-2 rounded-2xl text-gray-400 hover:text-maroon transition-all active:scale-90"
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl text-gray-400 hover:text-maroon transition-all active:scale-90"
                 >
-                    <Menu className="w-5 h-5" />
-                    <span className="text-[8px] font-black uppercase tracking-tighter mt-1 opacity-40">Menu</span>
+                    <div className="p-2">
+                        <Menu className="w-5 h-5" />
+                    </div>
+                    <span className="text-[8px] font-black uppercase tracking-widest mt-1 opacity-40">Menu</span>
                 </button>
             </div>
         </div>

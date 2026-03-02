@@ -101,15 +101,15 @@ export default function Navbar({ onMenuClick }) {
                 {/* User Info - Clickable for Profile Settings */}
                 <Link
                     to="/profile"
-                    className="flex items-center gap-2 sm:gap-4 pl-3 sm:pl-6 border-l border-white/10 hover:bg-white/5 px-2 sm:px-4 py-2 rounded-2xl transition-all group"
+                    className="flex items-center gap-2 sm:gap-4 border-l border-white/10 hover:bg-white/5 pl-2 sm:pl-6 px-2 sm:px-4 py-1.5 rounded-2xl transition-all group"
                 >
-                    <div className="text-right hidden sm:block">
+                    <div className="text-right hidden md:block">
                         <p className="text-[10px] font-black text-white uppercase whitespace-nowrap group-hover:text-gold transition-colors">
                             {user?.name || user?.email?.split('@')[0]}
                         </p>
                         <p className="text-[9px] text-gold/60 font-bold uppercase tracking-widest mt-0.5 group-hover:text-gold transition-colors">{user?.role}</p>
                     </div>
-                    <div className="w-10 h-10 bg-gold text-maroon font-black rounded-full flex items-center justify-center shadow-lg text-sm group-hover:scale-110 group-hover:rotate-6 transition-all overflow-hidden border-2 border-transparent group-hover:border-gold">
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gold text-maroon font-black rounded-full flex items-center justify-center shadow-lg text-xs sm:text-sm group-hover:scale-110 group-hover:rotate-6 transition-all overflow-hidden border-2 border-transparent group-hover:border-gold">
                         {user?.photo ? (
                             <img src={user?.photo} alt="Avatar" className="w-full h-full object-cover" />
                         ) : (

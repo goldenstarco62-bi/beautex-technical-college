@@ -107,18 +107,18 @@ function AdminDashboard() {
                     </div>
                     <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Global Directives</h2>
                 </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-                    <button onClick={() => navigate('/students')} className="flex items-center justify-center gap-3 bg-[#800000] text-white px-4 md:px-6 py-4 md:py-5 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] hover:bg-[#600000] transition-all shadow-xl hover:-translate-y-1 active:scale-95">
-                        <UserPlus className="w-4 h-4 text-[#FFD700]" /> Register Student
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
+                    <button onClick={() => navigate('/students')} className="flex items-center justify-center gap-2 md:gap-3 bg-maroon text-white p-3 md:py-5 rounded-xl md:rounded-2xl font-black text-[8px] md:text-[10px] uppercase tracking-wider md:tracking-[0.2em] hover:bg-maroon-dark transition-all shadow-lg hover:-translate-y-1 active:scale-95">
+                        <UserPlus className="w-3.5 h-3.5 md:w-4 md:h-4 text-gold" /> Register Student
                     </button>
-                    <button onClick={() => navigate('/faculty')} className="flex items-center justify-center gap-3 bg-[#FFD700] text-[#800000] px-4 md:px-6 py-4 md:py-5 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] hover:bg-[#E5C100] transition-all shadow-xl hover:-translate-y-1 active:scale-95">
-                        <UserPlus className="w-4 h-4" /> Recruit Faculty
+                    <button onClick={() => navigate('/faculty')} className="flex items-center justify-center gap-2 md:gap-3 bg-gold text-maroon p-3 md:py-5 rounded-xl md:rounded-2xl font-black text-[8px] md:text-[10px] uppercase tracking-wider md:tracking-[0.2em] hover:bg-gold-dark transition-all shadow-lg hover:-translate-y-1 active:scale-95">
+                        <UserPlus className="w-3.5 h-3.5 md:w-4 md:h-4" /> Recruit Faculty
                     </button>
-                    <button onClick={() => window.print()} className="flex items-center justify-center gap-3 bg-blue-600 text-white px-4 md:px-6 py-4 md:py-5 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] hover:bg-blue-700 transition-all shadow-xl hover:-translate-y-1 active:scale-95">
-                        <FileText className="w-4 h-4 text-blue-200" /> Export Analytics
+                    <button onClick={() => window.print()} className="flex items-center justify-center gap-2 md:gap-3 bg-blue-600 text-white p-3 md:py-5 rounded-xl md:rounded-2xl font-black text-[8px] md:text-[10px] uppercase tracking-wider md:tracking-[0.2em] hover:bg-blue-700 transition-all shadow-lg hover:-translate-y-1 active:scale-95">
+                        <FileText className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-200" /> Export Analytics
                     </button>
-                    <button onClick={() => navigate('/finance')} className="flex items-center justify-center gap-3 bg-green-600 text-white px-4 md:px-6 py-4 md:py-5 rounded-2xl font-black text-[9px] md:text-[10px] uppercase tracking-[0.2em] hover:bg-green-700 transition-all shadow-xl hover:-translate-y-1 active:scale-95">
-                        <DollarSign className="w-4 h-4 text-green-200" /> Treasury Hub
+                    <button onClick={() => navigate('/finance')} className="flex items-center justify-center gap-2 md:gap-3 bg-green-600 text-white p-3 md:py-5 rounded-xl md:rounded-2xl font-black text-[8px] md:text-[10px] uppercase tracking-wider md:tracking-[0.2em] hover:bg-green-700 transition-all shadow-lg hover:-translate-y-1 active:scale-95">
+                        <DollarSign className="w-3.5 h-3.5 md:w-4 md:h-4 text-green-200" /> Treasury Hub
                     </button>
                 </div>
             </div>

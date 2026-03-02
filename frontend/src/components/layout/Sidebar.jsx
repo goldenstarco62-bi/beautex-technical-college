@@ -63,15 +63,15 @@ export default function Sidebar({ isOpen, setIsOpen }) {
             {/* Mobile Backdrop */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-maroon/20 backdrop-blur-sm z-[55] lg:hidden transition-opacity duration-300"
+                    className="fixed inset-0 bg-maroon/40 backdrop-blur-md z-[55] lg:hidden transition-all duration-500 animate-in fade-in"
                     onClick={() => setIsOpen(false)}
                 />
             )}
 
-            <div className={`fixed left-0 top-0 h-screen w-72 bg-white/95 dark:bg-black/95 backdrop-blur-xl border-r border-gray-100/10 flex flex-col z-[60] transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] transform shadow-2xl rounded-r-[2.5rem]
+            <div className={`fixed left-0 top-0 h-screen w-80 bg-white dark:bg-black border-r border-gray-100/10 flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-4xl rounded-r-[3rem] lg:rounded-none
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
 
-                <div className="px-8 py-8 border-b border-gray-100/5 mb-4 flex justify-between items-center bg-maroon/5 rounded-tr-[2.5rem]">
+                <div className="px-6 py-10 border-b border-gray-50 mb-2 flex justify-between items-center bg-gradient-to-br from-maroon/[0.03] to-transparent rounded-tr-[3rem]">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-white p-1 rounded-2xl flex items-center justify-center overflow-hidden shadow-xl border border-gray-100 group-hover:rotate-6 transition-transform">
                             <img src="/logo.jpg" alt="Beautex Logo" className="w-full h-full object-cover rounded-xl" />
@@ -102,13 +102,20 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                                     <Link
                                         to={item.path}
                                         onClick={() => setIsOpen(false)}
-                                        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${isActive
-                                            ? 'bg-[#FFD700] text-[#800000] font-black shadow-lg translate-x-1'
-                                            : 'text-gray-400 hover:text-[#800000] hover:bg-gray-50'
+                                        className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 relative group overflow-hidden ${isActive
+                                            ? 'bg-gold text-maroon scale-[1.02] shadow-xl shadow-gold/20'
+                                            : 'text-gray-400 hover:text-maroon hover:bg-maroon/5'
                                             }`}
                                     >
-                                        <Icon className={`w-5 h-5 ${isActive ? 'text-[#800000]' : ''}`} />
-                                        <span className="text-xs font-bold uppercase tracking-widest">{item.name}</span>
+                                        <div className={`transition-transform duration-500 ${isActive ? 'rotate-[10deg] scale-110' : 'group-hover:rotate-12'}`}>
+                                            <Icon className={`w-5 h-5 ${isActive ? 'text-maroon' : 'text-gray-400 group-hover:text-maroon'}`} />
+                                        </div>
+                                        <span className={`text-[11px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-maroon' : 'group-hover:text-maroon'}`}>
+                                            {item.name}
+                                        </span>
+                                        {isActive && (
+                                            <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-maroon rounded-l-full"></div>
+                                        )}
                                     </Link>
                                 </li>
                             );
