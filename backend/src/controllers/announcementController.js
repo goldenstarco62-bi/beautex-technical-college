@@ -11,11 +11,12 @@ async function getAllUserEmails() {
     try {
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
-            const users = await User.find({ isActive: { $ne: false } }, 'email').lean();
+            // Fetch all active users regardless of role
+            const users = await User.find({ status: 'Active' }, 'email').lean();
             return users.map(u => u.email).filter(Boolean);
         }
-        // SQL path — try users table first, then fall back
-        const rows = await query('SELECT email FROM users WHERE is_active != 0 OR is_active IS NULL');
+        // SQL path — users must be in 'Active' status
+        const rows = await query("SELECT email FROM users WHERE status = 'Active'");
         return rows.map(r => r.email).filter(Boolean);
     } catch (err) {
         console.error('⚠️  Could not fetch user emails for announcement notification:', err.message);
@@ -59,13 +60,20 @@ export async function createAnnouncement(req, res) {
             res.status(201).json(savedAnnouncement);
         }
 
-        // ✉️  Send email notifications in the background (do NOT await — don't block the response)
-        getAllUserEmails().then(emails => {
-            if (emails.length > 0) {
-                console.log(`📢 Sending announcement email to ${emails.length} user(s)...`);
-                sendAnnouncementEmail(savedAnnouncement, emails);
-            }
-        });
+        // ✉️ Send email notifications in the background
+        getAllUserEmails()
+            .then(emails => {
+                if (emails && emails.length > 0) {
+                    console.log(`📢 Announcement Broadcast: Found ${emails.length} active recipient(s).`);
+                    console.log(`📧 Dispatching bulletins to: ${emails.slice(0, 5).join(', ')}${emails.length > 5 ? '...' : ''}`);
+                    return sendAnnouncementEmail(savedAnnouncement, emails);
+                } else {
+                    console.warn('⚠️ No active user emails found for announcement notification.');
+                }
+            })
+            .catch(err => {
+                console.error('❌ Critical failure in background announcement broadcast:', err.stack || err);
+            });
 
     } catch (error) {
         console.error('Create announcement error:', error);
