@@ -57,8 +57,8 @@ function App() {
     return (
         <ThemeProvider>
             <AuthProvider>
-                <PWAInstallPrompt />
                 <BrowserRouter>
+                    <PWAInstallPrompt />
                     <Routes>
                         <Route path="/login" element={<Login />} />
                         {/* FIX: /change-password now requires a token to prevent anonymous access */}
