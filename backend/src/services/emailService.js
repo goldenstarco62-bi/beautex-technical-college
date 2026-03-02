@@ -188,41 +188,41 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
         const htmlBody = `
             <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #f1f5f9; border-radius: 24px; overflow: hidden; background-color: #ffffff; color: #1e293b; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
                 <!-- Elite Header -->
-                <div style="background-color: #800000; padding: 48px 40px; text-align: center; background-image: linear-gradient(to bottom right, #800000, #5c0000);">
-                    <p style="color: #ffd700; margin: 0 0 12px; font-size: 10px; font-weight: 900; letter-spacing: 4px; text-transform: uppercase; opacity: 0.9;">Beautex Technical Training College</p>
-                    <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; text-transform: uppercase;">📢 Official Bulletin</h1>
-                    <div style="height: 2px; width: 40px; background-color: #ffd700; margin: 20px auto 0; opacity: 0.5;"></div>
+                <div style="background-color: #800000; padding: 32px 24px; text-align: center; background-image: linear-gradient(to bottom right, #800000, #5c0000);">
+                    <p style="color: #ffd700; margin: 0 0 8px; font-size: 9px; font-weight: 900; letter-spacing: 3px; text-transform: uppercase; opacity: 0.9;">Beautex Technical Training College</p>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px; text-transform: uppercase;">📢 Official Bulletin</h1>
+                    <div style="height: 2px; width: 30px; background-color: #ffd700; margin: 16px auto 0; opacity: 0.5;"></div>
                 </div>
 
-                <div style="padding: 40px;">
+                <div style="padding: 30px;">
                     <!-- Metadata Row -->
-                    <div style="margin-bottom: 32px; display: flex; align-items: center; gap: 12px;">
-                        <span style="background-color: ${priorityColor}15; color: ${priorityColor}; font-size: 9px; font-weight: 900; padding: 6px 14px; border-radius: 10px; border: 1px solid ${priorityColor}30; text-transform: uppercase; letter-spacing: 1.5px;">
+                    <div style="margin-bottom: 24px; display: flex; align-items: center; gap: 10px;">
+                        <span style="background-color: ${priorityColor}15; color: ${priorityColor}; font-size: 8px; font-weight: 900; padding: 5px 12px; border-radius: 8px; border: 1px solid ${priorityColor}30; text-transform: uppercase; letter-spacing: 1.2px;">
                             ${priorityLabel} PRIORITY
                         </span>
-                        <span style="background-color: #f8fafc; color: #64748b; font-size: 9px; font-weight: 900; padding: 6px 14px; border-radius: 10px; border: 1px solid #e2e8f0; text-transform: uppercase; letter-spacing: 1.5px; margin-left: 8px;">
+                        <span style="background-color: #f8fafc; color: #64748b; font-size: 8px; font-weight: 900; padding: 5px 12px; border-radius: 8px; border: 1px solid #e2e8f0; text-transform: uppercase; letter-spacing: 1.2px; margin-left: 6px;">
                             ${categoryLabel}
                         </span>
-                        <span style="color: #94a3b8; font-size: 10px; font-weight: 700; margin-left: auto;">
+                        <span style="color: #94a3b8; font-size: 9px; font-weight: 700; margin-left: auto;">
                             ${dateStr}
                         </span>
                     </div>
 
                     <!-- Content Section -->
-                    <h2 style="color: #800000; margin: 0 0 20px; font-size: 22px; font-weight: 900; line-height: 1.2; letter-spacing: -0.5px; text-transform: uppercase;">${title}</h2>
+                    <h2 style="color: #800000; margin: 0 0 16px; font-size: 18px; font-weight: 900; line-height: 1.2; letter-spacing: -0.5px; text-transform: uppercase;">${title}</h2>
                     
-                    <div style="background-color: #fdfcfb; border-left: 4px solid #800000; border-radius: 12px; padding: 32px; margin-bottom: 40px; border-top: 1px solid #f8fafc; border-right: 1px solid #f8fafc; border-bottom: 1px solid #f8fafc;">
-                        <p style="margin: 0; font-size: 16px; line-height: 1.8; color: #334155; white-space: pre-wrap; font-weight: 500;">${content}</p>
+                    <div style="background-color: #fdfcfb; border-left: 3px solid #800000; border-radius: 10px; padding: 24px; margin-bottom: 30px; border-top: 1px solid #f8fafc; border-right: 1px solid #f8fafc; border-bottom: 1px solid #f8fafc;">
+                        <p style="margin: 0; font-size: 14px; line-height: 1.7; color: #334155; white-space: pre-wrap; font-weight: 500;">${content}</p>
                     </div>
 
-                    <div style="margin-bottom: 40px; padding-bottom: 32px; border-bottom: 1px solid #f1f5f9;">
-                        <p style="margin: 0; font-size: 11px; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">Dispatch Authority</p>
-                        <p style="margin: 0; font-size: 14px; color: #800000; font-weight: 900; text-transform: uppercase;">${author || 'College Administration'}</p>
+                    <div style="margin-bottom: 30px; padding-bottom: 24px; border-bottom: 1px solid #f1f5f9;">
+                        <p style="margin: 0; font-size: 10px; color: #94a3b8; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px;">Dispatch Authority</p>
+                        <p style="margin: 0; font-size: 13px; color: #800000; font-weight: 900; text-transform: uppercase;">${author || 'College Administration'}</p>
                     </div>
 
                     <!-- CTA -->
                     <div style="text-align: center;">
-                        <a href="${portalUrl}" style="background-color: #800000; color: #ffd700; padding: 18px 48px; text-decoration: none; border-radius: 16px; font-weight: 900; font-size: 13px; display: inline-block; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 10px 15px -3px rgba(128, 0, 0, 0.3); border: 1px solid rgba(255, 215, 0, 0.2);">
+                        <a href="${portalUrl}" style="background-color: #800000; color: #ffd700; padding: 14px 36px; text-decoration: none; border-radius: 12px; font-weight: 900; font-size: 12px; display: inline-block; text-transform: uppercase; letter-spacing: 2px; box-shadow: 0 8px 12px -3px rgba(128, 0, 0, 0.2); border: 1px solid rgba(255, 215, 0, 0.1);">
                             Access Student Portal
                         </a>
                     </div>
@@ -248,14 +248,13 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
                 await new Promise(r => setTimeout(r, 1000));
 
                 process.stdout.write(`📤 Sending to ${email}... `);
-                const info = await transporter.sendMail({
+                await transporter.sendMail({
                     from: `"Beautex College News" <${process.env.SMTP_USER}>`,
                     to: email,
-                    bcc: process.env.SMTP_USER,
                     subject: `[Announcement] ${title}`,
                     html: htmlBody,
                 });
-                console.log(`✅ SENT (ID: ${info.messageId})`);
+                console.log(`✅ SENT`);
                 successCount++;
             } catch (err) {
                 console.log(`❌ FAILED: ${err.message}`);
@@ -264,6 +263,30 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
         }
 
         console.log(`🏁 Broadcast Complete: ${successCount} sent, ${failCount} failed.`);
+
+        // Send a single summary to the administrator
+        try {
+            await transporter.sendMail({
+                from: `"System Monitor" <${process.env.SMTP_USER}>`,
+                to: process.env.SMTP_USER,
+                subject: `📊 Broadcast Report: ${title}`,
+                html: `
+                    <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                        <h2 style="color: #800000;">Broadcast Summary</h2>
+                        <p><strong>Announcement:</strong> ${title}</p>
+                        <p><strong>Total Recipients:</strong> ${recipientEmails.length}</p>
+                        <hr/>
+                        <p style="color: green;">✅ <strong>Successfully Delivered:</strong> ${successCount}</p>
+                        <p style="color: red;">❌ <strong>Failed:</strong> ${failCount}</p>
+                        <p style="font-size: 12px; color: #666; margin-top: 20px;">This is an automated verification report.</p>
+                    </div>
+                `
+            });
+            console.log('📊 Summary report sent to administrator.');
+        } catch (reportErr) {
+            console.error('⚠️ Failed to send summary report:', reportErr.message);
+        }
+
         return successCount > 0;
     } catch (error) {
         console.error('❌ Critical error in announcement broadcaster:', error.message);

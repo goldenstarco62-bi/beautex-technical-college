@@ -107,36 +107,35 @@ export default function Announcements() {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-12 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Elite Header section */}
+        <div className="max-w-5xl mx-auto space-y-6 pb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="relative group">
-                <div className="absolute -inset-4 bg-gradient-to-r from-maroon/5 to-gold/5 rounded-[3rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-1000"></div>
+                <div className="absolute -inset-4 bg-gradient-to-r from-maroon/5 to-gold/5 rounded-[2.5rem] blur-2xl opacity-50 group-hover:opacity-100 transition-opacity duration-1000"></div>
 
-                <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-8 bg-white/40 backdrop-blur-xl p-8 md:p-12 rounded-[2.5rem] border border-white/60 shadow-2xl">
-                    <div className="flex items-center gap-8">
-                        <div className="w-20 h-20 bg-maroon rounded-3xl flex items-center justify-center shadow-2xl shadow-maroon/20 transform -rotate-3 transition-transform group-hover:rotate-0 duration-500">
-                            <Megaphone className="w-10 h-10 text-gold" />
+                <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white/40 backdrop-blur-xl p-5 md:p-6 rounded-[1.5rem] border border-white/60 shadow-2xl">
+                    <div className="flex items-center gap-6">
+                        <div className="w-14 h-14 bg-maroon rounded-2xl flex items-center justify-center shadow-xl shadow-maroon/20 transform -rotate-3 transition-transform group-hover:rotate-0 duration-500">
+                            <Megaphone className="w-7 h-7 text-gold" />
                         </div>
                         <div>
                             <div className="flex items-center gap-3 mb-1">
                                 <span className="h-[1px] w-8 bg-gold/40"></span>
                                 <p className="text-[10px] text-maroon/60 font-black tracking-[0.3em] uppercase">Communication Portal</p>
                             </div>
-                            <h1 className="text-4xl md:text-5xl font-black text-maroon tracking-tighter uppercase leading-none">
+                            <h1 className="text-3xl md:text-4xl font-black text-maroon tracking-tighter uppercase leading-none">
                                 Bulletins <span className="text-gold">&</span> News
                             </h1>
-                            <p className="text-sm text-gray-500 font-medium mt-3 border-l-2 border-gold/40 pl-4 italic">Official dispatches from the College Registry</p>
+                            <p className="text-xs text-gray-500 font-medium mt-2 border-l-2 border-gold/40 pl-4 italic">Official dispatches from the College Registry</p>
                         </div>
                     </div>
                     {(user?.role === 'admin' || user?.role === 'superadmin') && (
                         <button
                             onClick={() => { resetForm(); setShowModal(true); }}
-                            className="group relative px-10 py-5 bg-maroon text-gold rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-2xl shadow-maroon/30"
+                            className="group relative px-8 py-4 bg-maroon text-gold rounded-xl overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-xl shadow-maroon/30"
                         >
                             <div className="absolute inset-0 bg-gold translate-y-full group-hover:translate-y-0 transition-transform duration-500 opacity-10"></div>
-                            <div className="relative flex items-center gap-3">
-                                <Plus className="w-5 h-5 text-gold" />
-                                <span className="font-black text-xs uppercase tracking-[0.2em]">Broadcast News</span>
+                            <div className="relative flex items-center gap-2">
+                                <Plus className="w-4 h-4 text-gold" />
+                                <span className="font-black text-[10px] uppercase tracking-[0.2em]">Broadcast News</span>
                             </div>
                         </button>
                     )}
@@ -144,7 +143,7 @@ export default function Announcements() {
             </div>
 
             {/* Announcements Grid */}
-            <div className="grid grid-cols-1 gap-8">
+            <div className="grid grid-cols-1 gap-6">
                 {announcements.length === 0 ? (
                     <div className="text-center py-24 bg-white/30 rounded-[3rem] border-2 border-dashed border-maroon/10">
                         <Bell className="w-16 h-16 text-maroon/10 mx-auto mb-4" />
@@ -154,20 +153,20 @@ export default function Announcements() {
                     announcements.map((announcement, idx) => (
                         <div
                             key={announcement.id || announcement._id || `ann-${idx}`}
-                            className={`relative group bg-white rounded-[2.5rem] p-1 shadow-xl hover:shadow-2xl transition-all duration-500 border border-maroon/5 flex flex-col md:flex-row overflow-hidden ${announcement.priority === 'High' ? 'hover:border-red-500/20' : 'hover:border-gold/30'
+                            className={`relative group bg-white rounded-[2rem] p-1 shadow-xl hover:shadow-2xl transition-all duration-500 border border-maroon/5 flex flex-col md:flex-row overflow-hidden ${announcement.priority === 'High' ? 'hover:border-red-500/20' : 'hover:border-gold/30'
                                 }`}
                         >
                             {/* Priority Sidebar Decoration */}
                             <div className={`w-2 md:w-3 shrink-0 ${announcement.priority === 'High' ? 'bg-red-600' :
-                                    announcement.priority === 'Medium' ? 'bg-maroon' : 'bg-gold'
+                                announcement.priority === 'Medium' ? 'bg-maroon' : 'bg-gold'
                                 }`}></div>
 
-                            <div className="flex-1 p-8 md:p-12">
-                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+                            <div className="flex-1 p-5 md:p-8">
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-5">
                                     <div className="flex flex-wrap items-center gap-4">
                                         <div className={`flex items-center gap-2 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border ${announcement.priority === 'High'
-                                                ? 'bg-red-50 text-red-700 border-red-100'
-                                                : 'bg-maroon/5 text-maroon border-maroon/10'
+                                            ? 'bg-red-50 text-red-700 border-red-100'
+                                            : 'bg-maroon/5 text-maroon border-maroon/10'
                                             }`}>
                                             <div className={`w-1.5 h-1.5 rounded-full ${announcement.priority === 'High' ? 'bg-red-600' : 'bg-maroon'} ${announcement.priority === 'High' ? 'animate-pulse' : ''}`}></div>
                                             {announcement.priority} PRIORITY
@@ -194,19 +193,19 @@ export default function Announcements() {
                                     )}
                                 </div>
 
-                                <div className="space-y-6 max-w-4xl">
-                                    <h2 className="text-2xl md:text-3xl font-black text-maroon tracking-tight uppercase group-hover:text-black transition-colors duration-300">
+                                <div className="space-y-3 max-w-4xl">
+                                    <h2 className="text-lg md:text-xl font-black text-maroon tracking-tight uppercase group-hover:text-black transition-colors duration-300">
                                         {announcement.title}
                                     </h2>
                                     <div className="relative group/text">
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-gold/40 to-transparent rounded-full -ml-8"></div>
-                                        <p className="text-gray-600 text-lg leading-[1.8] font-medium whitespace-pre-wrap pl-2">
+                                        <p className="text-gray-600 text-base leading-[1.7] font-medium whitespace-pre-wrap pl-2">
                                             {announcement.content}
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="mt-12 pt-8 border-t border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                <div className="mt-6 pt-5 border-t border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 bg-maroon/5 rounded-full flex items-center justify-center border border-maroon/10 uppercase font-black text-xs text-maroon">
                                             {announcement.author?.charAt(0) || 'A'}
