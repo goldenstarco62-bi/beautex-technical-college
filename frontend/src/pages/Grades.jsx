@@ -31,6 +31,7 @@ export default function Grades() {
     const [submittingBatch, setSubmittingBatch] = useState(false);
     const [printingStudentReport, setPrintingStudentReport] = useState(null); // { student, grades }
     const [viewingReport, setViewingReport] = useState(null); // { student, grades }
+    const [logoDataUrl, setLogoDataUrl] = useState('');
 
     const [formData, setFormData] = useState({
         student_id: '',
@@ -48,6 +49,18 @@ export default function Grades() {
     ];
 
     const assignments = ['CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6', 'Final Exam', 'Practical Assessment'];
+
+    // Pre-load the logo as a base64 data URL so html2canvas can always embed it
+    useEffect(() => {
+        fetch('/logo.jpg')
+            .then(r => r.blob())
+            .then(blob => {
+                const reader = new FileReader();
+                reader.onloadend = () => setLogoDataUrl(reader.result);
+                reader.readAsDataURL(blob);
+            })
+            .catch(() => setLogoDataUrl('/logo.jpg')); // fallback
+    }, []);
 
     useEffect(() => {
         if (!user) return;
@@ -244,21 +257,41 @@ export default function Grades() {
 
         setPrintingStudentReport({ student, grades: studentGrades });
 
-        // Wait for state update and render
+        // Wait for React to render the off-screen template
         setTimeout(async () => {
-            const element = document.getElementById('printable-report');
+            // Target the INNER print div, not the outer off-screen wrapper
+            const element = document.getElementById('print-a4-inner');
             if (!element) return;
 
             try {
+                // Wait for every <img> inside the template to fully load
+                const images = Array.from(element.querySelectorAll('img'));
+                await Promise.all(
+                    images.map(img =>
+                        img.complete
+                            ? Promise.resolve()
+                            : new Promise(resolve => {
+                                img.onload = resolve;
+                                img.onerror = resolve;
+                            })
+                    )
+                );
+
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = pdf.internal.pageSize.getHeight();
 
+                // Capture the exact inner div — scrollX/scrollY:0 ensures we start from top-left
                 const canvas = await html2canvas(element, {
                     scale: 3,
                     useCORS: true,
+                    allowTaint: true,
                     backgroundColor: '#ffffff',
-                    windowWidth: 794,
+                    scrollX: 0,
+                    scrollY: 0,
+                    width: element.offsetWidth,
+                    height: element.offsetHeight,
+                    logging: false,
                 });
                 const imgData = canvas.toDataURL('image/png');
 
@@ -274,7 +307,7 @@ export default function Grades() {
             } finally {
                 setPrintingStudentReport(null);
             }
-        }, 1500);
+        }, 800);
     };
 
     const resetForm = () => {
@@ -605,7 +638,44 @@ export default function Grades() {
                                                             </td>
                                                             {catColumns.map(cat => (
                                                                 <td key={cat} className="px-4 py-5 text-center">
-                                                                    {scoreChip(row.grades[cat])}
+                                                                    {row.grades[cat] ? (
+                                                                        canManage ? (
+                                                                            <button
+                                                                                onClick={() => handleEdit(row.grades[cat])}
+                                                                                className="group relative inline-block"
+                                                                                title="Click to edit this result"
+                                                                            >
+                                                                                {scoreChip(row.grades[cat])}
+                                                                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-maroon text-white rounded-full text-[8px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                                                                                    <Edit className="w-2.5 h-2.5" />
+                                                                                </span>
+                                                                            </button>
+                                                                        ) : scoreChip(row.grades[cat])
+                                                                    ) : (
+                                                                        canManage ? (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    resetForm();
+                                                                                    setEditingGrade(null);
+                                                                                    setFormData(prev => ({
+                                                                                        ...prev,
+                                                                                        student_id: row.studentId,
+                                                                                        course: row.course,
+                                                                                        assignment: cat,
+                                                                                        month: new Date().toLocaleString('default', { month: 'long' }),
+                                                                                        score: '',
+                                                                                        max_score: '100',
+                                                                                        remarks: ''
+                                                                                    }));
+                                                                                    setShowModal(true);
+                                                                                }}
+                                                                                className="w-8 h-8 rounded-xl border-2 border-dashed border-black/10 text-black/20 hover:border-maroon hover:text-maroon hover:bg-maroon/5 transition-all flex items-center justify-center mx-auto"
+                                                                                title={`Add ${cat} for ${row.studentName}`}
+                                                                            >
+                                                                                <Plus className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        ) : <span className="text-[11px] font-black text-black/10">—</span>
+                                                                    )}
                                                                 </td>
                                                             ))}
                                                             <td className="px-5 py-5 text-center border-l border-black/10">
@@ -617,9 +687,34 @@ export default function Grades() {
                                                             </td>
                                                             {!isStudent && (
                                                                 <td className="px-4 py-5">
-                                                                    <div className="flex justify-center gap-2">
+                                                                    <div className="flex justify-center gap-1.5 flex-wrap">
                                                                         <button onClick={() => handleViewReport(row.studentId)} className="p-2 hover:bg-maroon/5 rounded-xl transition-all border border-maroon/5 text-maroon/40" title="View Summary"><Eye className="w-3.5 h-3.5" /></button>
                                                                         <button onClick={() => handleDownloadReport(row.studentId)} className="p-2 hover:bg-gold hover:text-maroon rounded-xl transition-all border border-maroon/5 text-maroon" title="Download PDF"><FileDown className="w-3.5 h-3.5" /></button>
+                                                                        {canManage && Object.values(row.grades).length > 0 && (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        // Edit the most recent grade in this row
+                                                                                        const latest = Object.values(row.grades).sort((a, b) => b.id - a.id)[0];
+                                                                                        if (latest) handleEdit(latest);
+                                                                                    }}
+                                                                                    className="p-2 hover:bg-maroon hover:text-white rounded-xl transition-all border border-maroon/10 text-maroon"
+                                                                                    title="Edit latest result"
+                                                                                >
+                                                                                    <Edit className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => {
+                                                                                        const latest = Object.values(row.grades).sort((a, b) => b.id - a.id)[0];
+                                                                                        if (latest) handleDelete(latest.id);
+                                                                                    }}
+                                                                                    className="p-2 hover:bg-red-500 hover:text-white rounded-xl transition-all border border-red-100 text-red-400"
+                                                                                    title="Delete latest result"
+                                                                                >
+                                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            </>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                             )}
@@ -1017,76 +1112,163 @@ export default function Grades() {
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-4">
-                                        <p className="text-[10px] font-black text-black/40 uppercase tracking-widest px-2">Assessment Timeline</p>
-                                        <div className="space-y-3">
-                                            {viewingReport.grades.map((g, i) => (
-                                                <div key={i} className="bg-gray-50/50 p-5 rounded-2xl border border-black/5 flex justify-between items-center group hover:bg-white transition-all">
+                                {/* ── Full CAT breakdown grouped by course ── */}
+                                {(() => {
+                                    // Group grades by course
+                                    const byCourse = {};
+                                    viewingReport.grades.forEach(g => {
+                                        const crs = g.course || 'Unknown Course';
+                                        if (!byCourse[crs]) byCourse[crs] = [];
+                                        byCourse[crs].push(g);
+                                    });
+                                    const catOrder = ['CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6', 'Practical Assessment', 'Final Exam'];
+                                    const sortGrades = (gs) => [...gs].sort((a, b) => {
+                                        const ai = catOrder.indexOf(a.assignment);
+                                        const bi = catOrder.indexOf(b.assignment);
+                                        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+                                    });
+
+                                    const bandColor = (pct) =>
+                                        pct >= 70 ? 'bg-green-50 text-green-700 border-green-200'
+                                            : pct >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                                : 'bg-red-50 text-red-600 border-red-200';
+
+                                    const bandLabel = (pct) =>
+                                        pct >= 70 ? 'Distinction' : pct >= 60 ? 'Credit' : pct >= 50 ? 'Pass' : 'Refer';
+
+                                    return (
+                                        <div className="space-y-8">
+                                            {/* Cumulative card */}
+                                            <div className="bg-maroon text-gold p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 p-6 opacity-10"><TrendingUp className="w-20 h-20" /></div>
+                                                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                                                     <div>
-                                                        <p className="text-xs font-black text-black uppercase">{g.assignment}</p>
-                                                        <p className="text-[10px] text-black/30 font-bold uppercase">{g.month} {g.year || ''}</p>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Cumulative Average</p>
+                                                        <h4 className="text-5xl font-black tracking-tighter">
+                                                            {viewingReport.grades.length > 0
+                                                                ? Math.round((viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100)
+                                                                : 0}%
+                                                        </h4>
                                                     </div>
                                                     <div className="text-right">
-                                                        <div className="text-sm font-black text-maroon">{Math.round((g.score / (g.max_score || 100)) * 100)}%</div>
-                                                        <div className="text-[9px] text-black/20 font-bold uppercase">{g.score}/{g.max_score || 100}</div>
+                                                        <p className="text-[9px] font-black uppercase opacity-60 mb-1">Academic Standing</p>
+                                                        <p className="text-xl font-black uppercase">
+                                                            {(() => {
+                                                                const avg = viewingReport.grades.length > 0
+                                                                    ? (viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100 : 0;
+                                                                return avg >= 70 ? 'Distinction' : avg >= 60 ? 'Credit' : avg >= 50 ? 'Pass' : viewingReport.grades.length > 0 ? 'Refer' : 'N/A';
+                                                            })()}
+                                                        </p>
+                                                        <p className="text-[10px] font-black uppercase opacity-50 mt-1">{viewingReport.grades.length} Assessment{viewingReport.grades.length !== 1 ? 's' : ''} Recorded</p>
                                                     </div>
                                                 </div>
-                                            ))}
-                                            {viewingReport.grades.length === 0 && (
-                                                <div className="py-10 text-center text-[10px] font-black text-black/20 uppercase tracking-widest border border-dashed border-black/10 rounded-2xl">
-                                                    No assessment records found
+                                            </div>
+
+                                            {/* Per-course tables */}
+                                            {viewingReport.grades.length === 0 ? (
+                                                <div className="py-14 text-center text-[10px] font-black text-black/20 uppercase tracking-widest border-2 border-dashed border-black/8 rounded-2xl">
+                                                    No assessment records found for this student.
                                                 </div>
+                                            ) : (
+                                                Object.entries(byCourse).map(([course, cGrades]) => {
+                                                    const sorted = sortGrades(cGrades);
+                                                    const courseAvg = Math.round((sorted.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / sorted.length) * 100);
+                                                    return (
+                                                        <div key={course} className="rounded-2xl border border-black/8 overflow-hidden">
+                                                            {/* Course header */}
+                                                            <div className="flex items-center justify-between bg-maroon/[0.04] px-6 py-4 border-b border-black/8">
+                                                                <div className="flex items-center gap-3">
+                                                                    <BookOpen className="w-4 h-4 text-maroon" />
+                                                                    <p className="text-sm font-black text-black uppercase tracking-tight">{course}</p>
+                                                                </div>
+                                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${bandColor(courseAvg)}`}>
+                                                                    Avg: {courseAvg}%
+                                                                </span>
+                                                            </div>
+
+                                                            {/* Grades table */}
+                                                            <table className="w-full">
+                                                                <thead>
+                                                                    <tr className="bg-black/[0.015] border-b border-black/5">
+                                                                        <th className="px-5 py-3 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Assessment</th>
+                                                                        <th className="px-5 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Month</th>
+                                                                        <th className="px-5 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Marks</th>
+                                                                        <th className="px-5 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Score</th>
+                                                                        <th className="px-5 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
+                                                                        <th className="px-5 py-3 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Remarks</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-black/5">
+                                                                    {sorted.map((g, i) => {
+                                                                        const pct = Math.round((g.score / (g.max_score || 100)) * 100);
+                                                                        return (
+                                                                            <tr key={i} className="hover:bg-maroon/[0.012] transition-colors">
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-xs font-black text-black uppercase">{g.assignment}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <p className="text-[11px] font-bold text-black/50 uppercase">{g.month || '—'}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <p className="text-xs font-black text-black">{g.score} / {g.max_score || 100}</p>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className={`inline-block px-3 py-1 rounded-xl text-xs font-black border ${bandColor(pct)}`}>
+                                                                                        {pct}%
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4 text-center">
+                                                                                    <span className="text-[10px] font-black text-black/50 uppercase">{bandLabel(pct)}</span>
+                                                                                </td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <p className="text-[11px] text-black/40 italic leading-snug max-w-[160px]">
+                                                                                        {g.remarks || '—'}
+                                                                                    </p>
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                                {/* Course footer row */}
+                                                                <tfoot>
+                                                                    <tr className="bg-black/[0.02] border-t-2 border-maroon/20">
+                                                                        <td colSpan={3} className="px-5 py-3 text-[10px] font-black text-black/40 uppercase tracking-widest">
+                                                                            Course Average
+                                                                        </td>
+                                                                        <td className="px-5 py-3 text-center">
+                                                                            <span className={`inline-block px-3 py-1 rounded-xl text-xs font-black border ${bandColor(courseAvg)}`}>
+                                                                                {courseAvg}%
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-5 py-3 text-center">
+                                                                            <span className="text-[10px] font-black text-maroon uppercase">{bandLabel(courseAvg)}</span>
+                                                                        </td>
+                                                                        <td />
+                                                                    </tr>
+                                                                </tfoot>
+                                                            </table>
+                                                        </div>
+                                                    );
+                                                })
                                             )}
-                                        </div>
-                                    </div>
 
-                                    <div className="space-y-6">
-                                        <div className="bg-maroon text-gold p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 p-6 opacity-10">
-                                                <TrendingUp className="w-20 h-20" />
-                                            </div>
-                                            <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-2">Cumulative Average</p>
-                                            <h4 className="text-5xl font-black tracking-tighter">
-                                                {viewingReport.grades.length > 0
-                                                    ? Math.round((viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100)
-                                                    : 0}%
-                                            </h4>
-                                            <div className="mt-4 pt-4 border-t border-gold/20 flex justify-between items-end">
-                                                <div>
-                                                    <p className="text-[9px] font-black uppercase opacity-60">Academic Standing</p>
-                                                    <p className="text-xs font-black uppercase">
-                                                        {(() => {
-                                                            const avg = viewingReport.grades.length > 0
-                                                                ? (viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100
-                                                                : 0;
-                                                            return avg >= 70 ? 'Distinction' : avg >= 60 ? 'Credit' : avg >= 50 ? 'Pass' : viewingReport.grades.length > 0 ? 'Refer' : 'N/A';
-                                                        })()}
-                                                    </p>
-                                                </div>
-                                                <CheckCircle className="w-6 h-6 opacity-40" />
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-gray-50 p-6 rounded-[2rem] border border-black/5">
-                                            <p className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-4">Registry Integrity</p>
-                                            <div className="space-y-3">
-                                                <div className="flex items-center gap-3 text-[10px] font-bold text-black/60 uppercase">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                                    Verified by Academic Registrar
-                                                </div>
-                                                <div className="flex items-center gap-3 text-[10px] font-bold text-black/60 uppercase">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                                    Digitally Signed Protocol
-                                                </div>
-                                                <div className="flex items-center gap-3 text-[10px] font-bold text-black/60 uppercase">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-maroon" />
-                                                    Certified on {new Date().toLocaleDateString()}
+                                            {/* Registry integrity */}
+                                            <div className="bg-gray-50 p-6 rounded-2xl border border-black/5">
+                                                <p className="text-[10px] font-black text-black/40 uppercase tracking-widest mb-3">Registry Integrity</p>
+                                                <div className="flex flex-wrap gap-4">
+                                                    {['Verified by Academic Registrar', 'Digitally Signed Protocol'].map(t => (
+                                                        <div key={t} className="flex items-center gap-2 text-[10px] font-bold text-black/60 uppercase">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />{t}
+                                                        </div>
+                                                    ))}
+                                                    <div className="flex items-center gap-2 text-[10px] font-bold text-black/60 uppercase">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-maroon shrink-0" />Certified on {new Date().toLocaleDateString()}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -1095,70 +1277,73 @@ export default function Grades() {
                 {/* Performance Report Printing View */}
                 {printingStudentReport && (
                     <>
-                        <style>{`
-                        @media print {
-                            @page { size: A4; margin: 0; }
-                            body { margin: 0; padding: 0 !important; }
-                            .print-a4 { 
-                                width: 210mm !important; 
-                                height: 297mm !important; 
-                                padding: 15mm !important; 
-                                margin: 0 auto !important;
-                                box-shadow: none !important;
-                                border: 4px double #800000 !important; /* Maroon border all round */
-                                box-sizing: border-box !important;
-                            }
-                            #printable-report { position: static !important; overflow: visible !important; }
-                        }
-                    `}</style>
-                        <div id="printable-report" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
-                            <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
-                                <div className="text-center mb-6 border-b-2 border-maroon pb-6">
-                                    <div className="flex flex-col items-center mb-6">
-                                        <img src="/logo.jpg" alt="College Logo" className="w-24 h-24 object-contain mb-4" />
-                                        <h1 className="text-2xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
-                                        <p className="text-[11px] font-bold text-gray-500 tracking-[0.2em] uppercase mb-2 text-center italic">"Empowering minds, shaping innovations"</p>
-                                    </div>
-                                    <div className="w-24 h-0.5 bg-gold mx-auto mb-6" />
-                                    <h2 className="text-lg font-black text-black uppercase tracking-widest mb-4">Official Student Performance Statement</h2>
+                        {/* User-facing loading overlay */}
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] flex items-center justify-center">
+                            <div className="bg-white rounded-3xl p-10 shadow-2xl text-center">
+                                <div className="w-12 h-12 border-4 border-maroon border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                                <p className="text-sm font-black text-black uppercase tracking-widest">Generating PDF</p>
+                                <p className="text-[10px] text-black/40 font-bold uppercase tracking-widest mt-1">Please wait...</p>
+                            </div>
+                        </div>
 
-                                    <div className="flex justify-between items-end mt-10 text-left px-4">
+                        {/* Off-screen printable template — rendered outside viewport so html2canvas captures the full thing */}
+                        <div
+                            id="printable-report"
+                            style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px', zIndex: -1 }}
+                            className="font-serif bg-white"
+                        >
+                            <div id="print-a4-inner" className="border-4 border-double border-maroon p-6 bg-white flex flex-col" style={{ width: '794px', minHeight: '1123px' }}>
+
+                                {/* ── HEADER ── */}
+                                <div className="text-center border-b-2 border-maroon pb-3 mb-3">
+                                    <div className="flex flex-col items-center mb-2">
+                                        {logoDataUrl && (
+                                            <img src={logoDataUrl} alt="College Logo" className="w-14 h-14 object-contain mb-1" crossOrigin="anonymous" />
+                                        )}
+                                        <h1 className="text-base font-black text-maroon uppercase tracking-widest leading-tight">Beautex Technical Training College</h1>
+                                        <p className="text-[9px] font-bold text-gray-500 tracking-[0.15em] uppercase italic mt-0.5">"Empowering minds, shaping innovations"</p>
+                                    </div>
+                                    <div className="w-16 h-px bg-yellow-500 mx-auto mb-2" />
+                                    <h2 className="text-sm font-black text-black uppercase tracking-widest">Official Student Performance Statement</h2>
+
+                                    <div className="flex justify-between items-start mt-3 text-left">
                                         <div>
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Student Details</p>
-                                            <p className="text-xl font-black text-black uppercase">{printingStudentReport.student.name}</p>
-                                            <p className="text-[11px] font-bold text-gray-600">Admission No: {printingStudentReport.student.id}</p>
-                                            <p className="text-[11px] font-bold text-gray-600">Academic Program: {printingStudentReport.student.course}</p>
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Student Details</p>
+                                            <p className="text-sm font-black text-black uppercase">{printingStudentReport.student.name}</p>
+                                            <p className="text-[9px] font-bold text-gray-600">Admission No: {printingStudentReport.student.id}</p>
+                                            <p className="text-[9px] font-bold text-gray-600">Academic Program: {printingStudentReport.student.course}</p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Registry Information</p>
-                                            <p className="text-[11px] font-bold text-black uppercase">Cycle: 2025/2026 Academic Year</p>
-                                            <p className="text-[11px] font-bold text-black uppercase">Printed: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Registry Information</p>
+                                            <p className="text-[9px] font-bold text-black uppercase">Cycle: 2025/2026 Academic Year</p>
+                                            <p className="text-[9px] font-bold text-black uppercase">Printed: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="px-4">
-                                    <table className="w-full text-left border-collapse mb-10">
+                                {/* ── GRADES TABLE ── */}
+                                <div className="flex-1 px-1">
+                                    <table className="w-full text-left border-collapse mb-4">
                                         <thead>
                                             <tr className="bg-maroon/5 border-b-2 border-maroon">
-                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Assessment Module</th>
-                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Period</th>
-                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest text-center">Marks</th>
-                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest text-center">Score %</th>
-                                                <th className="py-4 px-3 text-[10px] font-black text-maroon uppercase tracking-widest">Quality Assessment</th>
+                                                <th className="py-2 px-2 text-[8px] font-black text-maroon uppercase tracking-wider">Assessment Module</th>
+                                                <th className="py-2 px-2 text-[8px] font-black text-maroon uppercase tracking-wider">Period</th>
+                                                <th className="py-2 px-2 text-[8px] font-black text-maroon uppercase tracking-wider text-center">Marks</th>
+                                                <th className="py-2 px-2 text-[8px] font-black text-maroon uppercase tracking-wider text-center">Score %</th>
+                                                <th className="py-2 px-2 text-[8px] font-black text-maroon uppercase tracking-wider">Quality Assessment</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-maroon/10">
                                             {printingStudentReport.grades.map((g, i) => (
                                                 <tr key={i}>
-                                                    <td className="py-4 px-3">
-                                                        <p className="text-xs font-black text-black uppercase">{g.assignment}</p>
-                                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{g.course}</p>
+                                                    <td className="py-1.5 px-2">
+                                                        <p className="text-[10px] font-black text-black uppercase">{g.assignment}</p>
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase">{g.course}</p>
                                                     </td>
-                                                    <td className="py-4 px-3 text-xs font-bold text-gray-600 uppercase italic">{g.month}</td>
-                                                    <td className="py-4 px-3 text-xs font-black text-black text-center">{g.score} / {g.max_score || 100}</td>
-                                                    <td className="py-4 px-3 text-xs font-black text-maroon text-center">{Math.round((g.score / (g.max_score || 100)) * 100)}%</td>
-                                                    <td className="py-4 px-3 text-[10px] font-medium text-gray-500 italic leading-tight">
+                                                    <td className="py-1.5 px-2 text-[10px] font-bold text-gray-600 uppercase italic">{g.month}</td>
+                                                    <td className="py-1.5 px-2 text-[10px] font-black text-black text-center">{g.score} / {g.max_score || 100}</td>
+                                                    <td className="py-1.5 px-2 text-[10px] font-black text-maroon text-center">{Math.round((g.score / (g.max_score || 100)) * 100)}%</td>
+                                                    <td className="py-1.5 px-2 text-[9px] font-medium text-gray-500 italic leading-tight">
                                                         {g.remarks ? `"${g.remarks}"` : 'Progress satisfactory. Competency levels met.'}
                                                     </td>
                                                 </tr>
@@ -1166,58 +1351,61 @@ export default function Grades() {
                                         </tbody>
                                     </table>
 
-                                    <div className="grid grid-cols-2 gap-12 mt-12 bg-gray-50 p-8 rounded-2xl border border-gray-100">
+                                    {/* ── CUMULATIVE SUMMARY ── */}
+                                    <div className="grid grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
                                         <div>
-                                            <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em] mb-4">Cumulative Summary</h3>
-                                            <div className="space-y-4">
-                                                <div className="flex justify-between items-center text-xs border-b border-black/5 pb-2">
+                                            <h3 className="text-[8px] font-black text-maroon uppercase tracking-[0.2em] mb-2">Cumulative Summary</h3>
+                                            <div className="space-y-1.5">
+                                                <div className="flex justify-between items-center text-[10px] border-b border-black/5 pb-1">
                                                     <span className="font-bold text-gray-500 uppercase">Average Percentage</span>
-                                                    <span className="text-base font-black text-black">
+                                                    <span className="font-black text-black">
                                                         {printingStudentReport.grades.length > 0
                                                             ? Math.round((printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) * 100)
                                                             : 0}%
                                                     </span>
                                                 </div>
-                                                <div className="flex justify-between items-center text-xs border-b border-black/5 pb-2">
+                                                <div className="flex justify-between items-center text-[10px] border-b border-black/5 pb-1">
                                                     <span className="font-bold text-gray-500 uppercase">Total Assessments</span>
                                                     <span className="font-black text-black">{printingStudentReport.grades.length} Recorded Units</span>
                                                 </div>
-                                                <div className="flex justify-between items-center text-xs">
+                                                <div className="flex justify-between items-center text-[10px]">
                                                     <span className="font-bold text-gray-500 uppercase">Overall Standing</span>
-                                                    <span className="font-black text-maroon uppercase tracking-widest">
-                                                        {printingStudentReport.grades.length > 0 &&
-                                                            (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) >= 0.7
-                                                            ? 'Excellent Performance'
-                                                            : (printingStudentReport.grades.length > 0 && (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length) >= 0.5
-                                                                ? 'Good Progress'
-                                                                : 'Conditional Pass')}
+                                                    <span className="font-black text-maroon uppercase">
+                                                        {(() => {
+                                                            const avg = printingStudentReport.grades.length > 0
+                                                                ? (printingStudentReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / printingStudentReport.grades.length)
+                                                                : 0;
+                                                            return avg >= 0.7 ? 'Excellent Performance' : avg >= 0.5 ? 'Good Progress' : 'Conditional Pass';
+                                                        })()}
                                                     </span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="text-center flex flex-col justify-end items-center">
-                                            <div className="w-16 h-16 border-2 border-maroon rounded-full flex items-center justify-center mb-6 opacity-20">
-                                                <Award className="w-8 h-8 text-maroon" />
+                                        <div className="flex flex-col justify-end items-center">
+                                            <div className="w-10 h-10 border-2 border-maroon rounded-full flex items-center justify-center mb-3 opacity-20">
+                                                <Award className="w-5 h-5 text-maroon" />
                                             </div>
-                                            <div className="w-56 border-b border-black mb-2"></div>
-                                            <p className="text-[9px] font-black text-black uppercase tracking-widest">Registrar / Exams Officer</p>
-                                            <p className="text-[8px] font-bold text-gray-400 mt-1 uppercase">Beautex Training Centre Seal of Authenticity</p>
+                                            <div className="w-40 border-b border-black mb-1" />
+                                            <p className="text-[8px] font-black text-black uppercase tracking-widest">Registrar / Exams Officer</p>
+                                            <p className="text-[7px] font-bold text-gray-400 mt-0.5 uppercase">Beautex Training Centre Seal of Authenticity</p>
                                         </div>
                                     </div>
-
-                                    <div className="mt-8 text-center border-t border-maroon/10 pt-6">
-                                        <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">
-                                            Beautex Technical Training College
-                                        </p>
-                                        <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
-                                            Contact: 0708247557 | Email: beautexcollege01@gmail.com <br />
-                                            Location: Utawala, Geokarma behind Astrol Petrol Station | www.beautex.ac.ke
-                                        </p>
-                                        <p className="text-[7px] text-gray-300 uppercase tracking-[0.2em] mt-4">
-                                            Verified Registry Document • Beautex College Management System • © {new Date().getFullYear()}
-                                        </p>
-                                    </div>
                                 </div>
+
+                                {/* ── FOOTER ── always at bottom ── */}
+                                <div className="border-t-2 border-maroon/20 pt-3 text-center mt-auto">
+                                    <p className="text-[9px] font-black text-maroon uppercase tracking-widest mb-0.5">
+                                        Beautex Technical Training College
+                                    </p>
+                                    <p className="text-[8px] text-gray-400 uppercase tracking-wider leading-relaxed">
+                                        Contact: 0708247557 | Email: beautexcollege01@gmail.com<br />
+                                        Location: Utawala, Geokarma behind Astrol Petrol Station | www.beautex.ac.ke
+                                    </p>
+                                    <p className="text-[7px] text-gray-300 uppercase tracking-[0.15em] mt-1">
+                                        Verified Registry Document • Beautex College Management System • © {new Date().getFullYear()}
+                                    </p>
+                                </div>
+
                             </div>
                         </div>
                     </>

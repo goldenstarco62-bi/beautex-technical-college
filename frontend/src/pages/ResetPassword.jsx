@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
-import { Lock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Lock, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export default function ResetPassword() {
     const [searchParams] = useSearchParams();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -54,6 +56,7 @@ export default function ResetPassword() {
                         <Lock className="w-10 h-10 text-maroon" />
                     </div>
                     <h1 className="text-xl font-black text-white uppercase tracking-widest">Reset Password</h1>
+                    <p className="text-[11px] text-white/75 font-semibold uppercase tracking-[0.2em] mt-2">Beautex Technical Training College</p>
                 </div>
 
                 <div className="bg-white rounded-[2rem] p-10 shadow-2xl">
@@ -63,45 +66,68 @@ export default function ResetPassword() {
                                 <CheckCircle className="w-16 h-16 text-green-500" />
                             </div>
                             <h2 className="text-lg font-bold text-gray-800">Password Reset Successful!</h2>
-                            <p className="text-sm text-gray-500">You will be redirected to the login page shortly...</p>
+                            <p className="text-sm text-gray-600">You will be redirected to the login page shortly...</p>
                         </div>
                     ) : (
                         <>
-                            <div className="text-center mb-10">
-                                <p className="text-sm text-gray-500">Enter your new secure password below.</p>
+                            <div className="text-center mb-8">
+                                <h2 className="text-base font-bold text-gray-800">Create New Password</h2>
+                                <p className="text-sm text-gray-600 mt-2">Enter your new secure password below.</p>
                                 <div className="h-1 w-12 bg-gold mx-auto mt-4 rounded-full"></div>
                             </div>
 
                             {error && (
-                                <div className="mb-6 p-4 bg-red-50 rounded-xl flex items-center gap-3 text-red-500 text-xs font-bold border border-red-100 italic">
-                                    <AlertCircle className="w-4 h-4" />
-                                    {error}
+                                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700 text-sm font-semibold">
+                                    <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />
+                                    <span>{error}</span>
                                 </div>
                             )}
 
                             <form onSubmit={handleSubmit} className="space-y-6">
+                                {/* New Password */}
                                 <div className="space-y-2">
-                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">New Password</label>
-                                    <input
-                                        type="password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-maroon/5 focus:border-maroon/20 font-medium transition-all"
-                                        placeholder="Min 6 characters"
-                                        required
-                                    />
+                                    <label className="text-[12px] font-bold text-gray-600 uppercase tracking-widest ml-1">New Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            className="w-full px-5 py-4 pr-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/30 font-medium transition-all"
+                                            placeholder="Min 6 characters"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-maroon transition-colors"
+                                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                        >
+                                            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                        </button>
+                                    </div>
                                 </div>
 
+                                {/* Confirm Password */}
                                 <div className="space-y-2">
-                                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Confirm Password</label>
-                                    <input
-                                        type="password"
-                                        value={confirmPassword}
-                                        onChange={(e) => setConfirmPassword(e.target.value)}
-                                        className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-maroon/5 focus:border-maroon/20 font-medium transition-all"
-                                        placeholder="Repeat password"
-                                        required
-                                    />
+                                    <label className="text-[12px] font-bold text-gray-600 uppercase tracking-widest ml-1">Confirm Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showConfirmPassword ? 'text' : 'password'}
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            className="w-full px-5 py-4 pr-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/30 font-medium transition-all"
+                                            placeholder="Repeat password"
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-maroon transition-colors"
+                                            aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                                        >
+                                            {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <button
@@ -109,11 +135,17 @@ export default function ResetPassword() {
                                     disabled={loading || !token}
                                     className="w-full bg-maroon text-white font-black py-4 rounded-xl hover:bg-maroon-dark transition-all shadow-lg uppercase text-xs tracking-widest disabled:opacity-50"
                                 >
-                                    {loading ? 'Reseting...' : 'Update Password'}
+                                    {loading ? 'Updating...' : 'Update Password'}
                                 </button>
                             </form>
                         </>
                     )}
+                </div>
+
+                <div className="mt-10 text-center">
+                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.3em]">
+                        © 2026 Beautex Technical Training College
+                    </p>
                 </div>
             </div>
         </div>

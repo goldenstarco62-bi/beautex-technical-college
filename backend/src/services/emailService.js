@@ -157,3 +157,82 @@ export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
     }
 };
 
+export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
+    if (!recipientEmails || recipientEmails.length === 0) return;
+
+    try {
+        if (!transporter) {
+            transporter = await createTransporter();
+        }
+
+        const { title, content, author, category, priority } = announcement;
+        const portalUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        // Priority badge color
+        const priorityColors = {
+            high: '#dc2626',
+            medium: '#d97706',
+            low: '#16a34a',
+        };
+        const priorityColor = priorityColors[(priority || 'medium').toLowerCase()] || '#d97706';
+        const priorityLabel = (priority || 'General').toUpperCase();
+        const categoryLabel = (category || 'General').toUpperCase();
+
+        const htmlBody = `
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; color: #1a202c;">
+                <!-- Header -->
+                <div style="background-color: #800000; padding: 36px 20px; text-align: center;">
+                    <p style="color: #ffd700; margin: 0 0 8px; font-size: 11px; font-weight: bold; letter-spacing: 3px; text-transform: uppercase;">Beautex Technical Training College</p>
+                    <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px;">📢 College Announcement</h1>
+                    <p style="color: #ffffff; opacity: 0.75; margin: 8px 0 0; font-size: 13px;">${dateStr}</p>
+                </div>
+
+                <!-- Priority & Category Badges -->
+                <div style="padding: 20px 40px 0; display: flex; gap: 8px;">
+                    <span style="display: inline-block; background-color: ${priorityColor}; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 12px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase;">${priorityLabel} PRIORITY</span>
+                    <span style="display: inline-block; background-color: #e2e8f0; color: #4a5568; font-size: 11px; font-weight: 700; padding: 3px 12px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase; margin-left: 8px;">${categoryLabel}</span>
+                </div>
+
+                <!-- Body -->
+                <div style="padding: 30px 40px 40px;">
+                    <h2 style="color: #800000; margin: 0 0 16px; font-size: 20px; line-height: 1.3;">${title}</h2>
+                    <div style="background-color: #f9fafb; border-left: 4px solid #800000; border-radius: 8px; padding: 20px 24px; margin-bottom: 28px;">
+                        <p style="margin: 0; font-size: 15px; line-height: 1.8; color: #374151; white-space: pre-wrap;">${content}</p>
+                    </div>
+
+                    <p style="margin: 0 0 6px; font-size: 13px; color: #6b7280;">Posted by: <strong style="color: #1f2937;">${author || 'Administration'}</strong></p>
+
+                    <!-- CTA -->
+                    <div style="text-align: center; margin-top: 36px;">
+                        <a href="${portalUrl}" style="background-color: #800000; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 14px; display: inline-block; box-shadow: 0 4px 12px rgba(128, 0, 0, 0.25);">View on Portal</a>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div style="background-color: #f8fafc; padding: 20px 40px; text-align: center; border-top: 1px solid #e2e8f0;">
+                    <p style="margin: 0; font-size: 12px; color: #9ca3af;">© 2026 Beautex Technical Training College. All rights reserved.</p>
+                    <p style="margin: 4px 0 0; font-size: 11px; color: #d1d5db;">This email was sent because you are a member of the Beautex College portal.</p>
+                </div>
+            </div>
+        `;
+
+        // Send to all recipients via BCC to protect privacy
+        const info = await transporter.sendMail({
+            from: `"Beautex Technical Training College" <${process.env.SMTP_USER}>`,
+            to: process.env.SMTP_USER, // send to self
+            bcc: recipientEmails.join(','),
+            subject: `📢 [Announcement] ${title}`,
+            html: htmlBody,
+        });
+
+        console.log(`📧 Announcement email sent to ${recipientEmails.length} recipient(s): ${info.messageId}`);
+        if (nodemailer.getTestMessageUrl(info)) {
+            console.log(`🔗 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+        }
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to send announcement email:', error.message);
+        return false;
+    }
+};

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { authAPI } from '../services/api';
-import { Lock, Save } from 'lucide-react';
+import { Lock, Save, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function ChangePassword() {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
@@ -15,12 +17,6 @@ export default function ChangePassword() {
     const email = location.state?.email;
 
     if (!email) {
-        // If no email in state, redirect back to login
-        // In a real app, you might want to handle this better (e.g., check if user is already logged in but needs password change)
-        // But for this flow, we assume they come from Login.
-
-        // However, if we preserve the session, we might be able to get it from context. 
-        // For now, let's just redirect if missing.
         setTimeout(() => navigate('/login'), 0);
         return null;
     }
@@ -42,7 +38,6 @@ export default function ChangePassword() {
         setLoading(true);
 
         try {
-            // For forced changes, we don't need currentPassword as the user is semi-authenticated
             await authAPI.changePassword({
                 email,
                 newPassword
@@ -65,46 +60,69 @@ export default function ChangePassword() {
                         <Lock size={32} />
                     </div>
                     <h2 className="text-xl font-bold text-gray-800">Change Password</h2>
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-sm text-gray-600 mt-2">
                         For security, please update your temporary password.
                     </p>
                 </div>
 
                 {error && (
-                    <div className="bg-red-50 text-red-600 p-3 rounded-lg text-xs font-bold mb-4 text-center">
-                        {error}
+                    <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700 text-sm font-semibold">
+                        <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />
+                        <span>{error}</span>
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    {/* New Password */}
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">New Password</label>
-                        <input
-                            type="password"
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-100 text-gray-800 focus:outline-none focus:ring-2 focus:ring-maroon/20"
-                            placeholder="Min 6 characters"
-                            required
-                        />
+                        <label className="text-[12px] font-bold text-gray-600 uppercase tracking-widest">New Password</label>
+                        <div className="relative">
+                            <input
+                                type={showNewPassword ? 'text' : 'password'}
+                                value={newPassword}
+                                onChange={(e) => setNewPassword(e.target.value)}
+                                className="w-full px-4 py-3 pr-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 font-medium transition-all"
+                                placeholder="Min 6 characters"
+                                required
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-maroon transition-colors"
+                                aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                            >
+                                {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
                     </div>
 
+                    {/* Confirm Password */}
                     <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Confirm Password</label>
-                        <input
-                            type="password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-100 text-gray-800 focus:outline-none focus:ring-2 focus:ring-maroon/20"
-                            placeholder="Re-enter password"
-                            required
-                        />
+                        <label className="text-[12px] font-bold text-gray-600 uppercase tracking-widest">Confirm Password</label>
+                        <div className="relative">
+                            <input
+                                type={showConfirmPassword ? 'text' : 'password'}
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                className="w-full px-4 py-3 pr-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 font-medium transition-all"
+                                placeholder="Re-enter password"
+                                required
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-maroon transition-colors"
+                                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                            >
+                                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                            </button>
+                        </div>
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-maroon text-white font-bold py-3 rounded-xl hover:bg-maroon-dark transition-all shadow-lg flex items-center justify-center gap-2 mt-4"
+                        className="w-full bg-maroon text-white font-bold py-3 rounded-xl hover:bg-maroon-dark transition-all shadow-lg flex items-center justify-center gap-2 mt-4 disabled:opacity-50"
                     >
                         {loading ? 'Updating...' : <><Save size={16} /> Update Password</>}
                     </button>

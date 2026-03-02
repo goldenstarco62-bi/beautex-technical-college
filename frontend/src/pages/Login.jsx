@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, GraduationCap, Eye, EyeOff } from 'lucide-react';
+import { LogIn, GraduationCap, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -25,7 +25,18 @@ export default function Login() {
                 navigate('/dashboard');
             }
         } catch (err) {
-            setError(err.response?.data?.error || 'Invalid credentials');
+            const msg = err.response?.data?.error || '';
+            if (
+                msg.toLowerCase().includes('invalid') ||
+                msg.toLowerCase().includes('incorrect') ||
+                msg.toLowerCase().includes('not found') ||
+                msg.toLowerCase().includes('credentials') ||
+                !msg
+            ) {
+                setError('Invalid username or password. Please try again.');
+            } else {
+                setError(msg);
+            }
         } finally {
             setLoading(false);
         }
@@ -82,54 +93,63 @@ export default function Login() {
     return (
         <div className="min-h-screen bg-maroon flex items-center justify-center p-4">
             <div className="w-full max-w-sm">
-                {/* School Seal Screenshot 4 */}
+                {/* School Seal */}
                 <div className="text-center mb-10">
                     <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-2xl mb-6 shadow-xl overflow-hidden border-4 border-gold">
                         <img src="/logo.jpg" alt="Beautex Logo" className="w-full h-full object-cover" />
                     </div>
                     <div className="space-y-2">
                         <h1 className="text-xl font-black text-white uppercase tracking-widest">Beautex</h1>
-                        <p className="text-[10px] text-white/60 font-medium uppercase tracking-[0.2em]">Technical Training College</p>
+                        <p className="text-[11px] text-white/75 font-semibold uppercase tracking-[0.2em]">Technical Training College</p>
                     </div>
                 </div>
 
-                {/* Login Card Screenshot 4 */}
+                {/* Login Card */}
                 <div className="bg-white rounded-[2rem] p-10 shadow-2xl">
-                    <div className="text-center mb-10">
+                    <div className="text-center mb-8">
                         <h2 className="text-lg font-bold text-gray-800">Sign in to your account</h2>
                         <div className="h-1 w-12 bg-gold mx-auto mt-4 rounded-full"></div>
                     </div>
 
+                    {/* Error Message */}
+                    {error && (
+                        <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 text-red-700 text-sm font-semibold">
+                            <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-red-500" />
+                            <span>{error}</span>
+                        </div>
+                    )}
+
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                            <label className="text-[12px] font-bold text-gray-600 uppercase tracking-widest ml-1">Email Address</label>
                             <input
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-maroon/5 focus:border-maroon/20 font-medium transition-all"
+                                className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/30 font-medium transition-all"
                                 placeholder="name@example.com"
                                 required
                             />
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-1">Password</label>
+                            <label className="text-[12px] font-bold text-gray-600 uppercase tracking-widest ml-1">Password</label>
                             <div className="relative">
                                 <input
                                     type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-100 text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-maroon/5 focus:border-maroon/20 font-medium transition-all pr-12"
+                                    className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/30 font-medium transition-all pr-12"
                                     placeholder="Enter password"
                                     required
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maroon transition-colors"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-maroon transition-colors"
+                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                                 >
-                                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                                 </button>
                             </div>
                         </div>
@@ -137,12 +157,12 @@ export default function Login() {
                         <div className="flex items-center justify-between px-1">
                             <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" className="w-4 h-4 rounded border-gray-200 text-maroon focus:ring-maroon" />
-                                <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Remember me</span>
+                                <span className="text-[12px] font-semibold text-gray-600 uppercase tracking-wider">Remember me</span>
                             </label>
                             <button
                                 type="button"
                                 onClick={handleForgotPassword}
-                                className="text-[11px] font-bold text-maroon uppercase tracking-wider hover:underline"
+                                className="text-[12px] font-bold text-maroon uppercase tracking-wider hover:underline"
                             >
                                 Forgot?
                             </button>
@@ -160,7 +180,7 @@ export default function Login() {
                 </div>
 
                 <div className="mt-12 text-center">
-                    <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">
+                    <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.3em]">
                         © 2026 Beautex Technical Training College
                     </p>
                 </div>

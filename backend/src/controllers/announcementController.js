@@ -1,6 +1,27 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
+import { sendAnnouncementEmail } from '../services/emailService.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
+
+/**
+ * Fetch all user emails to notify when a new announcement is posted.
+ * Works for both MongoDB and SQL (SQLite / PostgreSQL).
+ */
+async function getAllUserEmails() {
+    try {
+        if (await isMongo()) {
+            const User = (await import('../models/mongo/User.js')).default;
+            const users = await User.find({ isActive: { $ne: false } }, 'email').lean();
+            return users.map(u => u.email).filter(Boolean);
+        }
+        // SQL path — try users table first, then fall back
+        const rows = await query('SELECT email FROM users WHERE is_active != 0 OR is_active IS NULL');
+        return rows.map(r => r.email).filter(Boolean);
+    } catch (err) {
+        console.error('⚠️  Could not fetch user emails for announcement notification:', err.message);
+        return [];
+    }
+}
 
 export async function getAllAnnouncements(req, res) {
     try {
@@ -22,19 +43,30 @@ export async function createAnnouncement(req, res) {
     try {
         const { title, content, author, category, priority, date } = req.body;
 
+        let savedAnnouncement;
+
         if (await isMongo()) {
             const Announcement = (await import('../models/mongo/Announcement.js')).default;
             const newAnnouncement = new Announcement({ title, content, author, category, priority, date });
-            const saved = await newAnnouncement.save();
-            return res.status(201).json(saved);
+            savedAnnouncement = await newAnnouncement.save();
+            res.status(201).json(savedAnnouncement);
+        } else {
+            const result = await run(
+                'INSERT INTO announcements (title, content, author, category, priority, date) VALUES (?, ?, ?, ?, ?, ?)',
+                [title, content, author, category, priority, date || new Date().toISOString().split('T')[0]]
+            );
+            savedAnnouncement = await queryOne('SELECT * FROM announcements WHERE id = ?', [result.lastID]);
+            res.status(201).json(savedAnnouncement);
         }
 
-        const result = await run(
-            'INSERT INTO announcements (title, content, author, category, priority, date) VALUES (?, ?, ?, ?, ?, ?)',
-            [title, content, author, category, priority, date || new Date().toISOString().split('T')[0]]
-        );
-        const announcement = await queryOne('SELECT * FROM announcements WHERE id = ?', [result.lastID]);
-        res.status(201).json(announcement);
+        // ✉️  Send email notifications in the background (do NOT await — don't block the response)
+        getAllUserEmails().then(emails => {
+            if (emails.length > 0) {
+                console.log(`📢 Sending announcement email to ${emails.length} user(s)...`);
+                sendAnnouncementEmail(savedAnnouncement, emails);
+            }
+        });
+
     } catch (error) {
         console.error('Create announcement error:', error);
         res.status(500).json({ error: 'Failed to create announcement' });
