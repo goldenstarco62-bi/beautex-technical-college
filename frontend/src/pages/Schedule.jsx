@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { sessionsAPI } from '../services/api';
+import { sessionsAPI, coursesAPI, facultyAPI } from '../services/api';
 import { Calendar as CalendarIcon, Clock, MapPin, Plus, X, Trash2 } from 'lucide-react';
 
 export default function Schedule() {
@@ -15,6 +15,21 @@ export default function Schedule() {
     const [formData, setFormData] = useState({
         day: 'Monday', time: '08:00', course: '', room: '', instructor: ''
     });
+    const [availableCourses, setAvailableCourses] = useState([]);
+    const [availableFaculty, setAvailableFaculty] = useState([]);
+
+    const fetchData = async () => {
+        try {
+            const [coursesRes, facultyRes] = await Promise.all([
+                coursesAPI.getAll(),
+                facultyAPI.getAll()
+            ]);
+            setAvailableCourses(coursesRes.data || []);
+            setAvailableFaculty(facultyRes.data || []);
+        } catch (error) {
+            console.error('Error fetching dynamic data:', error);
+        }
+    };
 
     const fetchSessions = async () => {
         try {
@@ -39,6 +54,7 @@ export default function Schedule() {
 
     useEffect(() => {
         fetchSessions();
+        fetchData();
     }, [user]);
 
     const handleSubmit = async (e) => {
@@ -216,14 +232,15 @@ export default function Schedule() {
 
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-black uppercase tracking-widest ml-1">Course Assignment</label>
-                                <input
-                                    type="text"
+                                <select
                                     value={formData.course}
                                     onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                                    className="w-full bg-black/5 border-none outline-none rounded-2xl px-6 py-4 text-xs font-black text-black placeholder:text-black/10 focus:ring-2 ring-black/10 transition-all uppercase tracking-widest shadow-inner"
-                                    placeholder="e.g. Cosmetology II"
+                                    className="w-full bg-black/5 border-none outline-none rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-widest text-black appearance-none focus:ring-2 ring-black/10 transition-all shadow-inner"
                                     required
-                                />
+                                >
+                                    <option value="">Select Course</option>
+                                    {availableCourses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
                             </div>
 
                             <div className="grid grid-cols-2 gap-6">
@@ -240,14 +257,15 @@ export default function Schedule() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-black uppercase tracking-widest ml-1">Lead Instructor</label>
-                                    <input
-                                        type="text"
+                                    <select
                                         value={formData.instructor}
                                         onChange={(e) => setFormData({ ...formData, instructor: e.target.value })}
-                                        className="w-full bg-black/5 border-none outline-none rounded-2xl px-6 py-4 text-xs font-black text-black placeholder:text-black/10 focus:ring-2 ring-black/10 transition-all uppercase tracking-widest shadow-inner"
-                                        placeholder="Instructor Name"
+                                        className="w-full bg-black/5 border-none outline-none rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-widest text-black appearance-none focus:ring-2 ring-black/10 transition-all shadow-inner"
                                         required
-                                    />
+                                    >
+                                        <option value="">Select Instructor</option>
+                                        {availableFaculty.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                                    </select>
                                 </div>
                             </div>
 

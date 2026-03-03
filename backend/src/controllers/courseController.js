@@ -26,7 +26,7 @@ export async function getAllCourses(req, res) {
                 }
                 return res.json(courses);
             }
-            const courses = await query(`SELECT ${sqlSelect} FROM courses c WHERE c.status = 'Active' ORDER BY c.name`);
+            const courses = await query(`SELECT ${sqlSelect} FROM courses c ORDER BY c.name`);
             return res.json(courses);
         }
 

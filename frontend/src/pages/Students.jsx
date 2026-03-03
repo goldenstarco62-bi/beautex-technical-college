@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { studentsAPI, usersAPI } from '../services/api';
+import { studentsAPI, usersAPI, coursesAPI } from '../services/api';
 import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -27,10 +27,21 @@ export default function Students() {
         department: '', level: 'Module 1'
     });
     const [printingStudent, setPrintingStudent] = useState(null);
+    const [availableCourses, setAvailableCourses] = useState([]);
 
     useEffect(() => {
         fetchStudents();
+        fetchAvailableCourses();
     }, []);
+
+    const fetchAvailableCourses = async () => {
+        try {
+            const { data } = await coursesAPI.getAll();
+            setAvailableCourses(data || []);
+        } catch (error) {
+            console.error('Error fetching courses:', error);
+        }
+    };
 
     const fetchStudents = async () => {
         try {
@@ -226,10 +237,13 @@ export default function Students() {
         }
     };
 
-    const courses = [
-        'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Computer Packages', 'Website Development', 'Cyber Security',
-        'Makeup', 'Sista Locks', 'Braiding, Plaiting & Crotcheting', 'Weaving & Wig Installation', 'Nail Technology'
-    ];
+    const courses = availableCourses.map(c => c.name);
+    const departments = [...new Set(availableCourses.map(c => c.department))].filter(Boolean);
+    if (departments.length === 0) {
+        departments.push('Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Information Technology', 'Fashion & Design');
+    }
+
+    const intakes = ['January Intake', 'May Intake', 'September Intake', 'Short Course'];
 
     const canResetPassword = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
 
@@ -701,12 +715,9 @@ export default function Students() {
                                             className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
                                         >
                                             <option value="">Select Department</option>
-                                            <option value="Cosmetology">Cosmetology</option>
-                                            <option value="Beauty Therapy">Beauty Therapy</option>
-                                            <option value="Hairdressing">Hairdressing</option>
-                                            <option value="Information Technology">Information Technology</option>
-                                            <option value="Catering & Hospitality">Catering & Hospitality</option>
-                                            <option value="Fashion & Design">Fashion & Design</option>
+                                            {departments.map(dept => (
+                                                <option key={dept} value={dept}>{dept}</option>
+                                            ))}
                                         </select>
                                     </div>
                                     <div className="space-y-1">

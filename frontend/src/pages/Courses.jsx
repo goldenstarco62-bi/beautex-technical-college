@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { coursesAPI, studentsAPI } from '../services/api';
+import { coursesAPI, studentsAPI, facultyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Plus, BookOpen, Edit, Monitor, ShieldAlert, Trash2, X, MessageSquare } from 'lucide-react';
 import Interactions from '../components/shared/Interactions';
@@ -13,13 +13,24 @@ export default function Courses() {
         id: '', name: '', department: '', instructor: '', duration: '', capacity: 30, room: '', schedule: '', status: 'Active'
     });
     const [discussionEntity, setDiscussionEntity] = useState(null);
+    const [availableFaculty, setAvailableFaculty] = useState([]);
 
     const isStudent = user?.role === 'student';
     const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business'];
 
     useEffect(() => {
         fetchCourses();
+        fetchFaculty();
     }, [user]);
+
+    const fetchFaculty = async () => {
+        try {
+            const { data } = await facultyAPI.getAll();
+            setAvailableFaculty(data || []);
+        } catch (error) {
+            console.error('Error fetching faculty:', error);
+        }
+    };
 
     const fetchCourses = async () => {
         try {
@@ -301,14 +312,15 @@ export default function Courses() {
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Instructor</label>
-                                <input
-                                    type="text"
+                                <select
                                     value={formData.instructor}
                                     onChange={(e) => setFormData({ ...formData, instructor: e.target.value })}
-                                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/5"
-                                    placeholder="Prof. John Doe"
+                                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/5"
                                     required
-                                />
+                                >
+                                    <option value="">Select Instructor</option>
+                                    {availableFaculty.map(f => <option key={f.id || f._id} value={f.name}>{f.name}</option>)}
+                                </select>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
