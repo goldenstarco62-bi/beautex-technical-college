@@ -54,7 +54,19 @@ export const getAllReports = async (req, res) => {
         sql += ' ORDER BY created_at DESC';
 
         const reports = await query(sql, params);
-        res.json(reports);
+
+        // FIX: Normalize course names for Supabase/PostgreSQL (remove {"..."})
+        const cleanedReports = reports.map(r => ({
+            ...r,
+            course_unit: typeof r.course_unit === 'string' && r.course_unit.startsWith('{') && r.course_unit.endsWith('}')
+                ? r.course_unit.slice(1, -1).replace(/"/g, '')
+                : r.course_unit,
+            student_name: typeof r.student_name === 'string' && r.student_name.startsWith('{') && r.student_name.endsWith('}')
+                ? r.student_name.slice(1, -1).replace(/"/g, '')
+                : r.student_name
+        }));
+
+        res.json(cleanedReports);
     } catch (error) {
         console.error('Error fetching reports:', error);
         res.status(500).json({ error: 'Internal server error' });
@@ -170,6 +182,13 @@ export const deleteReport = async (req, res) => {
             }
             await AcademicReport.findByIdAndDelete(id);
             return res.json({ message: 'Report deleted successfully' });
+        }
+
+        const report = await queryOne('SELECT * FROM academic_reports WHERE id = ?', [id]);
+        if (!report) return res.status(404).json({ error: 'Report not found' });
+
+        if (req.user.role === 'teacher' && String(report.trainer_email || '').toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()) {
+            return res.status(403).json({ error: 'Forbidden: You can only delete your own reports' });
         }
 
         await run('DELETE FROM academic_reports WHERE id = ?', [id]);

@@ -83,7 +83,16 @@ export async function getAllAttendance(req, res) {
         sql += ' ORDER BY date DESC LIMIT 1000';
 
         const attendance = await query(sql, params);
-        res.json(attendance);
+
+        // FIX: Normalize course names for Supabase/PostgreSQL (remove {"..."})
+        const cleanedAttendance = attendance.map(a => ({
+            ...a,
+            course: typeof a.course === 'string' && a.course.startsWith('{') && a.course.endsWith('}')
+                ? a.course.slice(1, -1).replace(/"/g, '')
+                : a.course
+        }));
+
+        res.json(cleanedAttendance);
     } catch (error) {
         console.error('Get attendance error:', error);
         res.status(500).json({ error: 'Failed to fetch attendance' });
@@ -185,12 +194,46 @@ export async function updateAttendance(req, res) {
 export async function deleteAttendance(req, res) {
     try {
         const recordId = req.params.id;
+        const { role, email } = req.user;
 
         if (await isMongo()) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
-            const deleted = await Attendance.findByIdAndDelete(recordId);
-            if (!deleted) return res.status(404).json({ error: 'Attendance record not found' });
+            const record = await Attendance.findById(recordId);
+            if (!record) return res.status(404).json({ error: 'Attendance record not found' });
+
+            if (role === 'teacher') {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const fac = await Faculty.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+                if (fac) {
+                    const matched = await Course.find({
+                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: fac.courses || [] } }]
+                    }).select('name');
+                    const teacherCourses = matched.map(c => c.name);
+                    if (!teacherCourses.some(tc => tc.toLowerCase().trim() === record.course.toLowerCase().trim())) {
+                        return res.status(403).json({ error: 'Forbidden: You can only delete attendance for your own courses' });
+                    }
+                }
+            }
+
+            await Attendance.findByIdAndDelete(recordId);
             return res.json({ message: 'Attendance record deleted' });
+        }
+
+        const record = await queryOne('SELECT * FROM attendance WHERE id = ?', [recordId]);
+        if (!record) return res.status(404).json({ error: 'Attendance record not found' });
+
+        if (role === 'teacher') {
+            const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email.toLowerCase().trim()]);
+            if (fac) {
+                let list = [];
+                try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
+                const teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
+                if (!teacherCourses.some(tc => tc.toLowerCase().trim() === record.course.toLowerCase().trim())) {
+                    return res.status(403).json({ error: 'Forbidden: You can only delete attendance for your own courses' });
+                }
+            }
         }
 
         const result = await run('DELETE FROM attendance WHERE id = ?', [recordId]);

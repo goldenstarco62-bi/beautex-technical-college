@@ -30,10 +30,14 @@ export async function getAllStudents(req, res) {
                 return res.json(students);
             }
             const students = await query('SELECT * FROM students ORDER BY created_at DESC');
-            return res.json(students.map(s => ({
-                ...s,
-                course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
-            })));
+            return res.json(students.map(s => {
+                let course = s.course;
+                if (typeof course === 'string' && course.startsWith('{') && course.endsWith('}')) {
+                    course = course.slice(1, -1).replace(/"/g, '');
+                }
+                const parsedCourse = typeof course === 'string' && course.startsWith('[') ? JSON.parse(course) : [course].filter(Boolean);
+                return { ...s, course: parsedCourse };
+            }));
         }
 
         // Teachers see students in their courses

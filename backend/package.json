@@ -8,8 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "build": "echo 'No build step needed for Node.js backend'",
-    "seed": "node src/scripts/seed.js",
-    "seed-mongo": "node seed_mongo.js"
+    "seed": "node src/scripts/seed.js"
   },
   "engines": {
     "node": "20.x"

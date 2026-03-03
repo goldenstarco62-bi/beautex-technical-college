@@ -148,9 +148,24 @@ export const deleteDailyReport = async (req, res) => {
     try {
         if (await isMongo()) {
             const StudentDailyReport = (await import('../models/mongo/StudentDailyReport.js')).default;
+            const report = await StudentDailyReport.findById(id);
+            if (!report) return res.status(404).json({ error: 'Report not found' });
+
+            if (req.user.role === 'teacher' && String(report.trainer_email || '').toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()) {
+                return res.status(403).json({ error: 'Forbidden: You can only delete your own reports' });
+            }
+
             await StudentDailyReport.findByIdAndDelete(id);
             return res.json({ message: 'Report deleted successfully' });
         }
+
+        const report = await queryOne('SELECT * FROM student_daily_reports WHERE id = ?', [id]);
+        if (!report) return res.status(404).json({ error: 'Report not found' });
+
+        if (req.user.role === 'teacher' && String(report.trainer_email || '').toLowerCase().trim() !== String(req.user.email || '').toLowerCase().trim()) {
+            return res.status(403).json({ error: 'Forbidden: You can only delete your own reports' });
+        }
+
         await run('DELETE FROM student_daily_reports WHERE id = ?', [id]);
         res.json({ message: 'Report deleted successfully' });
     } catch (error) {

@@ -142,8 +142,19 @@ export async function getAllGrades(req, res) {
         console.log('📡 Final SQL Query:', sql, params);
 
         const grades = await query(sql, params);
-        console.log(`✅ Found ${grades.length} grade records for ${req.user.email}`);
-        res.json(grades);
+
+        // FIX: Normalize course names for Supabase/PostgreSQL (remove {"..."})
+        const cleanedGrades = grades.map(g => ({
+            ...g,
+            course: typeof g.course === 'string' && g.course.startsWith('{') && g.course.endsWith('}')
+                ? g.course.slice(1, -1).replace(/"/g, '')
+                : g.course,
+            student_name: typeof g.student_name === 'string' && g.student_name.startsWith('{') && g.student_name.endsWith('}')
+                ? g.student_name.slice(1, -1).replace(/"/g, '')
+                : g.student_name
+        }));
+
+        res.json(cleanedGrades);
     } catch (error) {
         console.error('CRITICAL: Get grades error:', error);
         res.status(500).json({ error: 'Failed to fetch academic registry records' });
@@ -402,14 +413,50 @@ export async function updateGrade(req, res) {
 
 export async function deleteGrade(req, res) {
     try {
+        const gradeId = req.params.id;
+        const { role, email } = req.user;
+
         if (await isMongo()) {
             const Grade = (await import('../models/mongo/Grade.js')).default;
-            const result = await Grade.findByIdAndDelete(req.params.id);
-            if (!result) return res.status(404).json({ error: 'Grade not found' });
+            const grade = await Grade.findById(gradeId);
+            if (!grade) return res.status(404).json({ error: 'Grade not found' });
+
+            if (role === 'teacher') {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const fac = await Faculty.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+                if (fac) {
+                    const matched = await Course.find({
+                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: fac.courses || [] } }]
+                    }).select('name');
+                    const teacherCourses = matched.map(c => c.name);
+                    if (!teacherCourses.some(tc => tc.toLowerCase().trim() === grade.course.toLowerCase().trim())) {
+                        return res.status(403).json({ error: 'Forbidden: You can only delete grades for your own courses' });
+                    }
+                }
+            }
+
+            await Grade.findByIdAndDelete(gradeId);
             return res.json({ message: 'Grade deleted successfully' });
         }
 
-        const result = await run('DELETE FROM grades WHERE id = ?', [req.params.id]);
+        const grade = await queryOne('SELECT * FROM grades WHERE id = ?', [gradeId]);
+        if (!grade) return res.status(404).json({ error: 'Grade not found' });
+
+        if (role === 'teacher') {
+            const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email.toLowerCase().trim()]);
+            if (fac) {
+                let list = [];
+                try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
+                const teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
+                if (!teacherCourses.some(tc => tc.toLowerCase().trim() === grade.course.toLowerCase().trim())) {
+                    return res.status(403).json({ error: 'Forbidden: You can only delete grades for your own courses' });
+                }
+            }
+        }
+
+        const result = await run('DELETE FROM grades WHERE id = ?', [gradeId]);
         if (result.changes === 0) return res.status(404).json({ error: 'Grade not found' });
         res.json({ message: 'Grade deleted successfully' });
     } catch (error) {

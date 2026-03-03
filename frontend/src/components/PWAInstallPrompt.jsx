@@ -7,13 +7,19 @@ const PWAInstallPrompt = () => {
 
     useEffect(() => {
         const handler = (e) => {
+            console.info('📱 [PWA] Install prompt detected.');
             // Prevent Chrome 67 and earlier from automatically showing the prompt
             e.preventDefault();
             // Stash the event so it can be triggered later.
             setDeferredPrompt(e);
             // Show the install button if the user hasn't dismissed it this session
-            if (!sessionStorage.getItem('pwa_prompt_dismissed')) {
-                setIsVisible(true);
+            try {
+                if (!sessionStorage.getItem('pwa_prompt_dismissed')) {
+                    setIsVisible(true);
+                }
+            } catch (storageErr) {
+                console.warn('⚠️ [PWA] Session storage access denied:', storageErr.message);
+                setIsVisible(true); // Show it anyway if we can't remember dismissal
             }
         };
 
@@ -39,7 +45,9 @@ const PWAInstallPrompt = () => {
 
     const handleDismiss = () => {
         setIsVisible(false);
-        sessionStorage.setItem('pwa_prompt_dismissed', 'true');
+        try {
+            sessionStorage.setItem('pwa_prompt_dismissed', 'true');
+        } catch (e) { }
     };
 
     if (!isVisible) return null;
