@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export default function Attendance() {
     const { user } = useAuth();
@@ -47,7 +48,6 @@ export default function Attendance() {
     }, [selectedCourse, selectedDate, user]);
 
     const fetchRegistry = async () => {
-        // FIX: Guard — do not fetch if no course is selected
         if (!selectedCourse) {
             setStudents([]);
             return;
@@ -61,8 +61,6 @@ export default function Attendance() {
             ]);
 
             const allStudents = Array.isArray(studentsRes.data) ? studentsRes.data : [];
-
-            // FIX: Case-insensitive course name matching.
             const selectedCourseLower = selectedCourse.toLowerCase().trim();
             let filtered = allStudents.filter(s => {
                 const studentCourses = Array.isArray(s.course)
@@ -71,17 +69,7 @@ export default function Attendance() {
                 return studentCourses.some(c => c && c.toLowerCase().trim() === selectedCourseLower);
             });
 
-            // SMART FALLBACK: If no students matched the course filter but the backend
-            // returned students (already scoped to this teacher by the server), there's a
-            // course name casing/spelling mismatch. Show all returned students so the
-            // registry isn't blank. Console warning helps diagnose the root data issue.
             if (filtered.length === 0 && allStudents.length > 0) {
-                console.warn(
-                    `[Attendance] Course name mismatch — selectedCourse="${selectedCourse}" ` +
-                    `didn't match any student course values. Showing all ${allStudents.length} ` +
-                    `teacher-scoped students. Student courses: ` +
-                    JSON.stringify([...new Set(allStudents.flatMap(s => Array.isArray(s.course) ? s.course : [s.course]))])
-                );
                 filtered = allStudents;
             }
 
@@ -91,7 +79,6 @@ export default function Attendance() {
             const reportsData = reportsRes.data || [];
             setDailyReports(reportsData);
 
-            // Pre-populate topics/remarks if we have existing reports for this class/day
             if (reportsData.length > 0) {
                 setTopicsCovered(reportsData[0].topics_covered || '');
                 setTrainerRemarks(reportsData[0].trainer_remarks || '');
@@ -102,7 +89,7 @@ export default function Attendance() {
 
             setStudents(filtered.map(s => ({
                 ...s,
-                attendance: existingMap[s.id]?.status || 'Present',
+                attendance: existingMap[s.id]?.status || 'Pending',
                 existingRecordId: existingMap[s.id]?.id || existingMap[s.id]?._id || null
             })));
         } catch (err) {
@@ -123,7 +110,6 @@ export default function Attendance() {
             const attData = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
             const repData = Array.isArray(reportsRes.data) ? reportsRes.data : [];
 
-            // Merge reports into attendance for display
             const enriched = attData.map(record => {
                 const report = repData.find(r =>
                     r.student_id === record.student_id &&
@@ -140,16 +126,61 @@ export default function Attendance() {
         }
     };
 
-    const updateStatus = (id, status) => {
-        setStudents(prev => prev.map(s =>
-            s.id === id ? { ...s, attendance: status } : s
-        ));
+    const markAllPresent = async () => {
+        if (!window.confirm('Mark all pending students as Present?')) return;
+
+        const loadingToast = toast.loading('Marking all as present...');
+        try {
+            for (const s of students) {
+                if (s.attendance === 'Pending' || !s.attendance) {
+                    await updateStatus(s, 'Present', true);
+                }
+            }
+            toast.success('Batch update complete', { id: loadingToast });
+            fetchRegistry();
+        } catch (err) {
+            toast.error('Batch update failed', { id: loadingToast });
+        }
     };
 
-    const handleSave = async () => {
-        // FIX: Guard against saving with no course selected
+    const updateStatus = async (student, status, silent = false) => {
+        try {
+            const record = {
+                student_id: student.id,
+                student_name: student.name,
+                course: selectedCourse,
+                date: selectedDate,
+                status: status,
+                topics_covered: topicsCovered,
+                trainer_remarks: trainerRemarks
+            };
+
+            if (student.existingRecordId) {
+                await attendanceAPI.update(student.existingRecordId, record);
+            } else {
+                await attendanceAPI.mark(record);
+            }
+
+            setStudents(prev => prev.map(s =>
+                s.id === student.id ? { ...s, attendance: status } : s
+            ));
+
+            if (!silent) toast.success(`${student.name} marked as ${status}`);
+        } catch (err) {
+            console.error('Error marking attendance:', err);
+            if (!silent) toast.error('Failed to mark attendance');
+            throw err;
+        }
+    };
+
+    const handleSaveLogs = async () => {
         if (!selectedCourse) {
-            setError('Please select a course before saving attendance.');
+            setError('Please select a course before saving.');
+            return;
+        }
+
+        if (!topicsCovered) {
+            setError('Please describe topics covered before saving the ledger.');
             return;
         }
 
@@ -158,47 +189,27 @@ export default function Attendance() {
             setError('');
             setSuccessMsg('');
 
-            // 1. Save Attendance Records
-            // Using a sequential loop instead of Promise.all to prevent "database is locked" 
-            // errors in SQLite when processing multiple records concurrently.
+            const loadingToast = toast.loading('Synchronising Daily Academic Logs...');
+
             for (const s of students) {
-                const record = {
+                const report = {
                     student_id: s.id,
+                    student_name: s.name,
                     course: selectedCourse,
-                    date: selectedDate,
-                    status: s.attendance || 'Absent'
+                    report_date: selectedDate,
+                    topics_covered: topicsCovered,
+                    trainer_remarks: trainerRemarks
                 };
-                if (s.existingRecordId) {
-                    await attendanceAPI.update(s.existingRecordId, record);
-                } else {
-                    await attendanceAPI.mark(record);
-                }
+                await studentDailyReportsAPI.create(report);
             }
 
-            // 2. Save Daily Progress Reports (Topics Covered & Remarks)
-            // We save a report for every student in the registry
-            if (topicsCovered) {
-                for (const s of students) {
-                    const report = {
-                        student_id: s.id,
-                        student_name: s.name,
-                        course: selectedCourse,
-                        report_date: selectedDate,
-                        topics_covered: topicsCovered,
-                        trainer_remarks: trainerRemarks
-                    };
-                    await studentDailyReportsAPI.create(report);
-                }
-            }
-
-            setSuccessMsg('Attendance Registry and Daily Academic Log saved successfully!');
-            // Refresh to get updated record IDs and reports
+            toast.success('Daily Ledger Updated Successfully', { id: loadingToast });
+            setSuccessMsg('Academic Journal and Participation Logs synchronised.');
             await fetchRegistry();
         } catch (err) {
-            console.error('Error saving attendance/reports:', err);
-            // Detailed diagnostic log for the trainer
-            const errorDetail = err.response?.data?.error || err.message || 'Unknown Server Error';
-            setError(`Failed to save: ${errorDetail}. Please try again.`);
+            console.error('Error saving reports:', err);
+            setError(`Failed to sync ledger. Please try again.`);
+            toast.error('Sync failed');
         } finally {
             setSaving(false);
         }
@@ -222,89 +233,98 @@ export default function Attendance() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-maroon/[0.02] rounded-full translate-x-1/2 -translate-y-1/2 blur-2xl"></div>
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-black text-maroon tracking-tight uppercase">
-                        {isStudent ? 'Attendance Profile' : 'Attendance Registry'}
+                    <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tighter">
+                        {isStudent ? 'Attendance Profile' : 'Participation Ledger'}
                     </h1>
-                    <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">
-                        {isStudent ? 'Your Daily Participation Log' : 'Daily Registry Management'}
+                    <p className="text-sm text-gray-400 font-medium">
+                        {isStudent ? 'Your Daily Participation Log' : 'Academic Audit • Daily Registry Protocol'}
                     </p>
                 </div>
             </div>
 
-            {/* Error / success feedback */}
             {error && (
-                <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs font-bold">
+                <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-[1.5rem] text-xs font-bold animate-in slide-in-from-top-2">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
                     {error}
                 </div>
             )}
             {successMsg && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl text-xs font-bold">
+                <div className="bg-green-50 border border-green-200 text-green-700 px-6 py-4 rounded-[1.5rem] text-xs font-bold animate-in slide-in-from-top-2">
                     {successMsg}
                 </div>
             )}
 
             {!isStudent && (
                 <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                        <div className="sm:col-span-2 card-light p-3">
-                            <select
-                                value={selectedCourse}
-                                onChange={(e) => setSelectedCourse(e.target.value)}
-                                className="w-full h-full py-3 bg-parchment-100 border-none rounded-xl text-xs font-black uppercase tracking-widest text-maroon/60 px-4 focus:ring-2 focus:ring-maroon/5 outline-none"
-                            >
-                                <option value="">Select Academic Program</option>
-                                {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                            </select>
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="md:col-span-2 space-y-2">
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Users className="w-3 h-3" /> Select Unit / Course
+                                </label>
+                                <select
+                                    value={selectedCourse}
+                                    onChange={(e) => setSelectedCourse(e.target.value)}
+                                    className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none cursor-pointer"
+                                >
+                                    <option value="">Choose Module...</option>
+                                    {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Calendar className="w-3 h-3" /> Specific Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={selectedDate}
+                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                    className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none"
+                                />
+                            </div>
+                            <div className="flex items-end">
+                                <button
+                                    onClick={markAllPresent}
+                                    disabled={students.length === 0}
+                                    className="w-full h-[47px] bg-green-50 text-green-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-green-100 disabled:opacity-50"
+                                >
+                                    <UserPlus className="w-4 h-4" /> Mark All Present
+                                </button>
+                            </div>
                         </div>
-                        <div className="card-light p-3 flex gap-2 items-center">
-                            <Calendar className="w-4 h-4 text-maroon/20 ml-2" />
-                            <input
-                                type="date"
-                                value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
-                                className="flex-1 bg-transparent border-none text-xs font-black uppercase tracking-widest text-maroon/60 py-3 outline-none"
-                            />
-                        </div>
-                        <button
-                            onClick={fetchRegistry}
-                            className="bg-maroon text-gold px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-elite-maroon transition-all"
-                        >
-                            Load Registry
-                        </button>
                     </div>
 
-                    {/* Daily Academic Record Section */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-maroon/5 shadow-xl space-y-6">
-                        <div className="flex items-center gap-3 border-b border-maroon/5 pb-4">
-                            <div className="w-8 h-8 bg-maroon text-gold rounded-xl flex items-center justify-center shadow-lg transform -rotate-12">
-                                <CheckCircle2 className="w-4 h-4" />
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl space-y-6">
+                        <div className="flex items-center gap-4 mb-2">
+                            <div className="w-10 h-10 bg-maroon/5 rounded-xl flex items-center justify-center text-maroon">
+                                <CheckCircle2 className="w-5 h-5" />
                             </div>
                             <div>
-                                <h2 className="text-sm font-black text-maroon uppercase tracking-widest">Daily Academic Log</h2>
-                                <p className="text-[8px] text-maroon/40 font-bold uppercase tracking-[0.2em]">Record of work and trainer remarks for today's session</p>
+                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-tight">Academic Journal Entry</h2>
+                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Outline delivered content and session remarks</p>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Topics Covered Today</label>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Topics & Delivery Coverage</label>
                                 <textarea
                                     value={topicsCovered}
                                     onChange={(e) => setTopicsCovered(e.target.value)}
-                                    placeholder="Outline the modules or topics discussed in this session..."
-                                    className="w-full px-6 py-5 bg-parchment-100/50 border-none rounded-2xl text-xs font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5 transition-all min-h-[120px] resize-none"
+                                    placeholder="What was covered in this session?"
+                                    className="w-full px-6 py-5 bg-gray-50/50 border border-gray-100 rounded-[1.5rem] text-xs font-bold text-gray-700 outline-none focus:bg-white focus:border-maroon/20 transition-all min-h-[120px] resize-none custom-scrollbar"
                                 />
                             </div>
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-2">Session Remarks</label>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Trainer Remarks</label>
                                 <textarea
                                     value={trainerRemarks}
                                     onChange={(e) => setTrainerRemarks(e.target.value)}
-                                    placeholder="Add overall class performance remarks or specific student milestone notes..."
-                                    className="w-full px-6 py-5 bg-parchment-100/50 border-none rounded-2xl text-xs font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5 transition-all min-h-[120px] resize-none"
+                                    placeholder="Observations on student engagement or specific milestones..."
+                                    className="w-full px-6 py-5 bg-gray-50/50 border border-gray-100 rounded-[1.5rem] text-xs font-bold text-gray-700 outline-none focus:bg-white focus:border-maroon/20 transition-all min-h-[120px] resize-none custom-scrollbar"
                                 />
                             </div>
                         </div>
@@ -312,83 +332,115 @@ export default function Attendance() {
                 </>
             )}
 
-            <div className="table-container custom-scrollbar overflow-x-auto">
-                <table className="w-full min-w-[580px]">
-                    <thead>
-                        <tr className="bg-maroon/5">
-                            {isStudent ? (
-                                ['Date', 'Subject/Course', 'Topics Covered', 'Status', 'Recorded At'].map(header => (
-                                    <th key={header} className="px-6 py-5 text-left text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em]">{header}</th>
-                                ))
-                            ) : (
-                                ['Registry ID', 'Student Name', 'Status', 'Action'].map(header => (
-                                    <th key={header} className="px-6 py-5 text-left text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em]">{header}</th>
-                                ))
-                            )}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-maroon/5">
-                        {students.length === 0 ? (
-                            // FIX: Added empty state message instead of blank table
-                            <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-xs font-bold text-maroon/30 uppercase tracking-widest">
-                                    {isStudent
-                                        ? 'No attendance records found for your account.'
-                                        : selectedCourse
-                                            ? 'No students enrolled in this course, or no records for this date.'
-                                            : 'Select a course and date to load the registry.'}
-                                </td>
-                            </tr>
-                        ) : students.map((student, idx) => (
-                            <tr key={idx} className="hover:bg-parchment-100/50 transition-colors group">
+            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-gray-50/50 border-b border-gray-100">
                                 {isStudent ? (
-                                    <>
-                                        <td className="px-6 py-5 text-[10px] font-black text-maroon uppercase tracking-widest">{student.date}</td>
-                                        <td className="px-6 py-5 text-sm font-bold text-maroon">{student.course}</td>
-                                        <td className="px-6 py-5 max-w-xs">
-                                            <p className="text-[11px] font-bold text-maroon/60 line-clamp-2">{student.report?.topics_covered || '—'}</p>
-                                            {student.report?.trainer_remarks && (
-                                                <p className="text-[9px] font-bold text-maroon/30 italic mt-1 truncate">"{student.report.trainer_remarks}"</p>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-5">
-                                            <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.status === 'Present' ? 'bg-green-100 text-green-700' : student.status === 'Late' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-50 text-red-600'}`}>
-                                                {student.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 text-[10px] font-bold text-maroon/30 italic">
-                                            {formatLogTime(student)}
-                                        </td>
-                                    </>
+                                    ['Date', 'Unit / Course', 'Topics Covered', 'Status', 'Sync Time'].map(header => (
+                                        <th key={header} className="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{header}</th>
+                                    ))
                                 ) : (
-                                    <>
-                                        <td className="px-6 py-5 text-[10px] font-black text-maroon">{student.id}</td>
-                                        <td className="px-6 py-5 font-bold text-maroon">{student.name}</td>
-                                        <td className="px-6 py-5">
-                                            <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.attendance === 'Present' ? 'bg-green-100 text-green-700' : student.attendance === 'Late' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-50 text-red-600'}`}>
-                                                {student.attendance || 'Pending'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 flex gap-2">
-                                            <button title="Mark Present" onClick={() => updateStatus(student.id, 'Present')} className="p-2 bg-parchment-100 rounded-lg hover:bg-green-600 hover:text-white transition-all"><CheckCircle2 className="w-5 h-5" /></button>
-                                            <button title="Mark Absent" onClick={() => updateStatus(student.id, 'Absent')} className="p-2 bg-parchment-100 rounded-lg hover:bg-red-600 hover:text-white transition-all"><XCircle className="w-5 h-5" /></button>
-                                        </td>
-                                    </>
+                                    ['Enrollment ID', 'Learner Identification', 'Participation Status', 'Registry Actions'].map(header => (
+                                        <th key={header} className="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{header}</th>
+                                    ))
                                 )}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                            {students.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-8 py-20 text-center">
+                                        <div className="flex flex-col items-center justify-center grayscale opacity-30">
+                                            <Calendar className="w-16 h-16 mb-4 text-gray-300" />
+                                            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400">
+                                                {isStudent ? 'No attendance entries found' : selectedCourse ? 'No records for this selection' : 'Select a course to load registry'}
+                                            </p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : students.map((student, idx) => (
+                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
+                                    {isStudent ? (
+                                        <>
+                                            <td className="px-8 py-6 text-[11px] font-black text-gray-600 uppercase tracking-widest">{student.date}</td>
+                                            <td className="px-8 py-6 text-xs font-bold text-gray-800 uppercase">{student.course}</td>
+                                            <td className="px-8 py-6 max-w-xs">
+                                                <p className="text-[10px] font-bold text-gray-400 line-clamp-2 italic">"{student.report?.topics_covered || '—'}"</p>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.status === 'Present' ? 'bg-green-100 text-green-700' : student.status === 'Late' ? 'bg-yellow-100 text-yellow-700' : student.status === 'Pending' ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'}`}>
+                                                    {student.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-6 text-[10px] font-bold text-gray-400 italic">
+                                                {formatLogTime(student)}
+                                            </td>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <td className="px-8 py-6 text-[10px] font-black text-maroon/40 uppercase tracking-widest">{student.id}</td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-maroon/5 rounded-xl flex items-center justify-center text-maroon font-black text-xs uppercase">
+                                                        {student.name.charAt(0)}
+                                                    </div>
+                                                    <p className="text-xs font-black text-gray-800 uppercase tracking-tight">{student.name}</p>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.attendance === 'Present' ? 'bg-green-100 text-green-700' : student.attendance === 'Late' ? 'bg-yellow-100 text-yellow-700' : student.attendance === 'Pending' ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'}`}>
+                                                    {student.attendance || 'Pending'}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-6">
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        title="Mark Present"
+                                                        onClick={() => updateStatus(student, 'Present')}
+                                                        className="p-3 bg-gray-50 rounded-xl hover:bg-green-600 hover:text-white transition-all border border-gray-100 group-hover:border-green-200"
+                                                    >
+                                                        <CheckCircle2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        title="Mark Absent"
+                                                        onClick={() => updateStatus(student, 'Absent')}
+                                                        className="p-3 bg-gray-50 rounded-xl hover:bg-red-600 hover:text-white transition-all border border-gray-100 group-hover:border-red-200"
+                                                    >
+                                                        <XCircle className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
-            <div className="flex justify-center md:justify-end md:pr-8">
-                <button
-                    onClick={isStudent ? () => window.print() : handleSave}
-                    disabled={saving}
-                    className="w-full md:w-auto bg-maroon text-gold px-12 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] hover:bg-elite-maroon shadow-2xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                    {saving ? 'Saving...' : isStudent ? 'Download Attendance Report' : 'Save Daily Registry Portfolio'}
-                </button>
+            <div className="flex justify-center md:justify-end gap-4">
+                {!isStudent && (
+                    <button
+                        onClick={handleSaveLogs}
+                        disabled={saving || students.length === 0}
+                        className="w-full md:w-auto bg-maroon text-gold px-12 py-5 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.3em] hover:bg-elite-maroon shadow-2xl shadow-maroon/20 transition-all disabled:opacity-60 relative overflow-hidden group"
+                    >
+                        <span className="relative z-10 flex items-center justify-center gap-3">
+                            {saving ? 'Synchronising...' : 'Commit Daily Academic Ledger'}
+                        </span>
+                    </button>
+                )}
+                {isStudent && (
+                    <button
+                        onClick={() => window.print()}
+                        className="w-full md:w-auto bg-gray-800 text-white px-12 py-5 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.3em] shadow-xl hover:bg-black transition-all"
+                    >
+                        Export Attendance Report
+                    </button>
+                )}
             </div>
         </div>
     );

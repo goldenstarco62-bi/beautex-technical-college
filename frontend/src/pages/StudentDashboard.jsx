@@ -102,6 +102,14 @@ export default function StudentDashboard() {
                 ? Math.round((myGrades.reduce((acc, g) => acc + (g.score / g.max_score), 0) / myGrades.length) * 100)
                 : 0;
 
+            // 4. Process Attendance
+            const attendanceRes = await attendanceAPI.getAll(null, null, user.student_id || user.id).catch(() => ({ data: [] }));
+            const myAttendance = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
+            const presentCount = myAttendance.filter(a => a.status === 'Present' || a.status === 'Late').length;
+            const attendanceRate = myAttendance.length > 0
+                ? `${Math.round((presentCount / myAttendance.length) * 100)}%`
+                : '0%';
+
             if (profile) {
                 let enrolledCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
                 setCourseDetails(enrolledCourses[0] || null);
@@ -109,7 +117,7 @@ export default function StudentDashboard() {
                 setStats({
                     enrolledCourses: enrolledCourses.length,
                     avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
-                    attendanceRate: '96%', // Placeholder
+                    attendanceRate: attendanceRate,
                     sessionsCount: Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.length : 0
                 });
             }
@@ -318,7 +326,7 @@ export default function StudentDashboard() {
                             <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center group-hover:bg-green-600 transition-colors">
                                 <Clock className="w-6 h-6 text-green-600 group-hover:text-white" />
                             </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Absences</span>
+                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Attendance</span>
                         </Link>
                         <button className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group text-center">
                             <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center group-hover:bg-purple-600 transition-colors">
