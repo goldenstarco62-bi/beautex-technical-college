@@ -90,17 +90,43 @@ export async function getAllStudents(req, res) {
             if (allTutorCourses.length === 0) return res.json([]);
 
             const students = await query('SELECT * FROM students ORDER BY created_at DESC');
+
+            // Helper: normalise any course storage format to a lowercase string array
+            const parseCourse = (raw) => {
+                if (!raw) return [];
+                if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
+                    // PostgreSQL array literal: {"Course A","Course B"} or {Course A}
+                    return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim().toLowerCase()).filter(Boolean);
+                }
+                if (typeof raw === 'string' && raw.startsWith('[')) {
+                    try {
+                        const p = JSON.parse(raw);
+                        return (Array.isArray(p) ? p : [p]).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+                    } catch (e) { /* fall through */ }
+                }
+                return [String(raw).trim().toLowerCase()].filter(Boolean);
+            };
+
             const filteredStudents = students.filter(s => {
-                let sCourses = [];
+                const sCourses = parseCourse(s.course);
+                return sCourses.some(sc => allTutorCourses.includes(sc));
+            }).map(s => {
+                // Return original course strings parsed into an array (keeping original casing)
+                let courseArr = [];
                 try {
-                    sCourses = typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean);
-                } catch (e) { sCourses = [s.course].filter(Boolean); }
-                // FIX: Case-insensitive comparison
-                return sCourses.some(sc => sc && allTutorCourses.includes(sc.toLowerCase().trim()));
-            }).map(s => ({
-                ...s,
-                course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
-            }));
+                    if (typeof s.course === 'string' && s.course.startsWith('{') && s.course.endsWith('}')) {
+                        courseArr = s.course.slice(1, -1).split(',').map(x => x.replace(/^"|"$/g, '').trim()).filter(Boolean);
+                    } else if (typeof s.course === 'string' && s.course.startsWith('[')) {
+                        const p = JSON.parse(s.course);
+                        courseArr = Array.isArray(p) ? p : [p];
+                    } else {
+                        courseArr = [s.course].filter(Boolean);
+                    }
+                } catch (e) {
+                    courseArr = [s.course].filter(Boolean);
+                }
+                return { ...s, course: courseArr };
+            });
             return res.json(filteredStudents);
         }
 

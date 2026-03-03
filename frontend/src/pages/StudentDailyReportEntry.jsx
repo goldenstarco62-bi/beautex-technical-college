@@ -79,9 +79,13 @@ export default function StudentDailyReportEntry() {
             let studentList = studentsRes.data || [];
             if (user.role === 'teacher' && courses.length > 0) {
                 const courseNames = courses.map(c => c.name.toLowerCase());
-                studentList = studentList.filter(s =>
-                    courseNames.includes(String(s.course || '').toLowerCase())
-                );
+                studentList = studentList.filter(s => {
+                    // s.course is returned as an array by the backend; handle both array and string
+                    const sCourses = Array.isArray(s.course)
+                        ? s.course
+                        : [String(s.course || '')];
+                    return sCourses.some(c => courseNames.includes(String(c).toLowerCase().trim()));
+                });
             }
             setStudents(studentList);
 
@@ -107,7 +111,12 @@ export default function StudentDailyReportEntry() {
     const filteredStudents = students.filter(s => {
         const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             s.id.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCourse = selectedCourse === 'All' || s.course === selectedCourse;
+        // s.course is an array; check inclusively for the course filter
+        const sCourses = Array.isArray(s.course)
+            ? s.course
+            : [String(s.course || '')];
+        const matchesCourse = selectedCourse === 'All' ||
+            sCourses.some(c => String(c).trim() === selectedCourse);
         return matchesSearch && matchesCourse;
     });
 

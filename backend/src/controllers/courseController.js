@@ -4,7 +4,8 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 
 export async function getAllCourses(req, res) {
     try {
-        const { role, email } = req.user;
+        const currentRole = String(req.user.role || '').toLowerCase().trim();
+        const { email } = req.user;
         const mongo = await isMongo();
 
         // SQL Query parts
@@ -14,7 +15,7 @@ export async function getAllCourses(req, res) {
         `;
 
         // Admin and Superadmin see everything
-        if (role === 'admin' || role === 'superadmin') {
+        if (currentRole === 'admin' || currentRole === 'superadmin') {
             if (mongo) {
                 const Course = (await import('../models/mongo/Course.js')).default;
                 const Student = (await import('../models/mongo/Student.js')).default;

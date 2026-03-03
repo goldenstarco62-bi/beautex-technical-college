@@ -172,11 +172,22 @@ export async function getBatchStudents(req, res) {
             return res.json(students);
         }
 
-        const students = await query('SELECT id, name, course FROM students WHERE course LIKE ? AND status = ?', [`%${course}%`, 'Active']);
-        res.json(students.map(s => ({
-            ...s,
-            course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
-        })));
+        // Fetch all active students then filter — handles plain string, JSON array, and Postgres {} format
+        const allStudents = await query('SELECT id, name, course FROM students WHERE status = ?', ['Active']);
+        const normalise = (raw) => {
+            if (!raw) return [];
+            if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
+                // PostgreSQL array literal: {"Course A","Course B"} or {Course A}
+                return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
+            }
+            if (typeof raw === 'string' && raw.startsWith('[')) {
+                try { const p = JSON.parse(raw); return Array.isArray(p) ? p.map(s => s.trim()) : [String(p).trim()]; } catch (e) { /* fall through */ }
+            }
+            return [String(raw).trim()].filter(Boolean);
+        };
+        const courseLC = course.toLowerCase().trim();
+        const matchedStudents = allStudents.filter(s => normalise(s.course).some(c => c.toLowerCase() === courseLC));
+        res.json(matchedStudents.map(s => ({ ...s, course: normalise(s.course) })));
     } catch (error) {
         console.error('Batch students fetch error:', error);
         res.status(500).json({ error: 'Failed to fetch students for this course' });
