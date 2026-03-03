@@ -45,7 +45,9 @@ export const createReport = async (req, res) => {
             return res.status(400).json({ error: 'Required fields missing: week_number, report_date, daily_report, record_of_work' });
         }
 
-        let trainerName = req.user.name || req.user.email.split('@')[0];
+        // Guard against missing name/email
+        const trainerEmail = req.user.email || '';
+        let trainerName = req.user.name || (trainerEmail ? trainerEmail.split('@')[0] : 'Trainer');
         const mongo = await isMongo();
 
         if (mongo) {
@@ -66,12 +68,16 @@ export const createReport = async (req, res) => {
 
         const result = await run(
             'INSERT INTO trainer_reports (trainer_id, trainer_name, week_number, report_date, daily_report, record_of_work, course_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [String(id), trainerName, week_number, report_date, daily_report, record_of_work, course_id, 'Submitted']
+            [String(id), trainerName, week_number, report_date, daily_report, record_of_work, course_id || null, 'Submitted']
         );
         const report = await queryOne('SELECT * FROM trainer_reports WHERE id = ?', [result.lastID]);
         res.status(201).json(report);
     } catch (error) {
         console.error('Error creating trainer report:', error);
+        const msg = error.message || '';
+        if (msg.includes('does not exist') || msg.includes('no such table')) {
+            return res.status(500).json({ error: 'Database table missing. Please contact the system administrator to run database migrations.' });
+        }
         res.status(500).json({ error: 'Internal server error' });
     }
 };

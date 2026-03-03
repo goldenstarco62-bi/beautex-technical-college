@@ -224,6 +224,24 @@ async function runPostgresMigrations(database) {
             // Might fail if constraint name is different or doesn't exist, ignore
         }
 
+        // Migration: Ensure trainer_reports table exists (may have been dropped by the clash-fix above)
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS trainer_reports (
+                id SERIAL PRIMARY KEY,
+                trainer_id TEXT NOT NULL,
+                trainer_name TEXT NOT NULL,
+                week_number TEXT NOT NULL,
+                report_date DATE NOT NULL,
+                daily_report TEXT NOT NULL,
+                record_of_work TEXT NOT NULL,
+                course_id TEXT,
+                status TEXT DEFAULT 'Submitted',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ trainer_reports table ensured');
+
         // Check for 'name' column in users table
         const checkNameCol = await database.query(`
             SELECT column_name 
@@ -466,6 +484,24 @@ async function runSqliteMigrations(database) {
             console.log('⚠️ SQLite Conflict: Dropping clashing trainer_reports...');
             await database.run('DROP TABLE trainer_reports');
         }
+
+        // Ensure trainer_reports table exists (may have been dropped by the clash-fix above)
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS trainer_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trainer_id TEXT NOT NULL,
+                trainer_name TEXT NOT NULL,
+                week_number TEXT NOT NULL,
+                report_date DATE NOT NULL,
+                daily_report TEXT NOT NULL,
+                record_of_work TEXT NOT NULL,
+                course_id TEXT,
+                status TEXT DEFAULT 'Submitted',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ trainer_reports table ensured (SQLite)');
 
         // Check for user_email in audit_logs
         const tableInfo = await database.all("PRAGMA table_info('audit_logs')");
