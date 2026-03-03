@@ -32,7 +32,7 @@ export async function getAllCourses(req, res) {
         }
 
         // Teachers see courses they instruct
-        if (role === 'teacher') {
+        if (currentRole === 'teacher') {
             if (mongo) {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
@@ -83,7 +83,7 @@ export async function getAllCourses(req, res) {
         }
 
         // Students see their enrolled courses
-        if (role === 'student') {
+        if (currentRole === 'student') {
             if (mongo) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
@@ -116,10 +116,14 @@ export async function getAllCourses(req, res) {
             // Support JSON array strings or single course strings
             let studentCourses = [];
             try {
-                if (studentProfile.course && String(studentProfile.course).startsWith('[')) {
-                    studentCourses = JSON.parse(studentProfile.course);
-                } else if (studentProfile.course) {
-                    studentCourses = [studentProfile.course];
+                const raw = studentProfile.course || '';
+                if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
+                    // PostgreSQL array literal: {"Course A","Course B"}
+                    studentCourses = raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
+                } else if (typeof raw === 'string' && raw.startsWith('[')) {
+                    studentCourses = JSON.parse(raw);
+                } else if (raw) {
+                    studentCourses = [raw];
                 }
             } catch (e) {
                 studentCourses = [studentProfile.course].filter(Boolean);
