@@ -1,9 +1,9 @@
 // =====================================================================
 // Beautex College - Service Worker (Network-First Strategy)
-// Version: 2.0 - FIXES white screen on installed PWA
+// Version: 3.0 - Trigger automatic update for student feedback feature
 // =====================================================================
 
-const CACHE_NAME = 'beautex-cache-v2';
+const CACHE_NAME = 'beautex-cache-v3';
 
 // On install, skip waiting immediately so new SW takes over ASAP
 self.addEventListener('install', event => {

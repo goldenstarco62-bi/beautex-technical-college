@@ -26,6 +26,18 @@ const studentDailyReportSchema = new mongoose.Schema({
     trainer_remarks: {
         type: String
     },
+    lesson_taught: {
+        type: Boolean,
+        default: null
+    },
+    student_comment: {
+        type: String,
+        default: null
+    },
+    student_commented_at: {
+        type: Date,
+        default: null
+    },
     trainer_name: {
         type: String,
         required: true

@@ -235,6 +235,7 @@ export const trainerReportsAPI = {
 export const studentDailyReportsAPI = {
     getAll: (params) => api.get('student-daily-reports', { params }),
     create: (data) => api.post('student-daily-reports', data),
+    addStudentComment: (id, data) => api.patch(`student-daily-reports/${id}/student-comment`, data),
     delete: (id) => api.delete(`student-daily-reports/${id}`),
 };
 

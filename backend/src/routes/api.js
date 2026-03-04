@@ -234,6 +234,7 @@ router.delete('/trainer-reports/:id', authenticateToken, authorizeRoles('teacher
 // Student Daily Progress Reports
 router.get('/student-daily-reports', authenticateToken, studentDailyReportController.getAllDailyReports);
 router.post('/student-daily-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentDailyReportController.createDailyReport);
+router.patch('/student-daily-reports/:id/student-comment', authenticateToken, authorizeRoles('student'), studentDailyReportController.addStudentComment);
 router.delete('/student-daily-reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentDailyReportController.deleteDailyReport);
 
 // Multer error handler (file size & type errors)

@@ -466,6 +466,25 @@ async function runPostgresMigrations(database) {
             }
         }
 
+        // --- Student Daily Reports: student comment columns ---
+        const dailyRptCols = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='student_daily_reports'
+        `);
+        const existingDailyRptCols = dailyRptCols.rows.map(r => r.column_name);
+        if (!existingDailyRptCols.includes('lesson_taught')) {
+            await database.query('ALTER TABLE student_daily_reports ADD COLUMN lesson_taught BOOLEAN DEFAULT NULL');
+            console.log('✅ lesson_taught column added to student_daily_reports');
+        }
+        if (!existingDailyRptCols.includes('student_comment')) {
+            await database.query('ALTER TABLE student_daily_reports ADD COLUMN student_comment TEXT');
+            console.log('✅ student_comment column added to student_daily_reports');
+        }
+        if (!existingDailyRptCols.includes('student_commented_at')) {
+            await database.query('ALTER TABLE student_daily_reports ADD COLUMN student_commented_at TIMESTAMPTZ');
+            console.log('✅ student_commented_at column added to student_daily_reports');
+        }
+
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
     }
@@ -631,11 +650,30 @@ async function runSqliteMigrations(database) {
                 trainer_remarks TEXT,
                 trainer_name TEXT NOT NULL,
                 trainer_email TEXT NOT NULL,
+                lesson_taught INTEGER DEFAULT NULL,
+                student_comment TEXT,
+                student_commented_at DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
             )
         `);
+
+        // Migration: Add student comment columns to existing student_daily_reports
+        const sdrInfo = await database.all("PRAGMA table_info('student_daily_reports')");
+        const existingSdrCols = sdrInfo.map(c => c.name);
+        if (!existingSdrCols.includes('lesson_taught')) {
+            await database.run('ALTER TABLE student_daily_reports ADD COLUMN lesson_taught INTEGER DEFAULT NULL');
+            console.log('✅ lesson_taught column added to student_daily_reports (SQLite)');
+        }
+        if (!existingSdrCols.includes('student_comment')) {
+            await database.run('ALTER TABLE student_daily_reports ADD COLUMN student_comment TEXT');
+            console.log('✅ student_comment column added to student_daily_reports (SQLite)');
+        }
+        if (!existingSdrCols.includes('student_commented_at')) {
+            await database.run('ALTER TABLE student_daily_reports ADD COLUMN student_commented_at DATETIME');
+            console.log('✅ student_commented_at column added to student_daily_reports (SQLite)');
+        }
 
     } catch (error) {
         console.error('⚠️ SQLite migration warning:', error.message);

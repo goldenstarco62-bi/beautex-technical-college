@@ -143,6 +143,53 @@ export const createDailyReport = async (req, res) => {
     }
 };
 
+export const addStudentComment = async (req, res) => {
+    const { id } = req.params;
+    const { lesson_taught, student_comment } = req.body;
+
+    if (req.user.role !== 'student') {
+        return res.status(403).json({ error: 'Only students can leave a comment on their daily report.' });
+    }
+
+    try {
+        if (await isMongo()) {
+            const StudentDailyReport = (await import('../models/mongo/StudentDailyReport.js')).default;
+            const report = await StudentDailyReport.findById(id);
+            if (!report) return res.status(404).json({ error: 'Report not found' });
+
+            const studentId = String(req.user.student_id || req.user.id || '');
+            if (String(report.student_id) !== studentId) {
+                return res.status(403).json({ error: 'You can only comment on your own reports.' });
+            }
+
+            report.lesson_taught = lesson_taught;
+            report.student_comment = student_comment || null;
+            report.student_commented_at = new Date();
+            await report.save();
+            return res.json(report);
+        }
+
+        // SQL path
+        const report = await queryOne('SELECT * FROM student_daily_reports WHERE id = ?', [id]);
+        if (!report) return res.status(404).json({ error: 'Report not found' });
+
+        const studentId = String(req.user.student_id || req.user.id || '');
+        if (String(report.student_id) !== studentId) {
+            return res.status(403).json({ error: 'You can only comment on your own reports.' });
+        }
+
+        await run(
+            'UPDATE student_daily_reports SET lesson_taught = ?, student_comment = ?, student_commented_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [lesson_taught === true ? 1 : lesson_taught === false ? 0 : null, student_comment || null, id]
+        );
+        const updated = await queryOne('SELECT * FROM student_daily_reports WHERE id = ?', [id]);
+        return res.json(updated);
+    } catch (error) {
+        console.error('Error saving student comment:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 export const deleteDailyReport = async (req, res) => {
     const { id } = req.params;
     try {

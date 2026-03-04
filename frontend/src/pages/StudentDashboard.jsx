@@ -9,9 +9,16 @@ import {
     UserCheck,
     GraduationCap,
     CreditCard,
-    FileStack,
     History,
-    MessageSquare
+    MessageSquare,
+    CheckCircle2,
+    XCircle,
+    AlertCircle,
+    Send,
+    X,
+    ThumbsUp,
+    ThumbsDown,
+    Minus
 } from 'lucide-react';
 import {
     coursesAPI,
@@ -19,12 +26,12 @@ import {
     announcementsAPI,
     attendanceAPI,
     studentsAPI,
-    reportsAPI,
     materialsAPI,
     studentDailyReportsAPI
 } from '../services/api';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-hot-toast';
 
 
 export default function StudentDashboard() {
@@ -43,17 +50,20 @@ export default function StudentDashboard() {
     const [dailyReports, setDailyReports] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Comment Dialog State
+    const [commentDialog, setCommentDialog] = useState(null);
+    const [lessonTaught, setLessonTaught] = useState(null);   // true | false | 'partial'
+    const [commentText, setCommentText] = useState('');
+    const [submittingComment, setSubmittingComment] = useState(false);
+
 
     useEffect(() => {
-        if (user) {
-            fetchData();
-        }
+        if (user) fetchData();
     }, [user]);
 
     const fetchData = async () => {
         try {
-            // 1. Fetch all data needed
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, materialsRes, dailyReportsRes] = await Promise.all([
+            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, , dailyReportsRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 announcementsAPI.getAll(),
@@ -63,8 +73,6 @@ export default function StudentDashboard() {
                 studentDailyReportsAPI.getAll({ student_id: user.student_id || user.id }).catch(() => ({ data: [] }))
             ]);
 
-
-            // 2. Find current student profile
             const userEmail = String(user?.email || '').toLowerCase().trim();
             const userSid = String(user?.student_id || user?.id || '').toLowerCase().trim();
 
@@ -77,13 +85,10 @@ export default function StudentDashboard() {
             setStudentFee(feeRes.data);
             setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.slice(0, 5) : []);
 
-
-            // 3. Process Performance (Grades)
             const myGrades = (gradesRes.data || []).filter(g => {
-                const gradeSid = String(g.student_id || '').trim().toLowerCase();
-                const userSid = String(user?.student_id || '').trim().toLowerCase();
-                const userEmail = String(user?.email || '').trim().toLowerCase();
-                return gradeSid === userSid || (g.email && g.email.toLowerCase() === userEmail);
+                const gSid = String(g.student_id || '').trim().toLowerCase();
+                const gEmail = String(g.email || '').trim().toLowerCase();
+                return gSid === userSid || gEmail === userEmail;
             }).map(g => ({
                 ...g,
                 type: 'CAT',
@@ -92,17 +97,12 @@ export default function StudentDashboard() {
                 rawDate: g.created_at
             }));
 
-            const mergedPerformance = [...myGrades].sort((a, b) =>
-                new Date(b.rawDate) - new Date(a.rawDate)
-            );
-
-            setRecentGrades(mergedPerformance.slice(0, 5));
+            setRecentGrades([...myGrades].sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 5));
 
             const avgGrade = myGrades.length > 0
                 ? Math.round((myGrades.reduce((acc, g) => acc + (g.score / g.max_score), 0) / myGrades.length) * 100)
                 : 0;
 
-            // 4. Process Attendance
             const attendanceRes = await attendanceAPI.getAll(null, null, user.student_id || user.id).catch(() => ({ data: [] }));
             const myAttendance = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
             const presentCount = myAttendance.filter(a => a.status === 'Present' || a.status === 'Late').length;
@@ -111,24 +111,77 @@ export default function StudentDashboard() {
                 : '0%';
 
             if (profile) {
-                let enrolledCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
+                const enrolledCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
                 setCourseDetails(enrolledCourses[0] || null);
-
                 setStats({
                     enrolledCourses: enrolledCourses.length,
                     avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
-                    attendanceRate: attendanceRate,
+                    attendanceRate,
                     sessionsCount: Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.length : 0
                 });
             }
 
-            setRecentAnnouncements(announcementsRes.data.slice(0, 3));
+            setRecentAnnouncements((announcementsRes.data || []).slice(0, 3));
         } catch (error) {
             console.error('Error fetching student dashboard data:', error);
         } finally {
             setLoading(false);
         }
     };
+
+    // ─── Comment dialog helpers ───────────────────────────────────────────────
+    const openCommentDialog = (report) => {
+        setCommentDialog(report);
+        const lt = report.lesson_taught;
+        if (lt === true || lt === 1) setLessonTaught(true);
+        else if (lt === false || lt === 0) setLessonTaught(false);
+        else if (lt === null || lt === undefined) setLessonTaught(null);
+        else setLessonTaught('partial');
+        setCommentText(report.student_comment || '');
+    };
+
+    const closeCommentDialog = () => {
+        setCommentDialog(null);
+        setLessonTaught(null);
+        setCommentText('');
+    };
+
+    const handleCommentSubmit = async () => {
+        if (lessonTaught === null) {
+            toast.error('Please select whether the lesson was taught.');
+            return;
+        }
+        try {
+            setSubmittingComment(true);
+            // 'partial' maps to null on the backend (nullable boolean)
+            const boolVal = lessonTaught === 'partial' ? null : lessonTaught;
+            await studentDailyReportsAPI.addStudentComment(
+                commentDialog.id || commentDialog._id,
+                { lesson_taught: boolVal, student_comment: commentText.trim() || null }
+            );
+            toast.success('Your feedback has been recorded!');
+            setDailyReports(prev => prev.map(r => {
+                if (String(r.id || r._id) === String(commentDialog.id || commentDialog._id)) {
+                    return { ...r, lesson_taught: boolVal, student_comment: commentText.trim() || null, student_commented_at: new Date().toISOString() };
+                }
+                return r;
+            }));
+            closeCommentDialog();
+        } catch (err) {
+            toast.error(err.response?.data?.error || 'Could not save your feedback.');
+        } finally {
+            setSubmittingComment(false);
+        }
+    };
+
+    const getLessonBadge = (report) => {
+        const lt = report.lesson_taught;
+        if (lt === null || lt === undefined) return null;
+        if (lt === true || lt === 1) return { label: 'Lesson Taught', color: 'bg-green-50 text-green-600 border-green-100', Icon: ThumbsUp };
+        if (lt === false || lt === 0) return { label: 'Not Taught', color: 'bg-red-50 text-red-500 border-red-100', Icon: ThumbsDown };
+        return { label: 'Partially Taught', color: 'bg-amber-50 text-amber-600 border-amber-100', Icon: Minus };
+    };
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (loading) return <div className="p-8 text-center font-black uppercase tracking-widest text-maroon">Loading Student Portal...</div>;
 
@@ -141,14 +194,19 @@ export default function StudentDashboard() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+
             {/* Header */}
             <div className="flex justify-between items-end mb-4">
                 <div>
                     <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tighter">Student Portal</h1>
-                    <p className="text-sm text-gray-400 font-medium">Welcome back, {studentProfile ? studentProfile.name : (user?.name || user?.email?.split('@')[0])}</p>
+                    <p className="text-sm text-gray-400 font-medium">
+                        Welcome back, {studentProfile ? studentProfile.name : (user?.name || user?.email?.split('@')[0])}
+                    </p>
                 </div>
                 <div className="text-right">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
                 </div>
             </div>
 
@@ -157,8 +215,8 @@ export default function StudentDashboard() {
                 {statsConfig.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl hover:shadow-2xl transition-all group overflow-hidden relative">
-                            <div className="flex justify-between items-start relative z-10">
+                        <div key={index} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl hover:shadow-2xl transition-all">
+                            <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.title}</p>
                                     <p className="text-3xl font-black text-gray-800">{stat.value}</p>
@@ -175,9 +233,10 @@ export default function StudentDashboard() {
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
+
                     {/* Ongoing Curriculum */}
                     <div className="bg-maroon p-6 sm:p-8 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-gold/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-gold/20 transition-all duration-700"></div>
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-gold/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-gold/20 transition-all duration-700" />
                         <div className="relative z-10">
                             <div className="flex items-center gap-2 mb-6">
                                 <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
@@ -217,7 +276,7 @@ export default function StudentDashboard() {
                         </div>
                     </div>
 
-                    {/* Recent Performance Table */}
+                    {/* Recent Performance */}
                     <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-2">
@@ -280,41 +339,78 @@ export default function StudentDashboard() {
                             </div>
                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Last 5 Sessions</span>
                         </div>
+
                         {dailyReports.length > 0 ? (
                             <div className="space-y-4">
-                                {dailyReports.map((report, idx) => (
-                                    <div key={report.id || idx} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 hover:border-maroon/20 transition-all">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                                <p className="text-[9px] font-black text-maroon uppercase tracking-widest">{new Date(report.report_date).toLocaleDateString()}</p>
-                                                <h4 className="text-xs font-black text-gray-800 uppercase mt-1">{report.course}</h4>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Trainer</p>
-                                                <p className="text-[10px] font-bold text-gray-800">{report.trainer_name}</p>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-3">
-                                            <div className="bg-white/50 p-3 rounded-lg border border-gray-100">
-                                                <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Coverage</p>
-                                                <p className="text-[11px] text-gray-600 font-medium leading-relaxed">{report.topics_covered}</p>
-                                            </div>
-                                            {report.trainer_remarks && (
-                                                <div className="flex gap-2 items-start">
-                                                    <MessageSquare className="w-3 h-3 text-maroon mt-0.5" />
-                                                    <p className="text-[10px] text-gray-400 font-bold italic">"{report.trainer_remarks}"</p>
+                                {dailyReports.map((report, idx) => {
+                                    const badge = getLessonBadge(report);
+                                    return (
+                                        <div key={report.id || report._id || idx} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 hover:border-maroon/20 transition-all">
+                                            {/* Report header */}
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <p className="text-[9px] font-black text-maroon uppercase tracking-widest">
+                                                        {new Date(report.report_date).toLocaleDateString()}
+                                                    </p>
+                                                    <h4 className="text-xs font-black text-gray-800 uppercase mt-1">{report.course}</h4>
                                                 </div>
-                                            )}
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <div className="text-right">
+                                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Trainer</p>
+                                                        <p className="text-[10px] font-bold text-gray-800">{report.trainer_name}</p>
+                                                    </div>
+                                                    {badge && (
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest ${badge.color}`}>
+                                                            <badge.Icon className="w-2.5 h-2.5" />
+                                                            {badge.label}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Content */}
+                                            <div className="space-y-2">
+                                                <div className="bg-white/50 p-3 rounded-lg border border-gray-100">
+                                                    <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Coverage</p>
+                                                    <p className="text-[11px] text-gray-600 font-medium leading-relaxed">{report.topics_covered}</p>
+                                                </div>
+                                                {report.trainer_remarks && (
+                                                    <div className="flex gap-2 items-start">
+                                                        <MessageSquare className="w-3 h-3 text-maroon mt-0.5" />
+                                                        <p className="text-[10px] text-gray-400 font-bold italic">"{report.trainer_remarks}"</p>
+                                                    </div>
+                                                )}
+                                                {report.student_comment && (
+                                                    <div className="flex gap-2 items-start bg-blue-50/60 px-3 py-2 rounded-lg border border-blue-100">
+                                                        <Send className="w-3 h-3 text-blue-400 mt-0.5 shrink-0" />
+                                                        <p className="text-[10px] text-blue-500 font-bold italic">Your note: "{report.student_comment}"</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Feedback button */}
+                                            <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+                                                <button
+                                                    onClick={() => openCommentDialog(report)}
+                                                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${badge
+                                                            ? 'bg-white text-gray-400 border-gray-200 hover:border-maroon/20 hover:text-maroon'
+                                                            : 'bg-maroon text-gold border-maroon shadow-md shadow-maroon/10 hover:shadow-lg'
+                                                        }`}
+                                                >
+                                                    <MessageSquare className="w-3 h-3" />
+                                                    {badge ? 'Update Feedback' : 'Leave Feedback'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="py-12 text-center text-gray-300 uppercase font-black text-[10px] tracking-widest">Registry is currently empty</div>
                         )}
                     </div>
 
-                    {/* Quick Student Actions Links */}
+                    {/* Quick Actions */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <Link to="/grades" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group text-center">
                             <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 transition-colors">
@@ -343,7 +439,7 @@ export default function StudentDashboard() {
                     </div>
                 </div>
 
-                {/* Sidebar: Announcements */}
+                {/* Sidebar: Notice Board */}
                 <div className="space-y-8">
                     <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
                         <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-8">Notice Board</h2>
@@ -363,7 +459,129 @@ export default function StudentDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* ── Lesson Feedback Dialog ── */}
+            {commentDialog && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-maroon/20 backdrop-blur-xl"
+                        onClick={closeCommentDialog}
+                    />
+
+                    {/* Modal */}
+                    <div className="relative w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+
+                        {/* Modal Header */}
+                        <div className="bg-gradient-to-br from-maroon to-maroon/90 px-8 py-7 flex justify-between items-start">
+                            <div>
+                                <p className="text-[9px] font-black text-gold/60 uppercase tracking-[0.3em] mb-1">Session Feedback</p>
+                                <h2 className="text-lg font-black text-white uppercase tracking-tight leading-tight">
+                                    Was the Lesson Taught?
+                                </h2>
+                                <p className="text-[10px] text-white/50 font-bold mt-1 uppercase">
+                                    {new Date(commentDialog.report_date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                    {' '}•{' '}{commentDialog.course}
+                                </p>
+                            </div>
+                            <button
+                                onClick={closeCommentDialog}
+                                className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white mt-1"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="p-8 space-y-6">
+                            {/* Session context */}
+                            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Topics Covered (by trainer)</p>
+                                <p className="text-xs text-gray-600 font-medium italic leading-relaxed line-clamp-3">"{commentDialog.topics_covered}"</p>
+                            </div>
+
+                            {/* Lesson Taught Selector */}
+                            <div>
+                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-3">Select One *</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <button
+                                        onClick={() => setLessonTaught(true)}
+                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all font-black text-[9px] uppercase tracking-widest ${lessonTaught === true
+                                                ? 'bg-green-500 border-green-500 text-white shadow-lg shadow-green-200'
+                                                : 'bg-white border-gray-100 text-gray-400 hover:border-green-300 hover:text-green-500'
+                                            }`}
+                                    >
+                                        <CheckCircle2 className="w-6 h-6" />
+                                        Yes, Taught
+                                    </button>
+
+                                    <button
+                                        onClick={() => setLessonTaught('partial')}
+                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all font-black text-[9px] uppercase tracking-widest ${lessonTaught === 'partial'
+                                                ? 'bg-amber-400 border-amber-400 text-white shadow-lg shadow-amber-200'
+                                                : 'bg-white border-gray-100 text-gray-400 hover:border-amber-300 hover:text-amber-500'
+                                            }`}
+                                    >
+                                        <AlertCircle className="w-6 h-6" />
+                                        Partially
+                                    </button>
+
+                                    <button
+                                        onClick={() => setLessonTaught(false)}
+                                        className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all font-black text-[9px] uppercase tracking-widest ${lessonTaught === false
+                                                ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-200'
+                                                : 'bg-white border-gray-100 text-gray-400 hover:border-red-300 hover:text-red-500'
+                                            }`}
+                                    >
+                                        <XCircle className="w-6 h-6" />
+                                        Not Taught
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Optional comment */}
+                            <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                    <MessageSquare className="w-3 h-3" /> Additional Comments (Optional)
+                                </label>
+                                <textarea
+                                    value={commentText}
+                                    onChange={(e) => setCommentText(e.target.value)}
+                                    placeholder="Share your experience — was the session effective? Any concerns or suggestions..."
+                                    rows={3}
+                                    className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent rounded-2xl text-sm font-medium text-gray-700 outline-none focus:border-maroon/20 focus:bg-white focus:ring-4 focus:ring-maroon/5 transition-all resize-none"
+                                />
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={closeCommentDialog}
+                                    className="flex-1 py-4 rounded-2xl bg-gray-50 text-gray-400 font-black text-[10px] uppercase tracking-widest border border-gray-100 hover:bg-gray-100 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleCommentSubmit}
+                                    disabled={submittingComment || lessonTaught === null}
+                                    className="flex-[2] py-4 rounded-2xl bg-maroon text-gold font-black text-[10px] uppercase tracking-widest shadow-xl shadow-maroon/20 hover:shadow-maroon/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {submittingComment ? (
+                                        <>
+                                            <div className="animate-spin w-4 h-4 border-2 border-gold/40 border-t-gold rounded-full" />
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-4 h-4" />
+                                            Submit Feedback
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
-
