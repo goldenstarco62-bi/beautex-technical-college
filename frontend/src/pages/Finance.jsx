@@ -12,9 +12,17 @@ import html2canvas from 'html2canvas';
 
 const EMPTY_PAYMENT = {
     student_id: '',
+    amount: '',
+    method: 'Cash',
+    transaction_ref: '',
+    category: 'Tuition Fee',
+    semester: '',
+    academic_year: new Date().getFullYear().toString(),
+    remarks: '',
+    // For ledger adjustment mode
     total_due: '',
     total_paid: '',
-    remarks: ''
+    mode: 'transaction' // 'transaction' or 'adjustment'
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -398,7 +406,9 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                                     await financeAPI.syncLedger();
                                                     fetchAdminData();
                                                     alert('Financial Registry Synchronized!');
-                                                } catch (e) { alert('Sync Failed'); }
+                                                } catch (e) {
+                                                    alert('Sync Failed: ' + (e.response?.data?.error || e.message));
+                                                }
                                             }}
                                             className="px-6 py-4 bg-maroon/5 hover:bg-maroon hover:text-white rounded-[2rem] border border-maroon/10 text-maroon text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm"
                                         >
@@ -665,9 +675,23 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                             </div>
 
                                             <div className="flex justify-between items-end pt-4 border-t border-gray-50">
-                                                <div>
-                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Current Balance</p>
-                                                    <p className={`text-lg font-black tracking-tighter ${fee.balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>KSh {fmt(fee.balance)}</p>
+                                                <div className="space-y-1">
+                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Aggregate Registry Status</p>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <p className={`text-lg font-black tracking-tighter ${fee.balance > 0 ? 'text-red-500' : 'text-emerald-600'}`}>KSh {fmt(fee.balance)}</p>
+                                                        <p className="text-[9px] font-black text-gray-300 uppercase italic">Balance</p>
+                                                    </div>
+                                                    <div className="flex gap-3 mt-1">
+                                                        <div>
+                                                            <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Required</p>
+                                                            <p className="text-[9px] font-black text-gray-600">KSh {fmt(fee.total_due)}</p>
+                                                        </div>
+                                                        <div className="w-px h-4 bg-gray-100 self-center" />
+                                                        <div>
+                                                            <p className="text-[7px] font-black text-gray-400 uppercase tracking-tighter">Collected</p>
+                                                            <p className="text-[9px] font-black text-emerald-600">KSh {fmt(fee.total_paid)}</p>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div className="flex gap-2">
                                                     <button
@@ -755,31 +779,57 @@ export default function Finance() {
 
     const handleRecordPayment = async (e) => {
         e.preventDefault();
-        const { student_id, total_due, total_paid } = paymentForm;
-        if (!student_id || total_due === '' || total_paid === '') {
-            alert('Please fill in all financial fields.');
+        const { student_id, mode } = paymentForm;
+        if (!student_id) {
+            alert('Please select a student.');
             return;
         }
 
         try {
             setSaving(true);
-            const due = parseFloat(total_due);
-            const paid = parseFloat(total_paid);
-            const bal = due - paid;
 
-            await financeAPI.updateStudentFee(student_id, {
-                total_due: due,
-                total_paid: paid,
-                balance: bal,
-                status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending')
-            });
+            if (mode === 'transaction') {
+                const { amount, method, transaction_ref, category, semester, academic_year, remarks } = paymentForm;
+                if (!amount || !method) {
+                    alert('Amount and Method are required.');
+                    setSaving(false);
+                    return;
+                }
+                await financeAPI.recordPayment({
+                    student_id,
+                    amount: parseFloat(amount),
+                    method,
+                    transaction_ref: transaction_ref || `MANUAL-${Date.now()}`,
+                    category,
+                    semester,
+                    academic_year,
+                    remarks
+                });
+            } else {
+                const { total_due, total_paid } = paymentForm;
+                if (total_due === '' || total_paid === '') {
+                    alert('Please fill in total due and paid fields.');
+                    setSaving(false);
+                    return;
+                }
+                const due = parseFloat(total_due);
+                const paid = parseFloat(total_paid);
+                const bal = due - paid;
+
+                await financeAPI.updateStudentFee(student_id, {
+                    total_due: due,
+                    total_paid: paid,
+                    balance: bal,
+                    status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending')
+                });
+            }
 
             setShowModal(false);
             setPaymentForm(EMPTY_PAYMENT);
             fetchAdminData();
-            alert('Student financial ledger updated successfully!');
+            alert('Financial record committed successfully!');
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to update ledger.');
+            alert(error.response?.data?.error || 'Failed to update financial records.');
         } finally { setSaving(false); }
     };
 
@@ -938,58 +988,141 @@ export default function Finance() {
                                     })()}
                                 </div>
 
-                                {/* --- SECTION 2: FINANCIAL BALANCING --- */}
-                                <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-                                            <Wallet className="w-3.5 h-3.5" />
-                                        </div>
-                                        <h3 className="text-[10px] font-black text-emerald-700 uppercase tracking-[0.2em]">Ledger Balancing</h3>
-                                    </div>
+                                {/* --- SECTION 2: ENTRY MODE SELECTION --- */}
+                                <div className="flex gap-2 p-1.5 bg-gray-100/50 rounded-2xl w-full mb-8">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentForm({ ...paymentForm, mode: 'transaction' })}
+                                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentForm.mode === 'transaction' ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-gray-400'}`}
+                                    >
+                                        Add Transaction
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPaymentForm({ ...paymentForm, mode: 'adjustment' })}
+                                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentForm.mode === 'adjustment' ? 'bg-white text-maroon shadow-sm border border-maroon/10' : 'text-gray-400'}`}
+                                    >
+                                        Adjust Totals
+                                    </button>
+                                </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="space-y-3">
-                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Total fee required (KSh)</label>
-                                            <input
-                                                type="number"
-                                                value={paymentForm.total_due}
-                                                onChange={e => setPaymentForm({ ...paymentForm, total_due: e.target.value })}
-                                                className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
-                                                placeholder="0.00"
-                                                required
-                                            />
-                                        </div>
-                                        <div className="space-y-3">
-                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far (KSh)</label>
-                                            <input
-                                                type="number"
-                                                value={paymentForm.total_paid}
-                                                onChange={e => setPaymentForm({ ...paymentForm, total_paid: e.target.value })}
-                                                className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
-                                                placeholder="0.00"
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {paymentForm.total_due !== '' && paymentForm.total_paid !== '' && (
-                                        <div className="p-8 bg-maroon rounded-3xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500">
-                                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl" />
-                                            <div className="relative z-10 flex justify-between items-center">
-                                                <div>
-                                                    <p className="text-[10px] font-black text-gold/60 uppercase tracking-widest mb-1">Calculated Ledger Balance</p>
-                                                    <h4 className="text-2xl font-black text-white tracking-tighter">KSh {fmt(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0))}</h4>
+                                {paymentForm.mode === 'transaction' ? (
+                                    <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
+                                        <div className="p-8 bg-emerald-50/30 rounded-[2.5rem] border border-emerald-100/50 space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-6 h-6 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                                                    <DollarSign className="w-3.5 h-3.5" />
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-[9px] font-black text-gold/60 uppercase tracking-widest mb-1">Account Protocol</p>
-                                                    <p className="text-[10px] font-black text-white uppercase bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
-                                                        {(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0)) <= 0 ? 'Fully Cleared' : 'Deficit Detected'}
-                                                    </p>
+                                                <h3 className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Transaction Parameters</h3>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Amount (KSh)</label>
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={paymentForm.amount}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                                                        onFocus={e => e.target.select()}
+                                                        placeholder="0.00"
+                                                        className="w-full px-6 py-4 bg-white border border-emerald-100 rounded-2xl text-sm font-black text-emerald-700 outline-none focus:ring-4 focus:ring-emerald-50 transition-all font-mono"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Payment Method</label>
+                                                    <select
+                                                        value={paymentForm.method}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, method: e.target.value })}
+                                                        className="w-full px-6 py-4 bg-white border border-emerald-100 rounded-2xl text-sm font-black text-emerald-700 outline-none cursor-pointer"
+                                                    >
+                                                        {['Cash', 'Bank Transfer', 'Cheque', 'M-Pesa', 'Other'].map(m => <option key={m} value={m}>{m}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee Category</label>
+                                                    <select
+                                                        value={paymentForm.category}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, category: e.target.value })}
+                                                        className="w-full px-6 py-4 bg-white border border-emerald-100 rounded-2xl text-sm font-black text-emerald-700 outline-none"
+                                                    >
+                                                        {['Tuition Fee', 'Registration', 'Exam Fee', 'Uniform', 'Hostel', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Reference / Receipt No</label>
+                                                    <input
+                                                        type="text"
+                                                        value={paymentForm.transaction_ref}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, transaction_ref: e.target.value })}
+                                                        placeholder="Optional"
+                                                        className="w-full px-6 py-4 bg-white border border-emerald-100 rounded-2xl text-sm font-black text-emerald-700 outline-none"
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-8 animate-in slide-in-from-left-4 duration-500">
+                                        <div className="p-8 bg-maroon/5 rounded-[2.5rem] border border-maroon/10 space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-6 h-6 bg-maroon/10 text-maroon rounded-lg flex items-center justify-center">
+                                                    <Activity className="w-3.5 h-3.5" />
+                                                </div>
+                                                <h3 className="text-[10px] font-black text-maroon uppercase tracking-widest">Global Ledger Balancing</h3>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Total fee required (KSh)</label>
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={paymentForm.total_due}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, total_due: e.target.value })}
+                                                        onFocus={e => e.target.select()}
+                                                        className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm font-mono"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far (KSh)</label>
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={paymentForm.total_paid}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, total_paid: e.target.value })}
+                                                        onFocus={e => e.target.select()}
+                                                        className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm font-mono"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {paymentForm.total_due !== '' && paymentForm.total_paid !== '' && (
+                                                <div className="p-8 bg-maroon rounded-3xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500">
+                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl" />
+                                                    <div className="relative z-10 flex justify-between items-center">
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-gold/60 uppercase tracking-widest mb-1">Calculated Ledger Balance</p>
+                                                            <h4 className="text-2xl font-black text-white tracking-tighter">KSh {fmt(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0))}</h4>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[9px] font-black text-gold/60 uppercase tracking-widest mb-1">Account Protocol</p>
+                                                            <p className="text-[10px] font-black text-white uppercase bg-white/10 px-3 py-1.5 rounded-lg border border-white/10">
+                                                                {(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0)) <= 0 ? 'Fully Cleared' : 'Deficit Detected'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="space-y-3 px-2">
                                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Institutional Remarks (Optional)</label>
@@ -1013,7 +1146,7 @@ export default function Finance() {
                             >
                                 <span className={`flex items-center justify-center gap-3 transition-all duration-500 ${saving ? 'opacity-0 scale-90' : 'opacity-100 scale-100'}`}>
                                     <ShieldCheck className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-                                    Commit to Ledger
+                                    {paymentForm.mode === 'transaction' ? 'Authorize & Record Payment' : 'Commit Ledger Adjustments'}
                                 </span>
                                 {saving && (
                                     <div className="absolute inset-0 flex items-center justify-center gap-3 bg-maroon">
@@ -1064,6 +1197,7 @@ export default function Finance() {
                                                             type="number"
                                                             value={editingRecord.data.amount}
                                                             onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, amount: e.target.value } })}
+                                                            onFocus={e => e.target.select()}
                                                             className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
                                                         />
                                                     </div>
@@ -1167,6 +1301,7 @@ export default function Finance() {
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Total fee required</label>
                                                         <input
                                                             type="number"
+                                                            step="any"
                                                             value={editingRecord.data.total_due}
                                                             onChange={e => {
                                                                 const due = parseFloat(e.target.value) || 0;
@@ -1179,13 +1314,15 @@ export default function Finance() {
                                                                     }
                                                                 });
                                                             }}
-                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                            onFocus={e => e.target.select()}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm font-mono"
                                                         />
                                                     </div>
                                                     <div className="space-y-3">
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far</label>
                                                         <input
                                                             type="number"
+                                                            step="any"
                                                             value={editingRecord.data.total_paid}
                                                             onChange={e => {
                                                                 const paid = parseFloat(e.target.value) || 0;
@@ -1198,7 +1335,8 @@ export default function Finance() {
                                                                     }
                                                                 });
                                                             }}
-                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm"
+                                                            onFocus={e => e.target.select()}
+                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm font-mono"
                                                         />
                                                     </div>
                                                 </div>

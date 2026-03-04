@@ -724,9 +724,15 @@ export async function run(sql, params = []) {
 
         if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.toLowerCase().includes('on conflict')) {
             const lowerPgSql = pgSql.toLowerCase();
-            if (lowerPgSql.includes('insert into users')) {
+            const insertTableMatch = lowerPgSql.match(/insert\s+into\s+([\w.]+)/);
+            const targetTable = insertTableMatch ? insertTableMatch[1].replace(/['"`]/g, '') : '';
+
+            if (targetTable === 'users' || targetTable.endsWith('.users')) {
                 pgSql += ' ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, must_change_password = EXCLUDED.must_change_password, status = EXCLUDED.status';
-            } else if (lowerPgSql.includes('students') || lowerPgSql.includes('courses') || lowerPgSql.includes('faculty')) {
+            } else if (['students', 'courses', 'faculty'].includes(targetTable) ||
+                targetTable.endsWith('.students') ||
+                targetTable.endsWith('.courses') ||
+                targetTable.endsWith('.faculty')) {
                 pgSql += ' ON CONFLICT (id) DO NOTHING';
             }
         }

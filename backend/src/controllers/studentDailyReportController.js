@@ -5,13 +5,36 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 export const getAllDailyReports = async (req, res) => {
     try {
         const { student_id, course, date, trainer_email } = req.query;
+        const { role, email } = req.user;
 
         if (await isMongo()) {
             const StudentDailyReport = (await import('../models/mongo/StudentDailyReport.js')).default;
             let mongoFilter = {};
 
-            if (req.user.role === 'student') {
+            if (role === 'student') {
                 mongoFilter.student_id = req.user.student_id || req.user.id;
+            } else if (role === 'teacher') {
+                // Teachers see reports for their assigned courses
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const faculty = await Faculty.findOne({ email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
+
+                if (faculty) {
+                    const facultyCourses = await Course.find({
+                        $or: [
+                            { instructor: { $regex: new RegExp(`^${faculty.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+                            { name: { $in: faculty.courses || [] } }
+                        ],
+                        status: 'Active'
+                    }).select('name');
+                    const courseNames = facultyCourses.map(c => c.name);
+                    if (courseNames.length === 0) return res.json([]);
+
+                    const courseRegexes = courseNames.map(n => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+                    mongoFilter.course = { $in: courseRegexes };
+                } else {
+                    return res.json([]);
+                }
             } else if (student_id) {
                 mongoFilter.student_id = student_id;
             }
@@ -34,17 +57,37 @@ export const getAllDailyReports = async (req, res) => {
         let params = [];
         let conditions = [];
 
-        if (req.user.role === 'student') {
+        if (role === 'student') {
             conditions.push('student_id = ?');
             params.push(req.user.student_id || req.user.id);
+        } else if (role === 'teacher') {
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
+            if (faculty) {
+                let coursesList = [];
+                try {
+                    coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
+                } catch (e) { }
+                const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
+                const allTutorCourses = [...new Set([...coursesList.map(c => String(c).toLowerCase().trim()), ...instructorCourses.map(c => String(c.name).toLowerCase().trim())])];
+
+                if (allTutorCourses.length > 0) {
+                    const placeholders = allTutorCourses.map(() => 'LOWER(course) = ?').join(' OR ');
+                    conditions.push(`(${placeholders})`);
+                    params.push(...allTutorCourses);
+                } else {
+                    return res.json([]);
+                }
+            } else {
+                return res.json([]);
+            }
         } else if (student_id) {
             conditions.push('student_id = ?');
             params.push(student_id);
         }
 
         if (course) {
-            conditions.push('course = ?');
-            params.push(course);
+            conditions.push('LOWER(course) = ?');
+            params.push(String(course).toLowerCase().trim());
         }
         if (date) {
             conditions.push('report_date = ?');

@@ -15,7 +15,8 @@ function AdminDashboard() {
         students: 0,
         courses: 0,
         faculty: 0,
-        attendance: 0
+        attendance: 0,
+        revenue: 0
     });
     const [students, setStudents] = useState([]);
     const [courses, setCourses] = useState([]);
@@ -45,7 +46,9 @@ function AdminDashboard() {
                 students: statsData.summary.students,
                 courses: statsData.summary.courses,
                 faculty: statsData.summary.faculty,
-                attendance: statsData.summary.attendance
+                attendance: statsData.summary.attendance,
+                revenue: statsData.summary.revenue || 0,
+                distribution: statsData.courseDistribution || []
             });
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -58,12 +61,13 @@ function AdminDashboard() {
         { title: 'Active Courses', value: stats.courses.toLocaleString(), icon: BookOpen, change: '+2', trend: 'up' },
         { title: 'Faculty Members', value: stats.faculty.toLocaleString(), icon: UserCheck, change: '0%', trend: 'up' },
         { title: 'Avg Attendance', value: `${stats.attendance}%`, icon: TrendingUp, change: '-0.4%', trend: 'down' },
+        { title: 'Total Revenue', value: `KSh ${stats.revenue.toLocaleString()}`, icon: DollarSign, change: '+5.2%', trend: 'up' },
     ];
 
-    const chartData = courses.map(course => ({
-        name: course.name.split(' ')[0],
-        enrolled: course.enrolled,
-        capacity: course.capacity
+    const chartData = (stats.distribution || []).map(item => ({
+        name: item.name,
+        enrolled: item.enrolled,
+        capacity: item.capacity
     }));
 
     return (
@@ -78,7 +82,7 @@ function AdminDashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 md:gap-6">
                 {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
@@ -128,56 +132,63 @@ function AdminDashboard() {
                     <div className="flex justify-between items-center mb-10">
                         <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Enrollment Performance</h2>
                     </div>
-                    <ResponsiveContainer width="100%" height={320}>
-                        <BarChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                            <XAxis
-                                dataKey="name"
-                                stroke="#475569"
-                                fontSize={10}
-                                tick={{ fontWeight: 800 }}
-                                tickLine={false}
-                                axisLine={false}
-                                dy={10}
-                            />
-                            <YAxis
-                                stroke="#475569"
-                                fontSize={10}
-                                tick={{ fontWeight: 800 }}
-                                tickLine={false}
-                                axisLine={false}
-                                dx={-10}
-                            />
-                            <Tooltip
-                                cursor={{ fill: '#f1f5f9' }}
-                                contentStyle={{
-                                    borderRadius: '12px',
-                                    border: 'none',
-                                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
-                                    fontSize: '10px',
-                                    fontWeight: 'bold',
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.05em'
-                                }}
-                            />
-                            <Bar
-                                dataKey="enrolled"
-                                fill="#800000"
-                                radius={[6, 6, 0, 0]}
-                                barSize={40}
-                                activeBar={{ fill: '#FFD700', stroke: '#800000', strokeWidth: 1 }}
-                            >
-                                <LabelList
-                                    dataKey="enrolled"
-                                    position="top"
-                                    fill="#800000"
-                                    fontSize={10}
-                                    fontWeight="bold"
-                                    offset={10}
-                                />
-                            </Bar>
-                        </BarChart>
-                    </ResponsiveContainer>
+                    <div className="overflow-x-auto pb-4 custom-scrollbar">
+                        <div style={{ minWidth: (chartData.length * 80) > 600 ? `${chartData.length * 80}px` : '100%' }}>
+                            <ResponsiveContainer width="100%" height={320}>
+                                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                    <XAxis
+                                        dataKey="name"
+                                        stroke="#475569"
+                                        fontSize={9}
+                                        tick={{ fontWeight: 800 }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        interval={0}
+                                        angle={-25}
+                                        textAnchor="end"
+                                        height={60}
+                                    />
+                                    <YAxis
+                                        stroke="#475569"
+                                        fontSize={10}
+                                        tick={{ fontWeight: 800 }}
+                                        tickLine={false}
+                                        axisLine={false}
+                                        dx={-10}
+                                    />
+                                    <Tooltip
+                                        cursor={{ fill: '#f1f5f9' }}
+                                        contentStyle={{
+                                            borderRadius: '12px',
+                                            border: 'none',
+                                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                            fontSize: '10px',
+                                            fontWeight: 'bold',
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.05em'
+                                        }}
+                                    />
+                                    <Bar
+                                        dataKey="enrolled"
+                                        fill="#800000"
+                                        radius={[6, 6, 0, 0]}
+                                        barSize={32}
+                                        activeBar={{ fill: '#FFD700', stroke: '#800000', strokeWidth: 1 }}
+                                    >
+                                        <LabelList
+                                            dataKey="enrolled"
+                                            position="top"
+                                            fill="#800000"
+                                            fontSize={10}
+                                            fontWeight="bold"
+                                            offset={10}
+                                        />
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
                 </div>
                 <div className="space-y-6">
                     <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">

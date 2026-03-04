@@ -9,9 +9,10 @@ export async function getAllCourses(req, res) {
         const mongo = await isMongo();
 
         // SQL Query parts
+        // Using LIKE to capture students enrolled in multiple courses (stored as JSON arrays or comma-strings)
         const sqlSelect = `
             c.*, 
-            (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) = LOWER(c.name)) as enrolled
+            (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled
         `;
 
         // Admin and Superadmin see everything
@@ -23,7 +24,10 @@ export async function getAllCourses(req, res) {
 
                 // Manually add counts for Mongo
                 for (const course of courses) {
-                    course.enrolled = await Student.countDocuments({ course: course.name });
+                    const safeName = course.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    course.enrolled = await Student.countDocuments({
+                        course: { $regex: new RegExp(`^${safeName}$`, 'i') }
+                    });
                 }
                 return res.json(courses);
             }
@@ -50,7 +54,10 @@ export async function getAllCourses(req, res) {
                 }).sort({ name: 1 }).lean();
 
                 for (const course of courses) {
-                    course.enrolled = await Student.countDocuments({ course: course.name });
+                    const safeName = course.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    course.enrolled = await Student.countDocuments({
+                        course: { $regex: new RegExp(`^${safeName}$`, 'i') }
+                    });
                 }
                 return res.json(courses);
             }
@@ -105,7 +112,10 @@ export async function getAllCourses(req, res) {
                 }).lean();
 
                 for (const course of courses) {
-                    course.enrolled = await Student.countDocuments({ course: course.name });
+                    const safeName = course.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    course.enrolled = await Student.countDocuments({
+                        course: { $regex: new RegExp(`^${safeName}$`, 'i') }
+                    });
                 }
                 return res.json(courses);
             }
@@ -154,12 +164,15 @@ export async function getCourse(req, res) {
             const course = await Course.findOne({ id: req.params.id }).lean();
             if (!course) return res.status(404).json({ error: 'Course not found' });
 
-            course.enrolled = await Student.countDocuments({ course: course.name });
+            const safeName = course.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            course.enrolled = await Student.countDocuments({
+                course: { $regex: new RegExp(`^${safeName}$`, 'i') }
+            });
             return res.json(course);
         }
 
         const sql = `
-            SELECT c.*, (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) = LOWER(c.name)) as enrolled 
+            SELECT c.*, (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled 
             FROM courses c WHERE c.id = ?
         `;
         const course = await queryOne(sql, [req.params.id]);
