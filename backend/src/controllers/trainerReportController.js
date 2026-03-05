@@ -45,10 +45,29 @@ export const createReport = async (req, res) => {
             return res.status(400).json({ error: 'Required fields missing: week_number, report_date, daily_report, record_of_work' });
         }
 
-        // Guard against missing name/email
+        // Guard against missing name/email — always guarantee a non-empty trainer_name
         const trainerEmail = req.user.email || '';
-        let trainerName = req.user.name || (trainerEmail ? trainerEmail.split('@')[0] : 'Trainer');
+        let trainerName = (req.user.name || '').trim();
         const mongo = await isMongo();
+
+        // If name is missing from JWT, look it up from the faculty table (SQL only)
+        if (!trainerName && !mongo) {
+            try {
+                const facultyRecord = await queryOne(
+                    'SELECT name FROM faculty WHERE LOWER(email) = LOWER(?)',
+                    [trainerEmail]
+                );
+                if (facultyRecord && facultyRecord.name) {
+                    trainerName = facultyRecord.name;
+                }
+            } catch (_) { /* non-fatal */ }
+        }
+
+        // Final fallback: use email prefix
+        if (!trainerName) {
+            trainerName = trainerEmail ? trainerEmail.split('@')[0] : 'Trainer';
+        }
+
 
         if (mongo) {
             const TrainerReport = (await import('../models/mongo/TrainerReport.js')).default;
@@ -70,7 +89,19 @@ export const createReport = async (req, res) => {
             'INSERT INTO trainer_reports (trainer_id, trainer_name, week_number, report_date, daily_report, record_of_work, course_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [String(id), trainerName, week_number, report_date, daily_report, record_of_work, course_id || null, 'Submitted']
         );
-        const report = await queryOne('SELECT * FROM trainer_reports WHERE id = ?', [result.lastID]);
+
+        // PostgreSQL returns lastID from RETURNING clause; SQLite uses result.lastID
+        const insertedId = result.lastID;
+        if (!insertedId) {
+            // Fallback: fetch the latest inserted row for this trainer
+            const report = await queryOne(
+                'SELECT * FROM trainer_reports WHERE CAST(trainer_id AS TEXT) = ? ORDER BY created_at DESC LIMIT 1',
+                [String(id)]
+            );
+            return res.status(201).json(report);
+        }
+
+        const report = await queryOne('SELECT * FROM trainer_reports WHERE id = ?', [insertedId]);
         res.status(201).json(report);
     } catch (error) {
         console.error('Error creating trainer report:', error);
@@ -78,7 +109,7 @@ export const createReport = async (req, res) => {
         if (msg.includes('does not exist') || msg.includes('no such table')) {
             return res.status(500).json({ error: 'Database table missing. Please contact the system administrator to run database migrations.' });
         }
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Failed to submit report: ' + msg });
     }
 };
 

@@ -59,3 +59,23 @@ export function authorizeRoles(...roles) {
         next();
     };
 }
+
+/**
+ * Middleware: allows superadmin always; allows admin only if can_edit_finance is true.
+ * Blocks regular admins who have NOT been granted finance editing rights.
+ */
+export function authorizeFinanceEdit(req, res, next) {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const role = String(req.user.role || '').toLowerCase().trim();
+    if (role === 'superadmin') {
+        return next();
+    }
+    if (role === 'admin' && req.user.can_edit_finance) {
+        return next();
+    }
+    return res.status(403).json({
+        error: 'Access denied. Finance editing requires explicit permission from the Super Administrator.'
+    });
+}

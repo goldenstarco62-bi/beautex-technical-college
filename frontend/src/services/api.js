@@ -112,6 +112,7 @@ export const usersAPI = {
     resetPassword: (id) => api.put(`users/${encodeURIComponent(id)}/password`),
     resetByEmail: (email) => api.post('users/reset-by-email', { email }),
     delete: (id) => api.delete(`users/${encodeURIComponent(id)}`),
+    updateFinancePermission: (id, can_edit_finance) => api.put(`users/${encodeURIComponent(id)}/finance-permission`, { can_edit_finance }),
 };
 
 // Academic Reports

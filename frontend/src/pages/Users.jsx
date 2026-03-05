@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
     Shield, User, Mail, Trash2, CheckCircle, XCircle,
     MoreVertical, Key, Lock, Unlock, FileText,
-    Printer, Download, Eye, Clock, UserPlus
+    Printer, Download, Eye, Clock, UserPlus, DollarSign
 } from 'lucide-react';
 
 export default function Users() {
@@ -88,6 +88,24 @@ export default function Users() {
             if (showDetailModal) setShowDetailModal(false);
         } catch (error) {
             alert('Dismissal failed');
+        }
+    };
+
+    const handleFinancePermission = async (userId, currentFlag) => {
+        const action = currentFlag ? 'REVOKE' : 'GRANT';
+        const msg = currentFlag
+            ? 'Revoke finance editing rights from this admin?'
+            : 'Grant finance editing rights to this admin? They will be able to add, edit and delete payment records.';
+        if (!window.confirm(msg)) return;
+        try {
+            await usersAPI.updateFinancePermission(userId, !currentFlag);
+            fetchUsers();
+            if (selectedUser?.id === userId) {
+                setSelectedUser(prev => ({ ...prev, can_edit_finance: !currentFlag }));
+            }
+            alert(`Finance editing ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Failed to update finance permission');
         }
     };
 
@@ -223,6 +241,36 @@ export default function Users() {
                                     <option value="superadmin">Superadmin</option>
                                 </select>
                             </div>
+                            {/* Finance Permission — only superadmin can grant, only to admins */}
+                            {currentUser.role === 'superadmin' && user.role === 'admin' && (
+                                <div className="mt-4 p-4 rounded-2xl border-2 border-dashed border-gold/40 bg-gold/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
+                                        <DollarSign className="w-3 h-3 text-gold" />
+                                        Finance Editor Access
+                                    </p>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                {user.can_edit_finance ? '✅ Finance Editing: GRANTED' : '🔒 Finance Editing: RESTRICTED'}
+                                            </p>
+                                            <p className="text-[9px] text-gray-400 mt-0.5">
+                                                {user.can_edit_finance
+                                                    ? 'This admin can record, edit and delete payments.'
+                                                    : 'This admin can only view financial records.'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleFinancePermission(user.id, !!user.can_edit_finance)}
+                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_finance
+                                                    ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
+                                                    : 'bg-gold/20 text-gold hover:bg-gold hover:text-maroon border border-gold/40'
+                                                }`}
+                                        >
+                                            {user.can_edit_finance ? 'Revoke' : 'Grant'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </section>
 
                         {/* Administrative Controls */}
@@ -355,6 +403,12 @@ export default function Users() {
                                             }`}>
                                             {u.role === 'teacher' ? 'FACULTY' : u.role}
                                         </span>
+                                        {/* Finance Editor badge */}
+                                        {u.can_edit_finance && u.role === 'admin' && (
+                                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-gold/10 text-gold border border-gold/20">
+                                                <DollarSign className="w-2.5 h-2.5" /> Finance
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-10 py-8">
                                         <div className="flex items-center gap-2 text-gray-400 font-bold tracking-tight">

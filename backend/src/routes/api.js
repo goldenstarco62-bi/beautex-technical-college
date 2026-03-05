@@ -22,6 +22,7 @@ import * as interactionController from '../controllers/interactionController.js'
 import * as trainerReportController from '../controllers/trainerReportController.js';
 import * as studentDailyReportController from '../controllers/studentDailyReportController.js';
 import { authorizeRoles } from '../middleware/auth.js';
+import { authorizeFinanceEdit } from '../middleware/auth.js';
 
 
 import { logAudit } from '../middleware/audit.js';
@@ -140,6 +141,8 @@ router.put('/users/:id/password', authenticateToken, authorizeRoles('admin', 'su
 router.post('/users/reset-by-email', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetPasswordByEmail);
 router.delete('/users/:id', authenticateToken, authorizeRoles('superadmin'), userController.deleteUser);
 router.get('/audit-logs', authenticateToken, authorizeRoles('superadmin'), userController.getAuditLogs);
+// Finance permission management (superadmin only)
+router.put('/users/:id/finance-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateFinancePermission);
 
 
 // Academic Reports (Trainers/Admin/Superadmin)
@@ -180,19 +183,20 @@ router.get('/activity-reports/auto-capture', authenticateToken, authorizeRoles('
 router.get('/stats/dashboard', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), statsController.getDashboardStats);
 
 // Finance Routes
-router.post('/finance/sync', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.syncAllFees);
+// Read-only routes: all admins/superadmins can view
+router.post('/finance/sync', authenticateToken, authorizeFinanceEdit, financeController.syncAllFees);
 router.get('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFeeStructures);
-router.post('/finance/fees', authenticateToken, authorizeRoles('admin', 'superadmin'), feeValidation, financeController.createFeeStructure);
-router.put('/finance/fees/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.updateFeeStructure);
-router.delete('/finance/fees/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.deleteFeeStructure);
+router.post('/finance/fees', authenticateToken, authorizeFinanceEdit, feeValidation, financeController.createFeeStructure);
+router.put('/finance/fees/:id', authenticateToken, authorizeFinanceEdit, financeController.updateFeeStructure);
+router.delete('/finance/fees/:id', authenticateToken, authorizeFinanceEdit, financeController.deleteFeeStructure);
 router.get('/finance/student-fees', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getAllStudentFees);
 router.get('/finance/student-fees/:studentId', authenticateToken, financeController.getStudentFees);
-router.put('/finance/student-fees/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.updateStudentFee);
+router.put('/finance/student-fees/:id', authenticateToken, authorizeFinanceEdit, financeController.updateStudentFee);
 
-router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), paymentValidation, financeController.recordPayment);
+router.post('/finance/payments', authenticateToken, authorizeFinanceEdit, paymentValidation, financeController.recordPayment);
 router.get('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getPayments);
-router.put('/finance/payments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.updatePayment);
-router.delete('/finance/payments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.deletePayment);
+router.put('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.updatePayment);
+router.delete('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.deletePayment);
 
 router.post('/finance/mpesa-callback', financeController.mpesaCallback);
 router.get('/finance/analytics', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFinanceAnalytics);

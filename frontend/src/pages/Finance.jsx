@@ -294,7 +294,7 @@ function StudentFinanceView({ studentFee, payments }) {
 }
 
 // ─── ADMIN VIEW ───────────────────────────────────────────────────────────────
-function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRecord, onViewReport, onEditPayment, onDeletePayment, onEditFee, fetchAdminData }) {
+function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRecord, onViewReport, onEditPayment, onDeletePayment, onEditFee, fetchAdminData, canEditFinance }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -332,12 +332,18 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                     >
                         <Printer className="w-4 h-4" /> Global Export
                     </button>
-                    <button
-                        onClick={onRecord}
-                        className="flex-1 lg:flex-none bg-maroon text-gold px-8 py-4 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-2xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[10px] uppercase tracking-widest"
-                    >
-                        <Plus className="w-4 h-4" /> Record Payment
-                    </button>
+                    {canEditFinance ? (
+                        <button
+                            onClick={onRecord}
+                            className="flex-1 lg:flex-none bg-maroon text-gold px-8 py-4 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-2xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[10px] uppercase tracking-widest"
+                        >
+                            <Plus className="w-4 h-4" /> Record Payment
+                        </button>
+                    ) : (
+                        <div className="flex-1 lg:flex-none px-8 py-4 rounded-[1.5rem] flex items-center justify-center gap-3 border-2 border-dashed border-amber-300 bg-amber-50 font-black text-[10px] uppercase tracking-widest text-amber-500">
+                            <ShieldCheck className="w-4 h-4" /> View Only
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -742,6 +748,9 @@ export default function Finance() {
     const [printingReport, setPrintingReport] = useState(null);
     const [editingRecord, setEditingRecord] = useState(null); // {type: 'payment' | 'fee', data: any }
 
+    // Finance edit permission: superadmin always yes, admin only if granted
+    const canEditFinance = user?.role === 'superadmin' || (user?.role === 'admin' && !!user?.can_edit_finance);
+
     useEffect(() => {
         user?.role === 'student' ? fetchStudentData() : fetchAdminData();
     }, [user]);
@@ -902,18 +911,36 @@ export default function Finance() {
             {user?.role === 'student' ? (
                 <StudentFinanceView studentFee={studentFee} payments={payments} />
             ) : (
-                <AdminFinanceView
-                    analytics={analytics}
-                    payments={payments}
-                    studentFees={studentFees}
-                    allStudents={allStudents}
-                    fetchAdminData={fetchAdminData}
-                    onRecord={() => setShowModal(true)}
-                    onViewReport={setViewingReport}
-                    onEditPayment={(p) => setEditingRecord({ type: 'payment', data: { ...p } })}
-                    onEditFee={(f) => setEditingRecord({ type: 'fee', data: { ...f } })}
-                    onDeletePayment={(id) => handleDeleteRecord('payment', id)}
-                />
+                <div className="space-y-6">
+                    {/* View-only banner for restricted admins */}
+                    {user?.role === 'admin' && !canEditFinance && (
+                        <div className="flex items-center gap-4 px-8 py-5 bg-amber-50 border border-amber-200 rounded-3xl shadow-sm">
+                            <div className="w-10 h-10 bg-amber-100 rounded-2xl flex items-center justify-center shrink-0">
+                                <ShieldCheck className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-black text-amber-800 uppercase tracking-widest">View-Only Access</p>
+                                <p className="text-[11px] text-amber-600 font-medium mt-0.5">
+                                    You can view financial records but cannot edit or record payments.
+                                    Contact the Super Administrator to request Finance Editor access.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                    <AdminFinanceView
+                        analytics={analytics}
+                        payments={payments}
+                        studentFees={studentFees}
+                        allStudents={allStudents}
+                        fetchAdminData={fetchAdminData}
+                        canEditFinance={canEditFinance}
+                        onRecord={() => canEditFinance ? setShowModal(true) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
+                        onViewReport={setViewingReport}
+                        onEditPayment={(p) => canEditFinance ? setEditingRecord({ type: 'payment', data: { ...p } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
+                        onEditFee={(f) => canEditFinance ? setEditingRecord({ type: 'fee', data: { ...f } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
+                        onDeletePayment={(id) => canEditFinance ? handleDeleteRecord('payment', id) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
+                    />
+                </div>
             )}
 
             {showModal && (

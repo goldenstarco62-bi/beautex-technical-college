@@ -34,7 +34,7 @@ export async function getAllUsers(req, res) {
         }
 
         const users = await query(
-            'SELECT id, email, role, status, name, created_at, last_seen_at FROM users ORDER BY email'
+            'SELECT id, email, role, status, name, created_at, last_seen_at, can_edit_finance FROM users ORDER BY email'
         );
 
         const enriched = users.map(u => ({
@@ -204,5 +204,43 @@ export async function resetPasswordByEmail(req, res) {
     } catch (error) {
         console.error('Reset password by email error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
+    }
+}
+
+/**
+ * Grant or revoke Finance editing permission for a user.
+ * Only accessible by superadmin.
+ */
+export async function updateFinancePermission(req, res) {
+    try {
+        const { can_edit_finance } = req.body;
+        const userId = req.params.id;
+
+        if (typeof can_edit_finance === 'undefined') {
+            return res.status(400).json({ error: 'can_edit_finance field is required' });
+        }
+
+        const flag = can_edit_finance ? true : false;
+
+        if (await isMongo()) {
+            const User = (await import('../models/mongo/User.js')).default;
+            const user = await User.findByIdAndUpdate(userId, { can_edit_finance: flag }, { new: true }).select('-password');
+            if (!user) return res.status(404).json({ error: 'User not found' });
+            return res.json({ message: 'Finance permission updated', can_edit_finance: flag });
+        }
+
+        const user = await queryOne('SELECT id, role FROM users WHERE id = ?', [userId]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Only admins can be granted finance editing rights
+        if (!['admin', 'superadmin'].includes(user.role)) {
+            return res.status(400).json({ error: 'Finance editing rights can only be granted to admins' });
+        }
+
+        await run('UPDATE users SET can_edit_finance = ? WHERE id = ?', [flag, userId]);
+        res.json({ message: `Finance editing ${flag ? 'granted' : 'revoked'} successfully`, can_edit_finance: flag });
+    } catch (error) {
+        console.error('Update finance permission error:', error);
+        res.status(500).json({ error: 'Failed to update finance permission' });
     }
 }

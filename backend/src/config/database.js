@@ -445,6 +445,16 @@ async function runPostgresMigrations(database) {
             console.log('✅ reset_token columns added to users');
         }
 
+        // Check for can_edit_finance column in users
+        const checkFinanceCol = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='can_edit_finance'
+        `);
+        if (checkFinanceCol.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN can_edit_finance BOOLEAN DEFAULT FALSE');
+            console.log('✅ can_edit_finance column added to users');
+        }
+
         // --- Payments Table Migrations ---
         const paymentCols = await database.query(`
             SELECT column_name FROM information_schema.columns
@@ -605,6 +615,11 @@ async function runSqliteMigrations(database) {
             await database.run('ALTER TABLE users ADD COLUMN reset_token TEXT');
             await database.run('ALTER TABLE users ADD COLUMN reset_token_expiry TEXT');
             console.log('✅ reset_token columns added to SQLite users');
+        }
+        if (!userInfo.some(col => col.name === 'can_edit_finance')) {
+            console.log('🔄 Applying SQLite migration: Adding can_edit_finance to users...');
+            await database.run('ALTER TABLE users ADD COLUMN can_edit_finance INTEGER DEFAULT 0');
+            console.log('✅ can_edit_finance column added to SQLite users');
         }
 
         // Daily activity reports - add missing columns
