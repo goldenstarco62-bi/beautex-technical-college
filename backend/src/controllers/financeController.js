@@ -121,23 +121,36 @@ export async function syncAllFees(req, res) {
             console.log(`🔄 Syncing ledger for ${allStudents.length} students...`);
 
             for (const student of allStudents) {
-                const sid = student.id;
-                // Calculate total paid from all verified payment records
-                const totalPaid = allPayments
-                    .filter(p => p.student_id === sid)
-                    .reduce((sum, p) => sum + (p.amount || 0), 0);
+                const sid = String(student.id || '').trim().toLowerCase();
+                if (!sid) continue;
 
-                let fee = await StudentFee.findOne({ student_id: sid });
+                // Calculate total paid from all verified payment records (Case-insensitive match)
+                const studentPayments = allPayments.filter(p =>
+                    String(p.student_id || '').trim().toLowerCase() === sid
+                );
+
+                const totalPaid = studentPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+                // Get most recent payment date
+                let lastPaymentDate = null;
+                if (studentPayments.length > 0) {
+                    const dates = studentPayments.map(p => new Date(p.payment_date)).filter(d => !isNaN(d));
+                    if (dates.length > 0) {
+                        lastPaymentDate = new Date(Math.max(...dates));
+                    }
+                }
+
+                let fee = await StudentFee.findOne({ student_id: student.id });
                 let totalDue = fee?.total_due || 0;
 
                 // Attempt to initialize total_due if it's 0 and we have course info
                 if (totalDue <= 0 && student.course) {
                     const primaryCourseName = Array.isArray(student.course) ? student.course[0] : student.course;
                     if (primaryCourseName) {
-                        const courseObj = allCourses.find(c => c.name === primaryCourseName);
+                        const courseObj = allCourses.find(c => String(c.name).toLowerCase().trim() === String(primaryCourseName).toLowerCase().trim());
                         if (courseObj) {
                             const matchedStructure = allStructures.find(s =>
-                                String(s.course_id) === String(courseObj._id || courseObj.id) &&
+                                String(s.course_id).toLowerCase().trim() === String(courseObj._id || courseObj.id).toLowerCase().trim() &&
                                 s.category === 'Tuition Fee'
                             );
                             if (matchedStructure) totalDue = matchedStructure.amount;
@@ -149,13 +162,13 @@ export async function syncAllFees(req, res) {
                 const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
                 await StudentFee.findOneAndUpdate(
-                    { student_id: sid },
+                    { student_id: student.id },
                     {
                         total_due: totalDue,
                         total_paid: totalPaid,
                         balance,
                         status,
-                        last_payment_date: totalPaid > 0 ? new Date() : fee?.last_payment_date
+                        last_payment_date: lastPaymentDate
                     },
                     { upsert: true }
                 );
@@ -183,26 +196,44 @@ export async function syncAllFees(req, res) {
         console.log(`ℹ️ Found ${structures.length} fee structures and ${allCourses.length} courses.`);
 
         // 3. Find students with 0 total_due and attempt auto-assignment
-        const missingFees = await query('SELECT student_id, (SELECT course FROM students WHERE students.id = student_fees.student_id) as course_name FROM student_fees WHERE total_due <= 0');
+        const missingFees = await query(`
+            SELECT sf.student_id, s.course as course_name 
+            FROM student_fees sf
+            JOIN students s ON sf.student_id = s.id 
+            WHERE sf.total_due <= 0
+        `);
 
         for (const f of missingFees) {
             if (!f.course_name) continue;
 
-            // Match student course name to a course record to get course_id
             const courseObj = allCourses.find(c => String(c.name).toLowerCase().trim() === String(f.course_name).toLowerCase().trim());
             if (courseObj) {
-                const matchedStructure = structures.find(s => String(s.course_id) === String(courseObj.id));
+                const matchedStructure = structures.find(s => String(s.course_id).toLowerCase().trim() === String(courseObj.id).toLowerCase().trim());
                 if (matchedStructure) {
                     await run('UPDATE student_fees SET total_due = ? WHERE student_id = ?', [matchedStructure.amount, f.student_id]);
                 }
             }
         }
 
-        // 4. Perform a multi-stage update to sync totals and status
+        // 4. Perform a multi-stage update to sync totals, status, and dates 
+        // Using LOWER() and TRIM() to ensure robust ID matching across different DB engines
         await run(`
             UPDATE student_fees 
-            SET total_paid = (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE payments.student_id = student_fees.student_id),
-                balance = total_due - (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE payments.student_id = student_fees.student_id)
+            SET total_paid = (
+                    SELECT COALESCE(SUM(amount), 0) 
+                    FROM payments 
+                    WHERE LOWER(TRIM(payments.student_id)) = LOWER(TRIM(student_fees.student_id))
+                ),
+                last_payment_date = (
+                    SELECT MAX(payment_date) 
+                    FROM payments 
+                    WHERE LOWER(TRIM(payments.student_id)) = LOWER(TRIM(student_fees.student_id))
+                )
+        `);
+
+        await run(`
+            UPDATE student_fees 
+            SET balance = total_due - total_paid
         `);
 
         await run(`
