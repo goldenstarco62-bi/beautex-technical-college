@@ -294,7 +294,7 @@ function StudentFinanceView({ studentFee, payments }) {
 }
 
 // ─── ADMIN VIEW ───────────────────────────────────────────────────────────────
-function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRecord, onViewReport, onEditPayment, onDeletePayment, onEditFee, fetchAdminData, canEditFinance }) {
+function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRecord, onViewReport, onEditPayment, onDeletePayment, onEditFee, fetchAdminData, canEditFinance, canRecordFinance }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -332,7 +332,7 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                     >
                         <Printer className="w-4 h-4" /> Global Export
                     </button>
-                    {canEditFinance ? (
+                    {canRecordFinance ? (
                         <button
                             onClick={onRecord}
                             className="flex-1 lg:flex-none bg-maroon text-gold px-8 py-4 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-2xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[10px] uppercase tracking-widest"
@@ -501,18 +501,22 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                             <div className="flex justify-between items-center">
                                                 <p className="text-[9px] font-bold text-emerald-600">KSh {fmt(p.amount)}</p>
                                                 <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); onEditPayment(p); }}
-                                                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-amber-100 text-amber-600 rounded-lg transition-all"
-                                                    >
-                                                        <Pencil className="w-3 h-3" />
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); onDeletePayment(p.id || p._id); }}
-                                                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-all"
-                                                    >
-                                                        <Trash2 className="w-3 h-3" />
-                                                    </button>
+                                                    {canEditFinance && (
+                                                        <>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); onEditPayment(p); }}
+                                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-amber-100 text-amber-600 rounded-lg transition-all"
+                                                            >
+                                                                <Pencil className="w-3 h-3" />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => { e.stopPropagation(); onDeletePayment(p.id || p._id); }}
+                                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-all"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </button>
+                                                        </>
+                                                    )}
                                                     <p className="text-[8px] font-black text-gray-300 uppercase shrink-0">{new Date(p.payment_date).toLocaleDateString()}</p>
                                                 </div>
                                             </div>
@@ -597,12 +601,16 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                                     <button onClick={() => onViewReport({ ...p, type: 'payment' })} className="p-2.5 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
                                                         <Eye className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button onClick={() => onEditPayment(p)} className="p-2.5 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all shadow-sm text-amber-600">
-                                                        <Pencil className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <button onClick={() => onDeletePayment(p.id || p._id)} className="p-2.5 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-600">
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
+                                                    {canEditFinance && (
+                                                        <>
+                                                            <button onClick={() => onEditPayment(p)} className="p-2.5 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all shadow-sm text-amber-600">
+                                                                <Pencil className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button onClick={() => onDeletePayment(p.id || p._id)} className="p-2.5 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-600">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -706,12 +714,14 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                                     >
                                                         <Eye className="w-4 h-4" />
                                                     </button>
-                                                    <button
-                                                        onClick={() => onEditFee(fee)}
-                                                        className="p-3 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-2xl transition-all shadow-sm text-amber-600"
-                                                    >
-                                                        <Pencil className="w-4 h-4" />
-                                                    </button>
+                                                    {canEditFinance && (
+                                                        <button
+                                                            onClick={() => onEditFee(fee)}
+                                                            className="p-3 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-2xl transition-all shadow-sm text-amber-600"
+                                                        >
+                                                            <Pencil className="w-4 h-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -750,6 +760,7 @@ export default function Finance() {
 
     // Finance edit permission: superadmin always yes, admin only if granted
     const canEditFinance = user?.role === 'superadmin' || (user?.role === 'admin' && !!user?.can_edit_finance);
+    const canRecordFinance = user?.role === 'superadmin' || user?.role === 'admin';
 
     useEffect(() => {
         user?.role === 'student' ? fetchStudentData() : fetchAdminData();
@@ -919,10 +930,10 @@ export default function Finance() {
                                 <ShieldCheck className="w-5 h-5 text-amber-600" />
                             </div>
                             <div>
-                                <p className="text-xs font-black text-amber-800 uppercase tracking-widest">View-Only Access</p>
+                                <p className="text-xs font-black text-amber-800 uppercase tracking-widest">Limited Finance Access</p>
                                 <p className="text-[11px] text-amber-600 font-medium mt-0.5">
-                                    You can view financial records but cannot edit or record payments.
-                                    Contact the Super Administrator to request Finance Editor access.
+                                    You can record new payments but cannot edit or delete existing records.
+                                    Contact the Super Administrator for full Finance Editor access.
                                 </p>
                             </div>
                         </div>
@@ -934,7 +945,8 @@ export default function Finance() {
                         allStudents={allStudents}
                         fetchAdminData={fetchAdminData}
                         canEditFinance={canEditFinance}
-                        onRecord={() => canEditFinance ? setShowModal(true) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
+                        canRecordFinance={canRecordFinance}
+                        onRecord={() => canRecordFinance ? setShowModal(true) : alert('Access Denied: You do not have permission to record payments.')}
                         onViewReport={setViewingReport}
                         onEditPayment={(p) => canEditFinance ? setEditingRecord({ type: 'payment', data: { ...p } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
                         onEditFee={(f) => canEditFinance ? setEditingRecord({ type: 'fee', data: { ...f } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
@@ -1016,22 +1028,24 @@ export default function Finance() {
                                 </div>
 
                                 {/* --- SECTION 2: ENTRY MODE SELECTION --- */}
-                                <div className="flex gap-2 p-1.5 bg-gray-100/50 rounded-2xl w-full mb-8">
-                                    <button
-                                        type="button"
-                                        onClick={() => setPaymentForm({ ...paymentForm, mode: 'transaction' })}
-                                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentForm.mode === 'transaction' ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-gray-400'}`}
-                                    >
-                                        Add Transaction
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setPaymentForm({ ...paymentForm, mode: 'adjustment' })}
-                                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentForm.mode === 'adjustment' ? 'bg-white text-maroon shadow-sm border border-maroon/10' : 'text-gray-400'}`}
-                                    >
-                                        Adjust Totals
-                                    </button>
-                                </div>
+                                {canEditFinance && (
+                                    <div className="flex gap-2 p-1.5 bg-gray-100/50 rounded-2xl w-full mb-8">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentForm({ ...paymentForm, mode: 'transaction' })}
+                                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentForm.mode === 'transaction' ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-gray-400'}`}
+                                        >
+                                            Add Transaction
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentForm({ ...paymentForm, mode: 'adjustment' })}
+                                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${paymentForm.mode === 'adjustment' ? 'bg-white text-maroon shadow-sm border border-maroon/10' : 'text-gray-400'}`}
+                                        >
+                                            Adjust Totals
+                                        </button>
+                                    </div>
+                                )}
 
                                 {paymentForm.mode === 'transaction' ? (
                                     <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">

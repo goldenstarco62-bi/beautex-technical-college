@@ -521,6 +521,9 @@ export async function getFinanceAnalytics(req, res) {
  * Handle M-Pesa Daraja Callback (Webhook)
  * This endpoint receives the transaction result from Safaricom.
  */
+/**
+ * Handle M-Pesa Daraja Callback (Webhook)
+ */
 export async function mpesaCallback(req, res) {
     try {
         const body = req.body.Body.stkCallback;
@@ -532,16 +535,62 @@ export async function mpesaCallback(req, res) {
             const amount = metadata.find(i => i.Name === 'Amount')?.Value;
             const receipt = metadata.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
             const phone = metadata.find(i => i.Name === 'PhoneNumber')?.Value;
-            console.log(`💵 Received KSh ${amount} from ${phone}. Receipt: ${receipt}`);
+
+            // Extract Student ID from the 'Remarks' or 'AccountReference' passed during STK initiation
+            // In a real flow, this is usually retrieved via a CheckoutRequestID mapping.
+            // For now, we attempt to find the student by phone number if ID is missing.
+
+            const CheckoutRequestID = body.CheckoutRequestID;
+            console.log(`💵 Received KSh ${amount} from ${phone}. Receipt: ${receipt}, ID: ${CheckoutRequestID}`);
+
+            // FIX: PERSIST TO DATABASE
+            // 1. Find student by phone (Fallback) or specific metadata if you passed it
+            const student = await queryOne('SELECT id, name FROM students WHERE TRIM(phone) LIKE ? OR contact LIKE ?', [`%${phone.slice(-9)}%`, `%${phone.slice(-9)}%`]);
+
+            if (student) {
+                const student_id = student.id;
+                const recorded_by = 'M-Pesa Automation';
+
+                // Record the Receipt (Source of Truth)
+                await run(
+                    'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                    [student_id, amount, 'M-Pesa', receipt, recorded_by, 'Tuition Fee', 'Completed']
+                );
+
+                // Update the Summary Cache
+                let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [student_id]);
+                if (fee) {
+                    const newPaid = (Number(fee.total_paid) || 0) + Number(amount);
+                    const newBalance = (Number(fee.total_due) || 0) - newPaid;
+                    const newStatus = newBalance <= 0 ? 'Paid' : 'Partial';
+                    await run(
+                        'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
+                        [newPaid, newBalance, newStatus, student_id]
+                    );
+                } else {
+                    // Create summary if missing
+                    await run(
+                        'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                        [student_id, 0, amount, -amount, 'Partial']
+                    );
+                }
+                console.log(`✅ Ledger updated for ${student.name} (${student_id})`);
+            } else {
+                console.warn(`⚠️ Payment received but student with phone ${phone} not found in database.`);
+                // We should still record the payment with an 'Unassigned' status for manual matching
+                await run(
+                    'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, status, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                    ['PENDING_ASSIGNMENT', amount, 'M-Pesa', receipt, 'M-Pesa Automation', 'Tuition Fee', 'Completed', `From phone: ${phone}`]
+                );
+            }
         } else {
             console.warn(`❌ M-Pesa Transaction Failed/Cancelled: ${body.ResultDesc}`);
         }
 
-        // Always acknowledge to Safaricom to avoid retries
         res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
     } catch (error) {
         console.error('❌ M-Pesa Callback Processing Error:', error.message);
-        res.status(200).json({ ResultCode: 0, ResultDesc: "Success" }); // Still return OK to avoid Safaricom retry spam
+        res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
     }
 }
 /**

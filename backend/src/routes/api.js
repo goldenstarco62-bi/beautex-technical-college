@@ -193,7 +193,7 @@ router.get('/finance/student-fees', authenticateToken, authorizeRoles('admin', '
 router.get('/finance/student-fees/:studentId', authenticateToken, financeController.getStudentFees);
 router.put('/finance/student-fees/:id', authenticateToken, authorizeFinanceEdit, financeController.updateStudentFee);
 
-router.post('/finance/payments', authenticateToken, authorizeFinanceEdit, paymentValidation, financeController.recordPayment);
+router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), paymentValidation, financeController.recordPayment);
 router.get('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getPayments);
 router.put('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.updatePayment);
 router.delete('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.deletePayment);
