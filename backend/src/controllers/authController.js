@@ -21,6 +21,28 @@ async function findUserByEmail(email) {
     return await queryOne('SELECT * FROM users WHERE LOWER(email) = LOWER(?)', [normalizedEmail]);
 }
 
+/**
+ * Validates password complexity requirements.
+ * Minimum 8 characters, at least one number, and one special character.
+ */
+function validatePasswordStrength(password) {
+    if (!password || password.length < 8) {
+        return { valid: false, error: 'Password must be at least 8 characters long.' };
+    }
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    
+    if (!hasNumber) {
+        return { valid: false, error: 'Password must contain at least one number.' };
+    }
+    if (!hasSpecial) {
+        return { valid: false, error: 'Password must contain at least one special character (!@#$%^&* etc.).' };
+    }
+    return { valid: true };
+}
+
+const SALT_ROUNDS = 12; // Increased from 10 for better security
+
 async function findUserById(id) {
     await getDb();
 
@@ -61,7 +83,12 @@ export async function register(req, res) {
             return res.status(409).json({ error: 'User already exists' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const strength = validatePasswordStrength(password);
+        if (!strength.valid) {
+            return res.status(400).json({ error: strength.error });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
         const savedUser = await createUser(email, hashedPassword, role);
 
         res.status(201).json({
@@ -238,12 +265,13 @@ export async function changePassword(req, res) {
         const { currentPassword, newPassword } = req.body;
         const userId = req.user.id;
 
-        // FIX: Single clean validation — removed dead-code double-check
         if (!newPassword) {
             return res.status(400).json({ error: 'New password is required' });
         }
-        if (newPassword.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+        
+        const strength = validatePasswordStrength(newPassword);
+        if (!strength.valid) {
+            return res.status(400).json({ error: strength.error });
         }
 
         let user;
@@ -269,7 +297,7 @@ export async function changePassword(req, res) {
             }
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
         if (!!process.env.MONGODB_URI) {
             user.password = hashedPassword;
@@ -354,8 +382,10 @@ export async function resetPassword(req, res) {
         if (!token || !email || !newPassword) {
             return res.status(400).json({ error: 'Token, email, and new password are required' });
         }
-        if (newPassword.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+        const strength = validatePasswordStrength(newPassword);
+        if (!strength.valid) {
+            return res.status(400).json({ error: strength.error });
         }
 
         // Hash the incoming token to compare with stored hash
@@ -380,7 +410,7 @@ export async function resetPassword(req, res) {
             return res.status(400).json({ error: 'Invalid or expired reset token. Please request a new one.' });
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
         if (!!process.env.MONGODB_URI) {
             user.password = hashedPassword;

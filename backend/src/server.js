@@ -24,6 +24,16 @@ app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 1000 
 // Global XSS Sanitization
 app.use(sanitizeMiddleware);
 
+// HTTPS Redirection for Production (Vercel/Heroku/Cloud)
+if (process.env.NODE_ENV === 'production') {
+    app.use((req, res, next) => {
+        if (req.headers['x-forwarded-proto'] !== 'https') {
+            return res.redirect(`https://${req.headers.host}${req.url}`);
+        }
+        next();
+    });
+}
+
 // Advanced Security Headers (CSP)
 app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -43,7 +53,11 @@ app.use(helmet({
     dnsPrefetchControl: { allow: false },
     frameguard: { action: 'deny' },
     hidePoweredBy: true,
-    hsts: true,
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true,
+    },
     ieNoOpen: true,
     originAgentCluster: true,
     permittedCrossDomainPolicies: { policy: 'none' },
@@ -94,13 +108,14 @@ app.use(cors({
     credentials: true
 }));
 
-// Rate Limiting Configuration
+// Rate Limiting Configuration: Strict Brute Force Protection
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 20, // Limit each IP to 20 login/reset attempts per windowMs
-    message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' },
+    windowMs: 30 * 60 * 1000, // 30 minutes
+    limit: 5, // Limit each IP to 5 FAILED attempts per windowMs
+    message: { error: 'Too many failed login attempts. For security, your IP has been blocked for 30 minutes.' },
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    skipSuccessfulRequests: true, // Only failed attempts (4xx/5xx) count towards the limit
 });
 
 const apiLimiter = rateLimit({

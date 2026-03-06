@@ -99,7 +99,7 @@ export async function resetUserPassword(req, res) {
     try {
         const userId = req.params.id;
         const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+        const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
@@ -175,7 +175,7 @@ export async function resetPasswordByEmail(req, res) {
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
         const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
-        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+        const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;

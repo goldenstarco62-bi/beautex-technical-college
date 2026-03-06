@@ -31,8 +31,15 @@ export default function ResetPassword() {
             return;
         }
 
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters long');
+        if (password.length < 8) {
+            setError('Password must be at least 8 characters long');
+            return;
+        }
+
+        const hasNumber = /\d/.test(password);
+        const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+        if (!hasNumber || !hasSpecial) {
+            setError('Strict Policy: Must include a number and a special character.');
             return;
         }
 
@@ -73,6 +80,14 @@ export default function ResetPassword() {
                             <div className="text-center mb-8">
                                 <h2 className="text-base font-bold text-gray-800">Create New Password</h2>
                                 <p className="text-sm text-gray-600 mt-2">Enter your new secure password below.</p>
+                                <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-xl text-left">
+                                    <p className="text-[10px] text-blue-800 font-black uppercase tracking-widest mb-1 flex items-center gap-1">
+                                        <AlertCircle className="w-3 h-3" /> Security Requirement:
+                                    </p>
+                                    <p className="text-[10px] text-blue-600 font-bold leading-relaxed">
+                                        Password must be <span className="text-blue-900 underline">8 or more characters</span> and include a mix of <span className="text-blue-900">numbers</span> and <span className="text-blue-900">symbols</span>.
+                                    </p>
+                                </div>
                                 <div className="h-1 w-12 bg-gold mx-auto mt-4 rounded-full"></div>
                             </div>
 
@@ -93,7 +108,7 @@ export default function ResetPassword() {
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             className="w-full px-5 py-4 pr-12 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/30 font-medium transition-all"
-                                            placeholder="Min 6 characters"
+                                            placeholder="8+ chars (A1@...)"
                                             required
                                         />
                                         <button
