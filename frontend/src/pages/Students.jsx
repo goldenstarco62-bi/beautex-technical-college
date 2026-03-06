@@ -19,6 +19,8 @@ export default function Students() {
     const [showProfileModal, setShowProfileModal] = useState(null);
     const [editingStudent, setEditingStudent] = useState(null);
     const [resetLoading, setResetLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 20;
     const [formData, setFormData] = useState({
         id: '', name: '', email: '', course: [], intake: 'January Intake',
         gpa: 0, status: 'Active', contact: '',
@@ -93,13 +95,24 @@ export default function Students() {
         try {
             if (editingStudent) {
                 await studentsAPI.update(editingStudent.id, formData);
+                // Optimistically update the edited student in the list
+                const updatedList = allStudents.map(s => s.id === editingStudent.id ? { ...s, ...formData } : s);
+                setAllStudents(updatedList);
+                setStudents(updatedList);
             } else {
                 await studentsAPI.create(formData);
+                // Optimistically prepend the new student so it appears immediately
+                const newStudent = { ...formData, course: Array.isArray(formData.course) ? formData.course : [formData.course] };
+                const updatedList = [newStudent, ...allStudents];
+                setAllStudents(updatedList);
+                setStudents(updatedList);
+                setCurrentPage(1); // Jump to first page to see the new student
             }
             setShowModal(false);
             setEditingStudent(null);
-            fetchStudents();
             resetForm();
+            // Background refresh to sync any server-side changes (auto-generated fields, etc.)
+            setTimeout(() => fetchStudents(), 800);
         } catch (error) {
             console.error('Error saving student:', error);
             alert(error.response?.data?.error || 'Failed to save student record.');
@@ -332,14 +345,12 @@ export default function Students() {
                     <select
                         onChange={(e) => {
                             const status = e.target.value;
-                            // FIX: Filter from the master allStudents list, not from the already-filtered 'students' state.
-                            // Previously, filtering 'students' in-place would discard records that couldn't be recovered
-                            // without a network request.
                             if (status === 'All Status') {
                                 setStudents(allStudents);
                             } else {
                                 setStudents(allStudents.filter(s => s.status === status));
                             }
+                            setCurrentPage(1); // Reset to first page on filter change
                         }}
                         className="bg-gray-50/50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 outline-none"
                     >
@@ -361,7 +372,7 @@ export default function Students() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {students.map((student) => (
+                            {students.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((student) => (
                                 <tr key={student.id} className="hover:bg-gray-50/30 transition-colors group">
                                     <td className="px-6 py-5">
                                         <span className="text-xs font-bold text-gray-500">BT{student.id.toString().padStart(7, '0')}</span>
@@ -421,6 +432,46 @@ export default function Students() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {students.length > PAGE_SIZE && (
+                    <div className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-6 py-4 shadow-sm">
+                        <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                            Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, students.length)}–{Math.min(currentPage * PAGE_SIZE, students.length)} of {students.length} students
+                        </p>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="px-5 py-2.5 rounded-xl bg-gray-50 border border-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-maroon hover:text-white hover:border-maroon disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                ← Prev
+                            </button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: Math.ceil(students.length / PAGE_SIZE) }, (_, i) => i + 1).map(page => (
+                                    <button
+                                        key={page}
+                                        onClick={() => setCurrentPage(page)}
+                                        className={`w-9 h-9 rounded-xl text-[10px] font-black transition-all ${
+                                            currentPage === page
+                                                ? 'bg-maroon text-white shadow-lg shadow-maroon/20'
+                                                : 'bg-gray-50 text-gray-400 hover:bg-gray-100 border border-gray-100'
+                                        }`}
+                                    >
+                                        {page}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(students.length / PAGE_SIZE), p + 1))}
+                                disabled={currentPage === Math.ceil(students.length / PAGE_SIZE)}
+                                className="px-5 py-2.5 rounded-xl bg-gray-50 border border-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-maroon hover:text-white hover:border-maroon disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                Next →
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Student Profile Modal */}
