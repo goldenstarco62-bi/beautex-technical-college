@@ -187,7 +187,13 @@ export default function StudentDashboard() {
 
     const statsConfig = [
         { title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen },
-        { title: 'Fee Balance Remaining', value: `KSh ${(studentFee?.balance || 0).toLocaleString()}`, icon: CreditCard },
+        {
+            title: 'Fee Balance Remaining',
+            value: studentFee
+                ? `KSh ${Number(studentFee.balance ?? 0).toLocaleString()}`
+                : 'Not Set',
+            icon: CreditCard
+        },
         { title: 'Attendance', value: stats.attendanceRate, icon: UserCheck },
         { title: 'Academic Logs', value: stats.sessionsCount, icon: History },
     ];

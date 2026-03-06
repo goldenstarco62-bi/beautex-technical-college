@@ -58,13 +58,82 @@ export async function getStudentFees(req, res) {
 
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
-            const fee = await StudentFee.findOne({ student_id: studentId });
-            if (!fee) return res.status(404).json({ error: 'Fee record not found' });
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
+            const Course = (await import('../models/mongo/Course.js')).default;
+            const Payment = (await import('../models/mongo/Payment.js')).default;
+
+            let fee = await StudentFee.findOne({ student_id: studentId });
+
+            if (!fee) {
+                // Auto-calculate from payments + fee structures
+                const student = await Student.findOne({ id: studentId });
+                let totalDue = 0;
+
+                if (student?.course) {
+                    const primaryCourseName = Array.isArray(student.course) ? student.course[0] : student.course;
+                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${primaryCourseName}$`, 'i') } });
+                    if (courseObj) {
+                        const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
+                        if (structure) totalDue = structure.amount;
+                    }
+                }
+
+                const payments = await Payment.find({ student_id: studentId });
+                const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                const balance = totalDue - totalPaid;
+                const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
+                // Upsert so future calls return quickly
+                fee = await StudentFee.findOneAndUpdate(
+                    { student_id: studentId },
+                    { total_due: totalDue, total_paid: totalPaid, balance, status },
+                    { upsert: true, new: true }
+                );
+            }
+
             return res.json(fee);
         }
 
-        const fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
-        if (!fee) return res.status(404).json({ error: 'Fee record not found' });
+        // --- SQL path (SQLite / PostgreSQL) ---
+        let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
+
+        if (!fee) {
+            // Auto-calculate from payments + fee structures
+            const student = await queryOne('SELECT course FROM students WHERE id = ?', [studentId]);
+            let totalDue = 0;
+
+            if (student?.course) {
+                const courseObj = await queryOne(
+                    'SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))',
+                    [student.course]
+                );
+                if (courseObj) {
+                    const structure = await queryOne(
+                        "SELECT amount FROM fee_structures WHERE LOWER(TRIM(course_id)) = LOWER(TRIM(?)) AND category = 'Tuition Fee'",
+                        [courseObj.id]
+                    );
+                    if (structure) totalDue = Number(structure.amount);
+                }
+            }
+
+            const paidRow = await queryOne(
+                'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [studentId]
+            );
+            const totalPaid = Number(paidRow?.total_paid || 0);
+            const balance = totalDue - totalPaid;
+            const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
+            // Insert the auto-calculated row so subsequent requests are fast
+            await run(
+                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
+                [studentId, totalDue, totalPaid, balance, status]
+            );
+
+            fee = { student_id: studentId, total_due: totalDue, total_paid: totalPaid, balance, status };
+        }
+
         res.json(fee);
     } catch (error) {
         res.status(500).json({ error: error.message });
