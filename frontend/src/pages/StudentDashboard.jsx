@@ -27,7 +27,8 @@ import {
     attendanceAPI,
     studentsAPI,
     materialsAPI,
-    studentDailyReportsAPI
+    studentDailyReportsAPI,
+    financeAPI
 } from '../services/api';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -63,14 +64,16 @@ export default function StudentDashboard() {
 
     const fetchData = async () => {
         try {
+            // Use the student_id from JWT, or fall back to matching by email in the students list
+            const effectiveStudentId = user.student_id || user.id;
             const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, , dailyReportsRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 announcementsAPI.getAll(),
                 gradesAPI.getAll(),
-                api.get(`/finance/student-fees/${user.student_id || user.id}`).catch(() => ({ data: null })),
+                financeAPI.getStudentFees(effectiveStudentId).catch(() => ({ data: null })),
                 materialsAPI.getAll().catch(() => ({ data: [] })),
-                studentDailyReportsAPI.getAll({ student_id: user.student_id || user.id }).catch(() => ({ data: [] }))
+                studentDailyReportsAPI.getAll({ student_id: effectiveStudentId }).catch(() => ({ data: [] }))
             ]);
 
             const userEmail = String(user?.email || '').toLowerCase().trim();
