@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     FileText,
     Search,
@@ -10,6 +10,7 @@ import {
     Trash2,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     MessageSquare,
     History,
     Printer,
@@ -67,11 +68,27 @@ export default function DailyStudentLogs() {
 
     const [filters, setFilters] = useState({
         student_id: '',
-        course: '',
-        date: '',
+        course: 'All',
+        department: 'All',
+        date_from: '',
+        date_to: '',
         search: '',
         has_feedback: ''         // 'yes' | 'no' | ''
     });
+
+    const [expandedDepts, setExpandedDepts] = useState({});
+
+    // Departments derived from courses
+    const departments = useMemo(() => {
+        const depts = new Set((courses || []).map(c => c.department).filter(Boolean));
+        return ['All', ...Array.from(depts).sort()];
+    }, [courses]);
+
+    // Courses matching selected department
+    const filteredCourseList = useMemo(() => {
+        if (filters.department === 'All') return courses || [];
+        return (courses || []).filter(c => c.department === filters.department);
+    }, [courses, filters.department]);
 
     const [stats, setStats] = useState({
         totalEntries: 0,
@@ -103,12 +120,20 @@ export default function DailyStudentLogs() {
     const fetchLogs = async () => {
         try {
             setLoading(true);
-            const { data } = await studentDailyReportsAPI.getAll(filters);
-            setLogs(data || []);
+            const isAdmin = ['admin', 'superadmin'].includes(user?.role);
+            // If admin, we don't necessarily need to pass trainer_email unless we want to filter by trainer
+            const params = { ...filters };
+            if (params.course === 'All') delete params.course;
+            if (params.department === 'All') delete params.department;
+            
+            const { data } = await studentDailyReportsAPI.getAll(params);
+            // Sort newest first
+            const sortedData = (data || []).sort((a, b) => new Date(b.report_date) - new Date(a.report_date));
+            setLogs(sortedData);
 
-            const uniqueSids = new Set(data.map(l => l.student_id));
-            const withFeedback = data.filter(l => l.lesson_taught !== null && l.lesson_taught !== undefined).length;
-            setStats({ totalEntries: data.length, uniqueStudents: uniqueSids.size, withFeedback });
+            const uniqueSids = new Set(sortedData.map(l => l.student_id));
+            const withFeedback = sortedData.filter(l => l.lesson_taught !== null && l.lesson_taught !== undefined).length;
+            setStats({ totalEntries: sortedData.length, uniqueStudents: uniqueSids.size, withFeedback });
         } catch (error) {
             console.error('Error fetching logs:', error);
             toast.error('Failed to load daily logs');
@@ -167,9 +192,9 @@ export default function DailyStudentLogs() {
     // Client-side search + has_feedback filter
     const filteredLogs = logs.filter(l => {
         const searchMatch =
-            l.student_name.toLowerCase().includes(filters.search.toLowerCase()) ||
-            l.student_id.toLowerCase().includes(filters.search.toLowerCase()) ||
-            l.topics_covered.toLowerCase().includes(filters.search.toLowerCase());
+            (l.student_name || '').toLowerCase().includes(filters.search.toLowerCase()) ||
+            (l.student_id || '').toLowerCase().includes(filters.search.toLowerCase()) ||
+            (l.topics_covered || '').toLowerCase().includes(filters.search.toLowerCase());
 
         const hasFB = l.lesson_taught !== null && l.lesson_taught !== undefined;
         const feedbackMatch =
@@ -177,8 +202,39 @@ export default function DailyStudentLogs() {
                 filters.has_feedback === 'no' ? !hasFB :
                     true;
 
-        return searchMatch && feedbackMatch;
+        // Dept filter (frontend side in case API doesn't handle)
+        let deptMatch = true;
+        if (filters.department !== 'All') {
+            const courseObj = courses.find(c => c.name === l.course);
+            deptMatch = courseObj?.department === filters.department;
+        }
+
+        // Date range filter
+        const rDate = l.report_date || '';
+        const dateMatch = (!filters.date_from || rDate >= filters.date_from) && 
+                         (!filters.date_to || rDate <= filters.date_to);
+
+        return searchMatch && feedbackMatch && deptMatch && dateMatch;
     });
+
+    const groupedLogs = useMemo(() => {
+        if (!isAdmin) return null;
+        const grouped = {};
+        filteredLogs.forEach(l => {
+            const courseObj = courses.find(c => c.name === l.course);
+            const dept = courseObj?.department || 'Miscellaneous';
+            const courseName = l.course || 'Unassigned';
+            
+            if (!grouped[dept]) grouped[dept] = {};
+            if (!grouped[dept][courseName]) grouped[dept][courseName] = [];
+            grouped[dept][courseName].push(l);
+        });
+        return grouped;
+    }, [filteredLogs, isAdmin, courses]);
+
+    const toggleDept = (dept) => {
+        setExpandedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -210,9 +266,9 @@ export default function DailyStudentLogs() {
 
             {/* ── Filters ── */}
             <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
                     {/* Search */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 lg:col-span-2">
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
                             <Search className="w-3 h-3" /> Quick Search
                         </label>
@@ -225,11 +281,28 @@ export default function DailyStudentLogs() {
                         />
                     </div>
 
+                    {/* Department */}
+                    {isAdmin && (
+                        <div className="space-y-2">
+                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                <Shield className="w-3 h-3" /> Department
+                            </label>
+                            <select
+                                name="department"
+                                value={filters.department}
+                                onChange={(e) => setFilters({ ...filters, department: e.target.value, course: 'All' })}
+                                className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none cursor-pointer"
+                            >
+                                {departments.map(d => <option key={d} value={d}>{d === 'All' ? 'All Departments' : d}</option>)}
+                            </select>
+                        </div>
+                    )}
+
                     {/* Course */}
                     {!isStudent && (
                         <div className="space-y-2">
                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                <BookOpen className="w-3 h-3" /> Course
+                                <BookOpen className="w-3 h-3" /> Module
                             </label>
                             <select
                                 name="course"
@@ -237,23 +310,37 @@ export default function DailyStudentLogs() {
                                 onChange={handleFilterChange}
                                 className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none cursor-pointer"
                             >
-                                <option value="">All Departments</option>
-                                {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                <option value="All">All Courses</option>
+                                {filteredCourseList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                             </select>
                         </div>
                     )}
 
-                    {/* Date */}
+                    {/* Date From */}
                     <div className="space-y-2">
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                            <Calendar className="w-3 h-3" /> Date
+                            <Calendar className="w-3 h-3" /> From Date
                         </label>
                         <input
                             type="date"
-                            name="date"
-                            value={filters.date}
+                            name="date_from"
+                            value={filters.date_from}
                             onChange={handleFilterChange}
-                            className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none"
+                            className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-[10px] font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none"
+                        />
+                    </div>
+
+                    {/* Date To */}
+                    <div className="space-y-2">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                            <Calendar className="w-3 h-3" /> To Date
+                        </label>
+                        <input
+                            type="date"
+                            name="date_to"
+                            value={filters.date_to}
+                            onChange={handleFilterChange}
+                            className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-[10px] font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none"
                         />
                     </div>
 
@@ -261,7 +348,7 @@ export default function DailyStudentLogs() {
                     {!isStudent && (
                         <div className="space-y-2">
                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                <MessageSquare className="w-3 h-3" /> Student Feedback
+                                <MessageSquare className="w-3 h-3" /> Feedback
                             </label>
                             <select
                                 name="has_feedback"
@@ -269,168 +356,86 @@ export default function DailyStudentLogs() {
                                 onChange={handleFilterChange}
                                 className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none cursor-pointer"
                             >
-                                <option value="">All Entries</option>
+                                <option value="">All Feedback</option>
                                 <option value="yes">With Feedback</option>
-                                <option value="no">No Feedback Yet</option>
+                                <option value="no">No Feedback</option>
                             </select>
                         </div>
                     )}
 
                     {/* Clear */}
-                    <div className="flex items-end">
+                    <div className="flex items-end lg:col-span-1">
                         <button
-                            onClick={() => setFilters({ student_id: '', course: '', date: '', search: '', has_feedback: '' })}
-                            className="w-full h-[47px] bg-maroon/5 text-maroon rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-maroon hover:text-white transition-all flex items-center justify-center gap-2"
+                            onClick={() => setFilters({ student_id: '', course: 'All', department: 'All', date_from: '', date_to: '', search: '', has_feedback: '' })}
+                            className="w-full h-[47px] bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 border border-red-100"
                         >
-                            <Filter className="w-3.5 h-3.5" /> Clear Filters
+                            <Filter className="w-3.5 h-3.5" /> Clear All
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* ── Logs Table ── */}
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="bg-gray-50/50 border-b border-gray-100">
-                                <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Entry Date</th>
-                                <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Student Information</th>
-                                <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Daily Coverage Detail</th>
-                                {!isStudent && (
-                                    <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Student Feedback</th>
-                                )}
-                                <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Lead Trainer</th>
-                                <th className="px-8 py-6 text-right text-[9px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {loading ? (
-                                <tr>
-                                    <td colSpan={isStudent ? 4 : 5} className="px-8 py-20 text-center text-maroon font-black uppercase tracking-widest animate-pulse">
-                                        Syncing Ledger...
-                                    </td>
-                                </tr>
-                            ) : filteredLogs.length > 0 ? (
-                                filteredLogs.map((log) => {
-                                    const badge = getLessonBadge(log);
-                                    return (
-                                        <tr key={log.id || log._id} className="hover:bg-gray-50/50 transition-colors group">
-                                            {/* Date */}
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-2">
-                                                    <Calendar className="w-3 h-3 text-maroon/30" />
-                                                    <span className="text-[11px] font-black text-gray-600">
-                                                        {new Date(log.report_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                                    </span>
-                                                </div>
-                                            </td>
-
-                                            {/* Student */}
-                                            <td className="px-8 py-6">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-maroon/5 rounded-xl flex items-center justify-center text-maroon font-black text-xs">
-                                                        {log.student_name.charAt(0)}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-black text-gray-800 uppercase leading-none mb-1">{log.student_name}</p>
-                                                        <p className="text-[10px] text-gray-400 font-bold tracking-widest">{log.student_id} • {formatCourse(log.course)}</p>
-                                                    </div>
-                                                </div>
-                                            </td>
-
-                                            {/* Coverage */}
-                                            <td className="px-8 py-6 max-w-xs">
-                                                <div className="space-y-2">
-                                                    <p className="text-xs text-gray-600 font-medium leading-relaxed line-clamp-2 italic">"{log.topics_covered}"</p>
-                                                    {log.trainer_remarks && (
-                                                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
-                                                            <MessageSquare className="w-3 h-3 text-maroon mt-0.5" />
-                                                            <p className="text-[10px] text-gray-400 font-bold line-clamp-1">{log.trainer_remarks}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
-
-                                            {/* Student Feedback Column (teachers/admins only) */}
-                                            {!isStudent && (
-                                                <td className="px-8 py-6 max-w-[220px]">
-                                                    {badge ? (
-                                                        <div className="space-y-2">
-                                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${badge.color}`}>
-                                                                <badge.Icon className="w-3 h-3" />
-                                                                {badge.label}
-                                                            </span>
-                                                            {log.student_comment && (
-                                                                <div className="flex gap-1.5 items-start bg-blue-50/80 px-2.5 py-2 rounded-lg border border-blue-100">
-                                                                    <Send className="w-2.5 h-2.5 text-blue-400 mt-0.5 shrink-0" />
-                                                                    <p className="text-[9px] text-blue-500 font-bold italic line-clamp-2">"{log.student_comment}"</p>
-                                                                </div>
-                                                            )}
-                                                            {log.student_commented_at && (
-                                                                <p className="text-[8px] text-gray-300 font-bold uppercase tracking-widest">
-                                                                    {new Date(log.student_commented_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-[9px] font-black text-gray-200 uppercase tracking-widest">No feedback yet</span>
-                                                    )}
-                                                </td>
-                                            )}
-
-                                            {/* Trainer */}
-                                            <td className="px-8 py-6">
-                                                <div>
-                                                    <p className="text-xs font-bold text-gray-700">{log.trainer_name}</p>
-                                                    <p className="text-[9px] text-gray-400 font-medium">{log.trainer_email}</p>
-                                                </div>
-                                            </td>
-
-                                            {/* Actions */}
-                                            <td className="px-8 py-6 text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <button
-                                                        onClick={() => setViewingLog(log)}
-                                                        className="p-2 text-gray-400 hover:text-maroon hover:bg-maroon/5 rounded-xl transition-all"
-                                                        title="View Full Report"
-                                                    >
-                                                        <Eye className="w-4 h-4" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDownloadPDF(log)}
-                                                        className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
-                                                        title="Download PDF"
-                                                    >
-                                                        <FileDown className="w-4 h-4" />
-                                                    </button>
-                                                    {(isAdmin || isTeacher) && (
-                                                        <button
-                                                            onClick={() => handleDelete(log.id || log._id)}
-                                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                            title="Delete Log"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            ) : (
-                                <tr>
-                                    <td colSpan={isStudent ? 4 : 6} className="px-8 py-32 text-center">
-                                        <div className="flex flex-col items-center justify-center grayscale opacity-30">
-                                            <History className="w-16 h-16 mb-4" />
-                                            <p className="text-[11px] font-black uppercase tracking-[0.3em]">No academic logs matching your criteria</p>
+            <div className="space-y-8">
+                {loading ? (
+                    <div className="bg-white p-20 rounded-[2.5rem] border border-gray-100 shadow-sm text-center">
+                        <div className="animate-spin w-10 h-10 border-4 border-maroon border-t-transparent rounded-full mx-auto mb-4"></div>
+                        <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">Synchronizing Ledger...</p>
+                    </div>
+                ) : filteredLogs.length > 0 ? (
+                    isAdmin ? (
+                        /* Admin Grouped View */
+                        Object.keys(groupedLogs).sort().map(dept => (
+                            <div key={dept} className="space-y-6">
+                                <button 
+                                    onClick={() => toggleDept(dept)}
+                                    className="w-full flex items-center justify-between bg-maroon/5 hover:bg-maroon/10 px-6 py-3 rounded-2xl border border-maroon/5 transition-all text-left group"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-xl bg-maroon/10 flex items-center justify-center">
+                                            <Shield className="w-4 h-4 text-maroon" />
                                         </div>
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                        <div>
+                                            <h2 className="text-[11px] font-black text-maroon uppercase tracking-wider">{dept}</h2>
+                                            <p className="text-[8px] font-bold text-maroon/40 uppercase tracking-widest leading-none mt-0.5">
+                                                {Object.keys(groupedLogs[dept]).length} Courses • {Object.values(groupedLogs[dept]).flat().length} Log Entries
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <ChevronDown className={`w-4 h-4 text-maroon/40 transition-transform duration-500 ${expandedDepts[dept] ? '' : '-rotate-90'}`} />
+                                </button>
+                                
+                                {expandedDepts[dept] && (
+                                    <div className="space-y-8 pl-6 sm:pl-10 border-l-2 border-maroon/5 animate-in slide-in-from-top-4 duration-500">
+                                        {Object.keys(groupedLogs[dept]).sort().map(courseName => (
+                                            <div key={courseName} className="space-y-4">
+                                                <div className="flex items-center gap-3">
+                                                    <BookOpen className="w-4 h-4 text-gold" />
+                                                    <h3 className="text-xs font-black text-maroon uppercase tracking-[0.2em]">{courseName}</h3>
+                                                    <div className="flex-1 h-px bg-maroon/5"></div>
+                                                </div>
+                                                <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
+                                                    <LogTable logs={groupedLogs[dept][courseName]} isStudent={isStudent} isAdmin={isAdmin} isTeacher={isTeacher} onPdf={handleDownloadPDF} onPrint={handlePrint} onDelete={handleDelete} onView={setViewingLog} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    ) : (
+                        /* Regular Table View */
+                        <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
+                            <LogTable logs={filteredLogs} isStudent={isStudent} isAdmin={isAdmin} isTeacher={isTeacher} onPdf={handleDownloadPDF} onPrint={handlePrint} onDelete={handleDelete} onView={setViewingLog} />
+                        </div>
+                    )
+                ) : (
+                    <div className="bg-white py-32 rounded-[2.5rem] border border-dashed border-gray-200 text-center">
+                        <div className="flex flex-col items-center justify-center grayscale opacity-30">
+                            <History className="w-16 h-16 mb-4" />
+                            <p className="text-[11px] font-black uppercase tracking-[0.3em]">No academic logs matching your criteria</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ── View Modal ── */}
@@ -695,3 +700,97 @@ export default function DailyStudentLogs() {
         </div>
     );
 }
+
+const LogTable = ({ logs, isStudent, isAdmin, isTeacher, onPdf, onPrint, onDelete, onView }) => (
+    <div className="overflow-x-auto">
+        <table className="w-full">
+            <thead>
+                <tr className="bg-gray-50/50 border-b border-gray-100">
+                    <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Entry Date</th>
+                    <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Student Information</th>
+                    <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Daily Coverage Detail</th>
+                    {!isStudent && (
+                        <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Feedback</th>
+                    )}
+                    <th className="px-8 py-6 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest">Lead Trainer</th>
+                    <th className="px-8 py-6 text-right text-[9px] font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+                {logs.map((log) => {
+                    const badge = getLessonBadge(log);
+                    return (
+                        <tr key={log.id || log._id} className="hover:bg-gray-50/50 transition-colors group">
+                            <td className="px-8 py-6">
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="w-3 h-3 text-maroon/30" />
+                                    <span className="text-[11px] font-black text-gray-600">
+                                        {new Date(log.report_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                    </span>
+                                </div>
+                            </td>
+                            <td className="px-8 py-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-maroon/5 rounded-xl flex items-center justify-center text-maroon font-black text-xs shrink-0 overflow-hidden">
+                                        {log.student_photo ? (
+                                            <img src={log.student_photo} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            log.student_name.charAt(0)
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black text-gray-800 uppercase leading-none mb-1">{log.student_name}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold tracking-widest">{log.student_id} • {formatCourse(log.course)}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td className="px-8 py-6 max-w-xs">
+                                <div className="space-y-2">
+                                    <p className="text-xs text-gray-600 font-medium leading-relaxed line-clamp-2 italic">"{log.topics_covered}"</p>
+                                    {log.trainer_remarks && (
+                                        <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-gray-100 shadow-sm shadow-black/[0.02]">
+                                            <MessageSquare className="w-3 h-3 text-maroon mt-0.5 scale-75 opacity-40 shrink-0" />
+                                            <p className="text-[9px] text-gray-400 font-bold line-clamp-1">{log.trainer_remarks}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </td>
+                            {!isStudent && (
+                                <td className="px-8 py-6 max-w-[220px]">
+                                    {badge ? (
+                                        <div className="space-y-2">
+                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest ${badge.color}`}>
+                                                <badge.Icon className="w-3 h-3" />
+                                                {badge.short}
+                                            </span>
+                                            {log.student_comment && (
+                                                <p className="text-[9px] text-blue-500 font-bold italic line-clamp-1">"{log.student_comment}"</p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span className="text-[9px] font-black text-gray-200 uppercase tracking-widest">Pending</span>
+                                    )}
+                                </td>
+                            )}
+                            <td className="px-8 py-6">
+                                <div className="max-w-[120px]">
+                                    <p className="text-[11px] font-bold text-gray-700 truncate">{log.trainer_name}</p>
+                                    <p className="text-[9px] text-gray-400 font-medium truncate">{log.trainer_email}</p>
+                                </div>
+                            </td>
+                            <td className="px-8 py-6 text-right">
+                                <div className="flex justify-end gap-1">
+                                    <button onClick={() => onView(log)} className="p-2 text-gray-400 hover:text-maroon hover:bg-maroon/5 rounded-xl transition-all"><Eye className="w-4 h-4" /></button>
+                                    <button onClick={() => onPdf(log)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><FileDown className="w-4 h-4" /></button>
+                                    {(isAdmin || isTeacher) && (
+                                        <button onClick={() => onDelete(log.id || log._id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
+                                    )}
+                                </div>
+                            </td>
+                        </tr>
+                    );
+                })}
+            </tbody>
+        </table>
+    </div>
+);

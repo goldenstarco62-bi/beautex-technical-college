@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { trainerReportsAPI, coursesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown, Eye } from 'lucide-react';
+import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown, Eye, ChevronDown } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -21,6 +21,25 @@ export default function TrainerReports() {
         record_of_work: '',
         course_id: ''
     });
+
+    // Filtering & Grouping State
+    const [filterDepartment, setFilterDepartment] = useState('All');
+    const [filterCourse, setFilterCourse] = useState('All');
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
+    const [expandedDepts, setExpandedDepts] = useState({});
+
+    // Departments derived from courses
+    const departments = useMemo(() => {
+        const depts = new Set((courses || []).map(c => c.department).filter(Boolean));
+        return ['All', ...Array.from(depts).sort()];
+    }, [courses]);
+
+    // Courses matching selected department
+    const filteredCourseList = useMemo(() => {
+        if (filterDepartment === 'All') return courses || [];
+        return (courses || []).filter(c => c.department === filterDepartment);
+    }, [courses, filterDepartment]);
 
     const [recordOfWorkRows, setRecordOfWorkRows] = useState([
         { week: '', day: '', topic: '', content: '', theory_hours: '', practical_hours: '', remarks: '' }
@@ -134,10 +153,41 @@ export default function TrainerReports() {
         }, 1500);
     };
 
-    const filteredReports = reports.filter(r =>
-        r.trainer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.daily_report?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredReports = reports.filter(r => {
+        const matchesSearch = r.trainer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            r.daily_report?.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        // Find report's course info for department filter
+        const reportCourse = courses.find(c => c.name === r.course_id);
+        const matchesDept = filterDepartment === 'All' || reportCourse?.department === filterDepartment;
+        const matchesCourse = filterCourse === 'All' || r.course_id === filterCourse;
+        
+        const rDate = r.report_date || '';
+        const matchesDateFrom = !filterDateFrom || rDate >= filterDateFrom;
+        const matchesDateTo = !filterDateTo || rDate <= filterDateTo;
+
+        return matchesSearch && matchesDept && matchesCourse && matchesDateFrom && matchesDateTo;
+    }).sort((a, b) => new Date(b.report_date) - new Date(a.report_date));
+
+    // Grouping for admin/superadmin
+    const groupedReports = useMemo(() => {
+        if (!isAdmin) return null;
+        const grouped = {};
+        filteredReports.forEach(r => {
+            const course = courses.find(c => c.name === r.course_id);
+            const dept = course?.department || 'Unassigned Department';
+            const courseName = r.course_id || 'General Operations';
+            
+            if (!grouped[dept]) grouped[dept] = {};
+            if (!grouped[dept][courseName]) grouped[dept][courseName] = [];
+            grouped[dept][courseName].push(r);
+        });
+        return grouped;
+    }, [filteredReports, isAdmin, courses]);
+
+    const toggleDept = (dept) => {
+        setExpandedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
+    };
 
     const renderRecordOfWork = (record, isPrint = false) => {
         try {
@@ -200,17 +250,78 @@ export default function TrainerReports() {
             </div>
 
             {/* Filters */}
-            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-3xl shadow-sm border border-maroon/5">
-                <div className="flex-1 relative w-full">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-maroon/20" />
-                    <input
-                        type="text"
-                        placeholder="Search reports by trainer or content..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-gray-50 border-none rounded-2xl text-xs font-bold text-maroon placeholder:text-maroon/20 outline-none focus:ring-2 focus:ring-maroon/5 uppercase tracking-widest"
-                    />
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-maroon/5 space-y-4">
+                <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div className="flex-1 relative w-full">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-maroon/20" />
+                        <input
+                            type="text"
+                            placeholder="Search by trainer or content..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-12 pr-4 py-3 bg-gray-50 border-none rounded-2xl text-xs font-bold text-maroon placeholder:text-maroon/20 outline-none focus:ring-2 focus:ring-maroon/5 uppercase tracking-widest"
+                        />
+                    </div>
+                    {/* Clear Filters Button */}
+                    {(filterDepartment !== 'All' || filterCourse !== 'All' || filterDateFrom || filterDateTo || searchTerm) && (
+                        <button 
+                            onClick={() => {
+                                setFilterDepartment('All');
+                                setFilterCourse('All');
+                                setFilterDateFrom('');
+                                setFilterDateTo('');
+                                setSearchTerm('');
+                            }}
+                            className="flex items-center gap-2 px-6 py-3 bg-red-50 text-red-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-100 transition-all border border-red-100"
+                        >
+                            <X className="w-4 h-4" /> Clear All Filters
+                        </button>
+                    )}
                 </div>
+
+                {isAdmin && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
+                            <select
+                                value={filterDepartment}
+                                onChange={(e) => { setFilterDepartment(e.target.value); setFilterCourse('All'); }}
+                                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-[11px] font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5"
+                            >
+                                {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">Module/Course</label>
+                            <select
+                                value={filterCourse}
+                                onChange={(e) => setFilterCourse(e.target.value)}
+                                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-[11px] font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5"
+                            >
+                                <option value="All">All Courses</option>
+                                {filteredCourseList.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">From Date</label>
+                            <input
+                                type="date"
+                                value={filterDateFrom}
+                                onChange={(e) => setFilterDateFrom(e.target.value)}
+                                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-[11px] font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">To Date</label>
+                            <input
+                                type="date"
+                                value={filterDateTo}
+                                onChange={(e) => setFilterDateTo(e.target.value)}
+                                className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-[11px] font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/5"
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Reports List */}
@@ -221,94 +332,79 @@ export default function TrainerReports() {
                         <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Accessing Registry...</p>
                     </div>
                 ) : filteredReports.length > 0 ? (
-                    filteredReports.map((report) => (
-                        <div key={report._id || report.id} className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-maroon/5 hover:shadow-xl transition-all group overflow-hidden relative">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-maroon/[0.02] rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
-
-                            <div className="flex flex-col lg:flex-row gap-8 relative z-10">
-                                <div className="lg:w-1/4 space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-2xl bg-maroon text-gold flex items-center justify-center font-black text-xs shadow-lg">
-                                            {report.week_number}
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">Academic Period</p>
-                                            <p className="text-sm font-black text-maroon uppercase tracking-tight">{report.week_number}</p>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2 pt-4 border-t border-maroon/5">
-                                        <div className="flex items-center gap-2 text-[10px] font-black text-maroon/60 uppercase tracking-widest">
-                                            <Calendar className="w-3 h-3" />
-                                            {new Date(report.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-[10px] font-black text-maroon/60 uppercase tracking-widest">
-                                            <User className="w-3 h-3" />
-                                            {report.trainer_name}
-                                        </div>
-                                        {report.course_id && (
-                                            <div className="flex items-center gap-2 text-[10px] font-black text-maroon/60 uppercase tracking-widest">
-                                                <BookOpen className="w-3 h-3" />
-                                                {report.course_id}
+                    isAdmin ? (
+                        /* ADMIN VIEW: Grouped by Department & Course */
+                        <div className="space-y-12">
+                            {Object.keys(groupedReports).sort().map(dept => (
+                                <div key={dept} className="space-y-6">
+                                    <button 
+                                        onClick={() => toggleDept(dept)}
+                                        className="w-full flex items-center justify-between bg-maroon/5 text-maroon px-6 py-3 rounded-2xl group hover:bg-maroon/10 transition-all border border-maroon/5"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-xl bg-maroon/10 flex items-center justify-center">
+                                                <LayoutList className="w-4 h-4 text-maroon" />
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-2 pt-4">
-                                        <button
-                                            onClick={() => setViewingReport(report)}
-                                            className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
-                                            title="View Full Report"
-                                        >
-                                            <Eye className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDownload(report)}
-                                            className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
-                                            title="Download PDF"
-                                        >
-                                            <FileDown className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                            onClick={() => handlePrint(report)}
-                                            className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
-                                            title="Print Report"
-                                        >
-                                            <Printer className="w-3.5 h-3.5" />
-                                        </button>
-                                        {(isAdmin || report.trainer_id == user?.id) && (
-                                            <button
-                                                onClick={() => handleDelete(report._id || report.id)}
-                                                className="p-2 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-400 group/btn"
-                                                title="Purge Record"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
+                                            <div className="text-left">
+                                                <h2 className="text-[11px] font-black uppercase tracking-wider">{dept}</h2>
+                                                <p className="text-[8px] font-bold text-maroon/40 uppercase tracking-widest">
+                                                    {Object.keys(groupedReports[dept]).length} Courses • {Object.values(groupedReports[dept]).flat().length} Total Logs
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className={`w-7 h-7 rounded-full bg-maroon/10 flex items-center justify-center transition-transform duration-500 ${expandedDepts[dept] ? 'rotate-180' : ''}`}>
+                                            <ChevronDown className="w-4 h-4 text-maroon" />
+                                        </div>
+                                    </button>
 
-                                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="bg-gray-50/50 rounded-3xl p-6 border border-maroon/5">
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <FileText className="w-4 h-4 text-maroon opacity-40" />
-                                            <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Daily Operations Report</h3>
+                                    {expandedDepts[dept] && (
+                                        <div className="space-y-8 pl-4 sm:pl-8 border-l-2 border-maroon/5 animate-in slide-in-from-top-4 duration-500">
+                                            {Object.keys(groupedReports[dept]).sort().map(courseName => (
+                                                <div key={courseName} className="space-y-4">
+                                                    <div className="flex items-center gap-3 px-2">
+                                                        <BookOpen className="w-4 h-4 text-gold" />
+                                                        <h3 className="text-[11px] font-black text-maroon uppercase tracking-widest">{courseName}</h3>
+                                                        <div className="flex-1 h-px bg-maroon/5"></div>
+                                                        <span className="text-[9px] font-bold text-maroon/30">({groupedReports[dept][courseName].length})</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 gap-6">
+                                                        {groupedReports[dept][courseName].map(report => (
+                                                            <TrainerReportCard 
+                                                                key={report._id || report.id} 
+                                                                report={report} 
+                                                                user={user} 
+                                                                isAdmin={isAdmin}
+                                                                onView={setViewingReport}
+                                                                onDownload={handleDownload}
+                                                                onPrint={handlePrint}
+                                                                onDelete={handleDelete}
+                                                                renderWork={renderRecordOfWork}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                        <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">
-                                            {report.daily_report}
-                                        </p>
-                                    </div>
-                                    <div className="bg-gold/5 rounded-3xl p-6 border border-gold/20 flex flex-col">
-                                        <div className="flex items-center gap-2 mb-4 shrink-0">
-                                            <LayoutList className="w-4 h-4 text-maroon opacity-40" />
-                                            <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Academic Record of Work</h3>
-                                        </div>
-                                        <div className="flex-1 overflow-auto max-h-[300px] custom-scrollbar">
-                                            {renderRecordOfWork(report.record_of_work)}
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
-                            </div>
+                            ))}
                         </div>
-                    ))
+                    ) : (
+                        /* TEACHER VIEW: Flat list */
+                        filteredReports.map((report) => (
+                            <TrainerReportCard 
+                                key={report._id || report.id} 
+                                report={report} 
+                                user={user} 
+                                isAdmin={isAdmin}
+                                onView={setViewingReport}
+                                onDownload={handleDownload}
+                                onPrint={handlePrint}
+                                onDelete={handleDelete}
+                                renderWork={renderRecordOfWork}
+                            />
+                        ))
+                    )
                 ) : (
                     <div className="py-32 text-center bg-white rounded-[3rem] border border-dashed border-maroon/10">
                         <div className="w-20 h-20 bg-maroon/5 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -694,3 +790,101 @@ export default function TrainerReports() {
         </div>
     );
 }
+
+
+
+const TrainerReportCard = ({ report, user, isAdmin, onView, onDownload, onPrint, onDelete, renderWork }) => (
+    <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-maroon/5 hover:shadow-xl transition-all group overflow-hidden relative text-left">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-maroon/[0.02] rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+
+        <div className="flex flex-col lg:flex-row gap-8 relative z-10">
+            <div className="lg:w-1/4 space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-maroon text-gold flex items-center justify-center font-black text-xs shadow-lg shrink-0">
+                        {report.week_number}
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest leading-none mb-1">Academic Period</p>
+                        <p className="text-sm font-black text-maroon uppercase tracking-tight">{report.week_number}</p>
+                    </div>
+                </div>
+                <div className="space-y-2 pt-4 border-t border-maroon/5">
+                    <div className="flex items-center gap-2 text-[10px] font-black text-maroon/60 uppercase tracking-widest">
+                        <Calendar className="w-3 h-3 text-gold" />
+                        {new Date(report.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-gold/10 flex items-center justify-center overflow-hidden border border-gold/20">
+                            {report.trainer_photo ? (
+                                <img src={report.trainer_photo} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                                <User className="w-4 h-4 text-gold" />
+                            )}
+                        </div>
+                        <span className="text-[10px] font-black text-maroon/60 uppercase tracking-widest">{report.trainer_name}</span>
+                    </div>
+                    {report.course_id && (
+                        <div className="flex items-center gap-2 text-[10px] font-black text-maroon/60 uppercase tracking-widest">
+                            <BookOpen className="w-3 h-3 text-gold" />
+                            {report.course_id}
+                        </div>
+                    )}
+                </div>
+                <div className="flex flex-wrap gap-2 pt-4">
+                    <button
+                        onClick={() => onView(report)}
+                        className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
+                        title="View Full Report"
+                    >
+                        <Eye className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                        onClick={() => onDownload(report)}
+                        className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
+                        title="Download PDF"
+                    >
+                        <FileDown className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                        onClick={() => onPrint(report)}
+                        className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm group/btn"
+                        title="Print Report"
+                    >
+                        <Printer className="w-3.5 h-3.5" />
+                    </button>
+                    {(isAdmin || report.trainer_id == user?.id) && (
+                        <button
+                            onClick={() => onDelete(report._id || report.id)}
+                            className="p-2 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-400 group/btn"
+                            title="Purge Record"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="bg-gray-50/50 rounded-3xl p-6 border border-maroon/5">
+                    <div className="flex items-center gap-2 mb-4">
+                        <FileText className="w-4 h-4 text-maroon opacity-40" />
+                        <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Daily Operations Report</h3>
+                    </div>
+                    <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">
+                        {report.daily_report}
+                    </p>
+                </div>
+                <div className="bg-gold/5 rounded-3xl p-6 border border-gold/20 flex flex-col">
+                    <div className="flex items-center gap-2 mb-4 shrink-0">
+                        <LayoutList className="w-4 h-4 text-maroon opacity-40" />
+                        <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Academic Record of Work</h3>
+                    </div>
+                    <div className="flex-1 overflow-auto max-h-[300px] custom-scrollbar">
+                        {renderWork(report.record_of_work)}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+

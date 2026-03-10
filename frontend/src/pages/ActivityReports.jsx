@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react';
-import { FileText, Plus, Calendar, TrendingUp, BarChart3, X, Trash2, Edit, Printer, RefreshCw, Zap, Eye, FileDown } from 'lucide-react';
+import { useEffect, useState, useMemo } from 'react';
+import {
+    Calendar, TrendingUp, BarChart3, FileText, Plus, RefreshCw, Download,
+    X, Eye, Edit, Trash2, Zap, AlertCircle, User, Clock, FileDown, ChevronRight, Printer
+} from 'lucide-react';
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
+import { toast } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { activityReportsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function ActivityReports() {
     const [activeTab, setActiveTab] = useState('daily');
@@ -10,11 +18,32 @@ export default function ActivityReports() {
     const [weeklyReports, setWeeklyReports] = useState([]);
     const [monthlyReports, setMonthlyReports] = useState([]);
     const [showModal, setShowModal] = useState(false);
-    const [modalMode, setModalMode] = useState('create'); // 'create' or 'edit'
+    const [modalMode, setModalMode] = useState('create'); 
     const [editingReport, setEditingReport] = useState(null);
     const [viewingReport, setViewingReport] = useState(null);
     const [printingReport, setPrintingReport] = useState(null);
     const [loading, setLoading] = useState(false);
+
+    // Date filters
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
+
+    const chartData = useMemo(() => {
+        if (activeTab === 'daily') {
+            return dailyReports.slice(0, 7).reverse().map(r => ({
+                name: new Date(r.report_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+                attendance: r.total_attendance_percentage || 0,
+                classes: r.classes_conducted || 0
+            }));
+        } else if (activeTab === 'weekly') {
+            return weeklyReports.slice(0, 5).reverse().map(r => ({
+                name: `Week ${new Date(r.week_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+                attendance: r.average_attendance || 0,
+                revenue: r.revenue_collected || 0
+            }));
+        }
+        return [];
+    }, [dailyReports, weeklyReports, activeTab]);
 
     // Daily Report Form State
     const [dailyForm, setDailyForm] = useState({
@@ -100,8 +129,7 @@ export default function ActivityReports() {
             }
         } catch (error) {
             console.error('Error fetching reports:', error);
-            const errorMsg = error.response?.data?.error || error.message;
-            alert(`Failed to fetch reports: ${errorMsg}`);
+            toast.error('Failed to load activity intelligence');
         } finally {
             setLoading(false);
         }
@@ -112,17 +140,17 @@ export default function ActivityReports() {
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createDailyReport(dailyForm);
-                alert('Daily report created successfully!');
+                toast.success('Daily report archived successfully');
             } else {
                 await activityReportsAPI.updateDailyReport(editingReport.id, dailyForm);
-                alert('Daily report updated successfully!');
+                toast.success('Report revision authorized');
             }
             setShowModal(false);
             resetForms();
             fetchReports();
         } catch (error) {
             console.error('Error submitting daily report:', error);
-            alert(error.response?.data?.error || 'Failed to submit report');
+            toast.error(error.response?.data?.error || 'Archive sequence failed');
         }
     };
 
@@ -131,17 +159,17 @@ export default function ActivityReports() {
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createWeeklyReport(weeklyForm);
-                alert('Weekly report created successfully!');
+                toast.success('Weekly summary finalized');
             } else {
                 await activityReportsAPI.updateWeeklyReport(editingReport.id, weeklyForm);
-                alert('Weekly report updated successfully!');
+                toast.success('Weekly revision archived');
             }
             setShowModal(false);
             resetForms();
             fetchReports();
         } catch (error) {
             console.error('Error submitting weekly report:', error);
-            alert(error.response?.data?.error || 'Failed to submit report');
+            toast.error(error.response?.data?.error || 'Summary finalization failed');
         }
     };
 
@@ -150,33 +178,33 @@ export default function ActivityReports() {
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createMonthlyReport(monthlyForm);
-                alert('Monthly report created successfully!');
+                toast.success('Monthly intelligence report archived');
             } else {
                 await activityReportsAPI.updateMonthlyReport(editingReport.id, monthlyForm);
-                alert('Monthly report updated successfully!');
+                toast.success('Monthly revision authorized');
             }
             setShowModal(false);
             resetForms();
             fetchReports();
         } catch (error) {
             console.error('Error submitting monthly report:', error);
-            alert(error.response?.data?.error || 'Failed to submit report');
+            toast.error(error.response?.data?.error || 'Archive operation interrupted');
         }
     };
 
     const handleDelete = async (id, type) => {
-        if (!confirm('Are you sure you want to delete this report?')) return;
+        if (!confirm('Are you sure you want to delete this report? This action is archived.')) return;
 
         try {
             if (type === 'daily') await activityReportsAPI.deleteDailyReport(id);
             else if (type === 'weekly') await activityReportsAPI.deleteWeeklyReport(id);
             else if (type === 'monthly') await activityReportsAPI.deleteMonthlyReport(id);
 
-            alert('Report deleted successfully!');
+            toast.success('Report purged from active records');
             fetchReports();
         } catch (error) {
             console.error('Error deleting report:', error);
-            alert('Failed to delete report');
+            toast.error('Deletion protocol failed');
         }
     };
 
@@ -327,7 +355,7 @@ export default function ActivityReports() {
         }
 
         if (!start || !end) {
-            alert('Please select a date range first');
+            toast.error('Range parameters missing');
             return;
         }
 
@@ -343,7 +371,7 @@ export default function ActivityReports() {
                     total_students_absent: stats.attendance.Absent,
                     late_arrivals: stats.attendance.Late,
                     new_enrollments: stats.new_enrollments,
-                    staff_present: stats.total_faculty, // Mapping faculty as proxy for staff for now
+                    staff_present: stats.total_faculty, 
                     total_attendance_percentage: stats.attendance.Present + stats.attendance.Absent > 0
                         ? parseFloat(((stats.attendance.Present / (stats.attendance.Present + stats.attendance.Absent)) * 100).toFixed(1))
                         : 0
@@ -356,7 +384,7 @@ export default function ActivityReports() {
                         : 0,
                     new_enrollments: stats.new_enrollments,
                     revenue_collected: stats.revenue_collected,
-                    active_students: stats.attendance.Present // Proxied
+                    active_students: stats.attendance.Present 
                 }));
             } else if (activeTab === 'monthly') {
                 setMonthlyForm(prev => ({
@@ -369,22 +397,15 @@ export default function ActivityReports() {
                         : 0,
                 }));
             }
-
-            // Notification of success
-            const toast = document.createElement('div');
-            toast.className = 'fixed bottom-8 right-8 bg-green-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl animate-in slide-in-from-bottom-4 z-[100]';
-            toast.innerText = '✨ Data Synchronized Successfully';
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
-
+            toast.success('Operational data synchronized');
         } catch (error) {
             console.error('Auto-sync error:', error);
-            const errorMsg = error.response?.data?.error || error.message;
-            alert(`Failed to sync live data: ${errorMsg}`);
+            toast.error('Sync pipeline failure');
         } finally {
             setLoading(false);
         }
     };
+
     const handlePrint = (report) => {
         setPrintingReport(report);
         const type = activeTab;
@@ -416,306 +437,452 @@ export default function ActivityReports() {
                 const ratio = imgProps.height / imgProps.width;
                 const renderedHeight = pdfWidth * ratio;
 
-                // Center the image if it's smaller than A4
                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(renderedHeight, pdfHeight));
                 pdf.save(`${type.charAt(0).toUpperCase() + type.slice(1)}_Activity_Report_${report.report_date || report.week_start_date || report.month}.pdf`);
+                toast.success('Digital Archive Manifest Exported');
             } catch (error) {
                 console.error('Download failed:', error);
-                alert('Portal Warning: Connection to document engine interrupted.');
+                toast.error('Document generation sequence interrupted');
             } finally {
                 setPrintingReport(null);
             }
         }, 1000);
     };
 
+    if (loading && !dailyReports.length && !weeklyReports.length) {
+        return (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
+                <div className="relative">
+                    <div className="w-20 h-20 border-4 border-maroon/10 border-t-maroon rounded-full animate-spin"></div>
+                    <FileText className="w-8 h-8 text-maroon absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                </div>
+                <div className="text-maroon font-black uppercase tracking-[0.4em] text-xs animate-pulse">Aggregating Institutional Data...</div>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {/* Header */}
-            <div className="flex justify-between items-end">
-                <div>
-                    <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tighter">Activity Reports</h1>
-                    <p className="text-sm text-gray-400 font-medium">College-Wide Operations Tracking</p>
+        <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+            {/* Elegant Header Area */}
+            <div className="relative overflow-hidden bg-white/40 backdrop-blur-3xl rounded-[2.5rem] border border-white/60 shadow-2xl p-6 md:p-8">
+                <div className="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-maroon/5 to-transparent pointer-events-none"></div>
+                <div className="absolute -top-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-[80px]"></div>
+                
+                <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+                    <div className="flex items-center gap-8">
+                        <div className="relative group">
+                            <div className="absolute -inset-4 bg-maroon/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
+                            <div className="w-14 h-14 bg-gradient-to-br from-maroon to-maroon-950 rounded-2xl flex items-center justify-center shadow-2xl transform transition-transform group-hover:-rotate-6 duration-500">
+                                <BarChart3 className="w-7 h-7 text-gold" />
+                            </div>
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className="h-[2px] w-12 bg-gradient-to-r from-gold to-maroon"></span>
+                                <p className="text-[11px] text-maroon/70 font-black tracking-[0.4em] uppercase">Operations Intelligence</p>
+                            </div>
+                            <h1 className="text-2xl md:text-3xl font-black text-maroon tracking-tighter uppercase leading-none">
+                                Activity <span className="text-gold font-serif italic text-2xl lowercase mx-1">&</span> Metrics
+                            </h1>
+                            <p className="text-sm text-gray-500 font-medium mt-3 border-l-4 border-gold/40 pl-5 max-w-lg leading-relaxed italic">
+                                Institutional performance analytics and operational logs for the current academic period.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 print:hidden">
+                        <button
+                            onClick={() => window.print()}
+                            className="flex items-center gap-3 bg-white/80 backdrop-blur-md text-maroon border border-maroon/10 px-6 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon hover:text-gold transition-all shadow-xl active:scale-95 group"
+                        >
+                            <Printer className="w-3.5 h-3.5 group-hover:animate-bounce" />
+                            Print Manifest
+                        </button>
+                        <button
+                            onClick={openCreateModal}
+                            className="bg-maroon text-gold px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-black transition-all shadow-[0_20px_40px_-15px_rgba(128,0,0,0.3)] hover:-translate-y-1 active:translate-y-0 border border-maroon-900 group"
+                        >
+                            <Plus className="w-4 h-4 inline-block mr-2 group-hover:rotate-90 transition-transform" />
+                            Execute Report
+                        </button>
+                    </div>
                 </div>
-                <div className="flex gap-3 print:hidden">
-                    <button
-                        onClick={() => window.print()}
-                        className="flex items-center gap-2 bg-gray-100 text-gray-700 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-gray-200 transition-all shadow-sm"
-                    >
-                        <Printer className="w-4 h-4" />
-                        Print Reports
-                    </button>
-                    <button
-                        onClick={openCreateModal}
-                        className="flex items-center gap-2 bg-maroon text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#600000] transition-all shadow-xl hover:-translate-y-1 active:scale-95"
-                    >
-                        <Plus className="w-4 h-4" />
-                        New Report
-                    </button>
-                </div>
+
+                {/* Trend Chart Area (Only shown when data exists) */}
+                {chartData.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-maroon/5 animate-in fade-in duration-1000">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-[10px] font-black text-maroon/40 uppercase tracking-[.3em]">Institutional Performance Velocity</h3>
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-maroon"></div>
+                                    <span className="text-[9px] font-black uppercase text-gray-400">Attendance %</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 rounded-full bg-gold"></div>
+                                    <span className="text-[9px] font-black uppercase text-gray-400">Activity Vol.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="h-40 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartData}>
+                                    <defs>
+                                        <linearGradient id="colorAttendance" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#800000" stopOpacity={0.1}/>
+                                            <stop offset="95%" stopColor="#800000" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#80000010" />
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{fill: '#800000', fontSize: 9, fontWeight: 900}} 
+                                        dy={10}
+                                    />
+                                    <YAxis hide />
+                                    <Tooltip 
+                                        contentStyle={{backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #80000010', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)'}}
+                                        labelStyle={{fontWeight: 900, textTransform: 'uppercase', fontSize: '10px', color: '#800000', marginBottom: '8px'}}
+                                    />
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey="attendance" 
+                                        stroke="#800000" 
+                                        strokeWidth={4}
+                                        fillOpacity={1} 
+                                        fill="url(#colorAttendance)" 
+                                    />
+                                    <Area 
+                                        type="monotone" 
+                                        dataKey={activeTab === 'weekly' ? 'revenue' : 'classes'} 
+                                        stroke="#C5A059" 
+                                        strokeWidth={4}
+                                        fill="transparent"
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Tabs */}
-            <div className="bg-white rounded-[2rem] p-2 shadow-sm border border-gray-100 print:hidden">
-                <div className="flex gap-2">
+            {/* Smart Navigation Hub */}
+            <div className="flex flex-col md:flex-row gap-4 sticky top-6 z-40 print:hidden">
+                <div className="flex-1 bg-white/70 backdrop-blur-xl rounded-[2rem] p-2 shadow-2xl border border-white/80 flex gap-2">
                     {[
-                        { id: 'daily', label: 'Daily Reports', icon: Calendar },
-                        { id: 'weekly', label: 'Weekly Summaries', icon: TrendingUp },
-                        { id: 'monthly', label: 'Monthly Summaries', icon: BarChart3 }
-                    ].map((tab) => {
-                        const Icon = tab.icon;
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-[1.5rem] font-black text-xs uppercase tracking-widest transition-all ${activeTab === tab.id
-                                    ? 'bg-maroon text-white shadow-lg'
-                                    : 'text-gray-400 hover:text-maroon hover:bg-gray-50'
-                                    }`}
-                            >
-                                <Icon className="w-4 h-4" />
-                                {tab.label}
-                            </button>
-                        );
-                    })}
+                        { id: 'daily', label: 'Daily Logs', icon: Calendar },
+                        { id: 'weekly', label: 'Weekly Audits', icon: TrendingUp },
+                        { id: 'monthly', label: 'Monthly Intelligence', icon: BarChart3 }
+                    ].map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[.25em] transition-all duration-500 ${activeTab === tab.id
+                                ? 'bg-maroon text-gold shadow-[0_15px_30px_-10px_rgba(128,0,0,0.4)] translate-y-[-2px]'
+                                : 'text-maroon/40 hover:text-maroon hover:bg-maroon/5'
+                            }`}
+                        >
+                            <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'animate-pulse' : ''}`} />
+                            <span className="hidden sm:inline">{tab.label}</span>
+                        </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-3 bg-white/70 backdrop-blur-xl rounded-[2rem] px-8 py-2 shadow-2xl border border-white/80">
+                    <div className="flex items-center gap-4 border-r border-maroon/10 pr-6 mr-2">
+                        <div className="flex items-center gap-2">
+                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest whitespace-nowrap">From</label>
+                            <input
+                                type="date"
+                                value={filterDateFrom}
+                                onChange={e => setFilterDateFrom(e.target.value)}
+                                className="px-3 py-2 bg-transparent border-none text-maroon font-black text-[11px] outline-none cursor-pointer"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest whitespace-nowrap">To</label>
+                            <input
+                                type="date"
+                                value={filterDateTo}
+                                onChange={e => setFilterDateTo(e.target.value)}
+                                className="px-3 py-2 bg-transparent border-none text-maroon font-black text-[11px] outline-none cursor-pointer"
+                            />
+                        </div>
+                    </div>
+                    { (filterDateFrom || filterDateTo) && (
+                        <button
+                            onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); }}
+                            className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
+                    <div className="flex items-center gap-2 bg-maroon/5 px-4 py-2 rounded-xl">
+                        <span className="text-[10px] font-black text-maroon uppercase tracking-widest">
+                            {activeTab === 'daily' ? dailyReports.length : activeTab === 'weekly' ? weeklyReports.length : monthlyReports.length} Active Records
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            {/* Reports List */}
-            {loading ? (
-                <div className="text-center py-20">
-                    <div className="inline-block w-12 h-12 border-4 border-maroon border-t-transparent rounded-full animate-spin"></div>
-                    <p className="mt-4 text-sm font-bold text-gray-400">Loading reports...</p>
-                </div>
-            ) : (
-                <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-gray-100 print:shadow-none print:border-none print:p-0">
-                    {activeTab === 'daily' && (
-                        <div className="space-y-4">
-                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6">Daily Activity Reports</h2>
-                            {dailyReports.length === 0 ? (
-                                <p className="text-center text-gray-400 py-12">No daily reports found. Create your first report!</p>
-                            ) : (
-                                dailyReports.map((report) => (
-                                    <div key={report.id} className="bg-gray-50 p-6 rounded-2xl border border-gray-100 hover:shadow-md transition-all">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="font-black text-lg text-maroon">{report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'No Date'}</h3>
-                                                <p className="text-xs text-gray-400 font-bold mt-1">Reported by {report.reported_by}</p>
-                                            </div>
-                                            <div className="flex gap-2 print:hidden">
-                                                <button
-                                                    onClick={() => setViewingReport(report)}
-                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                                    title="View Full Report"
-                                                >
-                                                    <Eye className="w-4 h-4 text-gray-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => openEditModal(report)}
-                                                    className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Edit"
-                                                >
-                                                    <Edit className="w-4 h-4 text-blue-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(report.id, 'daily')}
-                                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-600" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Classes</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.classes_conducted}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.total_attendance_percentage != null && report.total_attendance_percentage !== '' ? parseFloat(report.total_attendance_percentage).toFixed(1) + '%' : '—'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Present</p>
-                                                <p className="text-2xl font-black text-green-600">{report.total_students_present}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Absent</p>
-                                                <p className="text-2xl font-black text-red-600">{report.total_students_absent}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">New Enrollments</p>
-                                                <p className="text-2xl font-black text-blue-600">{report.new_enrollments || 0}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Discipline</p>
-                                                <p className="text-2xl font-black text-amber-600">{report.disciplinary_cases || 0}</p>
-                                            </div>
-                                        </div>
-                                        {report.achievements && (
-                                            <div className="mt-4 p-4 bg-green-50 rounded-xl">
-                                                <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Achievements</p>
-                                                <p className="text-sm text-gray-700">{report.achievements}</p>
-                                            </div>
-                                        )}
-                                        {report.incidents && (
-                                            <div className="mt-2 p-4 bg-red-50 rounded-xl">
-                                                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Incidents</p>
-                                                <p className="text-sm text-gray-700">{report.incidents}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    )}
+            {/* Reports Intelligence Feed */}
+            <div className="bg-white/40 backdrop-blur-3xl rounded-[3rem] p-6 md:p-8 shadow-3xl border border-white/60 min-h-[400px]">
 
-                    {activeTab === 'weekly' && (
-                        <div className="space-y-4">
-                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6">Weekly Summary Reports</h2>
-                            {weeklyReports.length === 0 ? (
-                                <p className="text-center text-gray-400 py-12">No weekly reports found. Create your first summary!</p>
-                            ) : (
-                                weeklyReports.map((report) => (
-                                    <div key={report.id} className="bg-gray-50 p-6 rounded-2xl border border-gray-100 hover:shadow-md transition-all">
-                                        <div className="flex justify-between items-start mb-4">
+                {activeTab === 'daily' && (
+                    <div className="grid grid-cols-1 gap-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Chronological Daily Audit Logs</h2>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{dailyReports.length} Entries Archived</span>
+                        </div>
+
+                        {dailyReports.filter(r => {
+                                const d = r.report_date || '';
+                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+                            }).sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '')).length === 0 ? (
+                            <div className="text-center py-20 bg-maroon/[0.02] rounded-[2rem] border border-maroon/5 border-dashed">
+                                <Calendar className="w-12 h-12 text-maroon/10 mx-auto mb-4" />
+                                <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">No operational logs for this cycle</p>
+                            </div>
+                        ) : (
+                            dailyReports.filter(r => {
+                                const d = r.report_date || '';
+                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+                            }).sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '')).map((report) => (
+                                <div key={report.id} className="group relative bg-white rounded-[2rem] p-6 border border-maroon/5 hover:border-maroon/20 hover:shadow-2xl transition-all duration-500 overflow-hidden">
+                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-maroon to-gold transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 rounded-r-full"></div>
+                                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
+                                        <div className="flex items-center gap-5">
+                                            <div className="w-12 h-12 bg-maroon/5 rounded-2xl flex flex-col items-center justify-center border border-maroon/10 group-hover:bg-maroon group-hover:border-maroon transition-all duration-500 flex-shrink-0">
+                                                <span className="text-[7px] font-black uppercase text-maroon/40 group-hover:text-gold/60 tracking-tight">{report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { month: 'short' }) : ''}</span>
+                                                <span className="text-xl font-black text-maroon group-hover:text-gold transition-colors">{report.report_date ? new Date(report.report_date).getDate() : '--'}</span>
+                                            </div>
                                             <div>
-                                                <h3 className="font-black text-lg text-maroon">
-                                                    {report.week_start_date ? new Date(report.week_start_date).toLocaleDateString() : 'N/A'} - {report.week_end_date ? new Date(report.week_end_date).toLocaleDateString() : 'N/A'}
+                                                <h3 className="font-black text-lg text-maroon uppercase tracking-tight">{report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'No Date'}</h3>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-gold"></div>
+                                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Filed by {report.reported_by || 'Unknown Officer'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 px-6 border-l border-r border-maroon/5">
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Attendance</p>
+                                                <p className="text-xl font-black text-maroon">{report.total_attendance_percentage != null && report.total_attendance_percentage !== '' ? parseFloat(report.total_attendance_percentage).toFixed(1) + '%' : '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Classes</p>
+                                                <p className="text-xl font-black text-maroon">{report.classes_conducted}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Net Enroll</p>
+                                                <p className="text-xl font-black text-blue-600">+{report.new_enrollments || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Discipline</p>
+                                                <p className="text-xl font-black text-amber-500">{report.disciplinary_cases || 0}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2 print:hidden">
+                                            <button onClick={() => setViewingReport(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5" title="View Report">
+                                                <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => openEditModal(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5" title="Edit">
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(report.id, 'daily')} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-red-600 hover:text-white transition-all border border-maroon/5" title="Delete">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {(report.achievements || report.incidents) && (
+                                        <div className="mt-6 pt-6 border-t border-maroon/5 flex flex-wrap gap-3">
+                                            {report.achievements && (
+                                                <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-2xl px-4 py-2">
+                                                    <Zap className="w-3 h-3 text-green-600" />
+                                                    <span className="text-[10px] font-black text-green-700 uppercase tracking-wider">{report.achievements.length > 40 ? report.achievements.substring(0, 40) + '...' : report.achievements}</span>
+                                                </div>
+                                            )}
+                                            {report.incidents && (
+                                                <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-2xl px-4 py-2">
+                                                    <AlertCircle className="w-3 h-3 text-red-500" />
+                                                    <span className="text-[10px] font-black text-red-700 uppercase tracking-wider">{report.incidents.length > 40 ? report.incidents.substring(0, 40) + '...' : report.incidents}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'weekly' && (
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Aggregated Weekly Strategic Summaries</h2>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{weeklyReports.length} Summaries Compiled</span>
+                        </div>
+                        {weeklyReports.filter(r => {
+                            const d = r.week_start_date || r.report_date || '';
+                            return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+                        }).sort((a, b) => (b.week_start_date || b.report_date || '').localeCompare(a.week_start_date || a.report_date || '')).length === 0 ? (
+                            <div className="text-center py-20 bg-maroon/[0.02] rounded-[2rem] border border-maroon/5 border-dashed">
+                                <TrendingUp className="w-12 h-12 text-maroon/10 mx-auto mb-4" />
+                                <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">Strategic summary queue empty</p>
+                            </div>
+                        ) : (
+                            weeklyReports.filter(r => {
+                                const d = r.week_start_date || r.report_date || '';
+                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+                            }).sort((a, b) => (b.week_start_date || b.report_date || '').localeCompare(a.week_start_date || a.report_date || '')).map((report) => (
+                                <div key={report.id} className="group relative bg-white rounded-[2rem] p-6 border border-gold/10 hover:border-gold/30 hover:shadow-2xl transition-all duration-500 overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-700"></div>
+                                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 relative z-10">
+                                        <div className="flex items-center gap-6">
+                                            <div className="w-12 h-12 bg-gold/10 rounded-2xl flex items-center justify-center border border-gold/20 group-hover:bg-maroon group-hover:border-maroon transition-all duration-500 flex-shrink-0">
+                                                <TrendingUp className="w-5 h-5 text-gold group-hover:text-gold" />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-black text-xl text-maroon uppercase tracking-tight">
+                                                    {report.week_start_date ? new Date(report.week_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'N/A'} — {report.week_end_date ? new Date(report.week_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                                                 </h3>
-                                                <p className="text-xs text-gray-400 font-bold mt-1">Reported by {report.reported_by}</p>
-                                            </div>
-                                            <div className="flex gap-2 print:hidden">
-                                                <button
-                                                    onClick={() => setViewingReport(report)}
-                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                                    title="View Full Report"
-                                                >
-                                                    <Eye className="w-4 h-4 text-gray-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => openEditModal(report)}
-                                                    className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Edit"
-                                                >
-                                                    <Edit className="w-4 h-4 text-blue-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(report.id, 'weekly')}
-                                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-600" />
-                                                </button>
+                                                <p className="text-[10px] text-maroon/40 font-black uppercase tracking-widest mt-1">Compiled by {report.reported_by}</p>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 flex-1 px-6 border-l border-gold/10">
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Classes</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.total_classes_conducted}</p>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Avg Attendance</p>
+                                                <p className="text-xl font-black text-maroon">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">New Students</p>
+                                                <p className="text-xl font-black text-green-600">+{report.new_enrollments || 0}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Assessments</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.total_assessments}</p>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Assessments</p>
+                                                <p className="text-xl font-black text-maroon">{report.total_assessments || 0}</p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">New Students</p>
-                                                <p className="text-2xl font-black text-green-600">{report.new_enrollments}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Discipline Cases</p>
-                                                <p className="text-2xl font-black text-red-600">{report.disciplinary_cases}</p>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Discipline</p>
+                                                <p className="text-xl font-black text-red-500">{report.disciplinary_cases || 0}</p>
                                             </div>
                                         </div>
-                                        {report.key_achievements && (
-                                            <div className="mt-4 p-4 bg-blue-50 rounded-xl">
-                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Key Achievements</p>
-                                                <p className="text-sm text-gray-700">{report.key_achievements}</p>
-                                            </div>
-                                        )}
+                                        <div className="flex gap-2 print:hidden">
+                                            <button onClick={() => setViewingReport(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5" title="View">
+                                                <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => openEditModal(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5" title="Edit">
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(report.id, 'weekly')} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-red-600 hover:text-white transition-all border border-maroon/5" title="Delete">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </div>
-                                ))
-                            )}
-                        </div>
-                    )}
+                                    {report.key_achievements && (
+                                        <div className="mt-6 p-5 bg-gradient-to-r from-maroon/[0.03] to-transparent rounded-2xl border-l-4 border-gold">
+                                            <p className="text-[9px] font-black text-gold uppercase tracking-widest mb-2">Key Achievements</p>
+                                            <p className="text-sm text-gray-600 font-medium leading-relaxed italic line-clamp-2">"{report.key_achievements}"</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
 
-                    {activeTab === 'monthly' && (
-                        <div className="space-y-4">
-                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-6">Monthly Summary Reports</h2>
-                            {monthlyReports.length === 0 ? (
-                                <p className="text-center text-gray-400 py-12">No monthly reports found. Create your first overview!</p>
-                            ) : (
-                                monthlyReports.map((report) => (
-                                    <div key={report.id} className="bg-gray-50 p-6 rounded-2xl border border-gray-100 hover:shadow-md transition-all">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="font-black text-lg text-maroon">{report.month}</h3>
-                                                <p className="text-xs text-gray-400 font-bold mt-1">Reported by {report.reported_by}</p>
-                                            </div>
-                                            <div className="flex gap-2 print:hidden">
-                                                <button
-                                                    onClick={() => setViewingReport(report)}
-                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                                    title="View Full Report"
-                                                >
-                                                    <Eye className="w-4 h-4 text-gray-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => openEditModal(report)}
-                                                    className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Edit"
-                                                >
-                                                    <Edit className="w-4 h-4 text-blue-600" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(report.id, 'monthly')}
-                                                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Delete"
-                                                >
-                                                    <Trash2 className="w-4 h-4 text-red-600" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Students</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.total_students}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Pass Rate</p>
-                                                <p className="text-2xl font-black text-gray-800">{parseFloat(report.average_pass_rate || 0).toFixed(1)}%</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Faculty</p>
-                                                <p className="text-2xl font-black text-gray-800">{report.total_faculty}</p>
-                                            </div>
-                                        </div>
-                                        {report.major_achievements && (
-                                            <div className="mt-4 p-4 bg-purple-50 rounded-xl">
-                                                <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest mb-1">Major Achievements</p>
-                                                <p className="text-sm text-gray-700">{report.major_achievements}</p>
-                                            </div>
-                                        )}
-                                        {report.goals_next_month && (
-                                            <div className="mt-2 p-4 bg-gold/10 rounded-xl">
-                                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">Goals Next Month</p>
-                                                <p className="text-sm text-gray-700">{report.goals_next_month}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
-                            )}
+                {activeTab === 'monthly' && (
+                    <div className="space-y-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Executive Institutional Intelligence Reports</h2>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{monthlyReports.length} Executive Audits</span>
                         </div>
-                    )}
-                </div>
-            )}
+                        {monthlyReports.filter(r => {
+                            const d = r.month_start_date || r.report_date || '';
+                            return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+                        }).length === 0 ? (
+                            <div className="text-center py-20 bg-maroon/[0.02] rounded-[3rem] border border-maroon/5 border-dashed">
+                                <BarChart3 className="w-16 h-16 text-maroon/10 mx-auto mb-4" />
+                                <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">Executive Intelligence pipeline empty</p>
+                            </div>
+                        ) : (
+                            monthlyReports.filter(r => {
+                                const d = r.month_start_date || r.report_date || '';
+                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+                            }).sort((a, b) => (b.month_start_date || b.report_date || '').localeCompare(a.month_start_date || a.report_date || '')).map((report) => (
+                                <div key={report.id} className="group relative bg-white rounded-[3rem] p-8 border border-maroon/5 hover:border-gold/30 hover:shadow-2xl transition-all duration-700 overflow-hidden">
+                                    <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-maroon/[0.03] rounded-full blur-2xl group-hover:bg-maroon/[0.06] transition-all duration-700"></div>
+                                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 relative z-10">
+                                        <div className="space-y-3">
+                                            <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-maroon text-gold rounded-full text-[9px] font-black uppercase tracking-widest shadow-xl">
+                                                <BarChart3 className="w-3 h-3" /> Fiscal Oversight
+                                            </div>
+                                            <h3 className="font-black text-4xl text-maroon uppercase tracking-tighter leading-none">{report.month}</h3>
+                                            <div className="flex gap-5 mt-2">
+                                                <div className="flex items-center gap-2">
+                                                    <User className="w-3.5 h-3.5 text-gold" />
+                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{report.total_students || 0} Enrolled</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <TrendingUp className="w-3.5 h-3.5 text-gold" />
+                                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{parseFloat(report.average_pass_rate || 0).toFixed(1)}% Pass Rate</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1 px-6 lg:border-x border-maroon/5">
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Total Students</p>
+                                                <p className="text-2xl font-black text-maroon">{report.total_students || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Avg Attendance</p>
+                                                <p className="text-2xl font-black text-maroon">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Pass Rate</p>
+                                                <p className="text-2xl font-black text-maroon">{parseFloat(report.average_pass_rate || 0).toFixed(1)}%</p>
+                                            </div>
+                                            <div className="bg-maroon/[0.03] p-3 rounded-xl border border-maroon/5 group-hover:bg-maroon group-hover:border-maroon transition-all duration-700">
+                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1 group-hover:text-gold/60">Faculty</p>
+                                                <p className="text-2xl font-black text-maroon group-hover:text-gold transition-colors">{report.total_faculty || 0}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-3 print:hidden">
+                                            <button onClick={() => setViewingReport(report)} className="flex items-center gap-3 bg-maroon/5 text-maroon px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-maroon hover:text-gold transition-all border border-maroon/5">
+                                                <Eye className="w-4 h-4" /> Full Audit
+                                            </button>
+                                            <button onClick={() => openEditModal(report)} className="flex items-center gap-3 bg-maroon/5 text-maroon px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-maroon hover:text-gold transition-all border border-maroon/5">
+                                                <Edit className="w-4 h-4" /> Revise
+                                            </button>
+                                            <button onClick={() => handleDelete(report.id, 'monthly')} className="flex items-center gap-3 bg-white text-maroon px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all border border-maroon/5">
+                                                <Trash2 className="w-4 h-4" /> Purge
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {(report.major_achievements || report.goals_next_month) && (
+                                        <div className="mt-8 pt-8 border-t border-maroon/5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {report.major_achievements && (
+                                                <div className="p-5 bg-purple-50/50 rounded-2xl border border-purple-100">
+                                                    <p className="text-[9px] font-black text-purple-600 uppercase tracking-widest mb-2">Major Achievements</p>
+                                                    <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">{report.major_achievements}</p>
+                                                </div>
+                                            )}
+                                            {report.goals_next_month && (
+                                                <div className="p-5 bg-gold/5 rounded-2xl border border-gold/20">
+                                                    <p className="text-[9px] font-black text-maroon uppercase tracking-widest mb-2">Goals Next Month</p>
+                                                    <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">{report.goals_next_month}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
 
             {/* Modal */}
             {showModal && (

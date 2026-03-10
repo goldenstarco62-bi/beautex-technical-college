@@ -187,51 +187,7 @@ app.use('/api', ensureServices, (req, res, next) => {
     next();
 });
 
-// Database check route for debugging
-app.get('/api/db-check', ensureServices, async (req, res) => {
-    try {
-        const db = await getDb();
-        const isMongo = db.constructor.name === 'NativeConnection';
 
-        if (isMongo) {
-            const User = (await import('./models/mongo/User.js')).default;
-            const userCount = await User.countDocuments();
-            return res.json({
-                status: '✅ Connected to MongoDB Atlas',
-                database: 'MongoDB',
-                users: userCount,
-                message: 'MongoDB is active.'
-            });
-        }
-
-        // Supabase / PostgreSQL Check
-        if (getProcessedDatabaseUrl()) {
-            const userCount = await queryOne('SELECT COUNT(*) as count FROM users');
-            return res.json({
-                status: '✅ Connected to Supabase (PostgreSQL)',
-                database: 'PostgreSQL',
-                users: userCount.count,
-                message: 'Supabase is active.'
-            });
-        }
-
-        // SQLite Check
-        const userCount = await queryOne('SELECT COUNT(*) as count FROM users');
-        res.json({
-            status: '✅ Connected to local SQLite',
-            database: 'SQLite',
-            users: userCount.count,
-            message: 'SQLite is active. Vercel deployments require MongoDB or a cloud database.'
-        });
-
-    } catch (error) {
-        console.error('❌ Database Check Failed:', error);
-        res.status(500).json({
-            status: '❌ Database Connection Failed',
-            error: error.message
-        });
-    }
-});
 
 // Root route
 app.get('/', async (req, res) => {
@@ -254,42 +210,7 @@ app.get('/', async (req, res) => {
     });
 });
 
-// SMTP Diagnostic Route (Hidden & Restricted to Superadmin)
-app.get('/api/diag/smtp', authenticateToken, authorizeRoles('superadmin'), async (req, res) => {
-    try {
-        const { sendWelcomeEmail } = await import('./services/emailService.js');
-        const { getDb } = await import('./config/database.js');
-        const testEmail = req.query.email || process.env.SMTP_USER;
 
-        const db = await getDb();
-        const dbType = db.constructor.name === 'NativeConnection' ? 'MongoDB' : (process.env.DATABASE_URL ? 'PostgreSQL' : 'SQLite');
-
-        if (!testEmail) {
-            return res.status(400).json({
-                error: 'No test email provided',
-                db_type: dbType,
-                smtp_user_set: !!process.env.SMTP_USER,
-                smtp_pass_set: !!process.env.SMTP_PASS
-            });
-        }
-
-        console.log(`📡 Triggering diagnostic email to: ${testEmail}`);
-        const success = await sendWelcomeEmail(testEmail, 'Diagnostic User', 'diag123');
-
-        res.json({
-            success,
-            recipient: testEmail,
-            db_type: dbType,
-            smtp_config: {
-                user: process.env.SMTP_USER ? `${process.env.SMTP_USER.slice(0, 3)}...` : 'NOT SET',
-                from_address: process.env.SMTP_USER,
-                node_env: process.env.NODE_ENV
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // 404 handler
 app.use((req, res) => {

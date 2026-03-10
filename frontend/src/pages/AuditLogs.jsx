@@ -1,25 +1,39 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
-import { History, User, Terminal, Calendar, ShieldCheck } from 'lucide-react';
+import { History, User, Terminal, Calendar, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function AuditLogs() {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
+    const itemsPerPage = 20;
 
     useEffect(() => {
-        fetchLogs();
-    }, []);
+        fetchLogs(currentPage);
+    }, [currentPage]);
 
-    const fetchLogs = async () => {
+    const fetchLogs = async (page) => {
         try {
-            const res = await api.get('/audit-logs');
-            setLogs(res.data);
+            setLoading(true);
+            const res = await api.get(`/audit-logs?page=${page}&limit=${itemsPerPage}`);
+            // Check if response is the new object format or the old array format
+            if (res.data.logs) {
+                setLogs(res.data.logs);
+                setPagination(res.data.pagination);
+            } else {
+                setLogs(res.data);
+            }
         } catch (error) {
             console.error('Error fetching audit logs:', error);
         } finally {
             setLoading(false);
         }
     };
+
+    const totalPages = pagination.totalPages;
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedLogs = logs; // Server already paginated it
 
     if (loading) {
         return (
@@ -55,7 +69,7 @@ export default function AuditLogs() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {logs.map((log) => (
+                            {paginatedLogs.map((log) => (
                                 <tr key={log.id} className="hover:bg-gray-50/50 transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
@@ -107,6 +121,45 @@ export default function AuditLogs() {
                         </tbody>
                     </table>
                 </div>
+                
+                {pagination.total > itemsPerPage && (
+                    <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+                        <div className="text-[10px] font-black text-maroon/40 uppercase tracking-widest">
+                            Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, pagination.total)} of {pagination.total} entries
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-maroon/10 hover:bg-maroon hover:text-white transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-maroon/40"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            
+                            {[...Array(totalPages)].map((_, i) => (
+                                <button
+                                    key={i + 1}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-8 h-8 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        currentPage === i + 1 
+                                            ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' 
+                                            : 'border border-maroon/10 text-maroon hover:bg-maroon/5'
+                                    }`}
+                                >
+                                    {i + 1}
+                                </button>
+                            )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-2 rounded-lg border border-maroon/10 hover:bg-maroon hover:text-white transition-all disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-maroon/40"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

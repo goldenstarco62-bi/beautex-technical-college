@@ -53,12 +53,20 @@ export const getAllDailyReports = async (req, res) => {
             return res.json(reports);
         }
 
-        let sql = 'SELECT * FROM student_daily_reports';
+        let sql = `
+            SELECT 
+                r.*, 
+                s.photo as student_photo,
+                f.photo as trainer_photo
+            FROM student_daily_reports r
+            LEFT JOIN students s ON r.student_id = s.id
+            LEFT JOIN faculty f ON LOWER(r.trainer_email) = LOWER(f.email)
+        `;
         let params = [];
         let conditions = [];
 
         if (role === 'student') {
-            conditions.push('student_id = ?');
+            conditions.push('r.student_id = ?');
             params.push(req.user.student_id || req.user.id);
         } else if (role === 'teacher') {
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
@@ -71,7 +79,7 @@ export const getAllDailyReports = async (req, res) => {
                 const allTutorCourses = [...new Set([...coursesList.map(c => String(c).toLowerCase().trim()), ...instructorCourses.map(c => String(c.name).toLowerCase().trim())])];
 
                 if (allTutorCourses.length > 0) {
-                    const placeholders = allTutorCourses.map(() => 'LOWER(course) = ?').join(' OR ');
+                    const placeholders = allTutorCourses.map(() => 'LOWER(r.course) = ?').join(' OR ');
                     conditions.push(`(${placeholders})`);
                     params.push(...allTutorCourses);
                 } else {
@@ -81,20 +89,20 @@ export const getAllDailyReports = async (req, res) => {
                 return res.json([]);
             }
         } else if (student_id) {
-            conditions.push('student_id = ?');
+            conditions.push('r.student_id = ?');
             params.push(student_id);
         }
 
         if (course) {
-            conditions.push('LOWER(course) = ?');
+            conditions.push('LOWER(r.course) = ?');
             params.push(String(course).toLowerCase().trim());
         }
         if (date) {
-            conditions.push('report_date = ?');
+            conditions.push('r.report_date = ?');
             params.push(date);
         }
         if (trainer_email) {
-            conditions.push('trainer_email = ?');
+            conditions.push('r.trainer_email = ?');
             params.push(trainer_email);
         }
 
@@ -102,7 +110,7 @@ export const getAllDailyReports = async (req, res) => {
             sql += ' WHERE ' + conditions.join(' AND ');
         }
 
-        sql += ' ORDER BY report_date DESC';
+        sql += ' ORDER BY r.report_date DESC';
 
         const reports = await query(sql, params);
 

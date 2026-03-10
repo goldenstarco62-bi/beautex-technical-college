@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { reportsAPI, coursesAPI, facultyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
     FileText, Calendar, BookOpen, CheckCircle2,
     Plus, Trash2, Printer, TrendingUp, ShieldCheck,
-    ClipboardCheck, Edit, X, Users, FileDown, Eye
+    ClipboardCheck, Edit, X, Users, FileDown, Eye,
+    Filter, ChevronDown, ChevronRight, Layers
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -44,6 +45,13 @@ export default function AcademicReports() {
     const [formData, setFormData] = useState(EMPTY_FORM);
     const [theoryRows, setTheoryRows] = useState([{ topic: '', content: '' }]);
     const [practicalRows, setPracticalRows] = useState([{ task: '', equipment: '' }]);
+
+    // Filters (admin/superadmin only)
+    const [filterDept, setFilterDept] = useState('');
+    const [filterCourse, setFilterCourse] = useState('');
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
+    const [collapsedDepts, setCollapsedDepts] = useState({});
 
     const renderTheoryTopics = (data) => {
         try {
@@ -140,6 +148,62 @@ export default function AcademicReports() {
         fetchCourses();
         fetchTrainers();
     }, []);
+
+    // Derived helpers
+    const departments = useMemo(() => [...new Set(courses.map(c => c.department).filter(Boolean))].sort(), [courses]);
+
+    const coursesByDept = useMemo(() => {
+        const map = {};
+        (filterDept ? courses.filter(c => c.department === filterDept) : courses).forEach(c => {
+            if (!map[c.department]) map[c.department] = [];
+            map[c.department].push(c.name);
+        });
+        return map;
+    }, [courses, filterDept]);
+
+    // Apply filters and group reports by department -> course
+    const filteredReports = useMemo(() => {
+        return reports.filter(r => {
+            const rCourse = r.course_unit || r.student_name || '';
+            const rDate = r.report_date || (r.created_at ? r.created_at.split('T')[0] : '');
+
+            if (filterCourse && rCourse !== filterCourse) return false;
+            if (filterDept) {
+                const matchedCourse = courses.find(c => c.name === rCourse);
+                if (!matchedCourse || matchedCourse.department !== filterDept) return false;
+            }
+            if (filterDateFrom && rDate < filterDateFrom) return false;
+            if (filterDateTo && rDate > filterDateTo) return false;
+            return true;
+        }).sort((a, b) => {
+            const da = a.report_date || a.created_at || '';
+            const db = b.report_date || b.created_at || '';
+            return db.localeCompare(da);
+        });
+    }, [reports, filterDept, filterCourse, filterDateFrom, filterDateTo, courses]);
+
+    // Group by department -> course (for admin/superadmin views)
+    const groupedReports = useMemo(() => {
+        const map = {};
+        filteredReports.forEach(r => {
+            const rCourse = r.course_unit || r.student_name || 'Uncategorised';
+            const matchedCourse = courses.find(c => c.name === rCourse);
+            const dept = matchedCourse?.department || 'General';
+            if (!map[dept]) map[dept] = {};
+            if (!map[dept][rCourse]) map[dept][rCourse] = [];
+            map[dept][rCourse].push(r);
+        });
+        return map;
+    }, [filteredReports, courses]);
+
+    const toggleDept = (dept) => setCollapsedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
+
+    const clearFilters = () => {
+        setFilterDept('');
+        setFilterCourse('');
+        setFilterDateFrom('');
+        setFilterDateTo('');
+    };
 
     const handlePrint = (report) => {
         setPrintingReport(report);
@@ -276,6 +340,8 @@ export default function AcademicReports() {
 
     if (loading) return <div className="p-10 text-maroon font-black animate-pulse uppercase tracking-widest">Compiling Academic Data...</div>;
 
+    const isAdminView = user?.role === 'admin' || user?.role === 'superadmin';
+
     return (
         <div className="space-y-8 pb-20">
             <div className="print:hidden space-y-8">
@@ -300,9 +366,9 @@ export default function AcademicReports() {
                 {/* Stats */}
                 <div className="grid grid-cols-3 gap-4">
                     {[
-                        { label: 'Total Reports', value: reports.length },
-                        { label: 'This Month', value: reports.filter(r => new Date(r.created_at || r.date).getMonth() === new Date().getMonth()).length },
-                        { label: 'Courses Covered', value: [...new Set(reports.map(r => r.course_unit || r.student_name))].length },
+                        { label: 'Total Reports', value: filteredReports.length },
+                        { label: 'This Month', value: filteredReports.filter(r => new Date(r.created_at || r.date).getMonth() === new Date().getMonth()).length },
+                        { label: 'Courses Covered', value: [...new Set(filteredReports.map(r => r.course_unit || r.student_name))].length },
                     ].map((s, i) => (
                         <div key={i} className="bg-white border border-maroon/8 rounded-2xl p-5 shadow-sm text-center">
                             <p className="text-2xl font-black text-maroon">{s.value}</p>
@@ -311,93 +377,244 @@ export default function AcademicReports() {
                     ))}
                 </div>
 
-                {/* Reports Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {reports.length === 0 && (
-                        <div className="col-span-2 text-center py-20 text-maroon/30 font-black uppercase tracking-widest text-sm">
-                            No reports captured yet.
+                {/* Filter Bar — admin/superadmin only */}
+                {isAdminView && (
+                    <div className="bg-white border border-maroon/8 rounded-2xl p-5 shadow-sm">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Filter className="w-4 h-4 text-maroon/50" />
+                            <p className="text-[10px] font-black text-maroon/50 uppercase tracking-widest">Filter & Arrange Reports</p>
+                            {(filterDept || filterCourse || filterDateFrom || filterDateTo) && (
+                                <button onClick={clearFilters} className="ml-auto text-[9px] font-black text-red-400 uppercase tracking-widest hover:text-red-600 transition-colors flex items-center gap-1">
+                                    <X className="w-3 h-3" /> Clear Filters
+                                </button>
+                            )}
                         </div>
-                    )}
-                    {reports.map((report) => (
-                        <div key={report._id || report.id} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all group">
-                            <div className="h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
-                            <div className="p-7">
-                                {/* Top */}
-                                <div className="flex items-start justify-between mb-5">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-maroon rounded-2xl flex items-center justify-center shadow-lg shrink-0">
-                                            <BookOpen className="w-5 h-5 text-gold" />
-                                        </div>
-                                        <div>
-                                            <h3 className="text-base font-black text-maroon leading-tight">{report.course_unit || report.student_name}</h3>
-                                            <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mt-0.5">{report.reporting_period}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <span className={`px-3 py-1 rounded-full font-black text-[8px] uppercase tracking-widest border ${report.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' :
-                                            report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' :
-                                                'bg-red-50 border-red-200 text-red-600'
-                                            }`}>
-                                            {report.recommendation}
-                                        </span>
-                                        <div className="flex gap-1.5 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => setViewingReport(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="View Full Report">
-                                                <Eye className="w-3.5 h-3.5 text-maroon/40" />
-                                            </button>
-                                            <button onClick={() => handleDownload(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Download PDF">
-                                                <FileDown className="w-3.5 h-3.5 text-maroon/40" />
-                                            </button>
-                                            {(user?.role === 'admin' || user?.role === 'superadmin' || user?.email === report.trainer_email) && (
-                                                <>
-                                                    <button onClick={() => handleEdit(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors">
-                                                        <Edit className="w-3.5 h-3.5 text-maroon/40" />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(report._id || report.id)} className="p-1.5 rounded-lg border border-red-100 hover:bg-red-50 transition-colors">
-                                                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Metrics */}
-                                <div className="grid grid-cols-3 gap-3 mb-5">
-                                    <div className="bg-maroon/3 rounded-xl p-3 border border-maroon/5 text-center">
-                                        <p className="text-lg font-black text-maroon">{attendancePct(report)}</p>
-                                        <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Attendance</p>
-                                    </div>
-                                    <div className="bg-maroon/3 rounded-xl p-3 border border-maroon/5 text-center">
-                                        <p className="text-lg font-black text-maroon">{report.theory_score ?? '—'}</p>
-                                        <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Theory Score</p>
-                                    </div>
-                                    <div className="bg-gold/8 rounded-xl p-3 border border-gold/15 text-center">
-                                        <p className="text-lg font-black text-maroon">{report.skill_level}</p>
-                                        <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Skill Level</p>
-                                    </div>
-                                </div>
-
-                                {/* Observations */}
-                                {report.trainer_observations && (
-                                    <div className="bg-maroon/3 rounded-xl p-4 border border-maroon/5 mb-4">
-                                        <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Trainer Observations</p>
-                                        <p className="text-xs text-maroon/70 font-medium leading-relaxed">{report.trainer_observations}</p>
-                                    </div>
-                                )}
-
-                                {/* Footer */}
-                                <div className="flex items-center justify-between border-t border-maroon/5 pt-4">
-                                    <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">
-                                        {report.trainer_name || report.trainer_email || 'Trainer'}
-                                    </p>
-                                    <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">
-                                        {report.created_at ? new Date(report.created_at).toLocaleDateString() : ''}
-                                    </p>
-                                </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {/* Department */}
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
+                                <select
+                                    value={filterDept}
+                                    onChange={e => { setFilterDept(e.target.value); setFilterCourse(''); }}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-maroon font-bold text-xs outline-none focus:ring-2 focus:ring-maroon/10"
+                                >
+                                    <option value="">All Departments</option>
+                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                            </div>
+                            {/* Course */}
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">Course</label>
+                                <select
+                                    value={filterCourse}
+                                    onChange={e => setFilterCourse(e.target.value)}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-maroon font-bold text-xs outline-none focus:ring-2 focus:ring-maroon/10"
+                                >
+                                    <option value="">All Courses</option>
+                                    {(filterDept
+                                        ? courses.filter(c => c.department === filterDept)
+                                        : courses
+                                    ).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            {/* Date From */}
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">Date From</label>
+                                <input
+                                    type="date"
+                                    value={filterDateFrom}
+                                    onChange={e => setFilterDateFrom(e.target.value)}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-maroon font-bold text-xs outline-none focus:ring-2 focus:ring-maroon/10"
+                                />
+                            </div>
+                            {/* Date To */}
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">Date To</label>
+                                <input
+                                    type="date"
+                                    value={filterDateTo}
+                                    onChange={e => setFilterDateTo(e.target.value)}
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-maroon font-bold text-xs outline-none focus:ring-2 focus:ring-maroon/10"
+                                />
                             </div>
                         </div>
-                    ))}
-                </div>
+                    </div>
+                )}
+
+                {/* ---------- ADMIN/SUPERADMIN: Grouped by Department > Course ---------- */}
+                {isAdminView ? (
+                    <div className="space-y-8">
+                        {Object.keys(groupedReports).sort().length === 0 && (
+                            <div className="text-center py-20 text-maroon/30 font-black uppercase tracking-widest text-sm">
+                                No reports match the selected filters.
+                            </div>
+                        )}
+                        {Object.keys(groupedReports).sort().map(dept => (
+                            <div key={dept} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm">
+                                {/* Department header */}
+                                <button
+                                    onClick={() => toggleDept(dept)}
+                                    className="w-full flex items-center justify-between px-6 py-3 bg-maroon/5 hover:bg-maroon/10 transition-colors rounded-2xl border border-maroon/5"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 bg-maroon/10 rounded-xl flex items-center justify-center">
+                                            <Layers className="w-4 h-4 text-maroon" />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="font-black text-maroon uppercase tracking-wider text-[11px]">{dept}</p>
+                                            <p className="text-[8px] font-bold text-maroon/40 uppercase tracking-widest leading-none mt-0.5">
+                                                {Object.keys(groupedReports[dept]).length} course{Object.keys(groupedReports[dept]).length !== 1 ? 's' : ''} &nbsp;·&nbsp;
+                                                {Object.values(groupedReports[dept]).reduce((sum, arr) => sum + arr.length, 0)} report{Object.values(groupedReports[dept]).reduce((sum, arr) => sum + arr.length, 0) !== 1 ? 's' : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {collapsedDepts[dept]
+                                        ? <ChevronRight className="w-4 h-4 text-maroon/40 rotate-90" />
+                                        : <ChevronDown className="w-4 h-4 text-maroon/40" />}
+                                </button>
+
+                                {!collapsedDepts[dept] && (
+                                    <div className="p-5 space-y-6">
+                                        {Object.keys(groupedReports[dept]).sort().map(courseName => (
+                                            <div key={courseName}>
+                                                {/* Course sub-header */}
+                                                <div className="flex items-center gap-2 mb-3 px-2">
+                                                    <BookOpen className="w-3.5 h-3.5 text-gold" />
+                                                    <p className="text-[10px] font-black text-maroon/60 uppercase tracking-widest">{courseName}</p>
+                                                    <span className="text-[9px] text-maroon/30 font-bold">({groupedReports[dept][courseName].length})</span>
+                                                    <div className="flex-1 h-px bg-maroon/5 ml-2" />
+                                                </div>
+                                                {/* Reports grid */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {groupedReports[dept][courseName].map((report) => (
+                                                        <div key={report._id || report.id} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all group">
+                                                            <div className="h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
+                                                            <div className="p-5">
+                                                                <div className="flex items-start justify-between mb-3">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-10 h-10 rounded-xl bg-maroon/10 flex items-center justify-center overflow-hidden shrink-0 border border-maroon/5">
+                                                                            {report.student_photo ? (
+                                                                                <img src={report.student_photo} alt="" className="w-full h-full object-cover" />
+                                                                            ) : (
+                                                                                <Users className="w-5 h-5 text-maroon/20" />
+                                                                            )}
+                                                                        </div>
+                                                                        <div>
+                                                                            <h3 className="text-base font-black text-maroon leading-tight">{report.course_unit || report.student_name}</h3>
+                                                                            <p className="text-[9px] font-black text-maroon/40 uppercase tracking-widest mt-0.5">{report.reporting_period}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex flex-col items-end gap-2">
+                                                                        <span className={`px-3 py-1 rounded-full font-black text-[8px] uppercase tracking-widest border ${report.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' : report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-red-50 border-red-200 text-red-600'}`}>{report.recommendation}</span>
+                                                                        <div className="flex gap-1.5 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                                                            <button onClick={() => setViewingReport(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="View"><Eye className="w-3.5 h-3.5 text-maroon/40" /></button>
+                                                                            <button onClick={() => handleDownload(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Download"><FileDown className="w-3.5 h-3.5 text-maroon/40" /></button>
+                                                                            {(user?.role === 'admin' || user?.role === 'superadmin' || user?.email === report.trainer_email) && (
+                                                                                <>
+                                                                                    <button onClick={() => handleEdit(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors"><Edit className="w-3.5 h-3.5 text-maroon/40" /></button>
+                                                                                    <button onClick={() => handleDelete(report._id || report.id)} className="p-1.5 rounded-lg border border-red-100 hover:bg-red-50 transition-colors"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                                                                                </>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                                                    <div className="bg-maroon/3 rounded-xl p-2 border border-maroon/5 text-center"><p className="text-sm font-black text-maroon">{attendancePct(report)}</p><p className="text-[7px] font-black text-maroon/30 uppercase tracking-widest">Attendance</p></div>
+                                                                    <div className="bg-maroon/3 rounded-xl p-2 border border-maroon/5 text-center"><p className="text-sm font-black text-maroon">{report.theory_score ?? '—'}</p><p className="text-[7px] font-black text-maroon/30 uppercase tracking-widest">Theory</p></div>
+                                                                    <div className="bg-gold/8 rounded-xl p-2 border border-gold/15 text-center"><p className="text-sm font-black text-maroon">{report.skill_level}</p><p className="text-[7px] font-black text-maroon/30 uppercase tracking-widest">Skill</p></div>
+                                                                </div>
+                                                                <div className="flex items-center justify-between border-t border-maroon/5 pt-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-6 h-6 rounded-full bg-maroon/10 flex items-center justify-center overflow-hidden shrink-0 border border-maroon/5">
+                                                                            {report.trainer_photo ? (
+                                                                                <img src={report.trainer_photo} alt="" className="w-full h-full object-cover" />
+                                                                            ) : (
+                                                                                <Users className="w-3.5 h-3.5 text-maroon/40" />
+                                                                            )}
+                                                                        </div>
+                                                                        <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">{report.trainer_name || 'Trainer'}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    /* TEACHER: flat list, newest first */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {filteredReports.length === 0 && (
+                            <div className="col-span-2 text-center py-20 text-maroon/30 font-black uppercase tracking-widest text-sm">
+                                No reports captured yet.
+                            </div>
+                        )}
+                        {filteredReports.map((report) => (
+                            <div key={report._id || report.id} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all group">
+                                <div className="h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
+                                <div className="p-7">
+                                    <div className="flex items-start justify-between mb-5">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 bg-maroon/10 rounded-2xl flex items-center justify-center shadow-lg shrink-0 overflow-hidden border border-maroon/5">
+                                                {report.student_photo ? (
+                                                    <img src={report.student_photo} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <Users className="w-6 h-6 text-maroon/20" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3 className="text-base font-black text-maroon leading-tight">{report.course_unit || report.student_name}</h3>
+                                                <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mt-0.5">{report.reporting_period}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col items-end gap-2">
+                                            <span className={`px-3 py-1 rounded-full font-black text-[8px] uppercase tracking-widest border ${report.recommendation === 'Proceed' ? 'bg-green-50 border-green-200 text-green-600' : report.recommendation === 'Improve' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'bg-red-50 border-red-200 text-red-600'}`}>{report.recommendation}</span>
+                                            <div className="flex gap-1.5 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => setViewingReport(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="View"><Eye className="w-3.5 h-3.5 text-maroon/40" /></button>
+                                                <button onClick={() => handleDownload(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors" title="Download"><FileDown className="w-3.5 h-3.5 text-maroon/40" /></button>
+                                                {(user?.role === 'admin' || user?.role === 'superadmin' || user?.email === report.trainer_email) && (
+                                                    <>
+                                                        <button onClick={() => handleEdit(report)} className="p-1.5 rounded-lg border border-maroon/10 hover:bg-maroon/5 transition-colors"><Edit className="w-3.5 h-3.5 text-maroon/40" /></button>
+                                                        <button onClick={() => handleDelete(report._id || report.id)} className="p-1.5 rounded-lg border border-red-100 hover:bg-red-50 transition-colors"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-3 mb-5">
+                                        <div className="bg-maroon/3 rounded-xl p-3 border border-maroon/5 text-center"><p className="text-lg font-black text-maroon">{attendancePct(report)}</p><p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Attendance</p></div>
+                                        <div className="bg-maroon/3 rounded-xl p-3 border border-maroon/5 text-center"><p className="text-lg font-black text-maroon">{report.theory_score ?? '—'}</p><p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Theory Score</p></div>
+                                        <div className="bg-gold/8 rounded-xl p-3 border border-gold/15 text-center"><p className="text-lg font-black text-maroon">{report.skill_level}</p><p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest">Skill Level</p></div>
+                                    </div>
+                                    {report.trainer_observations && (
+                                        <div className="bg-maroon/3 rounded-xl p-4 border border-maroon/5 mb-4">
+                                            <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Trainer Observations</p>
+                                            <p className="text-xs text-maroon/70 font-medium leading-relaxed">{report.trainer_observations}</p>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center justify-between border-t border-maroon/5 pt-4 mt-auto">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-maroon/10 flex items-center justify-center overflow-hidden shrink-0 border border-maroon/5">
+                                                {report.trainer_photo ? (
+                                                    <img src={report.trainer_photo} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <Users className="w-4 h-4 text-maroon/40" />
+                                                )}
+                                            </div>
+                                            <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">{report.trainer_name || report.trainer_email || 'Trainer'}</p>
+                                        </div>
+                                        <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">{report.created_at ? new Date(report.created_at).toLocaleDateString() : ''}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Capture / Edit Modal */}
                 {showModal && (

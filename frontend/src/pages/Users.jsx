@@ -4,7 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import {
     Shield, User, Mail, Trash2, CheckCircle, XCircle,
     MoreVertical, Key, Lock, Unlock, FileText,
-    Printer, Download, Eye, Clock, UserPlus, DollarSign
+    Printer, Download, Eye, Clock, UserPlus, DollarSign,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 export default function Users() {
@@ -15,6 +16,8 @@ export default function Users() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     const tabs = [
         'All Users', 'Students', 'Trainers', 'Admins', 'Suspended', 'Pending Approval'
@@ -301,25 +304,25 @@ export default function Users() {
     };
 
     return (
-        <div className="min-h-screen space-y-8 pb-20">
+        <div className="min-h-screen space-y-6 pb-20">
             {/* Header Area */}
-            <div className="bg-maroon p-10 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
+            <div className="bg-maroon p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 -rotate-45 translate-x-32 -translate-y-32"></div>
                 <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <Shield className="w-6 h-6 text-gold" />
-                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Administrative Command</span>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Shield className="w-4 h-4 text-gold" />
+                            <span className="text-[8px] font-black uppercase tracking-[0.4em] text-white/40">Administrative Command</span>
                         </div>
-                        <h1 className="text-4xl font-black uppercase tracking-tight leading-none mb-1">Central Registry</h1>
-                        <p className="text-white/60 font-medium tracking-wide">Governance and Identity Management System</p>
+                        <h1 className="text-2xl font-black uppercase tracking-tight leading-none mb-1">Central Registry</h1>
+                        <p className="text-[11px] text-white/60 font-medium tracking-wide">Governance and Identity Management System</p>
                     </div>
-                    <div className="flex gap-4">
-                        <button onClick={handlePrint} className="p-4 bg-white/10 hover:bg-white/20 rounded-2xl transition-all shadow-xl backdrop-blur-md border border-white/5 group">
-                            <Printer className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <div className="flex gap-3">
+                        <button onClick={handlePrint} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all shadow-lg backdrop-blur-md border border-white/5 group">
+                            <Printer className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         </button>
-                        <button onClick={handleDownload} className="p-4 bg-white/10 hover:bg-white/20 rounded-2xl transition-all shadow-xl backdrop-blur-md border border-white/5 group">
-                            <Download className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <button onClick={handleDownload} className="p-4 bg-white/10 hover:bg-white/20 rounded-xl transition-all shadow-lg backdrop-blur-md border border-white/5 group">
+                            <Download className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         </button>
                     </div>
                 </div>
@@ -327,13 +330,13 @@ export default function Users() {
 
             {/* Dashboard Search & Filter */}
             <div className="flex flex-col xl:flex-row gap-6 items-stretch xl:items-center justify-between">
-                <div className="flex-1 bg-white dark:bg-zinc-900 rounded-3xl p-2 border border-gray-100 dark:border-white/5 shadow-xl flex flex-wrap gap-1">
+                <div className="flex-1 bg-white dark:bg-zinc-900 rounded-2xl p-1.5 border border-gray-100 dark:border-white/5 shadow-lg flex flex-wrap gap-1">
                     {tabs.map(tab => (
                         <button
                             key={tab}
-                            onClick={() => setActiveTab(tab)}
-                            className={`px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab
-                                ? 'bg-maroon text-white shadow-lg'
+                            onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                            className={`px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab
+                                ? 'bg-maroon text-white shadow-md'
                                 : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5'
                                 }`}
                         >
@@ -341,31 +344,31 @@ export default function Users() {
                         </button>
                     ))}
                 </div>
-                <div className="w-full xl:w-96 relative">
+                <div className="w-full xl:w-80 relative">
                     <input
                         type="text"
-                        placeholder="SEARCH REGISTRY (NAME, EMAIL, ID)..."
+                        placeholder="SEARCH REGISTRY..."
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-3xl px-8 py-5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-maroon/5 focus:border-maroon transition-all shadow-xl"
+                        onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                        className="w-full bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-2xl px-6 py-4 text-[9px] font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-maroon/5 focus:border-maroon transition-all shadow-lg"
                     />
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-maroon/5 rounded-xl">
-                        <User className="w-4 h-4 text-maroon" />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-maroon/5 rounded-lg">
+                        <User className="w-3.5 h-3.5 text-maroon" />
                     </div>
                 </div>
             </div>
 
             {/* Structured Table Layout */}
-            <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-2xl border border-gray-100 dark:border-white/5 overflow-hidden">
+            <div className="bg-white dark:bg-zinc-900 rounded-[1.5rem] shadow-xl border border-gray-100 dark:border-white/5 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
-                                <th className="px-10 py-8 text-[11px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Institutional Identity</th>
-                                <th className="px-10 py-8 text-[11px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Security Class</th>
-                                <th className="px-10 py-8 text-[11px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Registry Date</th>
-                                <th className="px-10 py-8 text-[11px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Status</th>
-                                <th className="px-10 py-8 text-[11px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em] text-center">Actions</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Institutional Identity</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Security Class</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Registry Date</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em]">Status</th>
+                                <th className="px-6 py-4 text-[10px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em] text-center">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -384,48 +387,52 @@ export default function Users() {
                                         <p className="text-gray-400 font-bold uppercase tracking-widest text-sm">NO RECORDS FOUND IN "{activeTab.toUpperCase()}"</p>
                                     </td>
                                 </tr>
-                            ) : filteredUsers.map((u) => (
+                            ) : filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((u) => (
                                 <tr key={u.id} className="group hover:bg-maroon/[0.02] transition-all">
-                                    <td className="px-10 py-8">
-                                        <div className="flex items-center gap-6">
-                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-inner ${u.role === 'superadmin' ? 'bg-gold text-maroon' : 'bg-gray-100 dark:bg-white/5 text-gray-400'
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-inner overflow-hidden ${u.role === 'superadmin' ? 'bg-gold text-maroon' : 'bg-gray-100 dark:bg-white/5 text-gray-400'
                                                 }`}>
-                                                {(u.email?.[0] || 'U').toUpperCase()}
+                                                {u.photo ? (
+                                                    <img src={u.photo} alt="" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    (u.email?.[0] || 'U').toUpperCase()
+                                                )}
                                             </div>
                                             <div>
-                                                <p className="text-base font-black tracking-tight text-gray-900 dark:text-white uppercase">{u.name || (u.email?.split('@')[0] || 'Unknown User')}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{u.email}</p>
+                                                <p className="text-sm font-black tracking-tight text-gray-900 dark:text-white uppercase">{u.name || (u.email?.split('@')[0] || 'Unknown User')}</p>
+                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{u.email}</p>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-10 py-8">
-                                        <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] border ${u.role === 'superadmin' ? 'bg-gold/10 border-gold/20 text-gold' : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500'
+                                    <td className="px-6 py-4">
+                                        <span className={`px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-[0.2em] border ${u.role === 'superadmin' ? 'bg-gold/10 border-gold/20 text-gold' : 'bg-gray-100 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500'
                                             }`}>
                                             {u.role === 'teacher' ? 'FACULTY' : u.role}
                                         </span>
                                         {/* Finance Editor badge */}
                                         {u.can_edit_finance && u.role === 'admin' && (
-                                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest bg-gold/10 text-gold border border-gold/20">
-                                                <DollarSign className="w-2.5 h-2.5" /> Finance
+                                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest bg-gold/10 text-gold border border-gold/20">
+                                                <DollarSign className="w-2 h-2" /> Finance
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-10 py-8">
+                                    <td className="px-6 py-4">
                                         <div className="flex items-center gap-2 text-gray-400 font-bold tracking-tight">
-                                            <Clock className="w-4 h-4" />
-                                            <span className="text-xs uppercase">{new Date(u.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                                            <Clock className="w-3.5 h-3.5" />
+                                            <span className="text-[10px] uppercase">{new Date(u.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
                                         </div>
                                     </td>
-                                    <td className="px-10 py-8">
-                                        <div className="flex flex-col gap-1.5">
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1">
                                             {/* Account status (admin-set) */}
-                                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest border w-fit ${u.status === 'Active'
+                                            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest border w-fit ${u.status === 'Active'
                                                 ? 'bg-green-500/10 border-green-500/20 text-green-600'
                                                 : u.status === 'Suspended' || u.status === 'Inactive'
                                                     ? 'bg-red-500/10 border-red-500/20 text-red-600'
                                                     : 'bg-gold/10 border-gold/20 text-gold'
                                                 }`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500' : u.status === 'Suspended' ? 'bg-red-500' : 'bg-gold'
+                                                <div className={`w-1 h-1 rounded-full ${u.status === 'Active' ? 'bg-green-500' : u.status === 'Suspended' ? 'bg-red-500' : 'bg-gold'
                                                     }`}></div>
                                                 {u.status}
                                             </div>
@@ -433,38 +440,38 @@ export default function Users() {
                                             {u.status === 'Active' && <PresenceBadge onlineStatus={u.online_status} />}
                                         </div>
                                     </td>
-                                    <td className="px-10 py-8">
-                                        <div className="flex justify-center gap-3">
+                                    <td className="px-6 py-4">
+                                        <div className="flex justify-center gap-2">
                                             <button
                                                 onClick={() => { setSelectedUser(u); setShowDetailModal(true); }}
-                                                className="p-3 bg-blue-500/10 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all shadow-md group border border-blue-500/10"
+                                                className="p-2.5 bg-blue-500/10 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all shadow-sm group border border-blue-500/10"
                                                 title="View Registry"
                                             >
-                                                <Eye className="w-4 h-4 group-active:scale-95" />
+                                                <Eye className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => handleResetPassword(u.id, u.email)}
-                                                className="p-3 bg-gold/10 text-gold hover:bg-gold hover:text-white rounded-xl transition-all shadow-md group border border-gold/5"
+                                                className="p-2.5 bg-gold/10 text-gold hover:bg-gold hover:text-white rounded-lg transition-all shadow-sm group border border-gold/5"
                                                 title="Reset Credentials"
                                             >
-                                                <Key className="w-4 h-4 group-active:scale-95" />
+                                                <Key className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => handleStatusUpdate(u.id, u.status === 'Active' ? 'Suspended' : 'Active')}
-                                                className={`p-3 rounded-xl transition-all shadow-md group border ${u.status === 'Active'
+                                                className={`p-2.5 rounded-lg transition-all shadow-sm group border ${u.status === 'Active'
                                                     ? 'bg-red-500/10 text-red-600 hover:bg-red-600 hover:text-white border-red-500/5'
                                                     : 'bg-green-500/10 text-green-600 hover:bg-green-600 hover:text-white border-green-500/5'
                                                     }`}
                                                 title={u.status === 'Active' ? 'Lock Account' : 'Activate Account'}
                                             >
-                                                {u.status === 'Active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                                                {u.status === 'Active' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(u.id, u.email)}
-                                                className="p-3 bg-red-500/5 text-red-400 hover:bg-red-600 hover:text-white rounded-xl transition-all shadow-sm group border border-red-500/5"
+                                                className="p-2.5 bg-red-500/5 text-red-400 hover:bg-red-600 hover:text-white rounded-lg transition-all shadow-sm group border border-red-500/5"
                                                 title="Dismiss Record"
                                             >
-                                                <Trash2 className="w-4 h-4" />
+                                                <Trash2 className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
                                     </td>
@@ -473,14 +480,48 @@ export default function Users() {
                         </tbody>
                     </table>
                 </div>
-                <div className="bg-gray-50 dark:bg-white/5 px-10 py-6 border-t border-gray-100 dark:border-white/5 flex justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                    <span>Registry Version 4.0.1</span>
-                    <div className="flex gap-8">
-                        <span>Total Records: {users.length}</span>
+                <div className="bg-gray-50 dark:bg-white/5 px-6 py-4 border-t border-gray-100 dark:border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">
+                        Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredUsers.length)} of {filteredUsers.length} records
+                    </div>
+
+                    {filteredUsers.length > itemsPerPage && (
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg border border-maroon/10 hover:bg-maroon hover:text-white transition-all disabled:opacity-30"
+                            >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            {[...Array(Math.ceil(filteredUsers.length / itemsPerPage))].map((_, i) => (
+                                <button
+                                    key={i + 1}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-7 h-7 rounded-lg text-[9px] font-black uppercase transition-all ${
+                                        currentPage === i + 1 
+                                            ? 'bg-maroon text-white shadow-md' 
+                                            : 'border border-maroon/10 text-maroon hover:bg-maroon/5'
+                                    }`}
+                                >
+                                    {i + 1}
+                                </button>
+                            )).slice(Math.max(0, currentPage - 3), Math.min(Math.ceil(filteredUsers.length / itemsPerPage), currentPage + 2))}
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(Math.ceil(filteredUsers.length / itemsPerPage), prev + 1))}
+                                disabled={currentPage === Math.ceil(filteredUsers.length / itemsPerPage)}
+                                className="p-2 rounded-lg border border-maroon/10 hover:bg-maroon hover:text-white transition-all disabled:opacity-30"
+                            >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex gap-4 text-[9px] font-black uppercase tracking-[0.2em] text-gray-400">
                         <span>Authorized: {users.filter(u => u.status === 'Active').length}</span>
-                        <span className="text-green-500 flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping inline-block"></span>
-                            Online Now: {users.filter(u => u.online_status === 'Online').length}
+                        <span className="text-green-500 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-green-500 animate-ping inline-block"></span>
+                            Online: {users.filter(u => u.online_status === 'Online').length}
                         </span>
                     </div>
                 </div>

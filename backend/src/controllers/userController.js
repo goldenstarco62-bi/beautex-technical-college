@@ -34,7 +34,7 @@ export async function getAllUsers(req, res) {
         }
 
         const users = await query(
-            'SELECT id, email, role, status, name, created_at, last_seen_at, can_edit_finance FROM users ORDER BY email'
+            'SELECT id, email, role, status, name, photo, created_at, last_seen_at, can_edit_finance FROM users ORDER BY email'
         );
 
         const enriched = users.map(u => ({
@@ -151,18 +151,42 @@ export async function deleteUser(req, res) {
 
 export async function getAuditLogs(req, res) {
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
+
         if (await isMongo()) {
             const AuditLog = (await import('../models/mongo/AuditLog.js')).default;
-            const logs = await AuditLog.find().sort({ created_at: -1 }).limit(100);
-            return res.json(logs);
+            const total = await AuditLog.countDocuments();
+            const logs = await AuditLog.find().sort({ created_at: -1 }).skip(offset).limit(limit);
+            return res.json({
+                logs,
+                pagination: {
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit)
+                }
+            });
         }
 
+        const totalRes = await queryOne('SELECT COUNT(*) as count FROM audit_logs');
+        const total = totalRes ? totalRes.count : 0;
         const logs = await query(`
             SELECT * FROM audit_logs 
             ORDER BY created_at DESC 
-            LIMIT 100
-        `);
-        res.json(logs);
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
+
+        res.json({
+            logs,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         console.error('Get audit logs error:', error);
         res.status(500).json({ error: 'Failed to fetch audit logs' });

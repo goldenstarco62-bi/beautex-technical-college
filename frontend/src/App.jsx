@@ -64,7 +64,6 @@ function App() {
                         {/* FIX: /change-password now requires a token to prevent anonymous access */}
                         <Route path="/change-password" element={<SemiProtectedRoute><ChangePassword /></SemiProtectedRoute>} />
                         <Route path="/reset-password" element={<ResetPassword />} />
-                        <Route path="/debug" element={<div className="p-10 text-green-600 font-bold">Debug Route Active</div>} />
 
                         <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
                         <Route path="/students" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Students /></Layout></ProtectedRoute>} />

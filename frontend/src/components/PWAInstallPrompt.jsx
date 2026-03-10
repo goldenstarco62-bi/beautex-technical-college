@@ -7,7 +7,6 @@ const PWAInstallPrompt = () => {
 
     useEffect(() => {
         const handler = (e) => {
-            console.info('📱 [PWA] Install prompt detected.');
             // Prevent Chrome 67 and earlier from automatically showing the prompt
             e.preventDefault();
             // Stash the event so it can be triggered later.
@@ -35,9 +34,6 @@ const PWAInstallPrompt = () => {
         deferredPrompt.prompt();
 
         // Wait for the user to respond to the prompt
-        const { outcome } = await deferredPrompt.userChoice;
-        console.log(`User response to the install prompt: ${outcome}`);
-
         // We've used the prompt, and can't use it again, throw it away
         setDeferredPrompt(null);
         setIsVisible(false);

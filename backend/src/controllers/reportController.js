@@ -27,23 +27,28 @@ export const getAllReports = async (req, res) => {
             return res.json(reports);
         }
 
-        let sql = 'SELECT * FROM academic_reports';
+        let sql = `
+            SELECT r.*, u.photo as trainer_photo, s.photo as student_photo
+            FROM academic_reports r
+            LEFT JOIN users u ON LOWER(TRIM(r.trainer_email)) = LOWER(TRIM(u.email))
+            LEFT JOIN students s ON LOWER(TRIM(r.student_id)) = LOWER(TRIM(s.id))
+        `;
         let params = [];
         let conditions = [];
 
         // Student isolation
         if (req.user?.role === 'student') {
             const studentId = req.user?.student_id || req.user?.id;
-            conditions.push('LOWER(TRIM(student_id)) = LOWER(TRIM(?))');
+            conditions.push('LOWER(TRIM(r.student_id)) = LOWER(TRIM(?))');
             params.push(String(studentId));
         } else if (trainer_email) {
-            conditions.push('LOWER(TRIM(trainer_email)) = LOWER(TRIM(?))');
+            conditions.push('LOWER(TRIM(r.trainer_email)) = LOWER(TRIM(?))');
             params.push(String(trainer_email).toLowerCase().trim());
         } else if (course) {
-            conditions.push('course_unit = ?');
+            conditions.push('r.course_unit = ?');
             params.push(course);
         } else if (req.user?.role === 'teacher') {
-            conditions.push('LOWER(TRIM(trainer_email)) = LOWER(TRIM(?))');
+            conditions.push('LOWER(TRIM(r.trainer_email)) = LOWER(TRIM(?))');
             params.push(String(req.user.email || '').toLowerCase().trim());
         }
 
@@ -51,7 +56,7 @@ export const getAllReports = async (req, res) => {
             sql += ' WHERE ' + conditions.join(' AND ');
         }
 
-        sql += ' ORDER BY created_at DESC';
+        sql += ' ORDER BY r.created_at DESC';
 
         const reports = await query(sql, params);
 

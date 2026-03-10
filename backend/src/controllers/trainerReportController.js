@@ -21,11 +21,21 @@ export const getAllReports = async (req, res) => {
             return res.json(reports);
         }
 
-        let sql = 'SELECT * FROM trainer_reports ORDER BY report_date DESC';
+        let sql = `
+            SELECT tr.*, u.photo as trainer_photo
+            FROM trainer_reports tr
+            LEFT JOIN users u ON CAST(tr.trainer_id AS TEXT) = CAST(u.id AS TEXT)
+            ORDER BY tr.report_date DESC
+        `;
         let params = [];
         if (role === 'teacher') {
-            // FIX: Cast to string for comparison since SQLite id is INTEGER, JWT id may be string
-            sql = 'SELECT * FROM trainer_reports WHERE CAST(trainer_id AS TEXT) = ? ORDER BY report_date DESC';
+            sql = `
+                SELECT tr.*, u.photo as trainer_photo
+                FROM trainer_reports tr
+                LEFT JOIN users u ON CAST(tr.trainer_id AS TEXT) = CAST(u.id AS TEXT)
+                WHERE CAST(tr.trainer_id AS TEXT) = ?
+                ORDER BY tr.report_date DESC
+            `;
             params = [String(id)];
         }
         const reports = await query(sql, params);
