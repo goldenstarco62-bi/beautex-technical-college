@@ -117,7 +117,7 @@ export const createReport = async (req, res) => {
     const parseNum = (val) => {
         if (val === '' || val === null || val === undefined) return 0;
         const num = parseFloat(val);
-        return isNaN(num) ? 0 : num;
+        return isFinite(num) ? num : 0;
     };
 
     try {
@@ -208,6 +208,15 @@ export const updateReport = async (req, res) => {
     const { id } = req.params;
     const reportData = req.body;
 
+    console.log('Update Report ID:', id);
+    console.log('Update Payload:', reportData);
+
+    const parseNum = (val) => {
+        if (val === '' || val === null || val === undefined) return 0;
+        const num = parseFloat(val);
+        return isFinite(num) ? num : 0;
+    };
+
     try {
         if (await isMongo()) {
             const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
@@ -218,9 +227,27 @@ export const updateReport = async (req, res) => {
                 return res.status(403).json({ error: 'Forbidden: You can only edit your own reports' });
             }
 
+            const allowedFields = [
+                'student_id', 'student_name', 'registration_number', 'course_unit',
+                'trainer_name', 'reporting_period', 'total_lessons', 'attended_lessons',
+                'attendance_percentage', 'theory_topics', 'theory_score', 'theory_remarks',
+                'practical_tasks', 'equipment_used', 'skill_level', 'safety_compliance',
+                'discipline_issues', 'trainer_observations', 'progress_summary', 'recommendation'
+            ];
+            const updates = {};
+            Object.keys(reportData).forEach(k => {
+                if (allowedFields.includes(k)) {
+                    if (['total_lessons', 'attended_lessons', 'theory_score', 'attendance_percentage'].includes(k)) {
+                        updates[k] = parseNum(reportData[k]);
+                    } else {
+                        updates[k] = reportData[k];
+                    }
+                }
+            });
+
             const updatedReport = await AcademicReport.findByIdAndUpdate(
                 id,
-                { $set: { ...reportData, updated_at: new Date() } },
+                { $set: { ...updates, updated_at: new Date() } },
                 { new: true, runValidators: true }
             );
             return res.json(updatedReport);
@@ -233,11 +260,23 @@ export const updateReport = async (req, res) => {
             return res.status(403).json({ error: 'Forbidden: You can only edit your own reports' });
         }
 
-        const fields = Object.keys(reportData).filter(k => !['id', 'created_at', 'updated_at', 'trainer_email'].includes(k));
-        if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+        const allowedFields = [
+            'student_id', 'student_name', 'registration_number', 'course_unit',
+            'trainer_name', 'reporting_period', 'total_lessons', 'attended_lessons',
+            'attendance_percentage', 'theory_topics', 'theory_score', 'theory_remarks',
+            'practical_tasks', 'equipment_used', 'skill_level', 'safety_compliance',
+            'discipline_issues', 'trainer_observations', 'progress_summary', 'recommendation'
+        ];
+        const fields = Object.keys(reportData).filter(k => allowedFields.includes(k));
+        if (fields.length === 0) return res.status(400).json({ error: 'No valid fields provided for update' });
 
         const setClause = fields.map(f => `${f} = ?`).join(', ');
-        const values = fields.map(f => reportData[f]);
+        const values = fields.map(f => {
+            if (['total_lessons', 'attended_lessons', 'theory_score', 'attendance_percentage'].includes(f)) {
+                return parseNum(reportData[f]);
+            }
+            return reportData[f];
+        });
         values.push(id);
 
         await run(`UPDATE academic_reports SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, values);
@@ -245,6 +284,6 @@ export const updateReport = async (req, res) => {
         res.json(updatedReport);
     } catch (error) {
         console.error('Error updating report:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: 'Internal server error', detail: error.message });
     }
 };

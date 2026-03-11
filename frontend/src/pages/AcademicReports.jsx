@@ -269,7 +269,9 @@ export default function AcademicReports() {
             setTheoryRows([{ topic: '', content: '' }]);
             setPracticalRows([{ task: '', equipment: '' }]);
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to submit report');
+            const errorMsg = error.response?.data?.error || 'Failed to submit report';
+            const detail = error.response?.data?.detail;
+            alert(detail ? `${errorMsg}\n\nDetail: ${detail}` : errorMsg);
         }
     };
 

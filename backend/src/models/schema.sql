@@ -434,7 +434,7 @@ CREATE TABLE IF NOT EXISTS student_daily_reports (
   student_name TEXT NOT NULL,
   course TEXT NOT NULL,
   report_date DATE NOT NULL,
-  topics_covered TEXT NOT NULL,
+  topics_covered TEXT,
   trainer_remarks TEXT,
   trainer_name TEXT NOT NULL,
   trainer_email TEXT NOT NULL,

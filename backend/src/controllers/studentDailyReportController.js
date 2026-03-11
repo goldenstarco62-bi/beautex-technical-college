@@ -144,7 +144,7 @@ export const createDailyReport = async (req, res) => {
         } catch (e) { }
     }
 
-    if (!student_id || !course || !report_date || !topics_covered) {
+    if (!student_id || !course || !report_date) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 

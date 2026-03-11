@@ -21,7 +21,7 @@ const studentDailyReportSchema = new mongoose.Schema({
     },
     topics_covered: {
         type: String,
-        required: true
+        required: false
     },
     trainer_remarks: {
         type: String

@@ -179,10 +179,13 @@ export default function Attendance() {
             return;
         }
 
+        // No longer mandatory
+        /*
         if (!topicsCovered) {
             setError('Please describe topics covered before saving the ledger.');
             return;
         }
+        */
 
         try {
             setSaving(true);
@@ -310,7 +313,7 @@ export default function Attendance() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-3">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Topics & Delivery Coverage</label>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Topics & Delivery Coverage (Optional)</label>
                                 <textarea
                                     value={topicsCovered}
                                     onChange={(e) => setTopicsCovered(e.target.value)}
@@ -319,7 +322,7 @@ export default function Attendance() {
                                 />
                             </div>
                             <div className="space-y-3">
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Trainer Remarks</label>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Trainer Remarks (Optional)</label>
                                 <textarea
                                     value={trainerRemarks}
                                     onChange={(e) => setTrainerRemarks(e.target.value)}
