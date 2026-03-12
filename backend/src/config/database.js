@@ -165,6 +165,19 @@ export async function initializeDatabase() {
             }
 
             await runPostgresMigrations(database);
+
+            // ─── INVENTORY MODULE (POSTGRES) ──────────────────────────────
+            const pgInvSchemaPath = path.join(__dirname, '../models/postgres_inventory_schema.sql');
+            if (fs.existsSync(pgInvSchemaPath)) {
+                console.log('📦 Initializing Inventory Module for PostgreSQL...');
+                const pgInvSchema = fs.readFileSync(pgInvSchemaPath, 'utf-8');
+                try {
+                    await database.query(pgInvSchema);
+                    console.log('✅ Inventory schema initialized (PostgreSQL)');
+                } catch (e) {
+                    console.warn('⚠️ Inventory schema warning (PostgreSQL):', e.message);
+                }
+            }
             return;
         }
 
@@ -690,10 +703,38 @@ async function runSqliteMigrations(database) {
             console.log('✅ student_commented_at column added to student_daily_reports (SQLite)');
         }
 
+        // ─── INVENTORY MODULE TABLES ─────────────────────────────────────
+        const inventorySchemaPath = path.join(__dirname, '../models/inventory_schema.sql');
+        if (fs.existsSync(inventorySchemaPath)) {
+            const invSchema = fs.readFileSync(inventorySchemaPath, 'utf-8');
+            try {
+                await database.exec(invSchema);
+                console.log('✅ Inventory schema initialized (SQLite)');
+            } catch (e) {
+                if (!e.message?.includes('already exists') && !e.message?.includes('UNIQUE constraint')) {
+                    console.warn('⚠️ Inventory schema warning:', e.message);
+                }
+            }
+        }
+
     } catch (error) {
         console.error('⚠️ SQLite migration warning:', error.message);
     }
 }
+
+/**
+ * Translate SQLite-specific functions to PostgreSQL equivalents
+ */
+const translateSqlForPostgres = (sql) => {
+    let pgSql = sql;
+    // Handle date('now') -> CURRENT_DATE
+    pgSql = pgSql.replace(/date\('now'\)/gi, 'CURRENT_DATE');
+    // Handle date('now', '+30 days') or date('now', '-30 days') -> CURRENT_DATE + INTERVAL '30 days'
+    pgSql = pgSql.replace(/date\('now',\s*'([+-])\s*(\d+)\s+days'\)/gi, "CURRENT_DATE $1 INTERVAL '$2 days'");
+    // Handle datetime('now') -> CURRENT_TIMESTAMP
+    pgSql = pgSql.replace(/datetime\('now'\)/gi, 'CURRENT_TIMESTAMP');
+    return pgSql;
+};
 
 /**
  * Generic query function
@@ -703,9 +744,16 @@ export async function query(sql, params = []) {
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
-        const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
-        const result = await database.query(pgSql, sanitizedParams);
-        return result.rows;
+        let pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
+        try {
+            const result = await database.query(pgSql, sanitizedParams);
+            return result.rows;
+        } catch (err) {
+            console.error('🐘 Postgres Query Error:', err.message);
+            console.error('SQL:', pgSql);
+            console.error('Params:', sanitizedParams);
+            throw err;
+        }
     }
     return database.all(sql, sanitizedParams);
 }
@@ -718,9 +766,15 @@ export async function queryOne(sql, params = []) {
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
-        const pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
-        const result = await database.query(pgSql, sanitizedParams);
-        return result.rows[0];
+        let pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
+        try {
+            const result = await database.query(pgSql, sanitizedParams);
+            return result.rows[0];
+        } catch (err) {
+            console.error('🐘 Postgres QueryOne Error:', err.message);
+            console.error('SQL:', pgSql);
+            throw err;
+        }
     }
     return database.get(sql, sanitizedParams);
 }
@@ -733,7 +787,7 @@ export async function run(sql, params = []) {
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
-        let pgSql = sql.replace(/\?/g, () => `$${++paramCount}`);
+        let pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
 
         pgSql = pgSql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
 
@@ -764,11 +818,17 @@ export async function run(sql, params = []) {
             pgSql += ' RETURNING id';
         }
 
-        const result = await database.query(pgSql, sanitizedParams);
-
-        // For Postgres, the result of RETURNING id is in result.rows[0].id
-        const lastID = (result.rows && result.rows[0]) ? result.rows[0].id : null;
-        return { lastID, changes: result.rowCount };
+        try {
+            const result = await database.query(pgSql, sanitizedParams);
+            // For Postgres, the result of RETURNING id is in result.rows[0].id
+            const lastID = (result.rows && result.rows[0]) ? (result.rows[0].id || result.rows[0].ID) : null;
+            return { lastID, changes: result.rowCount };
+        } catch (err) {
+            console.error('🐘 Postgres Run Error:', err.message);
+            console.error('SQL:', pgSql);
+            console.error('Params:', sanitizedParams);
+            throw err;
+        }
     }
     return database.run(sql, sanitizedParams);
 }

@@ -240,5 +240,55 @@ export const studentDailyReportsAPI = {
     delete: (id) => api.delete(`student-daily-reports/${id}`),
 };
 
+// Inventory Management
+export const inventoryAPI = {
+    getDashboard: () => api.get('inventory/dashboard'),
+    // Categories
+    getCategories: () => api.get('inventory/categories'),
+    createCategory: (data) => api.post('inventory/categories', data),
+    updateCategory: (id, data) => api.put(`inventory/categories/${id}`, data),
+    deleteCategory: (id) => api.delete(`inventory/categories/${id}`),
+    // Locations
+    getLocations: () => api.get('inventory/locations'),
+    createLocation: (data) => api.post('inventory/locations', data),
+    deleteLocation: (id) => api.delete(`inventory/locations/${id}`),
+    // Items
+    getItems: (params) => api.get('inventory/items', { params }),
+    getItem: (id) => api.get(`inventory/items/${id}`),
+    createItem: (data) => api.post('inventory/items', data),
+    updateItem: (id, data) => api.put(`inventory/items/${id}`, data),
+    deleteItem: (id) => api.delete(`inventory/items/${id}`),
+    // Suppliers
+    getSuppliers: () => api.get('inventory/suppliers'),
+    createSupplier: (data) => api.post('inventory/suppliers', data),
+    updateSupplier: (id, data) => api.put(`inventory/suppliers/${id}`, data),
+    deleteSupplier: (id) => api.delete(`inventory/suppliers/${id}`),
+    // Stock In/Out
+    getStockIn: () => api.get('inventory/stock-in'),
+    createStockIn: (data) => api.post('inventory/stock-in', data),
+    getStockOut: () => api.get('inventory/stock-out'),
+    createStockOut: (data) => api.post('inventory/stock-out', data),
+    // Department Requests
+    getRequests: (params) => api.get('inventory/requests', { params }),
+    createRequest: (data) => api.post('inventory/requests', data),
+    updateRequest: (id, data) => api.put(`inventory/requests/${id}`, data),
+    deleteRequest: (id) => api.delete(`inventory/requests/${id}`),
+    // Purchase Requests
+    getPurchases: () => api.get('inventory/purchases'),
+    createPurchase: (data) => api.post('inventory/purchases', data),
+    updatePurchase: (id, data) => api.put(`inventory/purchases/${id}`, data),
+    deletePurchase: (id) => api.delete(`inventory/purchases/${id}`),
+    // Assets
+    getAssets: () => api.get('inventory/assets'),
+    createAsset: (data) => api.post('inventory/assets', data),
+    updateAsset: (id, data) => api.put(`inventory/assets/${id}`, data),
+    deleteAsset: (id) => api.delete(`inventory/assets/${id}`),
+    // Damage Logs
+    getDamageLogs: () => api.get('inventory/damage-logs'),
+    createDamageLog: (data) => api.post('inventory/damage-logs', data),
+    // Reports
+    getReport: (type) => api.get(`inventory/reports/${type}`),
+};
+
 export default api;
 

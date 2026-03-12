@@ -21,6 +21,7 @@ import * as profileController from '../controllers/profileController.js';
 import * as interactionController from '../controllers/interactionController.js';
 import * as trainerReportController from '../controllers/trainerReportController.js';
 import * as studentDailyReportController from '../controllers/studentDailyReportController.js';
+import * as inventoryController from '../controllers/inventoryController.js';
 import { authorizeRoles } from '../middleware/auth.js';
 import { authorizeFinanceEdit } from '../middleware/auth.js';
 
@@ -75,6 +76,23 @@ router.post('/auth/change-password', authenticateToken, authController.changePas
 router.post('/auth/forgot-password', authController.forgotPassword);
 router.post('/auth/reset-password', authController.resetPassword);
 router.get('/auth/me', authenticateToken, authController.getMe);
+
+// Debug Route
+router.get('/debug/schema/:table', async (req, res) => {
+    try {
+        const { table } = req.params;
+        const { query } = await import('../config/database.js');
+        if (process.env.DATABASE_URL) {
+            const cols = await query(`SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = ?`, [table]);
+            return res.json({ type: 'postgres', table, columns: cols });
+        } else {
+            const cols = await query(`PRAGMA table_info(${table})`);
+            return res.json({ type: 'sqlite', table, columns: cols });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // Student routes (protected)
 router.get('/students', authenticateToken, studentController.getAllStudents);
@@ -240,6 +258,67 @@ router.get('/student-daily-reports', authenticateToken, studentDailyReportContro
 router.post('/student-daily-reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentDailyReportController.createDailyReport);
 router.patch('/student-daily-reports/:id/student-comment', authenticateToken, authorizeRoles('student'), studentDailyReportController.addStudentComment);
 router.delete('/student-daily-reports/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentDailyReportController.deleteDailyReport);
+
+// ─── INVENTORY ROUTES ─────────────────────────────────────────────────────────
+// Inventory roles: admin/superadmin = full access | teacher = request only | accountant(admin) = view
+router.get('/inventory/dashboard', authenticateToken, authorizeRoles('admin', 'superadmin', 'teacher'), inventoryController.getDashboardStats);
+
+// Categories
+router.get('/inventory/categories', authenticateToken, inventoryController.getCategories);
+router.post('/inventory/categories', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createCategory);
+router.put('/inventory/categories/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updateCategory);
+router.delete('/inventory/categories/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deleteCategory);
+
+// Locations
+router.get('/inventory/locations', authenticateToken, inventoryController.getLocations);
+router.post('/inventory/locations', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createLocation);
+router.delete('/inventory/locations/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deleteLocation);
+
+// Items
+router.get('/inventory/items', authenticateToken, inventoryController.getItems);
+router.get('/inventory/items/:id', authenticateToken, inventoryController.getItem);
+router.post('/inventory/items', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('CREATE_INVENTORY_ITEM', 'inv_items'), inventoryController.createItem);
+router.put('/inventory/items/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updateItem);
+router.delete('/inventory/items/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deleteItem);
+
+// Suppliers
+router.get('/inventory/suppliers', authenticateToken, inventoryController.getSuppliers);
+router.post('/inventory/suppliers', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createSupplier);
+router.put('/inventory/suppliers/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updateSupplier);
+router.delete('/inventory/suppliers/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deleteSupplier);
+
+// Stock In
+router.get('/inventory/stock-in', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.getStockIn);
+router.post('/inventory/stock-in', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createStockIn);
+
+// Stock Out
+router.get('/inventory/stock-out', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.getStockOut);
+router.post('/inventory/stock-out', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createStockOut);
+
+// Department Requests
+router.get('/inventory/requests', authenticateToken, inventoryController.getDepartmentRequests);
+router.post('/inventory/requests', authenticateToken, inventoryController.createDepartmentRequest);
+router.put('/inventory/requests/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updateDepartmentRequest);
+router.delete('/inventory/requests/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deleteDepartmentRequest);
+
+// Purchase Requests
+router.get('/inventory/purchases', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.getPurchaseRequests);
+router.post('/inventory/purchases', authenticateToken, inventoryController.createPurchaseRequest);
+router.put('/inventory/purchases/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updatePurchaseRequest);
+router.delete('/inventory/purchases/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deletePurchaseRequest);
+
+// Assets
+router.get('/inventory/assets', authenticateToken, inventoryController.getAssets);
+router.post('/inventory/assets', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createAsset);
+router.put('/inventory/assets/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updateAsset);
+router.delete('/inventory/assets/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deleteAsset);
+
+// Damage Logs
+router.get('/inventory/damage-logs', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.getDamageLogs);
+router.post('/inventory/damage-logs', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createDamageLog);
+
+// Reports
+router.get('/inventory/reports/:type', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.getReport);
 
 // Multer error handler (file size & type errors)
 router.use((err, req, res, next) => {

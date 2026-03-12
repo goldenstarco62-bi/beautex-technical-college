@@ -1,0 +1,1284 @@
+import { useEffect, useState, useCallback } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { inventoryAPI } from '../services/api';
+import {
+    Package, BarChart3, Boxes, TrendingDown, ArrowUpFromLine, Clock, Calendar, 
+    AlertCircle, AlertTriangle, DollarSign, Activity, ShoppingCart, Truck,
+    Tags, Wrench, FileText, ClipboardList, Plus, Search, Layers, X, Eye, 
+    Pencil, Trash2, CheckCircle2, RefreshCcw, ArrowDownToLine, MapPin, PackageOpen,
+    Download, Scan, Filter, ChevronRight, MoreVertical, LayoutGrid, List, Info, TrendingUp,
+    Box, FileSpreadsheet, User, Building2, MessageSquare
+} from 'lucide-react';
+
+const Toast = ({ message, type, onClose }) => (
+    <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-4 px-8 py-4 rounded-2xl shadow-[0_20px_50px_-10px_rgba(0,0,0,0.3)] border animate-in slide-in-from-bottom-10 duration-500 ${
+        type === 'error' ? 'bg-rose-500 text-white border-rose-400' : 'bg-[#111] text-gold border-white/10'
+    }`}>
+        <p className="text-[10px] font-black uppercase tracking-[0.2em]">{message}</p>
+        <button onClick={onClose} className="p-1 hover:rotate-90 transition-transform"><X className="w-4 h-4" /></button>
+    </div>
+);
+
+const TABS = [
+    { id: 'dashboard', label: 'DASHBOARD', icon: BarChart3, roles: ['admin', 'superadmin', 'teacher'] },
+    { id: 'items', label: 'INVENTORY', icon: Package, roles: ['admin', 'superadmin', 'teacher'] },
+    { id: 'mystock', label: 'MY SUPPLIES', icon: Boxes, roles: ['admin', 'superadmin'] },
+    { id: 'requests', label: 'REQUISITIONS', icon: ClipboardList, roles: ['admin', 'superadmin', 'teacher'] },
+    { id: 'stock', label: 'STOCK LOGS', icon: Layers, roles: ['admin', 'superadmin'] },
+];
+
+const Modal = ({ title, onClose, children }) => (
+    <div className="fixed inset-0 bg-[#00000040] dark:bg-[#00000080] backdrop-blur-xl z-[100] flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
+        <div className="bg-white dark:bg-[#111] rounded-3xl shadow-[0_40px_100px_-20px_rgba(0,0,0,0.3)] w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-white/40 dark:border-white/5 ring-1 ring-black/5">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-gray-50/50 dark:border-white/5 bg-gray-50/30 dark:bg-white/[0.02]">
+                <div>
+                    <h3 className="text-sm font-black text-maroon dark:text-gold uppercase tracking-[0.3em] mb-1">{title}</h3>
+                    <div className="h-1 w-10 bg-maroon rounded-full" />
+                </div>
+                <button onClick={onClose} className="group p-3 bg-white dark:bg-black hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-500 rounded-2xl transition-all shadow-sm">
+                    <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+                </button>
+            </div>
+            <div className="p-6">{children}</div>
+        </div>
+    </div>
+);
+
+const InputField = ({ label, ...props }) => (
+    <div>
+        <label className="block text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">{label}</label>
+        <input className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-2xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all placeholder:text-gray-300 dark:placeholder:text-gray-600" {...props} />
+    </div>
+);
+
+const SelectField = ({ label, children, ...props }) => (
+    <div>
+        <label className="block text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">{label}</label>
+        <select className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-2xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all appearance-none" {...props}>
+            {children}
+        </select>
+    </div>
+);
+
+function ItemsTab() {
+    const { user } = useAuth();
+    const isAdmin = ['admin', 'superadmin'].includes((user?.role || '').toLowerCase());
+    const [items, setItems] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [locations, setLocations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [formData, setFormData] = useState({ 
+        name: '', 
+        category: '', 
+        quantity: 0, 
+        unit_type: 'Piece', 
+        minimum_stock_level: 5, 
+        location: '', 
+        purchase_price: 0, 
+        status: 'Available',
+        date_purchased: new Date().toISOString().split('T')[0],
+        serial_number: '',
+        image_url: ''
+    });
+    const [filterCategory, setFilterCategory] = useState('ALL');
+    const [toast, setToast] = useState(null);
+    const [sortBy, setSortBy] = useState('name');
+    const [sortOrder, setSortOrder] = useState('asc');
+    const [selectedItem, setSelectedItem] = useState(null);
+
+    const showToast = (msg, type = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 4000);
+    };
+
+    const loadData = useCallback(() => {
+        setLoading(true);
+        Promise.all([
+            inventoryAPI.getItems({ search }),
+            inventoryAPI.getCategories(),
+            inventoryAPI.getLocations()
+        ]).then(([i, c, l]) => {
+            setItems(i.data);
+            setCategories(c.data);
+            setLocations(l.data);
+        }).catch(err => {
+            showToast('LOGISTICS SYNC FAILED', 'error');
+            console.error(err);
+        }).finally(() => setLoading(false));
+    }, [search]);
+
+    useEffect(() => { loadData(); }, [loadData]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            await inventoryAPI.createItem(formData);
+            showToast('ASSET SECURED IN VAULT');
+            setShowAddModal(false);
+            loadData();
+            setFormData({ name: '', category: '', quantity: 0, unit_type: 'Piece', minimum_stock_level: 5, location: '', purchase_price: 0, status: 'Available', date_purchased: new Date().toISOString().split('T')[0], serial_number: '', image_url: '' });
+        } catch (e) { 
+            const msg = e.response?.data?.details || e.response?.data?.error || 'Failed to save';
+            showToast(msg.toUpperCase(), 'error'); 
+        }
+    };
+
+    const handleExport = () => {
+        const headers = ['Name', 'Category', 'Quantity', 'Location', 'Price', 'Serial Number'];
+        const csvContent = [
+            headers.join(','),
+            ...items.map(i => [i.name, i.category_name, i.quantity, i.location_name, i.purchase_price, i.serial_number].join(','))
+        ].join('\n');
+        
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `inventory_manifest_${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        showToast('MANIFEST EXPORTED');
+    };
+
+    const filteredItems = items
+        .filter(item => {
+            const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
+                                 item.item_code.toLowerCase().includes(search.toLowerCase()) ||
+                                 item.serial_number?.toLowerCase().includes(search.toLowerCase());
+            const matchesCat = filterCategory === 'ALL' || item.category_name?.toUpperCase().includes(filterCategory);
+            return matchesSearch && matchesCat;
+        })
+        .sort((a, b) => {
+            const factor = sortOrder === 'asc' ? 1 : -1;
+            if (sortBy === 'qty') return (a.quantity - b.quantity) * factor;
+            if (sortBy === 'price') return (a.purchase_price - b.purchase_price) * factor;
+            return a.name.localeCompare(b.name) * factor;
+        });
+
+    const toggleSort = (val) => {
+        if (sortBy === val) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        else setSortBy(val);
+    };
+
+    return (
+        <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
+            <div className="flex flex-col lg:flex-row gap-5 items-stretch justify-between">
+                <div className="flex flex-col md:flex-row gap-4 flex-1">
+                    <div className="relative flex-1 group animate-in slide-in-from-left-6 duration-700">
+                        <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-maroon transition-all" />
+                        <input 
+                            type="text" placeholder="QUERY LOGISTICS CLOUD..." 
+                            className="w-full pl-16 pr-8 py-5 bg-white dark:bg-[#111] border border-gray-100 dark:border-white/5 rounded-2xl text-[10px] font-black tracking-[0.2em] focus:outline-none focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm ring-1 ring-black/5"
+                            value={search} onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex gap-2 p-2 bg-gray-50/50 dark:bg-white/[0.02] rounded-2xl border border-black/5 dark:border-white/5">
+                        {['ALL', 'BEAUTY', 'ICT', 'ADMIN'].map(cat => (
+                            <button 
+                                key={cat}
+                                onClick={() => setFilterCategory(cat)}
+                                className={`px-6 py-3 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
+                                    filterCategory === cat ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' : 'text-gray-400 hover:text-maroon'
+                                }`}
+                            >
+                                {cat}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                {isAdmin && (
+                    <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => showToast('Asset Scanner Initializing...', 'success')}
+                            className="p-5 bg-white dark:bg-[#111] text-gray-400 hover:text-maroon border border-black/5 dark:border-white/5 rounded-2xl transition-all hover:scale-105"
+                        >
+                            <Scan className="w-5 h-5" />
+                        </button>
+                        <button 
+                            onClick={handleExport}
+                            className="p-5 bg-white dark:bg-[#111] text-gray-400 hover:text-maroon border border-black/5 dark:border-white/5 rounded-2xl transition-all hover:scale-105"
+                        >
+                            <Download className="w-5 h-5" />
+                        </button>
+                        <button 
+                            onClick={() => setShowAddModal(true)}
+                            className="flex items-center gap-4 bg-gradient-to-r from-maroon to-[#800000] hover:scale-[1.05] active:scale-95 text-gold px-6 py-5 rounded-2xl shadow-[0_20px_50px_-10px_rgba(128,0,0,0.3)] text-[11px] font-black uppercase tracking-[0.2em] transition-all border border-white/10"
+                        >
+                            <Plus className="w-5 h-5 stroke-[3]" /> NEW ASSET ENTRY
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
+            <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.08)] overflow-hidden ring-1 ring-black/5">
+                <div className="overflow-x-auto no-scrollbar">
+                    <table className="w-full border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50/30 dark:bg-white/[0.01] border-b border-gray-100 dark:border-white/5">
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em] cursor-pointer hover:text-maroon transition-colors" onClick={() => toggleSort('name')}>
+                                    Operational Unit {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Classification</th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em] cursor-pointer hover:text-maroon transition-colors" onClick={() => toggleSort('qty')}>
+                                    Status & Volume {sortBy === 'qty' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em] cursor-pointer hover:text-maroon transition-colors" onClick={() => toggleSort('price')}>
+                                    Valuation {sortBy === 'price' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                </th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Availability</th>
+                                <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Controls</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50/50 dark:divide-white/5">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="6" className="py-20 text-center">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <div className="w-12 h-12 border-4 border-maroon border-t-gold rounded-2xl animate-spin shadow-xl"></div>
+                                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.4em]">Deciphering Stock Lattice...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredItems.length === 0 ? (
+                                <tr>
+                                    <td colSpan="6" className="py-20 text-center text-gray-300 font-black italic uppercase tracking-[0.3em] opacity-40">No matching assets in local sector</td>
+                                </tr>
+                            ) : filteredItems.map(item => (
+                                <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.015] transition-all duration-300 group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-6">
+                                            <div className="relative">
+                                                <div className="w-14 h-14 rounded-2xl bg-gray-50 dark:bg-black flex items-center justify-center shadow-inner border border-black/5 dark:border-white/5 group-hover:scale-110 transition-transform overflow-hidden font-black text-maroon text-[8px]">
+                                                    {item.image_url ? <img src={item.image_url} className="w-full h-full object-cover" /> : <PackageOpen className="w-7 h-7" />}
+                                                </div>
+                                                {item.quantity <= item.minimum_stock_level && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full border-2 border-white dark:border-[#111] animate-pulse" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="text-[13px] font-black text-gray-900 dark:text-white uppercase tracking-tight leading-tight group-hover:text-maroon dark:group-hover:text-gold transition-colors">{item.name}</p>
+                                                <div className="flex items-center gap-3 mt-1.5 opacity-60">
+                                                    <p className="text-[8px] text-gray-400 font-black tracking-[0.2em] uppercase">SN: {item.serial_number || 'NORECORD'}</p>
+                                                    <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                                                    <p className="text-[8px] text-gray-400 font-black tracking-[0.2em] uppercase">{item.item_code}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-1.5">
+                                            <span className="text-[9px] font-black text-maroon dark:text-gold uppercase tracking-[0.2em] opacity-80">{item.category_name}</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <MapPin className="w-2.5 h-2.5 text-gray-400" />
+                                                <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{item.location_name || 'UNASSIGNED'}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col gap-3">
+                                            <div className="flex items-end justify-between w-36">
+                                                <div className="flex flex-col">
+                                                    <span className={`text-base font-black ${item.quantity <= item.minimum_stock_level ? 'text-rose-500' : 'text-gray-900 dark:text-white'} leading-none`}>
+                                                        {item.quantity}
+                                                    </span>
+                                                    <span className="text-[8px] font-black text-gray-400 uppercase tracking-[0.1em] mt-1">AVAILABLE UNIT</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-[8px] font-black uppercase tracking-widest ${item.quantity <= item.minimum_stock_level ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                                        {item.quantity <= item.minimum_stock_level ? 'CRITICAL' : 'OPTIMAL'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="w-36 h-1.5 bg-gray-100 dark:bg-black rounded-full overflow-hidden shadow-inner flex border border-black/5 dark:border-white/5">
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-1000 ${
+                                                        item.quantity <= item.minimum_stock_level 
+                                                            ? 'bg-gradient-to-r from-rose-500 to-red-400 shadow-[0_0_10px_rgba(244,63,94,0.4)]' 
+                                                            : 'bg-gradient-to-r from-emerald-500 to-emerald-400'
+                                                    }`}
+                                                    style={{ width: `${Math.min(100, (item.quantity / (item.minimum_stock_level * 4)) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col items-start gap-1">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Vault Price</p>
+                                            <p className="text-[11px] font-black text-gray-800 dark:text-white uppercase tracking-tight">KSh {item.purchase_price?.toLocaleString()}</p>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4"><StatusBadge status={item.status} /></td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex items-center justify-end gap-2 translate-x-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                                            <button onClick={() => setSelectedItem(item)} className="w-9 h-9 bg-white dark:bg-black hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Eye className="w-3.5 h-3.5" /></button>
+                                            {isAdmin && (
+                                                <>
+                                                    <button onClick={() => { setFormData(item); setShowAddModal(true); }} className="w-9 h-9 bg-white dark:bg-black hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Pencil className="w-3.5 h-3.5" /></button>
+                                                    <button className="w-9 h-9 bg-white dark:bg-black hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Asset Insight Theater */}
+            {selectedItem && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-3xl animate-in fade-in duration-500">
+                    <div className="absolute inset-0 bg-black/80" onClick={() => setSelectedItem(null)} />
+                    <div className="bg-white dark:bg-[#0a0a0a] w-full max-w-4xl rounded-2xl border border-white/10 shadow-[0_40px_100px_rgba(0,0,0,0.5)] overflow-hidden relative flex flex-col md:flex-row animate-in zoom-in-95 duration-700">
+                        <div className="md:w-1/2 bg-gray-100 dark:bg-black/50 p-6 flex items-center justify-center border-r border-white/5">
+                            {selectedItem.image_url ? (
+                                <img src={selectedItem.image_url} className="w-full h-auto rounded-3xl shadow-2xl" />
+                            ) : (
+                                <PackageOpen className="w-40 h-40 text-maroon/20" />
+                            )}
+                        </div>
+                        <div className="md:w-1/2 p-16 flex flex-col gap-6">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <span className="text-[10px] font-black text-maroon dark:text-gold uppercase tracking-[0.4em] mb-4 block">{selectedItem.category_name}</span>
+                                    <h2 className="text-3xl font-black text-gray-900 dark:text-white uppercase leading-none">{selectedItem.name}</h2>
+                                    <p className="text-xs font-bold text-gray-400 mt-4 uppercase tracking-widest">{selectedItem.item_code} • SN: {selectedItem.serial_number || 'NONE'}</p>
+                                </div>
+                                <button onClick={() => setSelectedItem(null)} className="p-4 hover:rotate-90 transition-transform"><X className="w-6 h-6 text-gray-400" /></button>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">Vault Balance</p>
+                                    <p className="text-2xl font-black text-gray-900 dark:text-white">{selectedItem.quantity} <span className="text-[10px] text-gray-400">{selectedItem.unit_type}s</span></p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">Valuation</p>
+                                    <p className="text-2xl font-black text-gray-900 dark:text-white">KSh {selectedItem.purchase_price?.toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">Logistic Hub</p>
+                                    <p className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{selectedItem.location_name || 'CENTRAL'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-2">Acquisition</p>
+                                    <p className="text-[11px] font-black text-gray-900 dark:text-white uppercase">{selectedItem.date_purchased || 'NO.REC'}</p>
+                                </div>
+                            </div>
+
+                            <div className="mt-auto flex gap-4">
+                                <button className="flex-1 bg-maroon text-gold py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-maroon/20">Commence Requisition</button>
+                                <button className="p-5 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-400 hover:text-maroon transition-all"><MoreVertical className="w-5 h-5" /></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showAddModal && (
+                <Modal title="Register New Inventory Item" onClose={() => setShowAddModal(false)}>
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <InputField 
+                                label="Item Name / Nomenclature" 
+                                value={formData.name} 
+                                onChange={e => setFormData({...formData, name: e.target.value})} 
+                                placeholder="e.g., Facial Cream Hydrating" 
+                                required 
+                            />
+                            <InputField 
+                                label="Serial Number / Identifier" 
+                                value={formData.serial_number} 
+                                onChange={e => setFormData({...formData, serial_number: e.target.value})} 
+                                placeholder="UNIQUE ASSET SN" 
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <InputField 
+                                label="Category classification" 
+                                value={formData.category} 
+                                onChange={e => setFormData({...formData, category: e.target.value})} 
+                                placeholder="e.g. Beauty Supplies" 
+                                required 
+                            />
+                            <InputField 
+                                label="Storage Location" 
+                                value={formData.location} 
+                                onChange={e => setFormData({...formData, location: e.target.value})} 
+                                placeholder="e.g. Cabinet A" 
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-6">
+                            <InputField label="Initial Quantity" type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} />
+                            <InputField 
+                                label="Unit Type" 
+                                value={formData.unit_type} 
+                                onChange={e => setFormData({...formData, unit_type: e.target.value})} 
+                                placeholder="e.g. Bottle" 
+                            />
+                            <InputField label="Min Stock Threshold" type="number" value={formData.minimum_stock_level} onChange={e => setFormData({...formData, minimum_stock_level: Number(e.target.value)})} />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <InputField 
+                                label="Date of Purchase" 
+                                type="date"
+                                value={formData.date_purchased} 
+                                onChange={e => setFormData({...formData, date_purchased: e.target.value})} 
+                            />
+                            <InputField 
+                                label="Asset Image URL" 
+                                value={formData.image_url} 
+                                onChange={e => setFormData({...formData, image_url: e.target.value})} 
+                                placeholder="https://..." 
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-6">
+                            <InputField 
+                                label="Purchase Price (KSh)" 
+                                type="number"
+                                step="0.01"
+                                value={formData.purchase_price} 
+                                onChange={e => setFormData({...formData, purchase_price: Number(e.target.value)})} 
+                            />
+                        </div>
+
+                        <div className="flex gap-4 pt-8 text-center">
+                            <button type="submit" className="flex-1 bg-gradient-to-r from-maroon to-[#800000] text-gold h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] hover:scale-[1.02] active:scale-95 transition-all border border-white/10">
+                                Commit To Vault
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+const StatusBadge = ({ status }) => {
+    const cfg = {
+        Available: { bg: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: CheckCircle2 },
+        Issued: { bg: 'bg-blue-50 text-blue-700 border-blue-100', icon: Box },
+        Damaged: { bg: 'bg-red-50 text-red-700 border-red-100', icon: AlertTriangle },
+        Expired: { bg: 'bg-rose-50 text-rose-700 border-rose-100', icon: AlertCircle },
+        Pending: { bg: 'bg-amber-50 text-amber-700 border-amber-100', icon: Clock },
+        Approved: { bg: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: CheckCircle2 },
+        Rejected: { bg: 'bg-red-50 text-red-700 border-red-100', icon: X },
+    };
+    const c = cfg[status] || { bg: 'bg-gray-50 text-gray-500 border-gray-100', icon: Package };
+    return (
+        <span className={`inline-flex items-center gap-2 text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest border ${c.bg} transition-all hover:scale-105 active:scale-95 cursor-default`}>
+            <c.icon className="w-3 h-3" />
+            {status}
+        </span>
+    );
+};
+
+export default function Inventory() {
+    const { user } = useAuth();
+    const userRole = (user?.role || 'student').toLowerCase().trim();
+    const [activeTab, setActiveTab] = useState(userRole === 'teacher' ? 'items' : 'dashboard');
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState(null);
+    const [syncError, setSyncError] = useState("");
+
+    // Filter tabs by role
+    const filteredTabs = TABS.filter(t => t.roles.includes(userRole));
+
+    useEffect(() => {
+        if (activeTab === 'dashboard') {
+            setLoading(true);
+            setSyncError("");
+            inventoryAPI.getDashboard()
+                .then(r => setStats(r.data))
+                .catch(e => {
+                    console.error(e);
+                    setSyncError(e.response?.data?.error || e.message || "Unknown Network Error");
+                })
+                .finally(() => setLoading(false));
+        } else {
+            setLoading(false);
+        }
+    }, [activeTab]);
+
+    return (
+        <div className="min-h-screen bg-[#fafafa] dark:bg-[#050505] p-4 lg:p-6 animate-in fade-in duration-700">
+            {/* Premium Header Architecture */}
+            <header className="mb-6 relative">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div className="animate-in slide-in-from-left-8 duration-700">
+                        <div className="flex items-center gap-5 mb-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-maroon to-[#600000] rounded-2xl flex items-center justify-center shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] border border-white/20 relative group">
+                                <div className="absolute inset-0 bg-gold/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <Package className="w-8 h-8 text-gold stroke-[2.5] relative z-10" />
+                            </div>
+                            <div>
+                                <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-[-0.04em] uppercase leading-none mb-2">Inventory Vault</h1>
+                                <div className="flex items-center gap-3">
+                                    <div className="h-0.5 w-8 bg-maroon rounded-full" />
+                                    <p className="text-[10px] font-black text-maroon/60 dark:text-gold/60 uppercase tracking-[0.4em]">Integrated Logistics Engine</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tactical Tab Navigation */}
+                    <nav className="animate-in slide-in-from-right-8 duration-700">
+                        <div className="flex bg-white dark:bg-[#111] p-2 rounded-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.08)] border border-gray-100 dark:border-white/5 ring-1 ring-black/5 overflow-x-auto no-scrollbar max-w-[90vw] lg:max-w-none">
+                            {filteredTabs.map(tab => {
+                                const Icon = tab.icon;
+                                const isActive = activeTab === tab.id;
+                                return (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all duration-500 whitespace-nowrap group relative ${
+                                            isActive 
+                                            ? 'bg-maroon text-gold shadow-2xl shadow-maroon/30 scale-100' 
+                                            : 'text-gray-400 hover:text-maroon dark:hover:text-gold hover:bg-maroon/5 scale-95 hover:scale-100'
+                                        }`}
+                                    >
+                                        <Icon className={`w-4 h-4 ${isActive ? 'stroke-[3]' : 'stroke-[2]'} group-hover:rotate-12 transition-transform`} />
+                                        <span className={`text-[10px] font-black uppercase tracking-[0.15em]`}>{tab.label}</span>
+                                        {isActive && (
+                                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-gold rounded-full shadow-[0_0_10px_#FFD700]" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </nav>
+                </div>
+            </header>
+
+            {/* Main Operational Theater */}
+            <main className="max-w-[1600px] mx-auto">
+                {activeTab === 'dashboard' && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                        {loading ? (
+                            <div className="py-10 flex flex-col items-center justify-center gap-4">
+                                <div className="w-8 h-8 border-4 border-maroon border-t-gold rounded-xl animate-spin"></div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em] animate-pulse">Syncing...</p>
+                            </div>
+                        ) : stats ? (
+                            <>
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                    {(userRole === 'admin' || userRole === 'superadmin' ? [
+                                        { l: 'Total Inventory', v: stats.totalItems, sub: `${stats.totalQty} Units`, icon: Boxes, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                                        { l: 'Capital Valuation', v: `KSh ${Number(stats.totalValue || 0).toLocaleString()}`, sub: 'Asset Investment', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                                        { l: 'Critical Shortage', v: stats.lowStockCount, sub: 'Needs Restock', icon: TrendingDown, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                                        { l: 'Issued Today', v: stats.issuedToday, sub: 'Outbound Today', icon: ArrowUpFromLine, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+                                    ] : [
+                                        { l: 'Pending', v: stats.pendingRequests, sub: 'Awaiting Release', icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                                        { l: 'Approved', v: stats.approvedRequests, sub: 'Ready to Collect', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                                        { l: 'Received Today', v: stats.issuedToday, sub: 'Units Delivered', icon: ArrowDownToLine, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+                                        { l: 'Total Issued', v: stats.totalQty, sub: 'Lifetime Stock', icon: Boxes, color: 'text-maroon', bg: 'bg-maroon/10' },
+                                    ]).map((c, i) => (
+                                        <div key={i} className="bg-white dark:bg-[#111] px-4 py-3 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm group hover:-translate-y-1 transition-all duration-300 flex items-center gap-3">
+                                            <div className={`${c.bg} w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border border-black/5 dark:border-white/5`}>
+                                                <c.icon className={`w-5 h-5 ${c.color} stroke-[2]`} />
+                                            </div>
+                                            <div>
+                                                <p className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">{c.l}</p>
+                                                <p className="text-xl font-black text-gray-900 dark:text-white tracking-tight leading-none">{c.v}</p>
+                                                <p className="text-[9px] text-gray-400 mt-0.5">{c.sub}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                    <div className="lg:col-span-2 bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm p-4 flex flex-col relative overflow-hidden">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <h3 className="text-xs font-black text-gray-900 dark:text-gray-100 uppercase tracking-[0.2em]">Volume Heatmap</h3>
+                                                <p className="text-[9px] text-gray-400 uppercase tracking-widest">Movement Velocity</p>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                                                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                                <span className="text-[8px] font-black text-emerald-600 uppercase">Live</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-end gap-1.5 h-[140px] group/chart">
+                                            {[45, 60, 30, 85, 40, 55, 70, 45, 90, 65, 50, 80].map((v, i) => (
+                                                <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+                                                    <div 
+                                                        className="w-full bg-gradient-to-t from-maroon/20 to-maroon rounded-t-lg transition-all duration-700 relative cursor-pointer"
+                                                        style={{ height: `${v}%`, opacity: 0.3 + (v/100) }}
+                                                    >
+                                                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black text-gold text-[7px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                                            {v}%
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[7px] font-black text-gray-300 uppercase">{['J','F','M','A','M','J','J','A','S','O','N','D'][i]}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {(userRole === 'admin' || userRole === 'superadmin') ? (
+                                        <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden flex flex-col">
+                                            <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-rose-50 dark:bg-rose-950/20 rounded-xl flex items-center justify-center">
+                                                        <Calendar className="w-4 h-4 text-rose-500" />
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-[0.15em]">Expiring Soon</h3>
+                                                        <p className="text-[9px] text-gray-400 uppercase">Shelf-Life Watch</p>
+                                                    </div>
+                                                </div>
+                                                {stats.expiringSoon?.length > 0 && (
+                                                    <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[8px] font-black uppercase animate-pulse">
+                                                        {stats.expiringSoon.length} Critical
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="divide-y divide-gray-50 dark:divide-white/5 overflow-y-auto max-h-[280px] no-scrollbar">
+                                                {stats.expiringSoon?.length > 0 ? stats.expiringSoon.map((item, idx) => (
+                                                    <div key={idx} className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors group">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                                                            <div>
+                                                                <p className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase">{item.name}</p>
+                                                                <p className="text-[9px] text-gray-400 uppercase">{item.category} • {item.quantity} units</p>
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-[10px] font-black text-rose-500">{new Date(item.expiry_date).toLocaleDateString()}</p>
+                                                    </div>
+                                                )) : (
+                                                    <div className="py-8 flex flex-col items-center justify-center opacity-30">
+                                                        <CheckCircle2 className="w-8 h-8 text-gray-400 mb-2" />
+                                                        <p className="text-[9px] font-black uppercase tracking-widest">All dates optimal</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden flex flex-col">
+                                            <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-amber-50 dark:bg-amber-950/20 rounded-xl flex items-center justify-center">
+                                                        <ClipboardList className="w-4 h-4 text-amber-500" />
+                                                    </div>
+                                                    <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-[0.15em]">Recent Requisitions</h3>
+                                                </div>
+                                                <button onClick={() => setActiveTab('requests')} className="text-[9px] font-black text-maroon hover:underline uppercase">All</button>
+                                            </div>
+                                            <div className="divide-y divide-gray-50 dark:divide-white/5 overflow-y-auto max-h-[280px] no-scrollbar flex-1">
+                                                {stats.recentRequests?.length > 0 ? stats.recentRequests.map((req, idx) => (
+                                                    <div key={idx} className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                                                        <div>
+                                                            <p className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase">{req.item_name}</p>
+                                                            <p className="text-[9px] text-gray-400 uppercase">{req.quantity} units • {new Date(req.created_at).toLocaleDateString()}</p>
+                                                        </div>
+                                                        <StatusBadge status={req.status} />
+                                                    </div>
+                                                )) : (
+                                                    <div className="py-8 text-center flex-1 flex flex-col items-center justify-center opacity-30">
+                                                        <Clock className="w-8 h-8 text-gray-300 mb-2" />
+                                                        <p className="text-[9px] font-black uppercase tracking-widest">No recent requests</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="px-4 py-3 border-t border-gray-50 dark:border-white/5">
+                                                <button 
+                                                    onClick={() => setActiveTab('requests')}
+                                                    className="w-full py-2 bg-maroon text-gold rounded-xl text-[9px] font-black uppercase tracking-widest hover:opacity-90 active:scale-95 transition-all"
+                                                >
+                                                    New Request
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden flex flex-col">
+                                        <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5 flex items-center gap-2">
+                                            <div className={`w-8 h-8 ${userRole === 'teacher' ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-emerald-50 dark:bg-emerald-950/20'} rounded-xl flex items-center justify-center`}>
+                                                <Activity className={`w-4 h-4 ${userRole === 'teacher' ? 'text-blue-500' : 'text-emerald-500'}`} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-[0.15em]">
+                                                    {userRole === 'teacher' ? 'Personal Logs' : 'Movement Journal'}
+                                                </h3>
+                                                <p className="text-[9px] text-gray-400 uppercase">Transactional Stream</p>
+                                            </div>
+                                        </div>
+                                        <div className="divide-y divide-gray-50 dark:divide-white/5 overflow-y-auto max-h-[280px] no-scrollbar flex-1">
+                                            {stats.recentTransactions?.length > 0 ? stats.recentTransactions.map((tx, idx) => (
+                                                <div key={idx} className="px-4 py-2.5 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors group">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center border border-black/5 dark:border-white/5 ${userRole === 'teacher' ? 'bg-blue-50/50' : 'bg-emerald-50/50'}`}>
+                                                            {userRole === 'teacher' ? <ArrowDownToLine className="w-4 h-4 text-blue-600" /> : <ArrowUpFromLine className="w-4 h-4 text-emerald-600" />}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase">{tx.item_name}</p>
+                                                            <p className="text-[9px] text-gray-400 uppercase">{tx.department}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className={`text-[11px] font-black ${userRole === 'teacher' ? 'text-blue-600' : 'text-emerald-600'}`}>
+                                                            {userRole === 'teacher' ? '+' : '-'}{tx.quantity_issued}
+                                                        </p>
+                                                        <p className="text-[8px] text-gray-400">{new Date(tx.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    </div>
+                                                </div>
+                                            )) : (
+                                                <div className="py-8 flex flex-col items-center justify-center opacity-30">
+                                                    <Package className="w-8 h-8 text-gray-400 mb-2" />
+                                                    <p className="text-[9px] font-black uppercase tracking-widest">No activity logs</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : syncError ? (
+                            <div className="fixed inset-0 z-[9999] bg-red-950 flex flex-col items-center justify-center p-6 text-center text-white">
+                                <AlertTriangle className="w-16 h-16 text-rose-500 mb-6 animate-pulse" />
+                                <h1 className="text-3xl font-black uppercase tracking-widest text-rose-500 mb-4">Logistics Data Sync Error</h1>
+                                <p className="text-xl font-bold bg-black/50 p-5 rounded-2xl border-2 border-rose-500/30 max-w-4xl font-mono break-all">{syncError}</p>
+                                <button onClick={() => window.location.reload()} className="mt-10 px-6 py-4 bg-rose-600 text-white font-black uppercase tracking-widest rounded-full hover:scale-105 active:scale-95 transition-all">Reload Dashboard</button>
+                            </div>
+                        ) : (
+                            <div className="p-10 text-center flex flex-col items-center justify-center gap-4">
+                                <div className="w-12 h-12 border-4 border-maroon border-t-transparent rounded-[1.5rem] animate-spin shadow-2xl"></div>
+                                <p className="text-gray-400 font-black uppercase tracking-[0.5em] text-sm mt-4">Still Syncing Backend...</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {activeTab === 'items' && <ItemsTab />}
+                {activeTab === 'mystock' && <MyStockTab />}
+                {activeTab === 'requests' && <RequestsTab role={userRole} />}
+                {activeTab === 'stock' && <StockMovementTab />}
+            </main>
+        </div>
+    );
+}
+
+function RequestsTab({ role }) {
+    const [requests, setRequests] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [items, setItems] = useState([]);
+    const [formData, setFormData] = useState({ item_name: '', department: 'Beauty Therapy', quantity: 1, purpose: '', item_id: '' });
+
+    const load = useCallback(() => {
+        setLoading(true);
+        Promise.all([
+            inventoryAPI.getRequests(),
+            inventoryAPI.getItems()
+        ]).then(([r, i]) => {
+            setRequests(r.data);
+            setItems(i.data);
+        }).finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => { load(); }, [load]);
+
+    const submit = async (e) => {
+        e.preventDefault();
+        try {
+            await inventoryAPI.createRequest(formData);
+            setShowModal(false);
+            load();
+        } catch (e) { alert(e.response?.data?.error || 'Error'); }
+    };
+
+    const handleAction = async (id, status) => {
+        try {
+            await inventoryAPI.updateRequest(id, { status });
+            load();
+        } catch (e) { alert('Action failed'); }
+    };
+
+    const handleDelete = async (id, itemName) => {
+        if (!window.confirm(`Delete requisition for "${itemName}"? This cannot be undone.`)) return;
+        try {
+            await inventoryAPI.deleteRequest(id);
+            load();
+        } catch (e) { alert(e.response?.data?.error || 'Failed to delete request'); }
+    };
+
+    return (
+        <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-[-0.05em] mb-1">Logistics Requisitions</h2>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Operational Supply Pipeline
+                    </p>
+                </div>
+                <button 
+                    onClick={() => setShowModal(true)} 
+                    className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:scale-[1.05] active:scale-95 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all border border-white/10 group"
+                >
+                    <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform stroke-[3]" /> New Request
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+                {loading ? (
+                    <div className="py-20 text-center flex flex-col items-center gap-6">
+                        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-[1.5rem] animate-spin shadow-2xl"></div>
+                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em] animate-pulse">Syncing Requisition Lattice...</p>
+                    </div>
+                ) : requests.length > 0 ? requests.map(req => (
+                    <div key={req.id} className="bg-white dark:bg-[#111] px-4 py-3 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:ring-1 hover:ring-maroon/10 transition-all duration-300 group relative overflow-hidden ring-1 ring-black/5">
+                        <div className="flex items-center gap-3 relative z-10">
+                            <div className="w-9 h-9 bg-gray-50 dark:bg-black rounded-xl flex items-center justify-center border border-black/5 dark:border-white/5 shrink-0">
+                                <FileSpreadsheet className="w-5 h-5 text-gray-400 group-hover:text-maroon transition-colors" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight group-hover:text-maroon dark:group-hover:text-gold transition-colors">{req.item_name}</p>
+                                    <StatusBadge status={req.status} />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                    <div className="flex items-center gap-1">
+                                        <User className="w-3 h-3" />
+                                        <span>{req.requested_by_name}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Building2 className="w-3 h-3" />
+                                        <span>{req.department}</span>
+                                    </div>
+                                    <span className="px-2 py-0.5 bg-gray-50 dark:bg-white/5 rounded-full border border-black/5">Vol: {req.quantity}</span>
+                                    {req.purpose && (
+                                        <span className="text-gray-400 italic truncate max-w-[200px]">" {req.purpose} "</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 relative z-10 shrink-0">
+                            {(req.status === 'Pending' && (role === 'admin' || role === 'superadmin')) && (
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => handleAction(req.id, 'Approved')} 
+                                        className="h-8 px-4 rounded-lg bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all active:scale-95"
+                                    >
+                                        Approve
+                                    </button>
+                                    <button 
+                                        onClick={() => handleAction(req.id, 'Rejected')} 
+                                        className="h-8 px-4 rounded-lg bg-rose-500/10 text-rose-600 border border-rose-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all active:scale-95"
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                            )}
+                            {(req.status === 'Approved' && (role === 'admin' || role === 'superadmin')) && (
+                                <button 
+                                    onClick={() => handleAction(req.id, 'Issued')} 
+                                    className="h-8 px-4 rounded-lg bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
+                                >
+                                    Issue Stock
+                                </button>
+                            )}
+                            <button className="w-10 h-10 bg-gray-50 dark:bg-black text-gray-400 rounded-xl hover:bg-maroon hover:text-gold transition-all border border-black/5 dark:border-white/5 flex items-center justify-center group/eye" title="View">
+                                <Eye className="w-4 h-4 group-hover/eye:scale-110 transition-transform" />
+                            </button>
+                            {(role === 'admin' || role === 'superadmin') && (
+                                <button
+                                    onClick={() => handleDelete(req.id, req.item_name)}
+                                    className="w-10 h-10 bg-rose-50 dark:bg-rose-950/20 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all border border-rose-100 dark:border-rose-500/20 flex items-center justify-center group/del"
+                                    title="Delete Requisition"
+                                >
+                                    <Trash2 className="w-4 h-4 group-hover/del:scale-110 transition-transform" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )) : (
+                    <div className="py-20 text-center bg-white dark:bg-[#111] rounded-2xl border-2 border-dashed border-gray-100 dark:border-white/5 flex flex-col items-center">
+                        <div className="w-16 h-16 bg-gray-50/50 dark:bg-white/[0.02] rounded-2xl flex items-center justify-center mb-6">
+                            <PackageOpen className="w-10 h-10 text-gray-200" />
+                        </div>
+                        <h4 className="text-[12px] font-black text-gray-300 uppercase tracking-[0.5em]">No Pending Logistics Manifests</h4>
+                    </div>
+                )}
+            </div>
+
+            {showModal && (
+                <Modal title="Initialize Fleet Requisition" onClose={() => setShowModal(false)}>
+                    <form onSubmit={submit} className="space-y-8 py-4">
+                        <SelectField label="Inventory Reference (Auto-Link)" value={formData.item_id} onChange={e => {
+                            const item = items.find(i => String(i.id) === e.target.value);
+                            setFormData({...formData, item_id: e.target.value, item_name: item ? item.name : formData.item_name});
+                        }}>
+                            <option value="">Query Live Stock Infrastructure...</option>
+                            {items.map(i => <option key={i.id} value={i.id}>{i.name.toUpperCase()} (AVAILABLE: {i.quantity})</option>)}
+                        </SelectField>
+
+                        <InputField label="Operational Item Nomenclature" value={formData.item_name} onChange={e => setFormData({...formData, item_name: e.target.value})} placeholder="ENTRUSTED ASSET NAME" required />
+                        
+                        <div className="grid grid-cols-2 gap-6">
+                            <InputField label="Flow Volume Requested" type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} required />
+                            <SelectField label="Originating Sector" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required>
+                                <option value="Beauty Therapy">Beauty Therapy</option>
+                                <option value="Hairdressing">Hairdressing</option>
+                                <option value="ICT">ICT Sector</option>
+                                <option value="Administration">Central Admin</option>
+                                <option value="Barbering">Professional Barbering</option>
+                            </SelectField>
+                        </div>
+
+                        <div className="relative">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-1">Mission Critical Purpose</label>
+                            <textarea 
+                                value={formData.purpose} 
+                                onChange={e => setFormData({...formData, purpose: e.target.value})}
+                                className="w-full px-6 py-5 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-[1.5rem] text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-maroon/5 transition-all min-h-[120px]"
+                                placeholder="DETAIL OPERATIONAL REQUIREMENT..."
+                            />
+                        </div>
+
+                        <button type="submit" className="w-full bg-gradient-to-r from-maroon to-[#800000] text-gold h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] active:scale-95 transition-all mt-6 border border-white/10">
+                            TRANSMIT REQUISITION SIGNAL
+                        </button>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+function StockMovementTab() {
+    const [inLogs, setInLogs] = useState([]);
+    const [outLogs, setOutLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [view, setView] = useState('in'); // 'in' or 'out'
+    const [showInModal, setShowInModal] = useState(false);
+    const [showOutModal, setShowOutModal] = useState(false);
+    const [items, setItems] = useState([]);
+    const [suppliers, setSuppliers] = useState([]);
+
+    const loadData = useCallback(() => {
+        setLoading(true);
+        Promise.all([
+            inventoryAPI.getStockIn(),
+            inventoryAPI.getStockOut(),
+            inventoryAPI.getItems(),
+            inventoryAPI.getSuppliers()
+        ]).then(([si, so, i, s]) => {
+            setInLogs(si.data);
+            setOutLogs(so.data);
+            setItems(i.data);
+            setSuppliers(s.data);
+        }).finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => { loadData(); }, [loadData]);
+
+    const handleStockIn = async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(e.target));
+        try {
+            await inventoryAPI.createStockIn(data);
+            setShowInModal(false);
+            loadData();
+        } catch (e) { alert('Stock In failed'); }
+    };
+
+    const handleStockOut = async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(e.target));
+        try {
+            await inventoryAPI.createStockOut(data);
+            setShowOutModal(false);
+            loadData();
+        } catch (e) { alert(e.response?.data?.error || 'Stock Out failed'); }
+    };
+
+    return (
+        <div className="space-y-10 animate-in slide-in-from-right-8 duration-700">
+            {/* Tactical Switcher */}
+            <div className="flex bg-white dark:bg-[#111] p-2 rounded-2xl border border-gray-100 dark:border-white/5 w-fit mx-auto shadow-[0_20px_50px_-15px_rgba(0,0,0,0.05)] ring-1 ring-black/5 mb-12">
+                <button 
+                    onClick={() => setView('in')} 
+                    className={`flex items-center gap-3 px-6 py-4 rounded-[1.8rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${
+                        view === 'in' ? 'bg-maroon text-gold shadow-xl shadow-maroon/20 scale-100' : 'text-gray-400 hover:text-maroon'
+                    }`}
+                >
+                    <ArrowDownToLine className={`w-4 h-4 ${view === 'in' ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                    Stock Intake
+                </button>
+                <button 
+                    onClick={() => setView('out')} 
+                    className={`flex items-center gap-3 px-6 py-4 rounded-[1.8rem] text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${
+                        view === 'out' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-600/20 scale-100' : 'text-gray-400 hover:text-emerald-600'
+                    }`}
+                >
+                    <ArrowUpFromLine className={`w-4 h-4 ${view === 'out' ? 'stroke-[3]' : 'stroke-[2]'}`} />
+                    Stock Issued
+                </button>
+            </div>
+
+            <div className="flex justify-between items-end mb-8 animate-in fade-in duration-500">
+                <div>
+                    <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-[-0.03em] mb-1">
+                        {view === 'in' ? 'Logistics Inbound' : 'Logistics Outbound'}
+                    </h2>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${view === 'in' ? 'bg-maroon' : 'bg-emerald-500'}`} />
+                        Historical Operational Records
+                    </p>
+                </div>
+                {view === 'in' ? (
+                    <button onClick={() => setShowInModal(true)} className="flex items-center gap-4 bg-maroon hover:bg-maroon/90 text-gold px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.3)] transition-all active:scale-95 border border-white/10 group">
+                        <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform stroke-[3]" /> Record intake
+                    </button>
+                ) : (
+                    <button onClick={() => setShowOutModal(true)} className="flex items-center gap-4 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-[0_20px_50px_-10px_rgba(5,150,105,0.3)] transition-all active:scale-95 border border-white/10 group">
+                        <ArrowUpFromLine className="w-5 h-5 group-hover:-translate-y-1 transition-transform stroke-[3]" /> Distribute assets
+                    </button>
+                )}
+            </div>
+
+            <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.08)] overflow-hidden ring-1 ring-black/5 min-h-[500px] relative">
+                <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-gray-100 dark:via-white/5 to-transparent" />
+                {loading ? (
+                    <div className="py-16 flex flex-col items-center justify-center gap-6">
+                        <div className={`w-12 h-12 border-4 ${view === 'in' ? 'border-maroon' : 'border-emerald-500'} border-t-transparent rounded-[1.5rem] animate-spin shadow-2xl transition-colors`}></div>
+                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em] animate-pulse">Syncing Journal Segments...</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto no-scrollbar">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50/20 dark:bg-white/[0.01] border-b border-gray-100 dark:border-white/5">
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Log Date</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Operational Unit</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Flow Volume</th>
+                                    <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">{view === 'in' ? 'Supply Source' : 'Sector Destination'}</th>
+                                    <th className="px-6 py-4 text-right text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">{view === 'in' ? 'Receiver' : 'Issuer'}</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50/50 dark:divide-white/5">
+                                {(view === 'in' ? inLogs : outLogs).length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="py-16 text-center text-gray-300 font-black italic uppercase tracking-[0.4em] opacity-30">Null sector entrylogs</td>
+                                    </tr>
+                                ) : (view === 'in' ? inLogs : outLogs).map(log => (
+                                    <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.015] transition-all duration-300 group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <p className="text-[12px] font-black text-gray-900 dark:text-white leading-none mb-1">{new Date(log.created_at).toLocaleDateString()}</p>
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center border border-black/5 dark:border-white/5 ${view === 'in' ? 'bg-maroon/5 text-maroon' : 'bg-emerald-500/5 text-emerald-500'}`}>
+                                                    <Box className="w-5 h-5" />
+                                                </div>
+                                                <p className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase tracking-tight group-hover:text-maroon dark:group-hover:text-gold transition-colors">{log.item_name}</p>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className={`inline-flex items-center px-4 py-2 rounded-2xl text-[12px] font-black border ${
+                                                view === 'in' 
+                                                ? 'bg-maroon/5 text-maroon border-maroon/10' 
+                                                : 'bg-emerald-500/5 text-emerald-500 border-emerald-500/10'
+                                            } transition-all group-hover:scale-110`}>
+                                                {view === 'in' ? '+' : '-'}{view === 'in' ? log.quantity_received : log.quantity_issued}
+                                                <span className="text-[8px] ml-2 opacity-60 uppercase">{log.unit_type?.split(' ')[0]}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-gray-200 dark:bg-gray-800" />
+                                                <p className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{view === 'in' ? log.supplier_name : log.department}</p>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <p className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest leading-none mb-1">{view === 'in' ? log.received_by_name : log.issued_to}</p>
+                                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Authorized Signature</p>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {showInModal && (
+                <Modal title="Logistics Reception Entry" onClose={() => setShowInModal(false)}>
+                    <form onSubmit={handleStockIn} className="space-y-8 py-4">
+                        <SelectField label="Asset Target" name="item_id" required>
+                            <option value="">Query Inventory Lattice...</option>
+                            {items.map(i => <option key={i.id} value={i.id}>{i.name.toUpperCase()} (CURRENT VOL: {i.quantity})</option>)}
+                        </SelectField>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <InputField label="Flow Volume Received" name="quantity_received" type="number" required />
+                            <SelectField label="Supply Source (Vendor)" name="supplier_id">
+                                <option value="">Select Resource Origin...</option>
+                                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name.toUpperCase()} [{s.company}]</option>)}
+                            </SelectField>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <InputField label="Unit Acquisition Cost (KSh)" name="unit_cost" type="number" step="0.01" />
+                            <InputField label="Operational Expiry Date" name="expiry_date" type="date" />
+                        </div>
+                        
+                        <InputField label="Batch ID / Manifest Invoice" name="batch_number" />
+                        
+                        <button type="submit" className="w-full bg-gradient-to-r from-maroon to-[#800000] text-gold h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] active:scale-95 transition-all mt-6 border border-white/10">
+                            AUTHORIZE INTAKE & SYNC VAULT
+                        </button>
+                    </form>
+                </Modal>
+            )}
+
+            {showOutModal && (
+                <Modal title="Initialize Asset Distribution" onClose={() => setShowOutModal(false)}>
+                    <form onSubmit={handleStockOut} className="space-y-8 py-4">
+                        <SelectField label="Source Asset Class" name="item_id" required>
+                            <option value="">Choose item for transfer...</option>
+                            {items.filter(i => i.quantity > 0).map(i => <option key={i.id} value={i.id}>{i.name.toUpperCase()} - CAPACITY: {i.quantity} {i.unit_type}</option>)}
+                        </SelectField>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <InputField label="Operational Volume to Issue" name="quantity_issued" type="number" required />
+                            <SelectField label="Target Department Section" name="department" required>
+                                <option value="Beauty Therapy">BEAUTY THERAPY</option>
+                                <option value="Hairdressing">HAIRDRESSING</option>
+                                <option value="ICT Department">ICT SECTOR</option>
+                                <option value="Administration">CENTRAL ADMIN</option>
+                                <option value="Barbering">BARBERING</option>
+                            </SelectField>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <InputField label="Recipient Officer (Trainer)" name="issued_to" required />
+                            <InputField label="Authorization Officer" name="approved_by" />
+                        </div>
+                        
+                        <div className="relative">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-1">Operational Purpose / Comment</label>
+                            <textarea 
+                                name="purpose"
+                                className="w-full px-6 py-5 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-[1.5rem] text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-maroon/5 transition-all min-h-[100px]"
+                                placeholder="DETAIL MISSION REQUIREMENT..."
+                            />
+                        </div>
+                        
+                        <button type="submit" className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 text-white h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(5,150,105,0.4)] active:scale-95 transition-all mt-6 border border-white/10">
+                            AUTHORIZE DISTRIBUTION & UPDATE LOGS
+                        </button>
+                    </form>
+                </Modal>
+            )}
+        </div>
+    );
+}
+
+function MyStockTab() {
+    const [myStock, setMyStock] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        inventoryAPI.getStockOut()
+            .then(res => setMyStock(res.data))
+            .finally(() => setLoading(false));
+    }, []);
+
+    return (
+        <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-[-0.05em] mb-1">Personal Asset Portal</h2>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
+                        Custodial Possession Journal
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.08)] overflow-hidden ring-1 ring-black/5 min-h-[500px]">
+                <div className="overflow-x-auto no-scrollbar">
+                    <table className="w-full border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50/20 dark:bg-white/[0.01] border-b border-gray-100 dark:border-white/5">
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Entrusted Asset</th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Operational Volume</th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Issuance Date</th>
+                                <th className="px-6 py-4 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.3em]">Mission Focus</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50/50 dark:divide-white/5">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="4" className="py-16 text-center">
+                                        <div className="flex flex-col items-center gap-6 font-black text-gray-200 uppercase tracking-[0.5em] animate-pulse">
+                                            <div className="w-12 h-12 border-4 border-gold border-t-transparent rounded-[1.5rem] animate-spin shadow-2xl"></div>
+                                            Syncing Custodial Vault...
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : myStock.length > 0 ? myStock.map(item => (
+                                <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.015] transition-all duration-300 group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-6">
+                                            <div className="w-14 h-14 rounded-2xl bg-gray-50 dark:bg-black flex items-center justify-center border border-black/5 dark:border-white/5 shadow-inner group-hover:scale-110 transition-transform">
+                                                <Boxes className="w-7 h-7 text-gold" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[13px] font-black text-gray-900 dark:text-white uppercase tracking-tight leading-tight group-hover:text-maroon dark:group-hover:text-gold transition-colors">{item.item_name}</p>
+                                                <p className="text-[9px] text-gray-400 font-black tracking-[0.2em] mt-1.5 uppercase opacity-60">Inventory Controlled</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-end gap-2">
+                                            <span className="text-base font-black text-emerald-600 leading-none">{item.quantity_issued}</span>
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">{item.unit_type?.split(' ')[0]}s</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <Calendar className="w-4 h-4 text-gray-300" />
+                                            <p className="text-[11px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-[0.05em]">
+                                                {new Date(item.date_issued).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </p>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-start gap-3 max-w-xs">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-gold/40 mt-1.5 shrink-0" />
+                                            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase leading-relaxed tracking-wider italic">" {item.purpose || 'Ongoing Operational Utility'} "</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )) : (
+                                <tr>
+                                    <td colSpan="4" className="py-16 text-center">
+                                        <div className="w-16 h-16 bg-gray-50/50 dark:bg-white/[0.02] rounded-2xl flex items-center justify-center mx-auto mb-6 relative group">
+                                            <div className="absolute inset-0 bg-gold/10 rounded-2xl blur-2xl group-hover:bg-gold/20 transition-all" />
+                                            <PackageOpen className="w-10 h-10 text-gray-300 relative z-10" />
+                                        </div>
+                                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em] max-w-xs mx-auto leading-loose">No custodial asset records found in current sector</p>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
