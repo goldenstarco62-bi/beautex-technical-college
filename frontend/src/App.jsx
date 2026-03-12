@@ -75,8 +75,8 @@ function App() {
                         <Route path="/schedule" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Schedule /></Layout></ProtectedRoute>} />
                         <Route path="/announcements" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Announcements /></Layout></ProtectedRoute>} />
 
-                        <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Settings /></Layout></ProtectedRoute>} />
-                        <Route path="/users" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Users /></Layout></ProtectedRoute>} />
+                        <Route path="/settings" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><Settings /></Layout></ProtectedRoute>} />
+                        <Route path="/users" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><Users /></Layout></ProtectedRoute>} />
                         <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
                         <Route path="/reports" element={<ProtectedRoute allowedRoles={['teacher', 'admin', 'superadmin']}><Layout><AcademicReports /></Layout></ProtectedRoute>} />
                         <Route path="/academic-master" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><AcademicMaster /></Layout></ProtectedRoute>} />

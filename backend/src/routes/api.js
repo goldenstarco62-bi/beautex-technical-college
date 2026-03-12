@@ -152,11 +152,12 @@ router.get('/profile', authenticateToken, profileController.getProfile);
 router.put('/profile', authenticateToken, profileController.updateProfile);
 
 // User Management routes (Admin & Superadmin)
-router.get('/users', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.getAllUsers);
+// User Management routes (Strictly Superadmin only)
+router.get('/users', authenticateToken, authorizeRoles('superadmin'), userController.getAllUsers);
 router.put('/users/:id/role', authenticateToken, authorizeRoles('superadmin'), userController.updateUserRole);
-router.put('/users/:id/status', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.updateUserStatus);
-router.put('/users/:id/password', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetUserPassword);
-router.post('/users/reset-by-email', authenticateToken, authorizeRoles('admin', 'superadmin'), userController.resetPasswordByEmail);
+router.put('/users/:id/status', authenticateToken, authorizeRoles('superadmin'), userController.updateUserStatus);
+router.put('/users/:id/password', authenticateToken, authorizeRoles('superadmin'), userController.resetUserPassword);
+router.post('/users/reset-by-email', authenticateToken, authorizeRoles('superadmin'), userController.resetPasswordByEmail);
 router.delete('/users/:id', authenticateToken, authorizeRoles('superadmin'), userController.deleteUser);
 router.get('/audit-logs', authenticateToken, authorizeRoles('superadmin'), userController.getAuditLogs);
 // Finance permission management (superadmin only)
@@ -238,8 +239,8 @@ router.delete('/materials/:id', authenticateToken, materialController.deleteMate
 
 
 // Settings Routes (Admin & Superadmin)
-router.get('/settings', authenticateToken, authorizeRoles('admin', 'superadmin'), settingsController.getSettings);
-router.put('/settings', authenticateToken, authorizeRoles('admin', 'superadmin'), settingsController.updateSettings);
+router.get('/settings', authenticateToken, authorizeRoles('superadmin'), settingsController.getSettings);
+router.put('/settings', authenticateToken, authorizeRoles('superadmin'), settingsController.updateSettings);
 router.get('/settings/backup', authenticateToken, authorizeRoles('superadmin'), settingsController.downloadBackup);
 
 // Interaction Routes (Comments & Reactions)
