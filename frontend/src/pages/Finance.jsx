@@ -1558,7 +1558,7 @@ export default function Finance() {
                                             </div>
                                             <p className="text-[9px] font-black text-gray-800 uppercase tracking-[0.3em] leading-none">Registrar of Accounts</p>
                                             <p className="text-[8px] font-bold text-maroon/30 mt-2 tracking-tighter italic font-mono uppercase">
-                                                {viewingReport.id?.substring(0, 8) || 'SYSTEM'}-AUTH-SECURE
+                                                {String(viewingReport.id || viewingReport._id || 'SYSTEM').substring(0, 8)}-AUTH-SECURE
                                             </p>
                                         </div>
                                     </div>

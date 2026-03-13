@@ -113,6 +113,7 @@ export const usersAPI = {
     resetByEmail: (email) => api.post('users/reset-by-email', { email }),
     delete: (id) => api.delete(`users/${encodeURIComponent(id)}`),
     updateFinancePermission: (id, can_edit_finance) => api.put(`users/${encodeURIComponent(id)}/finance-permission`, { can_edit_finance }),
+    updateStudentPermission: (id, can_edit_students) => api.put(`users/${encodeURIComponent(id)}/student-permission`, { can_edit_students }),
 };
 
 // Academic Reports

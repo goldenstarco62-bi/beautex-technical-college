@@ -34,7 +34,7 @@ export async function getAllUsers(req, res) {
         }
 
         const users = await query(
-            'SELECT id, email, role, status, name, photo, created_at, last_seen_at, can_edit_finance FROM users ORDER BY email'
+            'SELECT id, email, role, status, name, photo, created_at, last_seen_at, can_edit_finance, can_edit_students FROM users ORDER BY email'
         );
 
         const enriched = users.map(u => ({
@@ -87,6 +87,11 @@ export async function updateUserStatus(req, res) {
         const user = await queryOne('SELECT * FROM users WHERE id = ?', [req.params.id]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
+        // Security check: if not superadmin, can only update students (and must have can_edit_students)
+        if (req.user.role !== 'superadmin' && user.role !== 'student') {
+            return res.status(403).json({ error: 'Access denied. You can only update status for student accounts.' });
+        }
+
         await run('UPDATE users SET status = ? WHERE id = ?', [status, req.params.id]);
         res.json({ id: user.id, email: user.email, role: user.role, status });
     } catch (error) {
@@ -106,6 +111,11 @@ export async function resetUserPassword(req, res) {
             const user = await User.findById(userId);
             if (!user) return res.status(404).json({ error: 'User not found' });
 
+            // Security check: if not superadmin, can only reset students
+            if (req.user.role !== 'superadmin' && user.role !== 'student') {
+                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+            }
+
             user.password = hashedPassword;
             user.must_change_password = true;
             await user.save();
@@ -114,8 +124,13 @@ export async function resetUserPassword(req, res) {
             return res.json({ message: 'Password reset — temporary credentials emailed' });
         }
 
-        const user = await queryOne('SELECT email FROM users WHERE id = ?', [userId]);
+        const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [userId]);
         if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Security check: if not superadmin, can only reset students
+        if (req.user.role !== 'superadmin' && user.role !== 'student') {
+            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+        }
 
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, userId]);
 
@@ -206,6 +221,11 @@ export async function resetPasswordByEmail(req, res) {
             const user = await User.findOne({ email: email.toLowerCase() });
             if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
+            // Security check: if not superadmin, can only reset students
+            if (req.user.role !== 'superadmin' && user.role !== 'student') {
+                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+            }
+
             user.password = hashedPassword;
             user.must_change_password = true;
             await user.save();
@@ -214,8 +234,13 @@ export async function resetPasswordByEmail(req, res) {
             return res.json({ message: 'Password reset — temporary credentials emailed' });
         }
 
-        const user = await queryOne('SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+        const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [email]);
         if (!user) return res.status(404).json({ error: 'No account found with that email address' });
+
+        // Security check: if not superadmin, can only reset students
+        if (req.user.role !== 'superadmin' && user.role !== 'student') {
+            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+        }
 
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, user.id]);
 
@@ -266,5 +291,43 @@ export async function updateFinancePermission(req, res) {
     } catch (error) {
         console.error('Update finance permission error:', error);
         res.status(500).json({ error: 'Failed to update finance permission' });
+    }
+}
+
+/**
+ * Grant or revoke Student account management permission for a user.
+ * Only accessible by superadmin.
+ */
+export async function updateStudentPermission(req, res) {
+    try {
+        const { can_edit_students } = req.body;
+        const userId = req.params.id;
+
+        if (typeof can_edit_students === 'undefined') {
+            return res.status(400).json({ error: 'can_edit_students field is required' });
+        }
+
+        const flag = can_edit_students ? true : false;
+
+        if (await isMongo()) {
+            const User = (await import('../models/mongo/User.js')).default;
+            const user = await User.findByIdAndUpdate(userId, { can_edit_students: flag }, { new: true }).select('-password');
+            if (!user) return res.status(404).json({ error: 'User not found' });
+            return res.json({ message: 'Student registry permission updated', can_edit_students: flag });
+        }
+
+        const user = await queryOne('SELECT id, role FROM users WHERE id = ?', [userId]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Only admins can be granted student editing rights
+        if (!['admin', 'superadmin'].includes(user.role)) {
+            return res.status(400).json({ error: 'Student management rights can only be granted to admins' });
+        }
+
+        await run('UPDATE users SET can_edit_students = ? WHERE id = ?', [flag, userId]);
+        res.json({ message: `Student management ${flag ? 'granted' : 'revoked'} successfully`, can_edit_students: flag });
+    } catch (error) {
+        console.error('Update student permission error:', error);
+        res.status(500).json({ error: 'Failed to update student permission' });
     }
 }

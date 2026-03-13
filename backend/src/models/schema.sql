@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   reset_token_expiry DATETIME,
   last_login DATETIME,
   last_seen_at DATETIME,
+  can_edit_finance BOOLEAN DEFAULT 0,
+  can_edit_students BOOLEAN DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

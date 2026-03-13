@@ -95,7 +95,6 @@ export default function Users() {
     };
 
     const handleFinancePermission = async (userId, currentFlag) => {
-        const action = currentFlag ? 'REVOKE' : 'GRANT';
         const msg = currentFlag
             ? 'Revoke finance editing rights from this admin?'
             : 'Grant finance editing rights to this admin? They will be able to add, edit and delete payment records.';
@@ -109,6 +108,23 @@ export default function Users() {
             alert(`Finance editing ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
         } catch (error) {
             alert(error.response?.data?.error || 'Failed to update finance permission');
+        }
+    };
+
+    const handleStudentPermission = async (userId, currentFlag) => {
+        const msg = currentFlag
+            ? 'Revoke student registry management rights from this admin?'
+            : 'Grant student registry management rights to this admin? They will be able to reset student passwords and update enrollment statuses.';
+        if (!window.confirm(msg)) return;
+        try {
+            await usersAPI.updateStudentPermission(userId, !currentFlag);
+            fetchUsers();
+            if (selectedUser?.id === userId) {
+                setSelectedUser(prev => ({ ...prev, can_edit_students: !currentFlag }));
+            }
+            alert(`Student registry permission ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
+        } catch (error) {
+            alert(error.response?.data?.error || 'Failed to update student permission');
         }
     };
 
@@ -244,33 +260,63 @@ export default function Users() {
                                     <option value="superadmin">Superadmin</option>
                                 </select>
                             </div>
-                            {/* Finance Permission — only superadmin can grant, only to admins */}
+                            {/* Administrative Permissions — only superadmin can grant, only to admins */}
                             {currentUser.role === 'superadmin' && user.role === 'admin' && (
-                                <div className="mt-4 p-4 rounded-2xl border-2 border-dashed border-gold/40 bg-gold/5">
-                                    <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
-                                        <DollarSign className="w-3 h-3 text-gold" />
-                                        Finance Editor Access
-                                    </p>
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                                {user.can_edit_finance ? '✅ Finance Editing: GRANTED' : '🔒 Finance Editing: RESTRICTED'}
-                                            </p>
-                                            <p className="text-[9px] text-gray-400 mt-0.5">
-                                                {user.can_edit_finance
-                                                    ? 'This admin can record, edit and delete payments.'
-                                                    : 'This admin can only view financial records.'}
-                                            </p>
+                                <div className="mt-4 space-y-4">
+                                    <div className="p-4 rounded-2xl border-2 border-dashed border-gold/40 bg-gold/5">
+                                        <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
+                                            <DollarSign className="w-3 h-3 text-gold" />
+                                            Finance Editor Access
+                                        </p>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                    {user.can_edit_finance ? '✅ Finance Editing: GRANTED' : '🔒 Finance Editing: RESTRICTED'}
+                                                </p>
+                                                <p className="text-[9px] text-gray-400 mt-0.5">
+                                                    {user.can_edit_finance
+                                                        ? 'This admin can record, edit and delete payments.'
+                                                        : 'This admin can only view financial records.'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleFinancePermission(user.id, !!user.can_edit_finance)}
+                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_finance
+                                                        ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
+                                                        : 'bg-gold/20 text-gold hover:bg-gold hover:text-maroon border border-gold/40'
+                                                    }`}
+                                            >
+                                                {user.can_edit_finance ? 'Revoke' : 'Grant'}
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => handleFinancePermission(user.id, !!user.can_edit_finance)}
-                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_finance
-                                                    ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
-                                                    : 'bg-gold/20 text-gold hover:bg-gold hover:text-maroon border border-gold/40'
-                                                }`}
-                                        >
-                                            {user.can_edit_finance ? 'Revoke' : 'Grant'}
-                                        </button>
+                                    </div>
+
+                                    <div className="p-4 rounded-2xl border-2 border-dashed border-maroon/40 bg-maroon/5">
+                                        <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
+                                            <Shield className="w-3 h-3 text-maroon" />
+                                            Student Registry Access
+                                        </p>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                    {user.can_edit_students ? '✅ Registry Access: GRANTED' : '🔒 Registry Access: RESTRICTED'}
+                                                </p>
+                                                <p className="text-[9px] text-gray-400 mt-0.5">
+                                                    {user.can_edit_students
+                                                        ? 'This admin can reset student passwords and update statuses.'
+                                                        : 'This admin can only view student records.'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleStudentPermission(user.id, !!user.can_edit_students)}
+                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_students
+                                                        ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
+                                                        : 'bg-maroon/20 text-maroon hover:bg-maroon hover:text-white border border-maroon/40'
+                                                    }`}
+                                            >
+                                                {user.can_edit_students ? 'Revoke' : 'Grant'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -414,6 +460,12 @@ export default function Users() {
                                         {u.can_edit_finance && u.role === 'admin' && (
                                             <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest bg-gold/10 text-gold border border-gold/20">
                                                 <DollarSign className="w-2 h-2" /> Finance
+                                            </span>
+                                        )}
+                                        {/* Student Editor badge */}
+                                        {u.can_edit_students && u.role === 'admin' && (
+                                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest bg-maroon/10 text-maroon border border-maroon/20">
+                                                <Shield className="w-2 h-2" /> Registry
                                             </span>
                                         )}
                                     </td>

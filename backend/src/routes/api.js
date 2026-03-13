@@ -24,6 +24,7 @@ import * as studentDailyReportController from '../controllers/studentDailyReport
 import * as inventoryController from '../controllers/inventoryController.js';
 import { authorizeRoles } from '../middleware/auth.js';
 import { authorizeFinanceEdit } from '../middleware/auth.js';
+import { authorizeStudentEdit } from '../middleware/auth.js';
 
 
 import { logAudit } from '../middleware/audit.js';
@@ -155,13 +156,15 @@ router.put('/profile', authenticateToken, profileController.updateProfile);
 // User Management routes (Strictly Superadmin only)
 router.get('/users', authenticateToken, authorizeRoles('superadmin'), userController.getAllUsers);
 router.put('/users/:id/role', authenticateToken, authorizeRoles('superadmin'), userController.updateUserRole);
-router.put('/users/:id/status', authenticateToken, authorizeRoles('superadmin'), userController.updateUserStatus);
-router.put('/users/:id/password', authenticateToken, authorizeRoles('superadmin'), userController.resetUserPassword);
-router.post('/users/reset-by-email', authenticateToken, authorizeRoles('superadmin'), userController.resetPasswordByEmail);
+router.put('/users/:id/status', authenticateToken, authorizeStudentEdit, userController.updateUserStatus);
+router.put('/users/:id/password', authenticateToken, authorizeStudentEdit, userController.resetUserPassword);
+router.post('/users/reset-by-email', authenticateToken, authorizeStudentEdit, userController.resetPasswordByEmail);
 router.delete('/users/:id', authenticateToken, authorizeRoles('superadmin'), userController.deleteUser);
 router.get('/audit-logs', authenticateToken, authorizeRoles('superadmin'), userController.getAuditLogs);
 // Finance permission management (superadmin only)
 router.put('/users/:id/finance-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateFinancePermission);
+// Student registry permission management (superadmin only)
+router.put('/users/:id/student-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateStudentPermission);
 
 
 // Academic Reports (Trainers/Admin/Superadmin)

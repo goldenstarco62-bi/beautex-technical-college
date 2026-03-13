@@ -468,6 +468,16 @@ async function runPostgresMigrations(database) {
             console.log('✅ can_edit_finance column added to users');
         }
 
+        // Check for can_edit_students column in users
+        const checkStudentEditCol = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='can_edit_students'
+        `);
+        if (checkStudentEditCol.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN can_edit_students BOOLEAN DEFAULT FALSE');
+            console.log('✅ can_edit_students column added to users');
+        }
+
         // --- Payments Table Migrations ---
         const paymentCols = await database.query(`
             SELECT column_name FROM information_schema.columns
@@ -633,6 +643,11 @@ async function runSqliteMigrations(database) {
             console.log('🔄 Applying SQLite migration: Adding can_edit_finance to users...');
             await database.run('ALTER TABLE users ADD COLUMN can_edit_finance INTEGER DEFAULT 0');
             console.log('✅ can_edit_finance column added to SQLite users');
+        }
+        if (!userInfo.some(col => col.name === 'can_edit_students')) {
+            console.log('🔄 Applying SQLite migration: Adding can_edit_students to users...');
+            await database.run('ALTER TABLE users ADD COLUMN can_edit_students INTEGER DEFAULT 0');
+            console.log('✅ can_edit_students column added to SQLite users');
         }
 
         // Daily activity reports - add missing columns

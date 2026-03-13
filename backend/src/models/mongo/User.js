@@ -43,7 +43,15 @@ const userSchema = new mongoose.Schema({
         default: Date.now
     },
     reset_token: String,
-    reset_token_expiry: Date
+    reset_token_expiry: Date,
+    can_edit_finance: {
+        type: Boolean,
+        default: false
+    },
+    can_edit_students: {
+        type: Boolean,
+        default: false
+    }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
     toJSON: { virtuals: true },
