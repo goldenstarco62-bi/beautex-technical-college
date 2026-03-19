@@ -497,22 +497,22 @@ export default function Announcements() {
             {/* Premium Broadcast Suite Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-maroon-950/80 backdrop-blur-3xl flex items-center justify-center p-4 z-[100] animate-in fade-in zoom-in-95 duration-500">
-                    <div className="bg-white rounded-[4rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] max-w-6xl w-full max-h-[92vh] overflow-hidden border border-white/20 flex flex-col lg:flex-row">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.5)] max-w-4xl w-full max-h-[88vh] overflow-hidden border border-white/20 flex flex-col lg:flex-row">
                         {/* Immersive Sidebar */}
-                        <div className="hidden lg:flex w-96 bg-maroon p-16 flex-col justify-between relative overflow-hidden shrink-0">
+                        <div className="hidden lg:flex w-72 bg-maroon p-10 flex-col justify-between relative overflow-hidden shrink-0">
                             {/* Animated Background Blobs */}
                             <div className="absolute -top-20 -right-20 w-80 h-80 bg-gold/10 rounded-full blur-[100px] animate-pulse"></div>
                             <div className="absolute top-1/2 left-[-50px] w-64 h-64 bg-white/5 rounded-full blur-[80px]"></div>
                             <div className="absolute -bottom-20 right-0 w-64 h-64 bg-gold/5 rounded-full blur-[60px]"></div>
 
                             <div className="relative">
-                                <div className="w-20 h-20 bg-white/15 backdrop-blur-2xl rounded-[1.8rem] flex items-center justify-center mb-10 border border-white/20 shadow-2xl group animate-in slide-in-from-left-8 duration-700">
-                                    <Megaphone className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                                <div className="w-14 h-14 bg-white/15 backdrop-blur-2xl rounded-[1.2rem] flex items-center justify-center mb-6 border border-white/20 shadow-2xl group animate-in slide-in-from-left-8 duration-700">
+                                    <Megaphone className="w-7 h-7 text-gold group-hover:scale-110 transition-transform" />
                                 </div>
-                                <h3 className="text-3xl font-black text-white uppercase tracking-tight mb-4 leading-tight">
+                                <h3 className="text-xl font-black text-white uppercase tracking-tight mb-3 leading-tight">
                                     {editingAnnouncement ? 'Evolve' : 'Launch'} <br /><span className="text-gold">Broadcast</span>
                                 </h3>
-                                <p className="text-[11px] text-white/50 font-bold uppercase tracking-widest leading-relaxed border-l-2 border-gold/30 pl-6 mb-12">
+                                <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest leading-relaxed border-l-2 border-gold/30 pl-4 mb-8">
                                     Synthesize official bulletins for real-time dispatch to the entire collegiate network.
                                 </p>
 
@@ -565,7 +565,7 @@ export default function Announcements() {
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-12 lg:p-20 custom-scrollbar">
+                            <div className="flex-1 overflow-y-auto p-6 lg:p-10 custom-scrollbar">
                                 {showPreview ? (
                                     <div className="max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-500">
                                         <div className="text-[11px] font-black text-gold uppercase tracking-[.4em] mb-12 text-center py-4 bg-maroon/5 rounded-full border border-maroon/5 shadow-inner">Simulated Broadcast Display</div>
@@ -605,7 +605,7 @@ export default function Announcements() {
                                         </div>
                                     </div>
                                 ) : (
-                                    <form onSubmit={handleSubmit} className="space-y-12 animate-in fade-in duration-500 max-w-4xl mx-auto pb-10">
+                                    <form onSubmit={handleSubmit} className="space-y-6 animate-in fade-in duration-500 max-w-4xl mx-auto">
                                         <div className="space-y-4">
                                             <label className="flex items-center gap-3 text-[11px] font-black text-maroon/50 uppercase tracking-[.25em] ml-2">
                                                 <Megaphone className="w-4 h-4" /> Headline Focus
@@ -614,13 +614,13 @@ export default function Announcements() {
                                                 type="text"
                                                 value={formData.title}
                                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                                className="w-full px-10 py-7 bg-white border border-gray-100 rounded-[2.5rem] text-maroon font-bold placeholder-maroon/10 shadow-sm focus:shadow-2xl focus:shadow-maroon/5 outline-none focus:ring-8 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all text-2xl tracking-tight"
+                                                className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/10 shadow-sm focus:shadow-2xl focus:shadow-maroon/5 outline-none focus:ring-4 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all text-base tracking-tight"
                                                 placeholder="e.g. Annual Convocation Ceremony 2024"
                                                 required
                                             />
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-4">
                                                 <label className="flex items-center gap-3 text-[11px] font-black text-maroon/50 uppercase tracking-[.25em] ml-2">
                                                     <AlertCircle className="w-4 h-4" /> Signal Priority
@@ -629,7 +629,7 @@ export default function Announcements() {
                                                     <select
                                                         value={formData.priority}
                                                         onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                                                        className="w-full px-10 py-7 bg-white border border-gray-100 rounded-[2rem] text-maroon font-black uppercase tracking-widest outline-none focus:ring-8 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all cursor-pointer shadow-sm appearance-none text-xs"
+                                                        className="w-full px-6 py-4 bg-white border border-gray-100 rounded-xl text-maroon font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all cursor-pointer shadow-sm appearance-none text-xs"
                                                     >
                                                         <option value="Medium">Standard Dispatch</option>
                                                         <option value="High">Urgent Broadcast</option>
@@ -646,7 +646,7 @@ export default function Announcements() {
                                                     <select
                                                         value={formData.category}
                                                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                                        className="w-full px-10 py-7 bg-white border border-gray-100 rounded-[2rem] text-maroon font-black uppercase tracking-widest outline-none focus:ring-8 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all cursor-pointer shadow-sm appearance-none text-xs"
+                                                        className="w-full px-6 py-4 bg-white border border-gray-100 rounded-xl text-maroon font-black uppercase tracking-widest outline-none focus:ring-4 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all cursor-pointer shadow-sm appearance-none text-xs"
                                                     >
                                                         <option value="General">General News</option>
                                                         <option value="Academic">Academic Affairs</option>
@@ -668,7 +668,7 @@ export default function Announcements() {
                                             <textarea
                                                 value={formData.content}
                                                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                                                className="w-full px-10 py-10 bg-white border border-gray-100 rounded-[3.5rem] text-maroon font-medium placeholder-maroon/10 shadow-sm focus:shadow-2xl focus:shadow-maroon/5 outline-none focus:ring-8 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all h-80 resize-none leading-[1.8] text-lg"
+                                                className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-maroon font-medium placeholder-maroon/10 shadow-sm focus:shadow-2xl focus:shadow-maroon/5 outline-none focus:ring-4 focus:ring-maroon/[0.03] focus:border-maroon/20 transition-all h-44 resize-none leading-relaxed text-sm"
                                                 placeholder="Synthesize the official narrative here..."
                                                 required
                                             ></textarea>
@@ -676,11 +676,11 @@ export default function Announcements() {
 
                                         <button
                                             type="submit"
-                                            className="group relative w-full bg-maroon text-gold overflow-hidden py-8 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.5em] shadow-4xl hover:shadow-[0_40px_80px_-20px_rgba(128,0,0,0.4)] transition-all hover:scale-[1.02] active:scale-95 border border-maroon-900"
+                                            className="group relative w-full bg-maroon text-gold overflow-hidden py-4 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-lg hover:shadow-[0_20px_40px_-10px_rgba(128,0,0,0.4)] transition-all hover:scale-[1.01] active:scale-95 border border-maroon-900"
                                         >
                                             <div className="absolute inset-0 bg-gold translate-y-full group-hover:translate-y-0 transition-transform duration-700 opacity-10"></div>
-                                            <div className="relative flex items-center justify-center gap-6">
-                                                <Bell className="w-6 h-6 animate-swing group-hover:animate-bounce" />
+                                            <div className="relative flex items-center justify-center gap-3">
+                                                <Bell className="w-4 h-4" />
                                                 {editingAnnouncement ? 'Execute Official Revision' : 'Authorize & Launch Broadcast'}
                                             </div>
                                         </button>
