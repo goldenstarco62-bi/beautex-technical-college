@@ -169,10 +169,17 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
 
     try {
         if (!transporter) {
-            console.log('🔄 First-time initialization of SMTP transporter...');
+            console.log('🔄 Initializing Secure SMTP Transporter...');
             transporter = await createTransporter();
-            console.log('🧪 Verifying SMTP Handshake...');
-            await transporter.verify();
+            
+            // Add a timeout to verification to prevent hanging
+            const verifyPromise = transporter.verify();
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('SMTP Verification Timeout (15s)')), 15000)
+            );
+
+            console.log('🧪 Performing SMTP Handshake...');
+            await Promise.race([verifyPromise, timeoutPromise]);
             console.log('✅ SMTP Bridge Verified & Ready.');
         }
 
@@ -239,30 +246,45 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
         console.log(`📡 [DISPATCH START] Initiating broadcast for: "${title}"`);
         console.log(`� Target: ${recipientEmails.length} active members.`);
 
+        console.log(`🏁 Dispatching Bulletins to ${recipientEmails.length} members...`);
+
         let successCount = 0;
         let failCount = 0;
 
         for (const email of recipientEmails) {
             try {
-                // Adhering strictly to Gmail's intake pace
-                await new Promise(r => setTimeout(r, 1000));
+                // Throttle to adhere to Gmail intake pace (1.5s per email)
+                await new Promise(r => setTimeout(r, 1500));
 
-                process.stdout.write(`📤 Sending to ${email}... `);
                 await transporter.sendMail({
-                    from: `"Beautex College News" <${process.env.SMTP_USER}>`,
+                    from: `"Beautex Technical Training College" <${process.env.SMTP_USER}>`,
                     to: email,
-                    subject: `[Announcement] ${title}`,
+                    subject: `📢 Announcement: ${title}`,
                     html: htmlBody,
+                    // Add importance headers
+                    priority: priority?.toLowerCase() === 'high' ? 'high' : 'normal',
+                    headers: {
+                        'X-Priority': priority?.toLowerCase() === 'high' ? '1 (Highest)' : '3 (Normal)',
+                        'Importance': priority?.toLowerCase() === 'high' ? 'High' : 'Normal'
+                    }
                 });
-                console.log(`✅ SENT`);
+                
                 successCount++;
+                if (successCount % 10 === 0 || successCount === recipientEmails.length) {
+                    console.log(`📡 Broadcast Progress: ${successCount}/${recipientEmails.length} delivered.`);
+                }
             } catch (err) {
-                console.log(`❌ FAILED: ${err.message}`);
+                console.error(`❌ Dispatch Failure [${email}]:`, err.message);
                 failCount++;
+                // If it's a fatal SMTP error, stop the broadcast
+                if (err.message.includes('Invalid login') || err.message.includes('Connection refused')) {
+                    console.error('⛔ Critical SMTP Error: Aborting remaining broadcast.');
+                    break;
+                }
             }
         }
 
-        console.log(`🏁 Broadcast Complete: ${successCount} sent, ${failCount} failed.`);
+        console.log(`🏁 Broadcast Complete: ${successCount} successful, ${failCount} failed.`);
 
         // Send a single summary to the administrator
         try {

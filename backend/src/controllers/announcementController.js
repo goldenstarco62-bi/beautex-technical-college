@@ -45,11 +45,11 @@ async function getAllUserEmails() {
                 .forEach(e => emailSet.add(e.toLowerCase().trim()));
         }
 
-        const emails = [...emailSet].filter(Boolean);
-        console.log(`📋 Email recipients gathered: ${emails.length} unique address(es).`);
+        const emails = [...emailSet].filter(e => e && e.includes('@'));
+        console.log(`📋 Registry Dispatch: ${emails.length} unique recipient(s) identified.`);
         return emails;
     } catch (err) {
-        console.error('⚠️  Could not fetch user emails for announcement notification:', err.message);
+        console.error('❌ Registry Query Failure:', err.message);
         return [];
     }
 }
@@ -91,19 +91,21 @@ export async function createAnnouncement(req, res) {
             res.status(201).json(savedAnnouncement);
         }
 
-        // ✉️ Send email notifications in the background
+        // ✉️ Trigger Neural Broadcast in background
+        console.log('📡 Initiating background broadcast sequence...');
+        
         getAllUserEmails()
             .then(emails => {
-                if (emails && emails.length > 0) {
-                    console.log(`📢 Announcement Broadcast: Found ${emails.length} active recipient(s).`);
-                    console.log(`📧 Dispatching bulletins to: ${emails.slice(0, 5).join(', ')}${emails.length > 5 ? '...' : ''}`);
-                    return sendAnnouncementEmail(savedAnnouncement, emails);
-                } else {
-                    console.warn('⚠️ No active user emails found for announcement notification.');
+                if (!emails || emails.length === 0) {
+                    console.warn('⚠️ Broadcast Aborted: No active recipients found in registry.');
+                    return;
                 }
+                
+                console.log(`📢 Dispatching to ${emails.length} members. (Author: ${author || 'Admin'})`);
+                return sendAnnouncementEmail(savedAnnouncement, emails);
             })
             .catch(err => {
-                console.error('❌ Critical failure in background announcement broadcast:', err.stack || err);
+                console.error('❌ Critical failure in background announcement broadcast path:', err.message);
             });
 
     } catch (error) {
