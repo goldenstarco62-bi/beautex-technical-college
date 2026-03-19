@@ -1,9 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Bell, Moon, Sun, LogOut, Menu } from 'lucide-react';
+import { Bell, Moon, Sun, LogOut, Menu, Check, CheckCheck, Megaphone, AlertTriangle, Info, X } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { notificationsAPI } from '../../services/api';
+
+const STORAGE_KEY = 'bttc_read_notifications';
+
+function getReadIds() {
+    try {
+        return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+
+function saveReadIds(ids) {
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+    } catch {}
+}
+
+const priorityIcon = (priority) => {
+    switch ((priority || '').toLowerCase()) {
+        case 'high': return <AlertTriangle className="w-3 h-3 text-red-500 shrink-0" />;
+        case 'medium': return <Megaphone className="w-3 h-3 text-amber-500 shrink-0" />;
+        default: return <Info className="w-3 h-3 text-blue-500 shrink-0" />;
+    }
+};
+
+const priorityBadge = (priority) => {
+    switch ((priority || '').toLowerCase()) {
+        case 'high': return 'bg-red-100 text-red-600';
+        case 'medium': return 'bg-amber-100 text-amber-600';
+        default: return 'bg-blue-100 text-blue-600';
+    }
+};
 
 export default function Navbar({ onMenuClick }) {
     const { user, logout } = useAuth();
@@ -11,28 +43,79 @@ export default function Navbar({ onMenuClick }) {
     const navigate = useNavigate();
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
+    const [readIds, setReadIds] = useState(getReadIds);
+    const [loading, setLoading] = useState(false);
+    const dropdownRef = useRef(null);
+    const bellRef = useRef(null);
 
-    useEffect(() => {
-        const fetchNotifications = async () => {
-            try {
-                const { data } = await notificationsAPI.getAll();
+    // Fetch notifications from backend (announcements shaped as notifications)
+    const fetchNotifications = useCallback(async () => {
+        if (!user) return;
+        try {
+            setLoading(true);
+            const { data } = await notificationsAPI.getAll();
+            if (Array.isArray(data)) {
                 setNotifications(data);
-            } catch (error) {
-                console.error('Error fetching notifications:', error);
+            }
+        } catch (error) {
+            console.error('Error fetching notifications:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [user]);
+
+    // Initial fetch + auto-refresh every 2 minutes
+    useEffect(() => {
+        fetchNotifications();
+        const interval = setInterval(fetchNotifications, 2 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, [fetchNotifications]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (
+                dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+                bellRef.current && !bellRef.current.contains(e.target)
+            ) {
+                setShowNotifications(false);
             }
         };
-        if (user) fetchNotifications();
-    }, [user]);
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
+    const markRead = (id) => {
+        setReadIds(prev => {
+            const next = new Set(prev);
+            next.add(String(id));
+            saveReadIds(next);
+            return next;
+        });
+    };
 
-    // Ensure notifications is an array
-    const safeNotifications = Array.isArray(notifications) ? notifications : [];
-    const unreadCount = safeNotifications.filter(n => !n.read).length;
+    const markAllRead = (e) => {
+        e.stopPropagation();
+        const allIds = new Set(notifications.map(n => String(n.id)));
+        saveReadIds(allIds);
+        setReadIds(allIds);
+    };
+
+    const handleNotificationClick = (notification) => {
+        markRead(notification.id);
+        setShowNotifications(false);
+        navigate('/announcements');
+    };
+
+    // Enrich notifications with local read state
+    const enriched = notifications.map(n => ({ ...n, read: readIds.has(String(n.id)) }));
+    const unreadCount = enriched.filter(n => !n.read).length;
+    const hasUnread = unreadCount > 0;
 
     return (
         <div className="h-20 bg-maroon backdrop-blur-md px-4 md:px-8 flex items-center justify-between sticky top-0 left-0 w-full z-40 shadow-2xl transition-all duration-300 border-b border-white/5">
@@ -52,7 +135,6 @@ export default function Navbar({ onMenuClick }) {
                     </span>
                 </div>
             </div>
-            {/* ... header ... */}
 
             <div className="flex items-center gap-2 sm:gap-6">
                 {/* Theme Toggle */}
@@ -63,40 +145,122 @@ export default function Navbar({ onMenuClick }) {
                     {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
 
-                {/* Notifications */}
+                {/* Notifications Bell */}
                 <div className="relative">
                     <button
+                        ref={bellRef}
                         onClick={() => setShowNotifications(!showNotifications)}
-                        className="p-2.5 text-white/40 hover:text-white hover:bg-white/5 rounded-xl relative transition-all"
+                        className="relative p-2.5 text-white/40 hover:text-white hover:bg-white/5 rounded-xl transition-all group"
+                        aria-label={`Notifications (${unreadCount} unread)`}
                     >
-                        <Bell className="w-5 h-5" />
-                        {unreadCount > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-accent rounded-full border-2 border-primary"></span>}
+                        {/* Animated bell when unread */}
+                        <Bell className={`w-5 h-5 transition-transform ${hasUnread ? 'animate-[wiggle_1s_ease-in-out]' : ''}`} />
+
+                        {/* Unread count badge */}
+                        {hasUnread && (
+                            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-gold text-maroon text-[9px] font-black rounded-full flex items-center justify-center px-1 border-2 border-maroon shadow-lg animate-in zoom-in-50 duration-200">
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </span>
+                        )}
                     </button>
 
+                    {/* Dropdown */}
                     {showNotifications && (
-                        <div className="absolute right-0 mt-4 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-white dark:bg-card-bg border border-primary/10 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                            <div className="p-4 border-b border-primary/5 flex justify-between items-center">
-                                <h3 className="text-[10px] font-black text-primary uppercase tracking-widest">Notifications</h3>
-                                <span className="text-[9px] font-bold text-accent px-2 py-0.5 bg-primary/5 rounded-full">{unreadCount} New</span>
-                            </div>
-                            <div className="max-h-[300px] overflow-y-auto">
-                                {safeNotifications.length > 0 ? safeNotifications.map(n => (
-                                    <div key={n.id} className={`p-4 border-b border-primary/5 hover:bg-parchment transition-colors cursor-pointer ${n.read ? 'opacity-60' : ''}`}>
-                                        <p className="text-[11px] font-black text-primary uppercase">{n.title}</p>
-                                        <div className="flex justify-between items-center mt-1">
-                                            <span className="text-[9px] font-bold text-primary/40 uppercase">{n.type}</span>
-                                            <span className="text-[9px] font-bold text-accent">{n.time}</span>
-                                        </div>
+                        <div
+                            ref={dropdownRef}
+                            className="absolute right-0 mt-4 w-80 sm:w-96 max-w-[calc(100vw-1rem)] bg-white border border-gray-100 rounded-[1.5rem] shadow-2xl z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right"
+                        >
+                            {/* Header */}
+                            <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 bg-maroon rounded-lg flex items-center justify-center">
+                                        <Bell className="w-3.5 h-3.5 text-gold" />
                                     </div>
-                                )) : (
-                                    <p className="p-8 text-center text-[10px] font-bold text-primary/20 uppercase tracking-widest">No notifications</p>
+                                    <div>
+                                        <h3 className="text-[11px] font-black text-gray-800 uppercase tracking-widest">Notifications</h3>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{unreadCount} unread</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {hasUnread && (
+                                        <button
+                                            onClick={markAllRead}
+                                            className="flex items-center gap-1 px-3 py-1.5 text-[9px] font-black text-maroon uppercase tracking-widest bg-maroon/5 hover:bg-maroon hover:text-gold rounded-lg transition-all"
+                                        >
+                                            <CheckCheck className="w-3 h-3" />
+                                            All Read
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setShowNotifications(false)}
+                                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* List */}
+                            <div className="max-h-[360px] overflow-y-auto custom-scrollbar">
+                                {loading && notifications.length === 0 ? (
+                                    <div className="py-12 text-center">
+                                        <div className="w-6 h-6 border-2 border-maroon/20 border-t-maroon rounded-full animate-spin mx-auto mb-2" />
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Loading...</p>
+                                    </div>
+                                ) : enriched.length > 0 ? (
+                                    enriched.map(n => (
+                                        <div
+                                            key={n.id}
+                                            onClick={() => handleNotificationClick(n)}
+                                            className={`flex gap-3 px-5 py-4 border-b border-gray-50 cursor-pointer transition-all hover:bg-maroon/[0.02] ${n.read ? 'opacity-50' : 'bg-white'}`}
+                                        >
+                                            {/* Priority icon */}
+                                            <div className="mt-0.5 shrink-0">
+                                                {priorityIcon(n.priority)}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <p className={`text-[11px] font-black uppercase tracking-tight leading-tight line-clamp-1 ${n.read ? 'text-gray-400' : 'text-gray-800'}`}>
+                                                        {n.title}
+                                                    </p>
+                                                    {!n.read && (
+                                                        <div className="w-2 h-2 bg-gold rounded-full shrink-0 mt-1" />
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-gray-400 font-medium line-clamp-2 mt-0.5">{n.content}</p>
+                                                <div className="flex items-center gap-2 mt-1.5">
+                                                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest ${priorityBadge(n.priority)}`}>
+                                                        {n.priority || 'general'}
+                                                    </span>
+                                                    <span className="text-[9px] font-bold text-gray-300">{n.time}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="py-16 text-center">
+                                        <div className="w-14 h-14 bg-gray-100 rounded-[1.5rem] flex items-center justify-center mx-auto mb-4">
+                                            <Bell className="w-7 h-7 text-gray-300" />
+                                        </div>
+                                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No announcements yet</p>
+                                    </div>
                                 )}
+                            </div>
+
+                            {/* Footer */}
+                            <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/60">
+                                <Link
+                                    to="/announcements"
+                                    onClick={() => setShowNotifications(false)}
+                                    className="block text-center text-[10px] font-black text-maroon uppercase tracking-widest hover:text-gold transition-colors py-1"
+                                >
+                                    View All Announcements →
+                                </Link>
                             </div>
                         </div>
                     )}
                 </div>
-
-                {/* User Info from Screenshot 1 */}
 
                 {/* User Info - Clickable for Profile Settings */}
                 <Link

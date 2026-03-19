@@ -4,25 +4,56 @@ import { sendAnnouncementEmail } from '../services/emailService.js';
 const isMongo = async () => !!process.env.MONGODB_URI;
 
 /**
- * Fetch all user emails to notify when a new announcement is posted.
- * Works for both MongoDB and SQL (SQLite / PostgreSQL).
+ * Fetch ALL user emails from across the system: users + students + faculty tables.
+ * Deduplicates to avoid sending the same person multiple emails.
  */
 async function getAllUserEmails() {
     try {
-        if (await isMongo()) {
+        const mongo = await isMongo();
+        const emailSet = new Set();
+
+        if (mongo) {
+            // Pull from User model
             const User = (await import('../models/mongo/User.js')).default;
-            // Fetch all active users regardless of role
-            const users = await User.find({ status: 'Active' }, 'email').lean();
-            return users.map(u => u.email).filter(Boolean);
+            const users = await User.find({}, 'email').lean();
+            users.forEach(u => u.email && emailSet.add(u.email.toLowerCase().trim()));
+
+            // Pull from Faculty model
+            try {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const faculty = await Faculty.find({}, 'email').lean();
+                faculty.forEach(f => f.email && emailSet.add(f.email.toLowerCase().trim()));
+            } catch (e) { console.warn('Faculty email fetch skipped:', e.message); }
+
+            // Pull from Student model
+            try {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const students = await Student.find({}, 'email').lean();
+                students.forEach(s => s.email && emailSet.add(s.email.toLowerCase().trim()));
+            } catch (e) { console.warn('Student email fetch skipped:', e.message); }
+
+        } else {
+            // SQL path — pull from all three tables
+            const [userRows, facultyRows, studentRows] = await Promise.all([
+                query('SELECT email FROM users').catch(() => []),
+                query('SELECT email FROM faculty').catch(() => []),
+                query('SELECT email FROM students').catch(() => []),
+            ]);
+            [...userRows, ...facultyRows, ...studentRows]
+                .map(r => r.email)
+                .filter(Boolean)
+                .forEach(e => emailSet.add(e.toLowerCase().trim()));
         }
-        // SQL path — users must be in 'Active' status
-        const rows = await query("SELECT email FROM users WHERE status = 'Active'");
-        return rows.map(r => r.email).filter(Boolean);
+
+        const emails = [...emailSet].filter(Boolean);
+        console.log(`📋 Email recipients gathered: ${emails.length} unique address(es).`);
+        return emails;
     } catch (err) {
         console.error('⚠️  Could not fetch user emails for announcement notification:', err.message);
         return [];
     }
 }
+
 
 export async function getAllAnnouncements(req, res) {
     try {
