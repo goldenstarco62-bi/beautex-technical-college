@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI } from '../services/api';
+import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, facultyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function Attendance() {
     const { user } = useAuth();
     const isStudent = (user?.role ? String(user.role).toLowerCase() : '') === 'student';
+    const isTeacher = (user?.role ? String(user.role).toLowerCase() : '') === 'teacher';
 
     const [courses, setCourses] = useState([]);
     const [selectedCourse, setSelectedCourse] = useState('');
@@ -28,9 +29,65 @@ export default function Attendance() {
         try {
             setLoading(true);
             setError('');
-            const { data } = await coursesAPI.getAll();
-            setCourses(data);
-            if (data.length > 0) setSelectedCourse(data[0].name);
+
+            if (isTeacher) {
+                // Fetch both courses and faculty in parallel for teachers
+                const [coursesRes, facultyRes] = await Promise.all([
+                    coursesAPI.getAll(),
+                    facultyAPI.getAll()
+                ]);
+
+                const allCourses = coursesRes.data || [];
+                const userEmail = String(user?.email || '').toLowerCase().trim();
+
+                // Find this teacher's faculty profile
+                const teacherProfile = facultyRes.data?.find(f =>
+                    String(f.email || '').toLowerCase().trim() === userEmail
+                );
+
+                if (teacherProfile) {
+                    // Parse assigned course names from the faculty profile
+                    let assignedCourseNames = [];
+                    try {
+                        if (typeof teacherProfile.courses === 'string') {
+                            if (teacherProfile.courses.startsWith('[')) {
+                                assignedCourseNames = JSON.parse(teacherProfile.courses);
+                            } else {
+                                assignedCourseNames = teacherProfile.courses.split(',').map(s => s.trim()).filter(Boolean);
+                            }
+                        } else if (Array.isArray(teacherProfile.courses)) {
+                            assignedCourseNames = teacherProfile.courses;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing teacher courses:', e);
+                    }
+
+                    const teacherName = teacherProfile.name || '';
+
+                    // Filter courses: where instructor matches OR course name is in assigned list
+                    const myCourses = allCourses.filter(c => {
+                        const isInstructor = c.instructor &&
+                            c.instructor.toLowerCase().trim() === teacherName.toLowerCase().trim();
+                        const isAssigned = assignedCourseNames.some(
+                            an => an.toLowerCase().trim() === (c.name || '').toLowerCase().trim()
+                        );
+                        return isInstructor || isAssigned;
+                    });
+
+                    setCourses(myCourses);
+                    if (myCourses.length > 0) setSelectedCourse(myCourses[0].name);
+                } else {
+                    // No faculty profile found - show all courses as fallback
+                    setCourses(allCourses);
+                    if (allCourses.length > 0) setSelectedCourse(allCourses[0].name);
+                    toast.error('No faculty profile linked to your account. Contact admin.');
+                }
+            } else {
+                // Admin/superadmin: show all courses
+                const { data } = await coursesAPI.getAll();
+                setCourses(data);
+                if (data.length > 0) setSelectedCourse(data[0].name);
+            }
         } catch (err) {
             console.error('Error fetching courses:', err);
             setError('Failed to load courses. Please refresh the page.');
@@ -168,7 +225,8 @@ export default function Attendance() {
             if (!silent) toast.success(`${student.name} marked as ${status}`);
         } catch (err) {
             console.error('Error marking attendance:', err);
-            if (!silent) toast.error('Failed to mark attendance');
+            const errMsg = err.response?.data?.error || 'Failed to mark attendance';
+            if (!silent) toast.error(errMsg);
             throw err;
         }
     };
@@ -178,14 +236,6 @@ export default function Attendance() {
             setError('Please select a course before saving.');
             return;
         }
-
-        // No longer mandatory
-        /*
-        if (!topicsCovered) {
-            setError('Please describe topics covered before saving the ledger.');
-            return;
-        }
-        */
 
         try {
             setSaving(true);
@@ -246,6 +296,18 @@ export default function Attendance() {
                         {isStudent ? 'Your Daily Participation Log' : 'Academic Audit • Daily Registry Protocol'}
                     </p>
                 </div>
+                {isTeacher && courses.length === 0 && (
+                    <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-700 px-5 py-3 rounded-2xl text-xs font-bold">
+                        <BookOpen className="w-4 h-4 shrink-0" />
+                        No courses are assigned to your account yet. Contact an administrator.
+                    </div>
+                )}
+                {isTeacher && courses.length > 0 && (
+                    <div className="flex items-center gap-2 bg-maroon/5 border border-maroon/10 text-maroon px-5 py-3 rounded-2xl text-xs font-bold">
+                        <BookOpen className="w-4 h-4" />
+                        Showing {courses.length} assigned course{courses.length !== 1 ? 's' : ''}
+                    </div>
+                )}
             </div>
 
             {error && (
@@ -272,9 +334,15 @@ export default function Attendance() {
                                     value={selectedCourse}
                                     onChange={(e) => setSelectedCourse(e.target.value)}
                                     className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none cursor-pointer"
+                                    disabled={isTeacher && courses.length === 0}
                                 >
-                                    <option value="">Choose Module...</option>
-                                    {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    {courses.length === 0
+                                        ? <option value="">No courses assigned</option>
+                                        : <>
+                                            <option value="">Choose Module...</option>
+                                            {courses.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        </>
+                                    }
                                 </select>
                             </div>
                             <div className="space-y-2">

@@ -18,7 +18,9 @@ import {
     X,
     ThumbsUp,
     ThumbsDown,
-    Minus
+    Minus,
+    Bell,
+    ChevronRight
 } from 'lucide-react';
 import {
     coursesAPI,
@@ -204,34 +206,50 @@ export default function StudentDashboard() {
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
-            {/* Header */}
-            <div className="flex justify-between items-end mb-4">
-                <div>
-                    <h1 className="text-3xl font-black text-gray-800 uppercase tracking-tighter">Student Portal</h1>
-                    <p className="text-sm text-gray-400 font-medium">
-                        Welcome back, {studentProfile ? studentProfile.name : (user?.name || user?.email?.split('@')[0])}
-                    </p>
-                </div>
-                <div className="text-right">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                        {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
+            {/* Welcome Banner */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-maroon to-maroon/90 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl shadow-maroon/20">
+                <div className="absolute top-0 right-0 w-72 h-72 bg-gold/10 rounded-full translate-x-1/3 -translate-y-1/3 blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+                <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                        <p className="text-[10px] font-black text-gold/60 uppercase tracking-[0.3em] mb-1">Student Portal</p>
+                        <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight">
+                            {studentProfile ? studentProfile.name : (user?.name || user?.email?.split('@')[0])} <span className="text-gold">↗</span>
+                        </h1>
+                        <p className="text-sm text-white/50 font-medium mt-2">
+                            {courseDetails ? courseDetails.name : 'No active enrollment'}
+                            {studentProfile?.intake ? ` · Intake: ${studentProfile.intake}` : ''}
+                        </p>
+                    </div>
+                    <div className="flex flex-col items-start md:items-end gap-2">
+                        <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
+                        <Link to="/grades" className="flex items-center gap-2 px-5 py-2.5 bg-gold text-maroon rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 shadow-xl">
+                            <Award className="w-3.5 h-3.5" /> View My Grades
+                        </Link>
+                    </div>
                 </div>
             </div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                {statsConfig.map((stat, index) => {
+                {[
+                    { ...statsConfig[0], accent: 'border-l-maroon', iconBg: 'bg-maroon/5', iconColor: 'text-maroon' },
+                    { ...statsConfig[1], accent: 'border-l-red-500', iconBg: 'bg-red-50', iconColor: 'text-red-500' },
+                    { ...statsConfig[2], accent: 'border-l-green-500', iconBg: 'bg-green-50', iconColor: 'text-green-600' },
+                    { ...statsConfig[3], accent: 'border-l-blue-500', iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
+                ].map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl hover:shadow-2xl transition-all">
+                        <div key={index} className={`bg-white p-6 rounded-[2rem] border border-gray-100 border-l-4 ${stat.accent} shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300`}>
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.title}</p>
                                     <p className="text-3xl font-black text-gray-800">{stat.value}</p>
                                 </div>
-                                <div className="w-14 h-14 bg-maroon/5 rounded-2xl flex items-center justify-center">
-                                    <Icon className="w-7 h-7 text-maroon" />
+                                <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center`}>
+                                    <Icon className={`w-6 h-6 ${stat.iconColor}`} />
                                 </div>
                             </div>
                         </div>
@@ -451,18 +469,27 @@ export default function StudentDashboard() {
                 {/* Sidebar: Notice Board */}
                 <div className="space-y-8">
                     <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                        <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-8">Notice Board</h2>
+                        <div className="flex items-center justify-between mb-8">
+                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Notice Board</h2>
+                            <Link to="/announcements" className="text-[9px] font-black uppercase tracking-widest text-maroon hover:text-gold transition-colors flex items-center gap-1">
+                                View All <ChevronRight className="w-3 h-3" />
+                            </Link>
+                        </div>
                         <div className="space-y-6">
                             {recentAnnouncements.length > 0 ? (
                                 recentAnnouncements.map(ann => (
                                     <div key={ann.id} className="relative pl-6 border-l-2 border-maroon pb-6 last:pb-0">
+                                        <div className="absolute -left-[5px] top-0 w-2 h-2 bg-maroon rounded-full" />
                                         <p className="text-[9px] font-black text-maroon uppercase tracking-widest mb-1">{ann.date}</p>
                                         <h4 className="text-xs font-bold text-gray-800 mb-1">{ann.title}</h4>
                                         <p className="text-[10px] text-gray-400 font-medium line-clamp-2">{ann.content}</p>
                                     </div>
                                 ))
                             ) : (
-                                <p className="text-[10px] text-gray-400 font-medium uppercase italic">No recent notices</p>
+                                <div className="py-8 text-center">
+                                    <Bell className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                                    <p className="text-xs text-gray-400 italic">No recent notices</p>
+                                </div>
                             )}
                         </div>
                     </div>
