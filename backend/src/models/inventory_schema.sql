@@ -201,3 +201,21 @@ CREATE TABLE IF NOT EXISTS inv_damage_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (item_id) REFERENCES inv_items(id)
 );
+
+-- Procurement Wishlist (Items not yet in inventory)
+CREATE TABLE IF NOT EXISTS inv_procurement_wishlist (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_name TEXT NOT NULL,
+  description TEXT,
+  quantity INTEGER NOT NULL,
+  estimated_unit_price REAL DEFAULT 0.0,
+  priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Critical')),
+  requested_by TEXT NOT NULL,  -- user email
+  requested_by_name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Approved', 'Purchased', 'Rejected')),
+  rejection_reason TEXT,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

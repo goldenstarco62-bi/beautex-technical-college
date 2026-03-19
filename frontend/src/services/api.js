@@ -279,6 +279,11 @@ export const inventoryAPI = {
     createPurchase: (data) => api.post('inventory/purchases', data),
     updatePurchase: (id, data) => api.put(`inventory/purchases/${id}`, data),
     deletePurchase: (id) => api.delete(`inventory/purchases/${id}`),
+    // Procurement Wishlist
+    getWishlist: (params) => api.get('inventory/wishlist', { params }),
+    createWishlist: (data) => api.post('inventory/wishlist', data),
+    updateWishlist: (id, data) => api.put(`inventory/wishlist/${id}`, data),
+    deleteWishlist: (id) => api.delete(`inventory/wishlist/${id}`),
     // Assets
     getAssets: () => api.get('inventory/assets'),
     createAsset: (data) => api.post('inventory/assets', data),

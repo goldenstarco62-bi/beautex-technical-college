@@ -191,3 +191,21 @@ CREATE TABLE IF NOT EXISTS inv_damage_logs (
   action_taken TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Procurement Wishlist (Items not yet in inventory)
+CREATE TABLE IF NOT EXISTS inv_procurement_wishlist (
+  id SERIAL PRIMARY KEY,
+  item_name TEXT NOT NULL,
+  description TEXT,
+  quantity INTEGER NOT NULL,
+  estimated_unit_price DECIMAL DEFAULT 0.0,
+  priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Critical')),
+  requested_by TEXT NOT NULL,  -- user email
+  requested_by_name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Approved', 'Purchased', 'Rejected')),
+  rejection_reason TEXT,
+  notes TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

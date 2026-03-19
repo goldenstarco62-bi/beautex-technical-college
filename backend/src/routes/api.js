@@ -311,6 +311,12 @@ router.post('/inventory/purchases', authenticateToken, inventoryController.creat
 router.put('/inventory/purchases/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.updatePurchaseRequest);
 router.delete('/inventory/purchases/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.deletePurchaseRequest);
 
+// Procurement Wishlist
+router.get('/inventory/wishlist', authenticateToken, inventoryController.getProcurementWishlist);
+router.post('/inventory/wishlist', authenticateToken, inventoryController.createProcurementWishlist);
+router.put('/inventory/wishlist/:id', authenticateToken, inventoryController.updateProcurementWishlist);
+router.delete('/inventory/wishlist/:id', authenticateToken, inventoryController.deleteProcurementWishlist);
+
 // Assets
 router.get('/inventory/assets', authenticateToken, inventoryController.getAssets);
 router.post('/inventory/assets', authenticateToken, authorizeRoles('admin', 'superadmin'), inventoryController.createAsset);

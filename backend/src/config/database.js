@@ -517,9 +517,33 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE student_daily_reports ADD COLUMN student_commented_at TIMESTAMPTZ');
             console.log('✅ student_commented_at column added to student_daily_reports');
         }
-
     } catch (err) {
         console.error('⚠️ Postgres migration warning:', err.message);
+    }
+
+    // Migration: Procurement Wishlist
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS inv_procurement_wishlist (
+                id SERIAL PRIMARY KEY,
+                item_name TEXT NOT NULL,
+                description TEXT,
+                quantity INTEGER NOT NULL,
+                estimated_unit_price DECIMAL DEFAULT 0.0,
+                priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Critical')),
+                requested_by TEXT NOT NULL,
+                requested_by_name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Approved', 'Purchased', 'Rejected')),
+                rejection_reason TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Procurement wishlist table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ Procurement wishlist migration warning (PostgreSQL):', e.message);
     }
 }
 
@@ -718,7 +742,7 @@ async function runSqliteMigrations(database) {
             console.log('✅ student_commented_at column added to student_daily_reports (SQLite)');
         }
 
-        // ─── INVENTORY MODULE TABLES ─────────────────────────────────────
+        // --- Inventory Module Tables ---
         const inventorySchemaPath = path.join(__dirname, '../models/inventory_schema.sql');
         if (fs.existsSync(inventorySchemaPath)) {
             const invSchema = fs.readFileSync(inventorySchemaPath, 'utf-8');
@@ -731,6 +755,27 @@ async function runSqliteMigrations(database) {
                 }
             }
         }
+
+        // Migration: Procurement Wishlist
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS inv_procurement_wishlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_name TEXT NOT NULL,
+                description TEXT,
+                quantity INTEGER NOT NULL,
+                estimated_unit_price REAL DEFAULT 0.0,
+                priority TEXT DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Critical')),
+                requested_by TEXT NOT NULL,
+                requested_by_name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Approved', 'Purchased', 'Rejected')),
+                rejection_reason TEXT,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Procurement wishlist table ensured (SQLite)');
 
     } catch (error) {
         console.error('⚠️ SQLite migration warning:', error.message);

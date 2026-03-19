@@ -6,6 +6,7 @@ const generateCode = (prefix) => `${prefix}-${Date.now()}-${Math.random().toStri
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export const getDashboardStats = async (req, res) => {
     try {
+        console.log('[Inventory] Fetching dashboard stats for user:', req.user.email, 'Role:', req.user.role);
         const userRole = req.user.role?.toLowerCase() || 'student';
         const userEmail = req.user.email;
         const isAdmin = ['admin', 'superadmin'].includes(userRole);
@@ -77,8 +78,12 @@ export const getDashboardStats = async (req, res) => {
             });
         }
     } catch (err) {
-        console.error('Inventory dashboard error:', err);
-        res.status(500).json({ error: 'Failed to load dashboard stats' });
+        console.error('❌ Inventory Dashboard Critical Error:', {
+            message: err.message,
+            stack: err.stack,
+            code: err.code
+        });
+        res.status(500).json({ error: 'Failed to fetch inventory dashboard metrics', details: err.message });
     }
 };
 
@@ -138,25 +143,60 @@ export const deleteCategory = async (req, res) => {
 // ─── ITEMS ────────────────────────────────────────────────────────────────────
 export const getItems = async (req, res) => {
     try {
-        const { category_id, status, search, low_stock, expiring } = req.query;
-        let sql = `SELECT i.*, c.name as category_name, c.color as category_color, 
-                   s.name as supplier_name, l.name as location_name
-                   FROM inv_items i 
-                   LEFT JOIN inv_categories c ON i.category_id = c.id
-                   LEFT JOIN inv_suppliers s ON i.supplier_id = s.id
-                   LEFT JOIN inv_locations l ON i.location_id = l.id
-                   WHERE 1=1`;
+        const { category_id, status, search, low_stock, expiring, page = 1, limit = 10 } = req.query;
+        const offset = (parseInt(page) - 1) * parseInt(limit);
+        
+        let baseSql = `FROM inv_items i 
+                      LEFT JOIN inv_categories c ON i.category_id = c.id
+                      LEFT JOIN inv_suppliers s ON i.supplier_id = s.id
+                      LEFT JOIN inv_locations l ON i.location_id = l.id
+                      WHERE 1=1`;
         const params = [];
 
-        if (category_id) { sql += ' AND i.category_id = ?'; params.push(category_id); }
-        if (status) { sql += ' AND i.status = ?'; params.push(status); }
-        if (search) { sql += ' AND (i.name LIKE ? OR i.item_code LIKE ? OR i.description LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
-        if (low_stock === 'true') { sql += ' AND i.quantity <= i.minimum_stock_level'; }
-        if (expiring === 'true') { sql += " AND i.expiry_date IS NOT NULL AND i.expiry_date <= date('now', '+30 days') AND i.expiry_date >= date('now')"; }
+        if (category_id) { baseSql += ' AND i.category_id = ?'; params.push(category_id); }
+        if (status) { baseSql += ' AND i.status = ?'; params.push(status); }
+        if (search) { 
+            baseSql += ' AND (i.name LIKE ? OR i.item_code LIKE ? OR i.description LIKE ? OR i.serial_number LIKE ?)'; 
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); 
+        }
+        if (low_stock === 'true') { baseSql += ' AND i.quantity <= i.minimum_stock_level'; }
+        if (expiring === 'true') { baseSql += " AND i.expiry_date IS NOT NULL AND i.expiry_date <= date('now', '+30 days') AND i.expiry_date >= date('now')"; }
 
-        sql += ' ORDER BY i.name';
-        const items = await query(sql, params);
-        res.json(items);
+        // Get total count for pagination
+        const countSql = `SELECT COUNT(*) as total ${baseSql}`;
+        const totalResult = await queryOne(countSql, params);
+        const total = totalResult?.total || 0;
+
+        // Sorting
+        const { sortBy = 'name', sortOrder = 'asc' } = req.query;
+        const validSortCols = {
+            name: 'i.name',
+            qty: 'i.quantity',
+            price: 'i.purchase_price',
+            category: 'c.name',
+            date: 'i.date_purchased'
+        };
+        const sortCol = validSortCols[sortBy] || 'i.name';
+        const order = sortOrder.toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+
+        // Get paginated items
+        const itemsSql = `SELECT i.*, c.name as category_name, c.color as category_color, 
+                         s.name as supplier_name, l.name as location_name
+                         ${baseSql}
+                         ORDER BY ${sortCol} ${order}
+                         LIMIT ? OFFSET ?`;
+        
+        const items = await query(itemsSql, [...params, parseInt(limit), offset]);
+        
+        res.json({
+            data: items,
+            pagination: {
+                total,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(total / parseInt(limit))
+            }
+        });
     } catch (err) {
         console.error('Items error:', err);
         res.status(500).json({ error: 'Failed to fetch items' });
@@ -822,5 +862,114 @@ export const getReport = async (req, res) => {
     } catch (err) {
         console.error('Report error:', err);
         res.status(500).json({ error: 'Failed to generate report' });
+    }
+};
+
+// ─── PROCUREMENT WISHLIST ───────────────────────────────────────────────────
+export const getProcurementWishlist = async (req, res) => {
+    try {
+        const { status, department } = req.query;
+        let sql = `SELECT * FROM inv_procurement_wishlist WHERE 1=1`;
+        const params = [];
+
+        // Teachers see only their own requests
+        if (req.user.role === 'teacher') {
+            sql += ' AND requested_by = ?';
+            params.push(req.user.email);
+        } else if (department) {
+            sql += ' AND department = ?';
+            params.push(department);
+        }
+
+        if (status) {
+            sql += ' AND status = ?';
+            params.push(status);
+        }
+
+        sql += ' ORDER BY created_at DESC';
+        const records = await query(sql, params);
+        res.json(records);
+    } catch (err) {
+        console.error('Get wishlist error:', err);
+        res.status(500).json({ error: 'Failed to fetch wishlist' });
+    }
+};
+
+export const createProcurementWishlist = async (req, res) => {
+    try {
+        const { item_name, description, quantity, estimated_unit_price, priority, department, notes } = req.body;
+        if (!item_name || !quantity || !department) {
+            return res.status(400).json({ error: 'Item name, quantity, and department are required' });
+        }
+
+        const requested_by = req.user.email;
+        const requested_by_name = req.user.name || req.user.email;
+
+        await run(
+            `INSERT INTO inv_procurement_wishlist (
+                item_name, description, quantity, estimated_unit_price, priority, 
+                requested_by, requested_by_name, department, notes, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
+            [
+                item_name, description || null, quantity, estimated_unit_price || 0.0, 
+                priority || 'Medium', requested_by, requested_by_name, department, notes || null
+            ]
+        );
+
+        res.json({ message: 'Wishlist item submitted successfully' });
+    } catch (err) {
+        console.error('Create wishlist error:', err);
+        res.status(500).json({ error: 'Failed to submit wishlist item' });
+    }
+};
+
+export const updateProcurementWishlist = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, rejection_reason, notes, estimated_unit_price } = req.body;
+
+        // Only admins can update status
+        if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+            return res.status(403).json({ error: 'Unauthorized to update wishlist status' });
+        }
+
+        const updates = [];
+        const params = [];
+
+        if (status) { updates.push('status = ?'); params.push(status); }
+        if (rejection_reason !== undefined) { updates.push('rejection_reason = ?'); params.push(rejection_reason); }
+        if (notes !== undefined) { updates.push('notes = ?'); params.push(notes); }
+        if (estimated_unit_price !== undefined) { updates.push('estimated_unit_price = ?'); params.push(estimated_unit_price); }
+
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        updates.push('updated_at = CURRENT_TIMESTAMP');
+        params.push(id);
+
+        await run(`UPDATE inv_procurement_wishlist SET ${updates.join(', ')} WHERE id = ?`, params);
+        res.json({ message: 'Wishlist item updated successfully' });
+    } catch (err) {
+        console.error('Update wishlist error:', err);
+        res.status(500).json({ error: 'Failed to update wishlist item' });
+    }
+};
+
+export const deleteProcurementWishlist = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Teachers can only delete their own PENDING requests
+        if (req.user.role === 'teacher') {
+            const item = await queryOne('SELECT * FROM inv_procurement_wishlist WHERE id = ?', [id]);
+            if (!item) return res.status(404).json({ error: 'Wishlist item not found' });
+            if (item.requested_by !== req.user.email) return res.status(403).json({ error: 'Unauthorized' });
+            if (item.status !== 'Pending') return res.status(400).json({ error: 'Cannot delete approved or processed requests' });
+        }
+
+        await run('DELETE FROM inv_procurement_wishlist WHERE id = ?', [id]);
+        res.json({ message: 'Wishlist item deleted' });
+    } catch (err) {
+        console.error('Delete wishlist error:', err);
+        res.status(500).json({ error: 'Failed to delete wishlist item' });
     }
 };
