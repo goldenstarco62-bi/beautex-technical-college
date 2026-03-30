@@ -75,7 +75,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 <div className="px-6 py-10 border-b border-gray-50 mb-2 flex justify-between items-center bg-gradient-to-br from-maroon/[0.03] to-transparent rounded-tr-[3rem]">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-white p-1 rounded-2xl flex items-center justify-center overflow-hidden shadow-xl border border-gray-100 group-hover:rotate-6 transition-transform">
-                            <img src="/logo.jpg" alt="Beautex Logo" className="w-full h-full object-cover rounded-xl" />
+                            <img src="/app-icon-v2.png" alt="Beautex Logo" className="w-full h-full object-cover rounded-xl" />
                         </div>
                         <div className="flex flex-col">
                             <span className="text-sm font-black text-maroon uppercase tracking-[0.2em]">Beautex</span>
@@ -131,3 +131,4 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         </>
     );
 }
+

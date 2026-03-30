@@ -1598,7 +1598,7 @@ export default function Finance() {
                                 {/* Document Header */}
                                 <div className="flex justify-between items-start mb-[60px] pb-[40px] border-b-2 border-maroon">
                                     <div className="flex items-center gap-[20px]">
-                                        <img src="/logo.jpg" alt="Logo" className="w-[80px] h-[80px] object-contain" />
+                                        <img src="/app-icon-v2.png" alt="Logo" className="w-[80px] h-[80px] object-contain" />
                                         <div>
                                             <h1 className="text-[20px] font-black uppercase tracking-[0.2em] text-maroon leading-tight">Beautex Technical<br />Training College</h1>
                                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.3em] mt-2">Department of Financial Registry</p>
@@ -1693,3 +1693,4 @@ export default function Finance() {
         </>
     );
 }
+

@@ -984,7 +984,7 @@ export default function AcademicReports() {
                         <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
                             <div className="text-center mb-6 border-b-2 border-maroon pb-6">
                                 <div className="flex flex-col items-center mb-4">
-                                    <img src="/logo.jpg" alt="College Logo" className="w-20 h-20 object-contain mb-3" />
+                                    <img src="/app-icon-v2.png" alt="College Logo" className="w-20 h-20 object-contain mb-3" />
                                     <h1 className="text-xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
                                     <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase italic">"Empowering minds, shaping innovations"</p>
                                 </div>
@@ -1038,3 +1038,4 @@ export default function AcademicReports() {
         </div>
     );
 }
+

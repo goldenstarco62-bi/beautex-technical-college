@@ -14,7 +14,7 @@ export default function IDCard({ data, role }) {
             <div className="id-card landscape relative bg-white overflow-hidden font-sans border border-gray-200 shadow-xl mb-8" id={`id-card-front-${data.id}`}>
                 {/* Background Watermark Logo */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                    <img src="/logo.jpg" alt="" className="w-64 h-64 grayscale" />
+                    <img src="/app-icon-v2.png" alt="" className="w-64 h-64 grayscale" />
                 </div>
 
                 {/* Top Section */}
@@ -89,7 +89,7 @@ export default function IDCard({ data, role }) {
             <div className="id-card landscape relative bg-[#fafafa] overflow-hidden font-sans border border-gray-200 shadow-xl" id={`id-card-back-${data.id}`}>
                 {/* Background Watermark Logo */}
                 <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
-                    <img src="/logo.jpg" alt="" className="w-64 h-64 grayscale rotate-12" />
+                    <img src="/app-icon-v2.png" alt="" className="w-64 h-64 grayscale rotate-12" />
                 </div>
 
                 <div className="h-1.5 bg-[#800000]"></div>
@@ -186,3 +186,4 @@ export default function IDCard({ data, role }) {
         </div>
     );
 }
+

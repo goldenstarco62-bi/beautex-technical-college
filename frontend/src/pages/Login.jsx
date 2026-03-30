@@ -96,7 +96,7 @@ export default function Login() {
                 {/* School Seal */}
                 <div className="text-center mb-10">
                     <div className="inline-flex items-center justify-center w-24 h-24 bg-white rounded-2xl mb-6 shadow-xl overflow-hidden border-4 border-gold">
-                        <img src="/logo.jpg" alt="Beautex Logo" className="w-full h-full object-cover" />
+                        <img src="/app-icon-v2.png" alt="Beautex Logo" className="w-full h-full object-cover" />
                     </div>
                     <div className="space-y-2">
                         <h1 className="text-xl font-black text-white uppercase tracking-widest">Beautex</h1>
@@ -188,3 +188,4 @@ export default function Login() {
         </div>
     );
 }
+

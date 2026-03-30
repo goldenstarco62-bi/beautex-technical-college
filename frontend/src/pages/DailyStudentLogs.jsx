@@ -569,7 +569,7 @@ export default function DailyStudentLogs() {
                                 {/* Letterhead */}
                                 <div className="text-center mb-10 pb-10 border-b-2 border-maroon">
                                     <div className="flex flex-col items-center mb-6">
-                                        <img src="/logo.jpg" alt="College Logo" className="w-24 h-24 object-contain mb-4" />
+                                        <img src="/app-icon-v2.png" alt="College Logo" className="w-24 h-24 object-contain mb-4" />
                                         <h1 className="text-3xl font-black text-maroon uppercase tracking-tight mb-1">Beautex Technical Training College</h1>
                                         <p className="text-[11px] font-bold text-gray-500 tracking-[0.3em] uppercase">Excellence in Vocational Training</p>
                                     </div>
@@ -794,3 +794,4 @@ const LogTable = ({ logs, isStudent, isAdmin, isTeacher, onPdf, onPrint, onDelet
         </table>
     </div>
 );
+

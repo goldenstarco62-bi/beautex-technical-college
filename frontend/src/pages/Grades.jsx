@@ -52,14 +52,14 @@ export default function Grades() {
 
     // Pre-load the logo as a base64 data URL so html2canvas can always embed it
     useEffect(() => {
-        fetch('/logo.jpg')
+        fetch('/app-icon-v2.png')
             .then(r => r.blob())
             .then(blob => {
                 const reader = new FileReader();
                 reader.onloadend = () => setLogoDataUrl(reader.result);
                 reader.readAsDataURL(blob);
             })
-            .catch(() => setLogoDataUrl('/logo.jpg')); // fallback
+            .catch(() => setLogoDataUrl('/app-icon-v2.png')); // fallback
     }, []);
 
     useEffect(() => {
@@ -1431,3 +1431,4 @@ export default function Grades() {
         </div>
     );
 }
+
