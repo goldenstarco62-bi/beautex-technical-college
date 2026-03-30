@@ -3,7 +3,7 @@ import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, faculty
 import { useAuth } from '../context/AuthContext';
 import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-
+import { calculateRemainingTime } from '../utils/dateUtils';
 export default function Attendance() {
     const { user } = useAuth();
     const isStudent = (user?.role ? String(user.role).toLowerCase() : '') === 'student';
@@ -123,12 +123,13 @@ export default function Attendance() {
                 const studentCourses = Array.isArray(s.course)
                     ? s.course
                     : [s.course].filter(Boolean);
-                return studentCourses.some(c => c && c.toLowerCase().trim() === selectedCourseLower);
+                const hasCourse = studentCourses.some(c => c && c.toLowerCase().trim() === selectedCourseLower);
+                
+                const isFinished = s.status === 'Graduated' || (s.completion_date && calculateRemainingTime(s.completion_date).isExpired);
+                
+                return hasCourse && !isFinished;
             });
 
-            if (filtered.length === 0 && allStudents.length > 0) {
-                filtered = allStudents;
-            }
 
             const existingMap = {};
             (attendanceRes.data || []).forEach(r => { existingMap[r.student_id] = r; });
