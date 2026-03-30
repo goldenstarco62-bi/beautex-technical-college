@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { studentsAPI, usersAPI, coursesAPI } from '../services/api';
-import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download, Clock } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { useNavigate } from 'react-router-dom';
 import IDCard from '../components/shared/IDCard';
 import { useAuth } from '../context/AuthContext';
+import { calculateRemainingTime } from '../utils/dateUtils';
 
 export default function Students() {
     const navigate = useNavigate();
@@ -144,7 +145,7 @@ export default function Students() {
             id: '', name: '', email: '', course: [], intake: 'January Intake',
             gpa: 0, status: 'Active', contact: '',
             dob: '', address: '', guardian_name: '', guardian_contact: '',
-            photo: '', department: '', level: 'Module 1'
+            photo: '', department: '', level: 'Module 1', completion_date: '', enrolled_date: new Date().toISOString().split('T')[0]
         });
     };
 
@@ -258,7 +259,8 @@ export default function Students() {
 
     const intakes = ['January Intake', 'May Intake', 'September Intake', 'Short Course'];
 
-    const canResetPassword = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
+    const isAdmin = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
+    const canResetPassword = isAdmin;
 
     const getStatusColor = (status) => {
         if (status === 'Active') return 'text-green-600 bg-green-50 border-green-200';
@@ -278,31 +280,35 @@ export default function Students() {
                     <div className="flex items-center gap-3 w-full sm:w-auto">
                         {/* FIX: Export generates a CSV instead of calling window.print() */}
                         {/* FIX: Using correct Download icon instead of Plus icon */}
-                        <button
-                            onClick={() => {
-                                const rows = [['Student ID', 'Name', 'Email', 'Course', 'GPA', 'Status', 'Contact']];
-                                students.forEach(s => rows.push([
-                                    s.id, s.name, s.email,
-                                    Array.isArray(s.course) ? s.course.join(' | ') : s.course,
-                                    s.gpa, s.status, s.contact || ''
-                                ]));
-                                const csv = rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n');
-                                const blob = new Blob([csv], { type: 'text/csv' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url; a.download = 'students.csv'; a.click();
-                                URL.revokeObjectURL(url);
-                            }}
-                            className="flex-1 sm:flex-none justify-center bg-gold text-maroon px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-gold-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
-                        >
-                            <Download className="w-4 h-4" /> Export
-                        </button>
-                        <button
-                            onClick={() => { resetForm(); setShowModal(true); }}
-                            className="flex-1 sm:flex-none justify-center bg-maroon text-white px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-maroon-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
-                        >
-                            <Plus className="w-4 h-4" /> Add Student
-                        </button>
+                        {isAdmin && (
+                            <>
+                                <button
+                                    onClick={() => {
+                                        const rows = [['Student ID', 'Name', 'Email', 'Course', 'GPA', 'Status', 'Contact']];
+                                        students.forEach(s => rows.push([
+                                            s.id, s.name, s.email,
+                                            Array.isArray(s.course) ? s.course.join(' | ') : s.course,
+                                            s.gpa, s.status, s.contact || ''
+                                        ]));
+                                        const csv = rows.map(r => r.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+                                        const blob = new Blob([csv], { type: 'text/csv' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url; a.download = 'students.csv'; a.click();
+                                        URL.revokeObjectURL(url);
+                                    }}
+                                    className="flex-1 sm:flex-none justify-center bg-gold text-maroon px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-gold-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
+                                >
+                                    <Download className="w-4 h-4" /> Export
+                                </button>
+                                <button
+                                    onClick={() => { resetForm(); setShowModal(true); }}
+                                    className="flex-1 sm:flex-none justify-center bg-maroon text-white px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-maroon-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
+                                >
+                                    <Plus className="w-4 h-4" /> Add Student
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -366,7 +372,7 @@ export default function Students() {
                     <table className="w-full text-left min-w-[1000px]">
                         <thead>
                             <tr className="bg-gray-50/50 border-b border-gray-100">
-                                {['Student ID', 'Name', 'Course', 'Intake', 'GPA', 'Status', 'Contact', 'Actions'].map(h => (
+                                {['Student ID', 'Name', 'Course', 'Intake', 'Enrolled Date', 'Remaining', 'Status', 'Contact', 'Actions'].map(h => (
                                     <th key={h} className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                                 ))}
                             </tr>
@@ -405,7 +411,19 @@ export default function Students() {
                                         {Array.isArray(student.course) ? student.course.join(', ') : student.course}
                                     </td>
                                     <td className="px-6 py-5 text-xs font-bold text-gray-400">{student.intake || student.semester || 'N/A'}</td>
-                                    <td className="px-6 py-5 text-xs font-bold text-gray-800">{student.gpa}</td>
+                                    <td className="px-6 py-5 text-[10px] font-black text-gray-500 uppercase">
+                                        {student.enrolled_date ? new Date(student.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        <div className="flex flex-col">
+                                            <span className={`text-[10px] font-black uppercase ${calculateRemainingTime(student.completion_date).isExpired ? 'text-red-500' : 'text-emerald-600'}`}>
+                                                {calculateRemainingTime(student.completion_date).formatted}
+                                            </span>
+                                            <span className="text-[8px] text-gray-400 uppercase tracking-tighter mt-0.5">
+                                                {student.completion_date ? `Ends: ${new Date(student.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}` : 'No End Date'}
+                                            </span>
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-5">
                                         <span className={`flex items-center gap-1.5 text-[10px] font-black uppercase ${student.status === 'Active' ? 'text-green-500' : 'text-gray-400'}`}>
                                             {student.status || 'Active'}
@@ -418,13 +436,17 @@ export default function Students() {
                                         <div className="flex gap-2">
                                             <button onClick={() => setShowProfileModal(student)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Profile"><Eye className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => navigate(`/reports?studentId=${student.id}`)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Academic Reports"><FileBarChart className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => handlePrintID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Print ID Card"><Printer className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => handleDownloadID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Download ID Card"><Download className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => handleEdit(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg"><Edit className="w-3.5 h-3.5" /></button>
+                                            {isAdmin && (
+                                                <>
+                                                    <button onClick={() => handlePrintID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Print ID Card"><Printer className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => handleDownloadID(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Download ID Card"><Download className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => handleEdit(student)} className="p-2 text-primary/20 hover:text-primary transition-colors border border-gray-100 rounded-lg" title="Edit Student Registry"><Edit className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => handleDelete(student.id)} className="p-2 text-primary/10 hover:text-red-600 transition-colors border border-gray-100 rounded-lg" title="Archive Student Record"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                </>
+                                            )}
                                             {canResetPassword && (
                                                 <button onClick={() => handleResetPassword(student)} className="p-2 text-primary/20 hover:text-amber-600 transition-colors border border-gray-100 rounded-lg" title="Reset Password"><Key className="w-3.5 h-3.5" /></button>
                                             )}
-                                            <button onClick={() => handleDelete(student.id)} className="p-2 text-primary/10 hover:text-red-600 transition-colors border border-gray-100 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -515,9 +537,16 @@ export default function Students() {
                                     { icon: User, label: 'Date of Birth', value: showProfileModal.dob ? new Date(showProfileModal.dob).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
                                     { icon: Shield, label: 'Cumulative GPA', value: showProfileModal.gpa ?? 'N/A' },
                                     { icon: MapPin, label: 'Address', value: showProfileModal.address || 'Not provided' },
-                                    { icon: Calendar, label: 'Enrollment Date', value: showProfileModal.enrolled_date ? new Date(showProfileModal.enrolled_date).toLocaleDateString('en-GB') : 'N/A' },
-                                ].map(({ icon: Icon, label, value }) => (
-                                    <div key={label} className="flex items-start gap-3">
+                                    { icon: Calendar, label: 'Enrollment Date', value: showProfileModal.enrolled_date ? new Date(showProfileModal.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
+                                    { icon: Calendar, label: 'Completion Date', value: showProfileModal.completion_date ? new Date(showProfileModal.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
+                                    { 
+                                        icon: Clock, 
+                                        label: 'Time to Completion', 
+                                        value: calculateRemainingTime(showProfileModal.completion_date).formatted,
+                                        isSpecial: true
+                                    },
+                                ].map(({ icon: Icon, label, value, isSpecial }) => (
+                                    <div key={label} className={`flex items-start gap-3 ${isSpecial ? 'bg-gold/5 p-2 rounded-xl border border-gold/10' : ''}`}>
                                         <div className="w-8 h-8 rounded-lg bg-maroon/5 flex items-center justify-center shrink-0 mt-0.5">
                                             <Icon className="w-3.5 h-3.5 text-maroon/40" />
                                         </div>
@@ -548,12 +577,14 @@ export default function Students() {
 
                             {/* Actions */}
                             <div className="flex gap-3">
-                                <button
-                                    onClick={() => { setShowProfileModal(null); handleEdit(showProfileModal); }}
-                                    className="flex-1 py-3 bg-maroon text-gold rounded-xl font-black text-xs uppercase tracking-widest hover:bg-maroon/90 transition-all flex items-center justify-center gap-2"
-                                >
-                                    <Edit className="w-4 h-4" /> Edit Profile
-                                </button>
+                                {isAdmin && (
+                                    <button
+                                        onClick={() => { setShowProfileModal(null); handleEdit(showProfileModal); }}
+                                        className="flex-1 py-3 bg-maroon text-gold rounded-xl font-black text-xs uppercase tracking-widest hover:bg-maroon/90 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Edit className="w-4 h-4" /> Edit Profile
+                                    </button>
+                                )}
                                 {canResetPassword && (
                                     <button
                                         onClick={() => handleResetPassword(showProfileModal)}

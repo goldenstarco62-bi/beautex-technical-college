@@ -35,6 +35,7 @@ import {
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
+import { calculateRemainingTime } from '../utils/dateUtils';
 
 
 export default function StudentDashboard() {
@@ -190,6 +191,8 @@ export default function StudentDashboard() {
 
     if (loading) return <div className="p-8 text-center font-black uppercase tracking-widest text-maroon">Loading Student Portal...</div>;
 
+    const remainingTime = calculateRemainingTime(studentProfile?.completion_date);
+
     const statsConfig = [
         { title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen },
         {
@@ -198,6 +201,12 @@ export default function StudentDashboard() {
                 ? `KSh ${Number(studentFee.balance ?? 0).toLocaleString()}`
                 : 'Not Set',
             icon: CreditCard
+        },
+        {
+            title: 'Time Remaining',
+            value: remainingTime.formatted,
+            icon: Clock,
+            isCountdown: true
         },
         { title: 'Attendance', value: stats.attendanceRate, icon: UserCheck },
         { title: 'Academic Logs', value: stats.sessionsCount, icon: History },
@@ -236,7 +245,7 @@ export default function StudentDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {[
                     { ...statsConfig[0], accent: 'border-l-maroon', iconBg: 'bg-maroon/5', iconColor: 'text-maroon' },
-                    { ...statsConfig[1], accent: 'border-l-red-500', iconBg: 'bg-red-50', iconColor: 'text-red-500' },
+                    { ...statsConfig[1], accent: 'border-l-gold', iconBg: 'bg-gold/5', iconColor: 'text-gold' },
                     { ...statsConfig[2], accent: 'border-l-green-500', iconBg: 'bg-green-50', iconColor: 'text-green-600' },
                     { ...statsConfig[3], accent: 'border-l-blue-500', iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
                 ].map((stat, index) => {
@@ -246,7 +255,7 @@ export default function StudentDashboard() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.title}</p>
-                                    <p className="text-3xl font-black text-gray-800">{stat.value}</p>
+                                    <p className={`${stat.isCountdown ? 'text-lg' : 'text-3xl'} font-black text-gray-800`}>{stat.value}</p>
                                 </div>
                                 <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center`}>
                                     <Icon className={`w-6 h-6 ${stat.iconColor}`} />
@@ -282,7 +291,7 @@ export default function StudentDashboard() {
                                             View All Results
                                         </Link>
                                     </div>
-                                    <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-3 gap-4">
+                                    <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-2 md:grid-cols-5 gap-4">
                                         <div>
                                             <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Status</p>
                                             <p className="text-xs font-bold text-green-400 uppercase">Active</p>
@@ -292,8 +301,18 @@ export default function StudentDashboard() {
                                             <p className="text-xs font-bold text-white uppercase">{studentProfile?.intake || studentProfile?.semester || 'N/A'}</p>
                                         </div>
                                         <div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Progress</p>
-                                            <p className="text-xs font-bold text-white uppercase">In Progress</p>
+                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Enrolled</p>
+                                            <p className="text-xs font-bold text-white uppercase">{studentProfile?.enrolled_date ? new Date(studentProfile.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Completion</p>
+                                            <p className="text-xs font-bold text-white uppercase">{studentProfile?.completion_date ? new Date(studentProfile.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Time to Completion</p>
+                                            <p className={`text-xs font-bold uppercase ${remainingTime.isExpired ? 'text-red-400' : 'text-white'}`}>
+                                                {remainingTime.formatted}
+                                            </p>
                                         </div>
                                     </div>
                                 </>

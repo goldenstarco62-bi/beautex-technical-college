@@ -9,13 +9,13 @@
     "start_url": "/",
     "icons": [
         {
-            "src": "app-icon.png",
+            "src": "app-icon-v2.png",
             "type": "image/png",
             "sizes": "192x192",
             "purpose": "any maskable"
         },
         {
-            "src": "app-icon.png",
+            "src": "app-icon-v2.png",
             "type": "image/png",
             "sizes": "512x512",
             "purpose": "any maskable"

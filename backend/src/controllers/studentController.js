@@ -234,10 +234,13 @@ export async function createStudent(req, res) {
         } else {
             // Create student record
             const courseVal = Array.isArray(course) ? JSON.stringify(course) : course;
+            const enrolledDate = req.body.enrolled_date || new Date().toISOString();
+            const completionDate = req.body.completion_date || null;
+            
             await run(
-                `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, dob, address, guardian_name, guardian_contact, blood_group)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, new Date().toISOString(), dob, address, guardian_name, guardian_contact, blood_group]
+                `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, completion_date, dob, address, guardian_name, guardian_contact, blood_group)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dob, address, guardian_name, guardian_contact, blood_group]
             );
 
             // Create user account for login
@@ -296,7 +299,8 @@ export async function updateStudent(req, res) {
 
         const allowedFields = [
             'name', 'email', 'course', 'intake', 'gpa', 'status', 'contact',
-            'photo', 'dob', 'address', 'guardian_name', 'guardian_contact', 'blood_group'
+            'photo', 'dob', 'address', 'guardian_name', 'guardian_contact', 'blood_group',
+            'completion_date', 'enrolled_date'
         ];
         const fields = Object.keys(req.body).filter(k => allowedFields.includes(k));
         if (fields.length === 0) return res.status(400).json({ error: 'No valid fields to update' });

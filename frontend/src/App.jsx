@@ -67,7 +67,7 @@ function App() {
                         <Route path="/reset-password" element={<ResetPassword />} />
 
                         <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
-                        <Route path="/students" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Students /></Layout></ProtectedRoute>} />
+                        <Route path="/students" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><Students /></Layout></ProtectedRoute>} />
                         <Route path="/faculty" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Faculty /></Layout></ProtectedRoute>} />
                         <Route path="/courses" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Courses /></Layout></ProtectedRoute>} />
                         <Route path="/attendance" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Attendance /></Layout></ProtectedRoute>} />
