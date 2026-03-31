@@ -241,6 +241,26 @@ export default function StudentDashboard() {
                 </div>
             </div>
 
+            {/* Time Remaining Alert */}
+            {remainingTime?.totalDays > 0 && remainingTime?.totalDays <= 7 ? (
+                <div className="bg-gradient-to-r from-red-500 to-red-600 p-1 rounded-[2rem] shadow-xl shadow-red-500/20 animate-pulse">
+                    <div className="bg-white rounded-[1.8rem] p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center shrink-0">
+                                <AlertCircle className="w-6 h-6 text-red-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-red-600 uppercase tracking-widest mb-1">Course Nearing Completion</h3>
+                                <p className="text-xs font-bold text-gray-600">You have only <span className="text-red-500">{remainingTime.formatted}</span> remaining in your current curriculum. Please ensure all requirements are met.</p>
+                            </div>
+                        </div>
+                        <Link to="/grades" className="shrink-0 px-6 py-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                            View Progress
+                        </Link>
+                    </div>
+                </div>
+            ) : null}
+
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
                 {[
