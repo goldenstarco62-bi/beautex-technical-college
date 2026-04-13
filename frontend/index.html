@@ -33,14 +33,27 @@
     </div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
+        // ── Capture PWA install event EARLY (before React mounts) ──────────
+        // beforeinstallprompt fires during page load, often before any
+        // React component has had a chance to register a listener.
+        // We stash it on window so the PWAInstallPrompt component can
+        // pick it up whenever it mounts.
+        window.__pwaInstallEvent = null;
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            window.__pwaInstallEvent = e;
+            console.log('✅ [PWA] Install event captured early');
+            // Notify any React listener that may already be mounted
+            window.dispatchEvent(new Event('pwa-install-ready'));
+        });
+
+        // ── Service Worker Registration ──────────────────────────────────────
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
                     .then(reg => {
                         console.log('✅ Service Worker Registered', reg.scope);
-                        // Check for updates every time the page loads
                         reg.update();
-                        // When a new SW is waiting, activate it immediately
                         reg.addEventListener('updatefound', () => {
                             const newWorker = reg.installing;
                             newWorker.addEventListener('statechange', () => {
@@ -53,7 +66,6 @@
                     })
                     .catch(err => console.error('❌ SW Registration Failed: ', err));
 
-                // When a new SW takes control, reload once to get fresh content
                 let refreshing = false;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
                     if (!refreshing) {
