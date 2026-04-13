@@ -17,6 +17,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// CRITICAL: Trust the first proxy (Vercel / Heroku / Nginx etc.)
+// Without this, req.ip returns the proxy's internal IP for ALL users,
+// causing everyone to share one rate-limit counter and be blocked together.
+app.set('trust proxy', 1);
+
 // Initial parsers at start (Security: Reduced limits to prevent DoS)
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 1000 }));
@@ -108,15 +113,18 @@ app.use(cors({
     credentials: true
 }));
 
-// Rate Limiting Configuration: Strict Brute Force Protection
-const authLimiter = rateLimit({
-    windowMs: 30 * 60 * 1000, // 30 minutes
-    limit: 5, // Limit each IP to 5 FAILED attempts per windowMs
-    message: { error: 'Too many failed login attempts. For security, your IP has been blocked for 30 minutes.' },
-    standardHeaders: 'draft-7',
-    legacyHeaders: false,
-    skipSuccessfulRequests: true, // Only failed attempts (4xx/5xx) count towards the limit
-});
+// Rate Limiting Configuration: Brute Force Protection
+// In development, skip all rate limiting so local testing is never blocked.
+const authLimiter = process.env.NODE_ENV !== 'production'
+    ? (_req, _res, next) => next()  // No-op in development
+    : rateLimit({
+        windowMs: 15 * 60 * 1000, // 15-minute block window
+        limit: 20, // Allow up to 20 failed attempts before blocking
+        message: { error: 'Too many failed login attempts. For security, your account access has been temporarily suspended. Please try again in 15 minutes.' },
+        standardHeaders: 'draft-7',
+        legacyHeaders: false,
+        skipSuccessfulRequests: true, // Only count failed (4xx/5xx) responses
+    });
 
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
