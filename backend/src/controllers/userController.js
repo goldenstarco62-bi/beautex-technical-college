@@ -234,7 +234,7 @@ export async function resetPasswordByEmail(req, res) {
             return res.json({ message: 'Password reset — temporary credentials emailed' });
         }
 
-        const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [email]);
+        const user = await queryOne('SELECT id, email, role FROM users WHERE email = ?', [email]);
         if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
         // Security check: if not superadmin, can only reset students
