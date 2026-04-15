@@ -135,6 +135,18 @@ function ItemsTab() {
         }
     };
 
+    const handleDelete = async (id, name) => {
+        if (!window.confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) return;
+        try {
+            await inventoryAPI.deleteItem(id);
+            showToast('ASSET PURGED FROM VAULT');
+            loadData();
+        } catch (e) {
+            const msg = e.response?.data?.error || 'Failed to delete item';
+            showToast(msg.toUpperCase(), 'error');
+        }
+    };
+
     const handleExport = () => {
         const headers = ['Name', 'Category', 'Quantity', 'Location', 'Price', 'Serial Number'];
         const csvContent = [
@@ -372,7 +384,7 @@ function ItemsTab() {
                                             {isAdmin && (
                                                 <>
                                                     <button onClick={() => { setFormData(item); setShowAddModal(true); }} className="w-9 h-9 bg-white dark:bg-black hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Pencil className="w-3.5 h-3.5" /></button>
-                                                    <button className="w-9 h-9 bg-white dark:bg-black hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                    <button onClick={() => handleDelete(item.id, item.name)} className="w-9 h-9 bg-white dark:bg-black hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Trash2 className="w-3.5 h-3.5" /></button>
                                                 </>
                                             )}
                                         </div>
