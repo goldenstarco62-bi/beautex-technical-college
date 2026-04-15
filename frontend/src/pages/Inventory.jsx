@@ -62,6 +62,8 @@ function ItemsTab() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
+    const [entryMode, setEntryMode] = useState('single');
+    const [selectedDepartment, setSelectedDepartment] = useState(null);
     const [formData, setFormData] = useState({ 
         name: '', 
         category: '', 
@@ -75,6 +77,9 @@ function ItemsTab() {
         serial_number: '',
         image_url: ''
     });
+    const [bulkItems, setBulkItems] = useState([
+        { name: '', quantity: 1, unit_type: 'Piece', purchase_price: 0, minimum_stock_level: 5 }
+    ]);
     const [filterCategory, setFilterCategory] = useState('ALL');
     const [toast, setToast] = useState(null);
     const [sortBy, setSortBy] = useState('name');
@@ -143,6 +148,50 @@ function ItemsTab() {
             loadData();
         } catch (e) {
             const msg = e.response?.data?.error || 'Failed to delete item';
+            showToast(msg.toUpperCase(), 'error');
+        }
+    };
+
+    const DEPARTMENTS = {
+        ICT: {
+            label: 'ICT Department', color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20',
+            category: 'ICT', location: 'ICT Lab', unit_type: 'Piece', emoji: '💻',
+            items: ['Laptop', 'Desktop Computer', 'Printer', 'Projector', 'Router', 'Network Switch', 'UPS', 'Monitor', 'Keyboard', 'Mouse', 'Flash Drive', 'External HDD', 'Webcam', 'Headset', 'Ethernet Cable', 'HDMI Cable', 'Power Strip', 'Ink Cartridge', 'Toner Cartridge', 'Mouse Pad']
+        },
+        BEAUTY: {
+            label: 'Beauty Therapy', color: 'text-pink-500', bg: 'bg-pink-500/10', border: 'border-pink-500/20',
+            category: 'Beauty Therapy', location: 'Beauty Lab', unit_type: 'Bottle', emoji: '💄',
+            items: ['Facial Cream', 'Moisturizer', 'Facial Toner', 'Cleanser', 'Face Mask', 'Exfoliator', 'Skin Serum', 'Sunscreen', 'Foundation', 'Concealer', 'Mascara', 'Lipstick', 'Eye Shadow Palette', 'Nail Polish', 'Cotton Pads', 'Beauty Sponge', 'Facial Brush Set', 'Face Steamer', 'Magnifying Lamp', 'Treatment Chair']
+        },
+        HAIR: {
+            label: 'Hair Dressing', color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
+            category: 'Hair Dressing', location: 'Hair Salon', unit_type: 'Bottle', emoji: '✂️',
+            items: ['Shampoo', 'Conditioner', 'Hair Dye', 'Bleaching Powder', 'Developer', 'Hair Relaxer', 'Hair Oil', 'Hair Serum', 'Hairspray', 'Styling Gel', 'Hair Wax', 'Curling Iron', 'Flat Iron', 'Hair Dryer', 'Scissors', 'Hair Clippers', 'Combs Set', 'Hair Clips', 'Aluminium Foils', 'Mixing Bowl']
+        }
+    };
+
+    const handleBulkSubmit = async () => {
+        const dept = DEPARTMENTS[selectedDepartment];
+        const validItems = bulkItems.filter(i => i.name.trim());
+        if (!validItems.length) { showToast('ADD AT LEAST ONE ITEM', 'error'); return; }
+        try {
+            await Promise.all(validItems.map(item => inventoryAPI.createItem({
+                ...item,
+                category: dept?.category || '',
+                location: dept?.location || '',
+                status: 'Available',
+                date_purchased: new Date().toISOString().split('T')[0],
+                serial_number: '',
+                image_url: ''
+            })));
+            showToast(`${validItems.length} ASSETS SECURED IN VAULT`);
+            setShowAddModal(false);
+            setBulkItems([{ name: '', quantity: 1, unit_type: 'Piece', purchase_price: 0, minimum_stock_level: 5 }]);
+            setSelectedDepartment(null);
+            setEntryMode('single');
+            loadData();
+        } catch (e) {
+            const msg = e.response?.data?.error || 'Bulk entry failed';
             showToast(msg.toUpperCase(), 'error');
         }
     };
@@ -448,83 +497,259 @@ function ItemsTab() {
             )}
 
             {showAddModal && (
-                <Modal title="Register New Inventory Item" onClose={() => setShowAddModal(false)}>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <InputField 
-                                label="Item Name / Nomenclature" 
-                                value={formData.name} 
-                                onChange={e => setFormData({...formData, name: e.target.value})} 
-                                placeholder="e.g., Facial Cream Hydrating" 
-                                required 
-                            />
-                            <InputField 
-                                label="Serial Number / Identifier" 
-                                value={formData.serial_number} 
-                                onChange={e => setFormData({...formData, serial_number: e.target.value})} 
-                                placeholder="UNIQUE ASSET SN" 
-                            />
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-[#0f0f0f] rounded-3xl shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)] w-full max-w-4xl max-h-[95vh] overflow-y-auto border border-white/10 ring-1 ring-black/10">
+
+                        {/* Header */}
+                        <div className="px-8 py-5 flex justify-between items-center border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white dark:bg-[#0f0f0f] z-10">
+                            <div>
+                                <h3 className="text-sm font-black text-maroon dark:text-gold uppercase tracking-[0.3em] mb-1">
+                                    {formData.id ? 'Update Asset' : 'Register New Asset'}
+                                </h3>
+                                <div className="h-1 w-10 bg-maroon rounded-full" />
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {!formData.id && (
+                                    <div className="flex p-1 bg-gray-100 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5">
+                                        {[['single', '⊕ Single'], ['bulk', '⊞ Bulk']].map(([mode, label]) => (
+                                            <button key={mode} type="button"
+                                                onClick={() => setEntryMode(mode)}
+                                                className={`px-5 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                                                    entryMode === mode ? 'bg-maroon text-gold shadow-lg' : 'text-gray-400 hover:text-maroon'
+                                                }`}>
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => { setShowAddModal(false); setSelectedDepartment(null); setEntryMode('single'); setFormData({ name: '', category: '', quantity: 0, unit_type: 'Piece', minimum_stock_level: 5, location: '', purchase_price: 0, status: 'Available', date_purchased: new Date().toISOString().split('T')[0], serial_number: '', image_url: '' }); }}
+                                    className="p-3 bg-gray-50 dark:bg-white/5 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-500 rounded-2xl transition-all">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-6">
-                            <InputField 
-                                label="Category classification" 
-                                value={formData.category} 
-                                onChange={e => setFormData({...formData, category: e.target.value})} 
-                                placeholder="e.g. Beauty Supplies" 
-                                required 
-                            />
-                            <InputField 
-                                label="Storage Location" 
-                                value={formData.location} 
-                                onChange={e => setFormData({...formData, location: e.target.value})} 
-                                placeholder="e.g. Cabinet A" 
-                            />
-                        </div>
+                        <div className="p-8 space-y-8">
 
-                        <div className="grid grid-cols-3 gap-6">
-                            <InputField label="Initial Quantity" type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} />
-                            <InputField 
-                                label="Unit Type" 
-                                value={formData.unit_type} 
-                                onChange={e => setFormData({...formData, unit_type: e.target.value})} 
-                                placeholder="e.g. Bottle" 
-                            />
-                            <InputField label="Min Stock Threshold" type="number" value={formData.minimum_stock_level} onChange={e => setFormData({...formData, minimum_stock_level: Number(e.target.value)})} />
-                        </div>
+                            {/* Department Picker */}
+                            {!formData.id && (
+                                <div>
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Select Department</p>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {Object.entries(DEPARTMENTS).map(([key, dept]) => (
+                                            <button key={key} type="button"
+                                                onClick={() => {
+                                                    const next = selectedDepartment === key ? null : key;
+                                                    setSelectedDepartment(next);
+                                                    if (next) {
+                                                        setFormData(p => ({ ...p, category: dept.category, location: dept.location, unit_type: dept.unit_type }));
+                                                        setBulkItems(p => p.map(r => ({ ...r, unit_type: dept.unit_type })));
+                                                    }
+                                                }}
+                                                className={`p-4 rounded-2xl border-2 transition-all text-left ${
+                                                    selectedDepartment === key
+                                                        ? `${dept.border} ${dept.bg}`
+                                                        : 'border-gray-100 dark:border-white/5 hover:border-gray-200 dark:hover:border-white/10'
+                                                }`}>
+                                                <span className="text-2xl mb-2 block">{dept.emoji}</span>
+                                                <p className={`text-[10px] font-black uppercase tracking-widest ${
+                                                    selectedDepartment === key ? dept.color : 'text-gray-500 dark:text-gray-400'
+                                                }`}>{dept.label}</p>
+                                                {selectedDepartment === key && (
+                                                    <p className="text-[8px] text-gray-400 mt-1 uppercase tracking-widest">{dept.location}</p>
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
-                        <div className="grid grid-cols-2 gap-6">
-                            <InputField 
-                                label="Date of Purchase" 
-                                type="date"
-                                value={formData.date_purchased} 
-                                onChange={e => setFormData({...formData, date_purchased: e.target.value})} 
-                            />
-                            <InputField 
-                                label="Asset Image URL" 
-                                value={formData.image_url} 
-                                onChange={e => setFormData({...formData, image_url: e.target.value})} 
-                                placeholder="https://..." 
-                            />
-                        </div>
+                            {/* ── SINGLE ENTRY ── */}
+                            {(entryMode === 'single' || formData.id) && (
+                                <form onSubmit={handleSubmit} className="space-y-6">
+                                    {/* Quick-fill chips */}
+                                    {selectedDepartment && !formData.id && (
+                                        <div>
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">Quick-fill — Common Items</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {DEPARTMENTS[selectedDepartment].items.map(item => (
+                                                    <button key={item} type="button"
+                                                        onClick={() => setFormData(p => ({ ...p, name: item }))}
+                                                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                                                            formData.name === item
+                                                                ? 'bg-maroon text-gold border-maroon/30'
+                                                                : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5 text-gray-500 hover:text-maroon dark:hover:text-gold hover:border-maroon/30'
+                                                        }`}>
+                                                        {item}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
-                        <div className="grid grid-cols-1 gap-6">
-                            <InputField 
-                                label="Purchase Price (KSh)" 
-                                type="number"
-                                step="0.01"
-                                value={formData.purchase_price} 
-                                onChange={e => setFormData({...formData, purchase_price: Number(e.target.value)})} 
-                            />
-                        </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <InputField label="Item Name / Nomenclature" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g., Facial Cream Hydrating" required />
+                                        <InputField label="Serial Number / Identifier" value={formData.serial_number} onChange={e => setFormData({...formData, serial_number: e.target.value})} placeholder="UNIQUE ASSET SN" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <InputField label="Category / Department" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} placeholder="e.g. Beauty Therapy" required />
+                                        <InputField label="Storage Location" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="e.g. Cabinet A" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-6">
+                                        <InputField label="Initial Quantity" type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: Number(e.target.value)})} />
+                                        <InputField label="Unit Type" value={formData.unit_type} onChange={e => setFormData({...formData, unit_type: e.target.value})} placeholder="e.g. Bottle" />
+                                        <InputField label="Min Stock Threshold" type="number" value={formData.minimum_stock_level} onChange={e => setFormData({...formData, minimum_stock_level: Number(e.target.value)})} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <InputField label="Date of Purchase" type="date" value={formData.date_purchased} onChange={e => setFormData({...formData, date_purchased: e.target.value})} />
+                                        <InputField label="Purchase Price (KSh)" type="number" step="0.01" value={formData.purchase_price} onChange={e => setFormData({...formData, purchase_price: Number(e.target.value)})} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div>
+                                            <label className="block text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">Status</label>
+                                            <select className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-2xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all appearance-none"
+                                                value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                                                {['Available', 'Issued', 'Damaged', 'Expired', 'Pending'].map(s => <option key={s}>{s}</option>)}
+                                            </select>
+                                        </div>
+                                        <InputField label="Asset Image URL" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} placeholder="https://..." />
+                                    </div>
+                                    <button type="submit" className="w-full bg-gradient-to-r from-maroon to-[#800000] text-gold h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] hover:scale-[1.02] active:scale-95 transition-all border border-white/10">
+                                        {formData.id ? '↻ Update Asset' : '⊕ Commit To Vault'}
+                                    </button>
+                                </form>
+                            )}
 
-                        <div className="flex gap-4 pt-8 text-center">
-                            <button type="submit" className="flex-1 bg-gradient-to-r from-maroon to-[#800000] text-gold h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] hover:scale-[1.02] active:scale-95 transition-all border border-white/10">
-                                Commit To Vault
-                            </button>
+                            {/* ── BULK ENTRY ── */}
+                            {entryMode === 'bulk' && !formData.id && (
+                                <div className="space-y-6">
+                                    {/* Preset chips */}
+                                    {selectedDepartment && (
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Quick-add — Click to Add Row</p>
+                                                <button type="button"
+                                                    onClick={() => {
+                                                        const dept = DEPARTMENTS[selectedDepartment];
+                                                        const existing = bulkItems.map(i => i.name.toLowerCase());
+                                                        const toAdd = dept.items.filter(i => !existing.includes(i.toLowerCase()));
+                                                        setBulkItems(p => [
+                                                            ...p.filter(i => i.name.trim()),
+                                                            ...toAdd.map(name => ({ name, quantity: 1, unit_type: dept.unit_type, purchase_price: 0, minimum_stock_level: 5 }))
+                                                        ]);
+                                                    }}
+                                                    className="text-[9px] font-black text-maroon dark:text-gold uppercase tracking-widest hover:underline">
+                                                    + Add All Presets
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {DEPARTMENTS[selectedDepartment].items.map(item => {
+                                                    const dept = DEPARTMENTS[selectedDepartment];
+                                                    const added = bulkItems.some(i => i.name.toLowerCase() === item.toLowerCase());
+                                                    return (
+                                                        <button key={item} type="button"
+                                                            onClick={() => {
+                                                                if (!added) setBulkItems(p => [...p.filter(i => i.name.trim()), { name: item, quantity: 1, unit_type: dept.unit_type, purchase_price: 0, minimum_stock_level: 5 }]);
+                                                            }}
+                                                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                                                                added ? 'bg-maroon text-gold border-maroon/30 cursor-default' : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5 text-gray-500 hover:text-maroon hover:border-maroon/30'
+                                                            }`}>
+                                                            {added ? '✓ ' : ''}{item}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Table */}
+                                    <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-white/5">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+                                                    {['#', 'Item Name', 'Qty', 'Unit', 'Price (KSh)', 'Min Stock', ''].map(h => (
+                                                        <th key={h} className="px-3 py-3 text-left text-[9px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                                                {bulkItems.map((item, idx) => (
+                                                    <tr key={idx} className="hover:bg-gray-50/40 dark:hover:bg-white/[0.01] transition-colors">
+                                                        <td className="px-3 py-2 text-[9px] font-black text-gray-300 w-8">{idx + 1}</td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                className="w-full min-w-[140px] px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all placeholder:text-gray-300"
+                                                                placeholder="Item name..."
+                                                                value={item.name}
+                                                                onChange={e => { const n = [...bulkItems]; n[idx].name = e.target.value; setBulkItems(n); }}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input type="number" min="0"
+                                                                className="w-16 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all"
+                                                                value={item.quantity}
+                                                                onChange={e => { const n = [...bulkItems]; n[idx].quantity = Number(e.target.value); setBulkItems(n); }}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input
+                                                                className="w-20 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all"
+                                                                placeholder="Piece"
+                                                                value={item.unit_type}
+                                                                onChange={e => { const n = [...bulkItems]; n[idx].unit_type = e.target.value; setBulkItems(n); }}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input type="number" min="0" step="0.01"
+                                                                className="w-24 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all"
+                                                                value={item.purchase_price}
+                                                                onChange={e => { const n = [...bulkItems]; n[idx].purchase_price = Number(e.target.value); setBulkItems(n); }}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <input type="number" min="0"
+                                                                className="w-16 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all"
+                                                                value={item.minimum_stock_level}
+                                                                onChange={e => { const n = [...bulkItems]; n[idx].minimum_stock_level = Number(e.target.value); setBulkItems(n); }}
+                                                            />
+                                                        </td>
+                                                        <td className="px-3 py-2">
+                                                            <button type="button"
+                                                                onClick={() => setBulkItems(p => p.length > 1 ? p.filter((_, i) => i !== idx) : p)}
+                                                                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/20 hover:text-rose-500 text-gray-300 transition-all">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-2">
+                                        <button type="button"
+                                            onClick={() => setBulkItems(p => [...p, { name: '', quantity: 1, unit_type: selectedDepartment ? DEPARTMENTS[selectedDepartment].unit_type : 'Piece', purchase_price: 0, minimum_stock_level: 5 }])}
+                                            className="flex items-center gap-2 px-5 py-3 border-2 border-dashed border-gray-200 dark:border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-maroon dark:hover:text-gold hover:border-maroon/30 transition-all">
+                                            <Plus className="w-4 h-4" /> Add Row
+                                        </button>
+                                        <div className="flex items-center gap-4">
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                                {bulkItems.filter(i => i.name.trim()).length} item{bulkItems.filter(i => i.name.trim()).length !== 1 ? 's' : ''} ready
+                                            </span>
+                                            <button type="button"
+                                                onClick={handleBulkSubmit}
+                                                className="flex items-center gap-3 bg-gradient-to-r from-maroon to-[#800000] text-gold px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg hover:scale-[1.02] active:scale-95 transition-all border border-white/10">
+                                                <CheckCircle2 className="w-4 h-4" /> Commit All To Vault
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
-                    </form>
-                </Modal>
+                    </div>
+                </div>
             )}
         </div>
     );
