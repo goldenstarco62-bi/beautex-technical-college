@@ -7,7 +7,7 @@ import {
     Tags, Wrench, FileText, ClipboardList, Plus, Search, Layers, X, Eye, 
     Pencil, Trash2, CheckCircle2, RefreshCcw, ArrowDownToLine, MapPin, PackageOpen,
     Download, Scan, Filter, ChevronRight, ChevronLeft, MoreVertical, LayoutGrid, List, Info, TrendingUp,
-    Box, FileSpreadsheet, User, Building2, MessageSquare
+    Box, FileSpreadsheet, User, Building2, MessageSquare, CalendarDays, ArrowLeftRight
 } from 'lucide-react';
 
 const Toast = ({ message, type, onClose }) => (
@@ -56,7 +56,6 @@ function ItemsTab() {
     const { user } = useAuth();
     const isAdmin = ['admin', 'superadmin'].includes((user?.role || '').toLowerCase());
     const [items, setItems] = useState([]);
-    const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0, limit: 10 });
     const [categories, setCategories] = useState([]);
     const [locations, setLocations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -81,11 +80,17 @@ function ItemsTab() {
         { name: '', quantity: 1, unit_type: 'Piece', purchase_price: 0, minimum_stock_level: 5 }
     ]);
     const [filterCategory, setFilterCategory] = useState('ALL');
+    const [filterDate, setFilterDate] = useState('');
+    const [bulkDate, setBulkDate] = useState(new Date().toISOString().split('T')[0]);
     const [toast, setToast] = useState(null);
     const [sortBy, setSortBy] = useState('name');
     const [sortOrder, setSortOrder] = useState('asc');
     const [selectedItem, setSelectedItem] = useState(null);
-    const [page, setPage] = useState(1);
+    const [moveDeptItem, setMoveDeptItem] = useState(null);
+    const [moveDeptDest, setMoveDeptDest] = useState('');
+    const [moveDeptLocation, setMoveDeptLocation] = useState('');
+    const [clientPage, setClientPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
@@ -94,32 +99,26 @@ function ItemsTab() {
 
     const loadData = useCallback(() => {
         setLoading(true);
-        const params = { 
-            search, 
-            page, 
-            limit: 10,
-            sortBy,
-            sortOrder,
-            ...(filterCategory !== 'ALL' ? { category_id: filterCategory } : {}) 
-        };
+        // Fetch all items (no limit) so client-side filtering + pagination works correctly
+        const params = { search, limit: 9999, sortBy, sortOrder };
 
         Promise.all([
             inventoryAPI.getItems(params),
             inventoryAPI.getCategories(),
             inventoryAPI.getLocations()
         ]).then(([i, c, l]) => {
-            setItems(i.data.data || []);
-            setPagination(i.data.pagination || { page: 1, totalPages: 1, total: 0, limit: 10 });
+            setItems(i.data.data || i.data || []);
             setCategories(c.data);
             setLocations(l.data);
         }).catch(err => {
             showToast('LOGISTICS SYNC FAILED', 'error');
             console.error(err);
         }).finally(() => setLoading(false));
-    }, [search, page, sortBy, sortOrder, filterCategory]);
+    }, [search, sortBy, sortOrder]);
 
     useEffect(() => { loadData(); }, [loadData]);
-    useEffect(() => { setPage(1); }, [search, filterCategory]);
+    // Reset to page 1 whenever any filter changes
+    useEffect(() => { setClientPage(1); }, [search, filterCategory, filterDate, sortBy, sortOrder]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -180,19 +179,47 @@ function ItemsTab() {
                 category: dept?.category || '',
                 location: dept?.location || '',
                 status: 'Available',
-                date_purchased: new Date().toISOString().split('T')[0],
+                date_purchased: bulkDate || new Date().toISOString().split('T')[0],
                 serial_number: '',
                 image_url: ''
             })));
             showToast(`${validItems.length} ASSETS SECURED IN VAULT`);
             setShowAddModal(false);
             setBulkItems([{ name: '', quantity: 1, unit_type: 'Piece', purchase_price: 0, minimum_stock_level: 5 }]);
+            setBulkDate(new Date().toISOString().split('T')[0]);
             setSelectedDepartment(null);
             setEntryMode('single');
             loadData();
         } catch (e) {
             const msg = e.response?.data?.error || 'Bulk entry failed';
             showToast(msg.toUpperCase(), 'error');
+        }
+    };
+
+    const DEPT_OPTIONS = [
+        { label: 'ICT Department', category: 'ICT', location: 'ICT Lab', color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20', emoji: '💻' },
+        { label: 'Beauty Therapy', category: 'Beauty Therapy', location: 'Beauty Lab', color: 'text-pink-500', bg: 'bg-pink-500/10', border: 'border-pink-500/20', emoji: '💄' },
+        { label: 'Hair Dressing', category: 'Hair Dressing', location: 'Hair Salon', color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20', emoji: '✂️' },
+        { label: 'Administration', category: 'Administration', location: 'Admin Office', color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-500/20', emoji: '🏛️' },
+        { label: 'Barbering', category: 'Barbering', location: 'Barbering Lab', color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', emoji: '🪒' },
+    ];
+
+    const handleMoveDept = async () => {
+        if (!moveDeptItem || !moveDeptDest) return;
+        const dept = DEPT_OPTIONS.find(d => d.category === moveDeptDest);
+        try {
+            await inventoryAPI.updateItem(moveDeptItem.id, {
+                ...moveDeptItem,
+                category: moveDeptDest,
+                location: moveDeptLocation || dept?.location || '',
+            });
+            showToast(`${moveDeptItem.name.toUpperCase()} MOVED TO ${moveDeptDest.toUpperCase()}`);
+            setMoveDeptItem(null);
+            setMoveDeptDest('');
+            setMoveDeptLocation('');
+            loadData();
+        } catch (e) {
+            showToast('FAILED TO MOVE ITEM', 'error');
         }
     };
 
@@ -217,8 +244,14 @@ function ItemsTab() {
             const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
                                  item.item_code.toLowerCase().includes(search.toLowerCase()) ||
                                  item.serial_number?.toLowerCase().includes(search.toLowerCase());
-            const matchesCat = filterCategory === 'ALL' || item.category_name?.toUpperCase().includes(filterCategory);
-            return matchesSearch && matchesCat;
+            const cat = item.category_name?.toLowerCase() || '';
+            const matchesCat = filterCategory === 'ALL'
+                || (filterCategory === 'BEAUTY' && cat.includes('beauty'))
+                || (filterCategory === 'HAIR'   && (cat.includes('hair') || cat.includes('hairdress')))
+                || (filterCategory === 'ICT'    && cat.includes('ict'))
+                || (filterCategory === 'ADMIN'  && (cat.includes('admin') || cat.includes('administration')));
+            const matchesDate = !filterDate || (item.date_purchased && item.date_purchased.startsWith(filterDate));
+            return matchesSearch && matchesCat && matchesDate;
         })
         .sort((a, b) => {
             const factor = sortOrder === 'asc' ? 1 : -1;
@@ -233,41 +266,47 @@ function ItemsTab() {
             setSortBy(val);
             setSortOrder('asc');
         }
-        setPage(1);
     };
 
+    // Client-side pagination over filtered items
+    const totalClientPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
+    const pagedItems = filteredItems.slice((clientPage - 1) * ITEMS_PER_PAGE, clientPage * ITEMS_PER_PAGE);
+
     const PaginationControl = () => {
-        if (pagination.totalPages <= 1) return null;
-        
+        if (totalClientPages <= 1) return null;
+
         return (
             <div className="flex items-center justify-between px-6 py-4 bg-gray-50/30 dark:bg-white/[0.01] border-t border-gray-100 dark:border-white/5">
                 <div className="flex items-center gap-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                        Showing <span className="text-maroon dark:text-gold">{items.length}</span> of {pagination.total} Assets
+                        Showing <span className="text-maroon dark:text-gold">
+                            {Math.min(filteredItems.length, (clientPage - 1) * ITEMS_PER_PAGE + pagedItems.length)}
+                        </span> of <span className="text-maroon dark:text-gold">{filteredItems.length}</span> Assets
+                        {filterCategory !== 'ALL' && <span className="ml-1 text-gray-300">({items.length} total)</span>}
                     </p>
                 </div>
                 <div className="flex items-center gap-1">
                     <button 
-                        disabled={page === 1}
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={clientPage === 1}
+                        onClick={() => setClientPage(p => Math.max(1, p - 1))}
                         className="p-2 rounded-xl hover:bg-maroon hover:text-gold disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit transition-all"
                     >
                         <ChevronLeft className="w-5 h-5" />
                     </button>
-                    {[...Array(pagination.totalPages)].map((_, i) => (
+                    {[...Array(totalClientPages)].map((_, i) => (
                         <button 
                             key={i}
-                            onClick={() => setPage(i + 1)}
+                            onClick={() => setClientPage(i + 1)}
                             className={`w-9 h-9 rounded-xl text-[10px] font-black transition-all ${
-                                page === i + 1 ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' : 'hover:bg-maroon/5 text-gray-400 hover:text-maroon'
+                                clientPage === i + 1 ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' : 'hover:bg-maroon/5 text-gray-400 hover:text-maroon'
                             }`}
                         >
                             {i + 1}
                         </button>
                     ))}
                     <button 
-                        disabled={page === pagination.totalPages}
-                        onClick={() => setPage(p => Math.min(pagination.totalPages, p + 1))}
+                        disabled={clientPage === totalClientPages}
+                        onClick={() => setClientPage(p => Math.min(totalClientPages, p + 1))}
                         className="p-2 rounded-xl hover:bg-maroon hover:text-gold disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-inherit transition-all"
                     >
                         <ChevronRight className="w-5 h-5" />
@@ -289,18 +328,44 @@ function ItemsTab() {
                             value={search} onChange={(e) => setSearch(e.target.value)}
                         />
                     </div>
-                    <div className="flex gap-1.5 p-1.5 bg-gray-50/50 dark:bg-white/[0.02] rounded-xl border border-black/5 dark:border-white/5">
-                        {['ALL', 'BEAUTY', 'ICT', 'ADMIN'].map(cat => (
+                    <div className="flex gap-1.5 p-1.5 bg-gray-50/50 dark:bg-white/[0.02] rounded-xl border border-black/5 dark:border-white/5 flex-wrap">
+                        {[
+                            { id: 'ALL',   label: 'All' },
+                            { id: 'BEAUTY', label: 'Beauty' },
+                            { id: 'HAIR',   label: 'Hair' },
+                            { id: 'ICT',    label: 'ICT' },
+                            { id: 'ADMIN',  label: 'Admin' },
+                        ].map(({ id, label }) => (
                             <button 
-                                key={cat}
-                                onClick={() => setFilterCategory(cat)}
+                                key={id}
+                                onClick={() => setFilterCategory(id)}
                                 className={`px-4 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all ${
-                                    filterCategory === cat ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' : 'text-gray-400 hover:text-maroon'
+                                    filterCategory === id ? 'bg-maroon text-gold shadow-lg shadow-maroon/20' : 'text-gray-400 hover:text-maroon'
                                 }`}
                             >
-                                {cat}
+                                {label}
                             </button>
                         ))}
+                    </div>
+                    {/* Date Filter */}
+                    <div className="relative group flex items-center gap-2 bg-white dark:bg-[#111] border border-gray-100 dark:border-white/5 rounded-xl px-4 shadow-sm ring-1 ring-black/5">
+                        <CalendarDays className="w-4 h-4 text-gray-400 group-focus-within:text-maroon shrink-0 transition-colors" />
+                        <input
+                            type="date"
+                            className="py-3 bg-transparent text-[9px] font-black tracking-[0.15em] text-gray-600 dark:text-gray-300 focus:outline-none w-[140px] cursor-pointer"
+                            value={filterDate}
+                            onChange={e => setFilterDate(e.target.value)}
+                            title="Filter by purchase date"
+                        />
+                        {filterDate && (
+                            <button
+                                onClick={() => setFilterDate('')}
+                                className="ml-1 p-1 hover:text-maroon text-gray-300 transition-colors rounded-lg"
+                                title="Clear date filter"
+                            >
+                                <X className="w-3 h-3" />
+                            </button>
+                        )}
                     </div>
                 </div>
                 {isAdmin && (
@@ -326,6 +391,19 @@ function ItemsTab() {
                     </div>
                 )}
             </div>
+            {/* Active date filter badge */}
+            {filterDate && (
+                <div className="flex items-center gap-3 animate-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-maroon/5 border border-maroon/10 rounded-xl">
+                        <CalendarDays className="w-3.5 h-3.5 text-maroon" />
+                        <span className="text-[9px] font-black text-maroon uppercase tracking-widest">
+                            Showing assets purchased on {new Date(filterDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                        </span>
+                        <span className="ml-2 text-[8px] px-2 py-0.5 bg-maroon text-gold rounded-full font-black">{filteredItems.length} found</span>
+                        <button onClick={() => setFilterDate('')} className="ml-1 p-0.5 hover:text-maroon text-gray-400 transition-colors"><X className="w-3 h-3" /></button>
+                    </div>
+                </div>
+            )}
 
             {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
@@ -358,11 +436,16 @@ function ItemsTab() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : items.length === 0 ? (
+                            ) : filteredItems.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="py-20 text-center text-gray-300 font-black italic uppercase tracking-[0.3em] opacity-40">No matching assets in local sector</td>
+                                    <td colSpan="6" className="py-20 text-center">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <PackageOpen className="w-12 h-12 text-gray-200" />
+                                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em]">No assets found {filterCategory !== 'ALL' ? `in ${filterCategory} department` : ''}</p>
+                                        </div>
+                                    </td>
                                 </tr>
-                            ) : items.map(item => (
+                            ) : pagedItems.map(item => (
                                 <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.015] transition-all duration-300 group">
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-6">
@@ -432,6 +515,13 @@ function ItemsTab() {
                                             <button onClick={() => setSelectedItem(item)} className="w-9 h-9 bg-white dark:bg-black hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Eye className="w-3.5 h-3.5" /></button>
                                             {isAdmin && (
                                                 <>
+                                                    <button 
+                                                        onClick={() => { setMoveDeptItem(item); setMoveDeptDest(item.category_name || ''); setMoveDeptLocation(item.location_name || ''); }}
+                                                        className="w-9 h-9 bg-white dark:bg-black hover:bg-blue-500 hover:text-white rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"
+                                                        title="Move to Department"
+                                                    >
+                                                        <ArrowLeftRight className="w-3.5 h-3.5" />
+                                                    </button>
                                                     <button onClick={() => { setFormData(item); setShowAddModal(true); }} className="w-9 h-9 bg-white dark:bg-black hover:bg-maroon hover:text-gold rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Pencil className="w-3.5 h-3.5" /></button>
                                                     <button onClick={() => handleDelete(item.id, item.name)} className="w-9 h-9 bg-white dark:bg-black hover:bg-rose-500 hover:text-white rounded-xl transition-all shadow-sm flex items-center justify-center border border-black/5 dark:border-white/5"><Trash2 className="w-3.5 h-3.5" /></button>
                                                 </>
@@ -490,6 +580,116 @@ function ItemsTab() {
                             <div className="mt-auto flex gap-4">
                                 <button className="flex-1 bg-maroon text-gold py-5 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-maroon/20">Commence Requisition</button>
                                 <button className="p-5 bg-gray-50 dark:bg-white/5 rounded-2xl text-gray-400 hover:text-maroon transition-all"><MoreVertical className="w-5 h-5" /></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Move to Department Modal */}
+            {moveDeptItem && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-xl z-[150] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-300">
+                    <div className="bg-white dark:bg-[#0f0f0f] rounded-3xl shadow-[0_40px_100px_-20px_rgba(0,0,0,0.5)] w-full max-w-lg border border-white/10 overflow-hidden">
+                        {/* Header */}
+                        <div className="px-6 py-5 border-b border-gray-100 dark:border-white/5 bg-blue-50/30 dark:bg-blue-950/10 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center border border-blue-500/20">
+                                    <ArrowLeftRight className="w-5 h-5 text-blue-500" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest leading-none">Transfer Department</h3>
+                                    <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest mt-0.5">Move item to a new sector</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setMoveDeptItem(null); setMoveDeptDest(''); setMoveDeptLocation(''); }} className="p-2 hover:rotate-90 transition-transform text-gray-400 hover:text-gray-600">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-5">
+                            {/* Current asset info */}
+                            <div className="p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5">
+                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Asset Being Transferred</p>
+                                <p className="text-[14px] font-black text-gray-900 dark:text-white uppercase tracking-tight leading-none">{moveDeptItem.name}</p>
+                                <div className="flex items-center gap-3 mt-2.5 flex-wrap">
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-maroon/5 border border-maroon/10 rounded-lg">
+                                        <Building2 className="w-3 h-3 text-maroon" />
+                                        <span className="text-[8px] font-black text-maroon uppercase tracking-widest">{moveDeptItem.category_name || 'Unclassified'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-100/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/5 rounded-lg">
+                                        <MapPin className="w-3 h-3 text-gray-400" />
+                                        <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">{moveDeptItem.location_name || 'No location'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1 px-2.5 py-1 bg-gray-100/50 dark:bg-white/5 border border-gray-200/50 dark:border-white/5 rounded-lg">
+                                        <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Qty: {moveDeptItem.quantity}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Department selector */}
+                            <div>
+                                <p className="text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-3 ml-1">Select Target Department</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {DEPT_OPTIONS.map(dept => (
+                                        <button
+                                            key={dept.category}
+                                            type="button"
+                                            onClick={() => { setMoveDeptDest(dept.category); setMoveDeptLocation(dept.location); }}
+                                            className={`flex items-center gap-4 p-3.5 rounded-2xl border-2 transition-all text-left ${
+                                                moveDeptDest === dept.category
+                                                    ? `${dept.border} ${dept.bg}`
+                                                    : 'border-gray-100 dark:border-white/5 hover:border-gray-200 dark:hover:border-white/10'
+                                            } ${moveDeptItem.category_name === dept.category ? 'opacity-40 pointer-events-none' : ''}`}
+                                        >
+                                            <span className="text-xl shrink-0">{dept.emoji}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-[10px] font-black uppercase tracking-widest ${
+                                                    moveDeptDest === dept.category ? dept.color : 'text-gray-600 dark:text-gray-400'
+                                                }`}>{dept.label}</p>
+                                                <p className="text-[8px] text-gray-400 uppercase tracking-widest mt-0.5 flex items-center gap-1">
+                                                    <MapPin className="w-2.5 h-2.5" />{dept.location}
+                                                </p>
+                                            </div>
+                                            {moveDeptItem.category_name === dept.category && (
+                                                <span className="text-[7px] font-black text-gray-400 uppercase tracking-widest shrink-0">Current</span>
+                                            )}
+                                            {moveDeptDest === dept.category && moveDeptItem.category_name !== dept.category && (
+                                                <CheckCircle2 className={`w-4 h-4 ${dept.color} shrink-0`} />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Optional custom location override */}
+                            {moveDeptDest && (
+                                <div className="animate-in slide-in-from-top-2 duration-300">
+                                    <label className="block text-[9px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 ml-1">Storage Location <span className="text-gray-300">(optional override)</span></label>
+                                    <input
+                                        type="text"
+                                        value={moveDeptLocation}
+                                        onChange={e => setMoveDeptLocation(e.target.value)}
+                                        placeholder="e.g. Cabinet B, Shelf 3…"
+                                        className="w-full px-5 py-3.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-2xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all placeholder:text-gray-300"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div className="flex gap-3 pt-1">
+                                <button
+                                    onClick={() => { setMoveDeptItem(null); setMoveDeptDest(''); setMoveDeptLocation(''); }}
+                                    className="flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-gray-100 dark:border-white/5 text-gray-400 hover:bg-gray-50 dark:hover:bg-white/5 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleMoveDept}
+                                    disabled={!moveDeptDest || moveDeptDest === moveDeptItem.category_name}
+                                    className="flex-1 py-4 bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-2"
+                                >
+                                    <ArrowLeftRight className="w-4 h-4" /> Transfer Item
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -624,6 +824,22 @@ function ItemsTab() {
                             {/* ── BULK ENTRY ── */}
                             {entryMode === 'bulk' && !formData.id && (
                                 <div className="space-y-6">
+                                    {/* Shared Date for Bulk */}
+                                    <div className="flex items-center gap-4 p-4 bg-amber-50/30 dark:bg-amber-950/10 rounded-2xl border border-amber-500/10">
+                                        <div className="w-9 h-9 bg-amber-500/10 rounded-xl flex items-center justify-center border border-amber-500/20 shrink-0">
+                                            <CalendarDays className="w-4 h-4 text-amber-500" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">Bulk Purchase Date</p>
+                                            <p className="text-[8px] text-gray-400 uppercase tracking-widest">Applied to all items below</p>
+                                        </div>
+                                        <input
+                                            type="date"
+                                            value={bulkDate}
+                                            onChange={e => setBulkDate(e.target.value)}
+                                            className="px-4 py-2.5 bg-white dark:bg-gray-800/50 border border-amber-200 dark:border-amber-500/20 rounded-xl text-[10px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition-all"
+                                        />
+                                    </div>
                                     {/* Preset chips */}
                                     {selectedDepartment && (
                                         <div>
