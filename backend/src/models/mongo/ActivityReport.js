@@ -12,18 +12,51 @@ const activityReportSchema = new mongoose.Schema({
     },
     // DAILY
     report_date: Date,
-    classes_conducted: Number,
-    total_attendance_percentage: Number,
-    assessments_conducted: Number,
+    department: String,
+    
+    // Attendance Summary
+    total_students_expected: Number,
     total_students_present: Number,
     total_students_absent: Number,
-    late_arrivals: Number,
-    new_enrollments: Number,
+    absent_students_list: String,  // Names of absent students
     staff_present: Number,
     staff_absent: Number,
+    late_arrivals: Number,
+
+    // Academic Activities
+    classes_conducted: String, // Changed to String to list subjects
+    topics_covered: String,
+    practical_sessions: String,
+    assessments_conducted: Number,
+    total_attendance_percentage: Number,
+
+    // Administrative Activities
+    meetings_held: String,
+    admissions_registrations: String,
+    new_enrollments: Number,
+    fees_collection_summary: String,
+
+    // Student Affairs
     disciplinary_cases: Number,
+    discipline_issues: String,
+    student_feedback: String,
+    counseling_support: String,
+
+    // Facilities & Operations
     facilities_issues: String,
     equipment_maintenance: String,
+    cleaning_maintenance: String,
+    internet_ict_status: String,
+
+    // Marketing & Outreach
+    inquiries_received: Number,
+    walk_ins: Number,
+    social_media_activities: String,
+
+    // Operational Intelligence
+    challenges_faced: String,
+    actions_taken: String,
+    plans_for_next_day: String,
     notable_events: String,
     incidents: String,
     achievements: String,

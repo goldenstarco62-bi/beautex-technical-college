@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-    Calendar, TrendingUp, BarChart3, FileText, Plus, RefreshCw, Download,
-    X, Eye, Edit, Trash2, Zap, AlertCircle, User, Clock, FileDown, ChevronRight, Printer
+    Calendar, TrendingUp, BarChart3, FileText, Plus, RefreshCw, Download, Info, Users, BookOpen, Building2, Heart,
+    X, Eye, Edit, Trash2, Zap, AlertCircle, User, Clock, FileDown, ChevronRight, Printer, CheckCircle, Check, Briefcase, Minus
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -48,18 +48,37 @@ export default function ActivityReports() {
     // Daily Report Form State
     const [dailyForm, setDailyForm] = useState({
         report_date: new Date().toISOString().split('T')[0],
-        classes_conducted: 0,
-        total_attendance_percentage: 0,
-        assessments_conducted: 0,
+        department: '',
+        total_students_expected: 0,
         total_students_present: 0,
         total_students_absent: 0,
-        late_arrivals: 0,
-        new_enrollments: 0,
         staff_present: 0,
         staff_absent: 0,
+        late_arrivals: 0,
+        absent_students_list: '',
+        classes_conducted: '',
+        topics_covered: '',
+        practical_sessions: '',
+        assessments_conducted: 0,
+        total_attendance_percentage: 0,
+        meetings_held: '',
+        admissions_registrations: '',
+        new_enrollments: 0,
+        fees_collection_summary: '',
         disciplinary_cases: 0,
+        discipline_issues: '',
+        student_feedback: '',
+        counseling_support: '',
         facilities_issues: '',
         equipment_maintenance: '',
+        cleaning_maintenance: '',
+        internet_ict_status: '',
+        inquiries_received: 0,
+        walk_ins: 0,
+        social_media_activities: '',
+        challenges_faced: '',
+        actions_taken: '',
+        plans_for_next_day: '',
         notable_events: '',
         incidents: '',
         achievements: '',
@@ -136,32 +155,55 @@ export default function ActivityReports() {
     };
 
     const handleSubmitDaily = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        
+        // Manual Validation to prevent silent browser blocks
+        if (!dailyForm.report_date) {
+            toast.error('Report date is required');
+            return;
+        }
+        if (!dailyForm.department) {
+            toast.error('Department is required');
+            return;
+        }
+
+        const reportId = editingReport?.id || editingReport?._id || dailyForm.id || dailyForm._id;
+        setLoading(true);
+        
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createDailyReport(dailyForm);
                 toast.success('Daily report archived successfully');
             } else {
-                await activityReportsAPI.updateDailyReport(editingReport.id, dailyForm);
+                if (!reportId) {
+                    console.error('Missing ID:', { editingReport, dailyForm });
+                    throw new Error('Institutional Reference ID missing');
+                }
+                await activityReportsAPI.updateDailyReport(reportId, dailyForm);
                 toast.success('Report revision authorized');
             }
             setShowModal(false);
             resetForms();
             fetchReports();
         } catch (error) {
-            console.error('Error submitting daily report:', error);
-            toast.error(error.response?.data?.error || 'Archive sequence failed');
+            console.error('Daily submission error:', error);
+            const errorMsg = error.response?.data?.error || error.message || 'Archive sequence failed';
+            toast.error(errorMsg);
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleSubmitWeekly = async (e) => {
         e.preventDefault();
+        const reportId = editingReport?.id || editingReport?._id;
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createWeeklyReport(weeklyForm);
                 toast.success('Weekly summary finalized');
             } else {
-                await activityReportsAPI.updateWeeklyReport(editingReport.id, weeklyForm);
+                if (!reportId) throw new Error('Institutional Reference ID missing');
+                await activityReportsAPI.updateWeeklyReport(reportId, weeklyForm);
                 toast.success('Weekly revision archived');
             }
             setShowModal(false);
@@ -169,18 +211,20 @@ export default function ActivityReports() {
             fetchReports();
         } catch (error) {
             console.error('Error submitting weekly report:', error);
-            toast.error(error.response?.data?.error || 'Summary finalization failed');
+            toast.error(error.response?.data?.error || error.message || 'Summary finalization failed');
         }
     };
 
     const handleSubmitMonthly = async (e) => {
         e.preventDefault();
+        const reportId = editingReport?.id || editingReport?._id;
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createMonthlyReport(monthlyForm);
                 toast.success('Monthly intelligence report archived');
             } else {
-                await activityReportsAPI.updateMonthlyReport(editingReport.id, monthlyForm);
+                if (!reportId) throw new Error('Institutional Reference ID missing');
+                await activityReportsAPI.updateMonthlyReport(reportId, monthlyForm);
                 toast.success('Monthly revision authorized');
             }
             setShowModal(false);
@@ -188,7 +232,7 @@ export default function ActivityReports() {
             fetchReports();
         } catch (error) {
             console.error('Error submitting monthly report:', error);
-            toast.error(error.response?.data?.error || 'Archive operation interrupted');
+            toast.error(error.response?.data?.error || error.message || 'Archive operation interrupted');
         }
     };
 
@@ -219,12 +263,29 @@ export default function ActivityReports() {
         setModalMode('edit');
         setEditingReport(report);
 
+        const formatDate = (dateStr) => {
+            if (!dateStr) return '';
+            const d = new Date(dateStr);
+            return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+        };
+
         if (activeTab === 'daily') {
-            setDailyForm({ ...report });
+            setDailyForm({ 
+                ...report,
+                report_date: formatDate(report.report_date)
+            });
         } else if (activeTab === 'weekly') {
-            setWeeklyForm({ ...report });
+            setWeeklyForm({ 
+                ...report,
+                week_start_date: formatDate(report.week_start_date),
+                week_end_date: formatDate(report.week_end_date)
+            });
         } else if (activeTab === 'monthly') {
-            setMonthlyForm({ ...report });
+            setMonthlyForm({ 
+                ...report,
+                month_start_date: formatDate(report.month_start_date),
+                month_end_date: formatDate(report.month_end_date)
+            });
         }
 
         setShowModal(true);
@@ -233,18 +294,37 @@ export default function ActivityReports() {
     const resetForms = () => {
         setDailyForm({
             report_date: new Date().toISOString().split('T')[0],
-            classes_conducted: 0,
-            total_attendance_percentage: 0,
-            assessments_conducted: 0,
+            department: '',
+            total_students_expected: 0,
             total_students_present: 0,
             total_students_absent: 0,
-            late_arrivals: 0,
-            new_enrollments: 0,
+            absent_students_list: '',
             staff_present: 0,
             staff_absent: 0,
+            late_arrivals: 0,
+            classes_conducted: '',
+            topics_covered: '',
+            practical_sessions: '',
+            assessments_conducted: 0,
+            total_attendance_percentage: 0,
+            meetings_held: '',
+            admissions_registrations: '',
+            new_enrollments: 0,
+            fees_collection_summary: '',
             disciplinary_cases: 0,
+            discipline_issues: '',
+            student_feedback: '',
+            counseling_support: '',
             facilities_issues: '',
             equipment_maintenance: '',
+            cleaning_maintenance: '',
+            internet_ict_status: '',
+            inquiries_received: 0,
+            walk_ins: 0,
+            social_media_activities: '',
+            challenges_faced: '',
+            actions_taken: '',
+            plans_for_next_day: '',
             notable_events: '',
             incidents: '',
             achievements: '',
@@ -422,24 +502,48 @@ export default function ActivityReports() {
             const element = document.getElementById('report-print-capture');
             if (!element) return;
             try {
+                // Pre-capture style adjustments to ensure perfection
+                element.style.padding = '0px'; 
+                
                 const canvas = await html2canvas(element, {
-                    scale: 3,
+                    scale: 2.5, // Optimized 'Golden Scale' for high-res without glitching
                     useCORS: true,
                     backgroundColor: '#ffffff',
-                    windowWidth: 794
+                    windowWidth: 794, 
+                    logging: false,
+                    imageTimeout: 0,
+                    onclone: (clonedDoc) => {
+                        const el = clonedDoc.getElementById('report-print-capture');
+                        if (el) el.style.padding = '0';
+                    }
                 });
-                const imgData = canvas.toDataURL('image/png');
+
+                // Lossless PNG for crisp text without JPEG artifacts
+                const imgData = canvas.toDataURL('image/png'); 
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = pdf.internal.pageSize.getHeight();
 
                 const imgProps = pdf.getImageProperties(imgData);
                 const ratio = imgProps.height / imgProps.width;
-                const renderedHeight = pdfWidth * ratio;
+                const totalRenderedHeight = pdfWidth * ratio;
 
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(renderedHeight, pdfHeight));
+                let heightLeft = totalRenderedHeight;
+                let position = 0;
+
+                // Precision addition with manual paging
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'SLOW');
+                heightLeft -= pdfHeight;
+
+                while (heightLeft > 0) {
+                    position -= pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'SLOW');
+                    heightLeft -= pdfHeight;
+                }
+
                 pdf.save(`${type.charAt(0).toUpperCase() + type.slice(1)}_Activity_Report_${report.report_date || report.week_start_date || report.month}.pdf`);
-                toast.success('Digital Archive Manifest Exported');
+                toast.success('High-Fidelity Archive Exported');
             } catch (error) {
                 console.error('Download failed:', error);
                 toast.error('Document generation sequence interrupted');
@@ -910,231 +1014,418 @@ export default function ActivityReports() {
 
                         <div className="p-6">
                             {activeTab === 'daily' && (
-                                <form onSubmit={handleSubmitDaily} className="space-y-6">
-                                    {/* Section 1: Core Metrics & Attendance */}
-                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
-                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
-                                            <div className="w-8 h-8 bg-maroon/10 rounded-lg flex items-center justify-center">
-                                                <Calendar className="w-4 h-4 text-maroon" />
+                                <form onSubmit={handleSubmitDaily} className="space-y-8">
+                                    {/* 1. Basic Information */}
+                                    <div className="bg-maroon/[0.02] p-8 rounded-[2rem] border border-maroon/5 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-maroon/5 pb-4">
+                                            <div className="w-10 h-10 bg-maroon/10 rounded-xl flex items-center justify-center">
+                                                <Info className="w-5 h-5 text-maroon" />
                                             </div>
-                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">General & Attendance</h3>
+                                            <div>
+                                                <h3 className="text-sm font-black text-maroon uppercase tracking-widest">1. Basic Information</h3>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Categorization & Identity</p>
+                                            </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Report Date</label>
+                                                <label className="block text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-2 ml-1">Report Date</label>
                                                 <input
                                                     type="date"
                                                     value={dailyForm.report_date}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, report_date: e.target.value })}
                                                     className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
-                                                    required
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Staff Present</label>
-                                                <input
-                                                    type="number"
-                                                    value={dailyForm.staff_present}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
-                                                    required
-                                                />
+                                                <label className="block text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-2 ml-1">Day of Week</label>
+                                                <div className="w-full px-5 py-3.5 bg-gray-50 rounded-2xl border border-gray-100 font-black text-maroon uppercase tracking-widest text-xs">
+                                                    {new Date(dailyForm.report_date).toLocaleDateString(undefined, { weekday: 'long' })}
+                                                </div>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Staff Absent</label>
-                                                <input
-                                                    type="number"
-                                                    value={dailyForm.staff_absent}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, staff_absent: parseInt(e.target.value) || 0 })}
+                                                <label className="block text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-2 ml-1">Department / Section</label>
+                                                <select
+                                                    value={dailyForm.department}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, department: e.target.value })}
                                                     className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
-                                                />
+                                                >
+                                                    <option value="">Select Department</option>
+                                                    <option value="ICT">ICT Department</option>
+                                                    <option value="Cosmetology">Cosmetology & Beauty</option>
+                                                    <option value="Business">Business Studies</option>
+                                                    <option value="Engineering">Engineering</option>
+                                                    <option value="Admin">Administration</option>
+                                                    <option value="Finance">Finance / Accounts</option>
+                                                    <option value="Marketing">Marketing & Outreach</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 2. Attendance Summary */}
+                                    <div className="bg-blue-50/20 p-8 rounded-[2rem] border border-blue-100/50 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-blue-100 pb-4">
+                                            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                                                <Users className="w-5 h-5 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-blue-900 uppercase tracking-widest">2. Attendance Summary</h3>
+                                                <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Student & Staff Daily Count</p>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Students Present</label>
+                                                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1">Expected</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.total_students_expected}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, total_students_expected: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-blue-100 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1 text-green-600">Present</label>
                                                 <input
                                                     type="number"
                                                     value={dailyForm.total_students_present}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, total_students_present: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-green-600"
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-blue-100 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-green-600"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Students Absent</label>
+                                                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1 text-red-600">Absent</label>
                                                 <input
                                                     type="number"
                                                     value={dailyForm.total_students_absent}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, total_students_absent: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-red-600"
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-blue-100 focus:border-red-500 focus:ring-4 focus:ring-red-500/5 outline-none transition-all font-bold text-red-600"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Late Arrivals</label>
+                                                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1">Staff Present</label>
                                                 <input
                                                     type="number"
-                                                    value={dailyForm.late_arrivals}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, late_arrivals: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-amber-600"
+                                                    value={dailyForm.staff_present}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, staff_present: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-blue-100 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Attendance %</label>
-                                                <div className="w-full px-5 py-3.5 bg-gray-100 rounded-2xl border border-gray-200 font-black text-maroon flex items-center justify-between">
-                                                    <span>{dailyForm.total_attendance_percentage}%</span>
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-maroon animate-pulse" />
-                                                </div>
+                                                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1">Staff Absent</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.staff_absent}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, staff_absent: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-blue-100 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Absent Students List */}
+                                        <div className="md:col-span-5 mt-2">
+                                            <label className="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-2 ml-1">Absent Students (Names)</label>
+                                            <textarea
+                                                value={dailyForm.absent_students_list}
+                                                onChange={(e) => setDailyForm({ ...dailyForm, absent_students_list: e.target.value })}
+                                                placeholder="e.g. John Doe, Jane Smith, Omar Ali..."
+                                                className="w-full px-5 py-4 bg-white rounded-2xl border border-red-100 focus:border-red-400 focus:ring-4 focus:ring-red-400/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
+                                            />
+                                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-1 ml-1">Separate names with commas or enter one per line</p>
+                                        </div>
+                                    </div>
+
+                                    {/* 3. Academic Activities */}
+                                    <div className="bg-purple-50/20 p-8 rounded-[2rem] border border-purple-100/50 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-purple-100 pb-4">
+                                            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                                                <BookOpen className="w-5 h-5 text-purple-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-purple-900 uppercase tracking-widest">3. Academic Activities</h3>
+                                                <p className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">Curriculum Execution & Progress</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Classes Conducted (List Subjects/Courses)</label>
+                                                <textarea
+                                                    value={dailyForm.classes_conducted}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: e.target.value })}
+                                                    placeholder="e.g. Intro to Programming, Advanced Styling..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Topics Covered</label>
+                                                <textarea
+                                                    value={dailyForm.topics_covered}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, topics_covered: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Practical Sessions</label>
+                                                <textarea
+                                                    value={dailyForm.practical_sessions}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, practical_sessions: e.target.value })}
+                                                    placeholder="Lab work, salon practice, site visits..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Section 2: Academic Operations */}
-                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
-                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
-                                            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
-                                                <TrendingUp className="w-4 h-4 text-blue-600" />
+                                    {/* 4. Administrative Activities */}
+                                    <div className="bg-emerald-50/20 p-8 rounded-[2rem] border border-emerald-100/50 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-emerald-100 pb-4">
+                                            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                                                <Building2 className="w-5 h-5 text-emerald-600" />
                                             </div>
-                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Academic Operations</h3>
+                                            <div>
+                                                <h3 className="text-sm font-black text-emerald-900 uppercase tracking-widest">4. Administrative Activities</h3>
+                                                <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Office & Financial Operations</p>
+                                            </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Classes Conducted</label>
-                                                <input
-                                                    type="number"
-                                                    value={dailyForm.classes_conducted}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
-                                                    required
+                                                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Meetings Held</label>
+                                                <textarea
+                                                    value={dailyForm.meetings_held}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, meetings_held: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Assessments</label>
-                                                <input
-                                                    type="number"
-                                                    value={dailyForm.assessments_conducted}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, assessments_conducted: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Admissions / Registrations</label>
+                                                <textarea
+                                                    value={dailyForm.admissions_registrations}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, admissions_registrations: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">New Enrollments</label>
+                                                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">New Students (Count)</label>
                                                 <input
                                                     type="number"
                                                     value={dailyForm.new_enrollments}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, new_enrollments: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Fees Collection Summary</label>
+                                                <input
+                                                    type="text"
+                                                    value={dailyForm.fees_collection_summary}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, fees_collection_summary: e.target.value })}
+                                                    placeholder="Total collected, significant payments..."
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700"
                                                 />
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Section 3: Facilities & Logistics */}
-                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
-                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
-                                            <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center">
-                                                <Zap className="w-4 h-4 text-amber-600" />
+                                    {/* 5. Student Affairs */}
+                                    <div className="bg-rose-50/20 p-8 rounded-[2rem] border border-rose-100/50 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-rose-100 pb-4">
+                                            <div className="w-10 h-10 bg-rose-100 rounded-xl flex items-center justify-center">
+                                                <Heart className="w-5 h-5 text-rose-600" />
                                             </div>
-                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Facilities & Discipline</h3>
+                                            <div>
+                                                <h3 className="text-sm font-black text-rose-900 uppercase tracking-widest">5. Student Affairs</h3>
+                                                <p className="text-[10px] text-rose-400 font-bold uppercase tracking-wider">Wellbeing & Discipline</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1 text-red-600">Discipline Issues</label>
+                                                <textarea
+                                                    value={dailyForm.discipline_issues}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, discipline_issues: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1">Student Feedback / Concerns</label>
+                                                <textarea
+                                                    value={dailyForm.student_feedback}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, student_feedback: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1">Counseling / Support</label>
+                                                <textarea
+                                                    value={dailyForm.counseling_support}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, counseling_support: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 6. Facilities & Operations */}
+                                    <div className="bg-amber-50/20 p-8 rounded-[2rem] border border-amber-100/50 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-amber-100 pb-4">
+                                            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                                                <Zap className="w-5 h-5 text-amber-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-amber-900 uppercase tracking-widest">6. Facilities & Operations</h3>
+                                                <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Infrastructure & Maintenance</p>
+                                            </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Disciplinary Cases</label>
-                                                <input
-                                                    type="number"
-                                                    value={dailyForm.disciplinary_cases}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) || 0 })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-red-500"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Facilities Issues</label>
+                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Classroom / Lab Condition</label>
                                                 <input
                                                     type="text"
                                                     value={dailyForm.facilities_issues}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, facilities_issues: e.target.value })}
-                                                    placeholder="Any infrastructure concerns?"
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300"
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
                                                 />
                                             </div>
-                                            <div className="md:col-span-2">
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Equipment Maintenance</label>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Equipment Status</label>
                                                 <input
                                                     type="text"
                                                     value={dailyForm.equipment_maintenance}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, equipment_maintenance: e.target.value })}
-                                                    placeholder="Status of laboratory/classroom equipment..."
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300"
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Cleaning & Maintenance</label>
+                                                <input
+                                                    type="text"
+                                                    value={dailyForm.cleaning_maintenance}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, cleaning_maintenance: e.target.value })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Internet / ICT Status</label>
+                                                <input
+                                                    type="text"
+                                                    value={dailyForm.internet_ict_status}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, internet_ict_status: e.target.value })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
                                                 />
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Section 4: Qualitative Observations */}
-                                    <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-6">
-                                        <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
-                                            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
-                                                <FileText className="w-4 h-4 text-green-600" />
+                                    {/* 7. Marketing & Outreach */}
+                                    <div className="bg-indigo-50/20 p-8 rounded-[2rem] border border-indigo-100/50 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-indigo-100 pb-4">
+                                            <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                                                <TrendingUp className="w-5 h-5 text-indigo-600" />
                                             </div>
-                                            <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Detailed Observations</h3>
+                                            <div>
+                                                <h3 className="text-sm font-black text-indigo-900 uppercase tracking-widest">7. Marketing & Outreach</h3>
+                                                <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Growth & Inquiries</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 ml-1">Inquiries Received</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.inquiries_received}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, inquiries_received: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-indigo-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 ml-1">Walk-ins</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.walk_ins}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, walk_ins: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-indigo-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 ml-1">Social Media Activities</label>
+                                                <input
+                                                    type="text"
+                                                    value={dailyForm.social_media_activities}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, social_media_activities: e.target.value })}
+                                                    placeholder="Posts, ads, engagement..."
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-indigo-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-bold text-gray-700"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 8-11. Operational Intelligence */}
+                                    <div className="bg-gray-50 p-8 rounded-[2rem] border border-gray-200 space-y-6">
+                                        <div className="flex items-center gap-3 border-b border-gray-200 pb-4">
+                                            <div className="w-10 h-10 bg-gray-200 rounded-xl flex items-center justify-center">
+                                                <FileText className="w-5 h-5 text-gray-600" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest">Operational Intelligence</h3>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Analysis, Planning & Remarks</p>
+                                            </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Notable Events</label>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-500">8. Challenges Faced</label>
                                                 <textarea
-                                                    value={dailyForm.notable_events}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, notable_events: e.target.value })}
-                                                    placeholder="Workshops, visitors, guest lectures..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 h-28 resize-none shadow-inner"
+                                                    value={dailyForm.challenges_faced}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, challenges_faced: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Achievements</label>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-green-600">9. Actions Taken</label>
                                                 <textarea
-                                                    value={dailyForm.achievements}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, achievements: e.target.value })}
-                                                    placeholder="Success stories from students or faculty..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 h-28 resize-none shadow-inner"
+                                                    value={dailyForm.actions_taken}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, actions_taken: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-500">Incidents</label>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-blue-600">10. Plans for Next Day</label>
                                                 <textarea
-                                                    value={dailyForm.incidents}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, incidents: e.target.value })}
-                                                    placeholder="Any accidents, security breaches, or emergencies..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-red-100 focus:border-red-500 focus:ring-4 focus:ring-red-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-red-200 h-28 resize-none shadow-inner"
+                                                    value={dailyForm.plans_for_next_day}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, plans_for_next_day: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Additional Notes</label>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">11. Remarks (Optional)</label>
                                                 <textarea
                                                     value={dailyForm.additional_notes}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, additional_notes: e.target.value })}
-                                                    placeholder="Miscellaneous observations..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 placeholder:text-gray-300 h-28 resize-none shadow-inner"
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
                                                 />
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="flex gap-4 justify-end pt-6">
+                                    <div className="flex gap-4 justify-end pt-6 sticky bottom-0 bg-white/80 backdrop-blur-md p-4 border-t border-gray-100 rounded-b-[2rem] z-10">
                                         <button
                                             type="button"
                                             onClick={() => setShowModal(false)}
                                             className="px-8 py-4 rounded-2xl border border-gray-200 font-black text-[10px] uppercase tracking-widest text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-all active:scale-95"
                                         >
-                                            Cancel Entry
+                                            Discard Entry
                                         </button>
                                         <button
                                             type="submit"
                                             className="px-8 py-4 rounded-2xl bg-maroon text-gold font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon/90 transition-all shadow-xl hover:-translate-y-1 active:scale-95 border border-gold/20"
                                         >
-                                            {modalMode === 'create' ? 'Seal & Submit' : 'Update Record'}
+                                            {modalMode === 'create' ? 'Seal & Submit Audit' : 'Confirm Revision'}
                                         </button>
                                     </div>
                                 </form>
@@ -1432,95 +1723,196 @@ export default function ActivityReports() {
                         <div className="space-y-8">
                             {/* Daily Details */}
                             {activeTab === 'daily' && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-                                    <div className="space-y-6">
-                                        <div>
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Date</p>
-                                            <p className="text-lg font-bold text-gray-800">{new Date(viewingReport.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-10 text-left">
+                                    {/* Header Info */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-maroon/[0.02] p-8 rounded-[2rem] border border-maroon/5">
+                                        <div className="space-y-6">
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Classes Conducted</p>
-                                                <p className="text-xl font-black text-gray-800">{viewingReport.classes_conducted}</p>
+                                                <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-1">Audit Date</p>
+                                                <p className="text-xl font-black text-maroon uppercase tracking-tight">
+                                                    {new Date(viewingReport.report_date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                                </p>
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Avg Attendance</p>
-                                                <p className="text-xl font-black text-maroon">{parseFloat(viewingReport.total_attendance_percentage || 0).toFixed(1)}%</p>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Students Present</p>
-                                                <p className="text-xl font-black text-green-600">{viewingReport.total_students_present}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Students Absent</p>
-                                                <p className="text-xl font-black text-red-600">{viewingReport.total_students_absent}</p>
+                                                <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-1">Department / Section</p>
+                                                <div className="inline-flex items-center gap-2 px-4 py-2 bg-maroon text-gold rounded-full text-[10px] font-black uppercase tracking-widest">
+                                                    {viewingReport.department || 'General Institutional Audit'}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                    <div className="space-y-6">
-                                        <div>
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported By</p>
-                                            <p className="text-lg font-bold text-gray-800">{viewingReport.reported_by}</p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-6 flex flex-col justify-end items-end text-right">
                                             <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Late Arrivals</p>
-                                                <p className="text-xl font-black text-amber-600">{viewingReport.late_arrivals || 0}</p>
+                                                <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-1">Reported By</p>
+                                                <p className="text-lg font-bold text-gray-800">{viewingReport.reported_by}</p>
                                             </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">New Enrollments</p>
-                                                <p className="text-xl font-black text-blue-600">{viewingReport.new_enrollments || 0}</p>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Present</p>
-                                                <p className="text-xl font-black text-gray-800">{viewingReport.staff_present || 0}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Staff Absent</p>
-                                                <p className="text-xl font-black text-gray-400">{viewingReport.staff_absent || 0}</p>
+                                            <div className="flex gap-4">
+                                                <div className="px-4 py-2 bg-green-50 rounded-xl border border-green-100 flex flex-col items-center">
+                                                    <span className="text-[8px] font-black text-green-600 uppercase tracking-widest">Present</span>
+                                                    <span className="text-lg font-black text-green-700">{viewingReport.total_students_present}</span>
+                                                </div>
+                                                <div className="px-4 py-2 bg-red-50 rounded-xl border border-red-100 flex flex-col items-center">
+                                                    <span className="text-[8px] font-black text-red-600 uppercase tracking-widest">Absent</span>
+                                                    <span className="text-lg font-black text-red-700">{viewingReport.total_students_absent}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="md:col-span-2 space-y-6">
-                                        {viewingReport.notable_events && (
-                                            <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">Notable Events</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.notable_events}</p>
+                                    {/* 2. Attendance & Staffing */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                        <div className="p-5 bg-blue-50/30 rounded-2xl border border-blue-100">
+                                            <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Expected Students</p>
+                                            <p className="text-xl font-black text-blue-900">{viewingReport.total_students_expected || 0}</p>
+                                        </div>
+                                        <div className="p-5 bg-blue-50/30 rounded-2xl border border-blue-100">
+                                            <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Staff Present</p>
+                                            <p className="text-xl font-black text-blue-900">{viewingReport.staff_present || 0}</p>
+                                        </div>
+                                        <div className="p-5 bg-blue-50/30 rounded-2xl border border-blue-100">
+                                            <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Staff Absent</p>
+                                            <p className="text-xl font-black text-blue-900">{viewingReport.staff_absent || 0}</p>
+                                        </div>
+                                        <div className="p-5 bg-amber-50 rounded-2xl border border-amber-100">
+                                            <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Late Arrivals</p>
+                                            <p className="text-xl font-black text-amber-700">{viewingReport.late_arrivals || 0}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* 3. Academic & Administrative */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-6">
+                                            <div className="p-6 bg-purple-50/30 rounded-[2rem] border border-purple-100">
+                                                <h4 className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] border-b border-purple-100 pb-3 mb-4">Academic Activities</h4>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Classes Conducted</p>
+                                                        <p className="text-sm font-bold text-gray-700">{viewingReport.classes_conducted || 'None reported'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Topics Covered</p>
+                                                        <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.topics_covered}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Practical Sessions</p>
+                                                        <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.practical_sessions}</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        )}
-                                        {viewingReport.achievements && (
-                                            <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
-                                                <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Achievements</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.achievements}</p>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <div className="p-6 bg-emerald-50/30 rounded-[2rem] border border-emerald-100">
+                                                <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] border-b border-emerald-100 pb-3 mb-4">Administrative Oversight</h4>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Meetings Held</p>
+                                                        <p className="text-sm font-bold text-gray-700">{viewingReport.meetings_held || 'No meetings reported'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Admissions & Growth</p>
+                                                        <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.admissions_registrations}</p>
+                                                    </div>
+                                                    <div className="flex gap-4">
+                                                        <div>
+                                                            <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">New Students</p>
+                                                            <p className="text-lg font-black text-emerald-700">{viewingReport.new_enrollments || 0}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Fees Collection</p>
+                                                            <p className="text-sm font-bold text-emerald-700">{viewingReport.fees_collection_summary || '—'}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        )}
-                                        {viewingReport.incidents && (
-                                            <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
-                                                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Incidents / Issues</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.incidents}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* 5-6. Student Affairs & Facilities */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="p-6 bg-rose-50/30 rounded-[2rem] border border-rose-100">
+                                            <h4 className="text-[10px] font-black text-rose-600 uppercase tracking-[0.2em] border-b border-rose-100 pb-3 mb-4">Student Affairs</h4>
+                                            <div className="space-y-4">
+                                                {viewingReport.discipline_issues && (
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Discipline Issues</p>
+                                                        <p className="text-sm text-gray-700 font-medium">{viewingReport.discipline_issues}</p>
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">Feedback & Concerns</p>
+                                                    <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.student_feedback || 'No concerns recorded'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">Support Provided</p>
+                                                    <p className="text-sm text-gray-600 leading-relaxed italic">{viewingReport.counseling_support || 'Standard support'}</p>
+                                                </div>
                                             </div>
-                                        )}
-                                        {viewingReport.facilities_issues && (
-                                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                                                <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Facilities Issues</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.facilities_issues}</p>
+                                        </div>
+
+                                        <div className="p-6 bg-amber-50/30 rounded-[2rem] border border-amber-100">
+                                            <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] border-b border-amber-100 pb-3 mb-4">Facilities & Operations</h4>
+                                            <div className="grid grid-cols-1 gap-4">
+                                                <div>
+                                                    <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Classroom / Lab Condition</p>
+                                                    <p className="text-sm text-gray-700 font-medium">{viewingReport.classroom_lab_condition || 'Optimal'}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Equipment Status</p>
+                                                    <p className="text-sm text-gray-700 font-medium">{viewingReport.equipment_maintenance || 'Operational'}</p>
+                                                </div>
+                                                <div className="flex gap-4">
+                                                    <div className="flex-1">
+                                                        <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Cleaning</p>
+                                                        <p className="text-xs font-bold text-gray-600">{viewingReport.cleaning_maintenance || 'Satisfactory'}</p>
+                                                    </div>
+                                                    <div className="flex-1 text-right">
+                                                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">Internet / ICT</p>
+                                                        <p className="text-xs font-bold text-blue-600">{viewingReport.internet_ict_status || 'Connected'}</p>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        )}
-                                        {viewingReport.equipment_maintenance && (
-                                            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Equipment Maintenance</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.equipment_maintenance}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* 7-11. Marketing & Intelligence */}
+                                    <div className="grid grid-cols-1 gap-8">
+                                        <div className="p-8 bg-indigo-50/30 rounded-[2.5rem] border border-indigo-100">
+                                            <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] border-b border-indigo-100 pb-3 mb-6">Marketing & Institutional Intelligence</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                                                <div className="bg-white p-4 rounded-2xl shadow-sm">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Inquiries</p>
+                                                    <p className="text-2xl font-black text-indigo-600">{viewingReport.inquiries_received || 0}</p>
+                                                </div>
+                                                <div className="bg-white p-4 rounded-2xl shadow-sm">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Walk-ins</p>
+                                                    <p className="text-2xl font-black text-indigo-600">{viewingReport.walk_ins || 0}</p>
+                                                </div>
+                                                <div className="bg-white p-4 rounded-2xl shadow-sm">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Engagement</p>
+                                                    <p className="text-xs font-bold text-gray-600 truncate">{viewingReport.social_media_activities || 'Scheduled'}</p>
+                                                </div>
                                             </div>
-                                        )}
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="p-5 bg-red-50/50 rounded-2xl border border-red-50">
+                                                    <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2">Challenges Faced</p>
+                                                    <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.challenges_faced || 'No major challenges reported'}</p>
+                                                </div>
+                                                <div className="p-5 bg-green-50/50 rounded-2xl border border-green-50">
+                                                    <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-2">Actions Taken</p>
+                                                    <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.actions_taken || 'Routine operations'}</p>
+                                                </div>
+                                                <div className="md:col-span-2 p-5 bg-blue-50/50 rounded-2xl border border-blue-50">
+                                                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Plans for Next Day</p>
+                                                    <p className="text-sm text-gray-700 leading-relaxed font-bold">{viewingReport.plans_for_next_day || 'Continue standard curriculum'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         {viewingReport.additional_notes && (
-                                            <div className="p-4 bg-gray-50/50 rounded-2xl border border-maroon/5">
-                                                <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-1">Additional Notes</p>
-                                                <p className="text-sm text-gray-600 italic leading-relaxed">{viewingReport.additional_notes}</p>
+                                            <div className="p-6 bg-gray-50 rounded-2xl border-l-4 border-maroon">
+                                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-2">Final Remarks</p>
+                                                <p className="text-sm text-gray-600 italic leading-relaxed">"{viewingReport.additional_notes}"</p>
                                             </div>
                                         )}
                                     </div>
@@ -1728,102 +2120,357 @@ export default function ActivityReports() {
                         @media print {
                             @page { size: A4; margin: 0; }
                             body { margin: 0; padding: 0 !important; }
-                            .print-a4 { 
-                                width: 210mm !important; 
-                                height: 297mm !important; 
-                                padding: 15mm !important; 
-                                margin: 0 auto !important;
-                                box-shadow: none !important;
-                                border: 4px double #800000 !important;
-                                box-sizing: border-box !important;
-                            }
                             #report-print-capture { position: static !important; overflow: visible !important; }
                         }
                     `}</style>
-                    <div id="report-print-capture" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
-                        <div className="print-a4 mx-auto border-4 border-double border-maroon p-10 bg-white min-h-[297mm] flex flex-col justify-between">
-                            <div>
-                                <div className="text-center mb-6 border-b-2 border-maroon pb-6">
-                                    <div className="flex flex-col items-center mb-4">
-                                        <img src="/app-icon-v2.png" alt="College Logo" className="w-20 h-20 object-contain mb-3" />
-                                        <h1 className="text-xl font-black text-maroon uppercase tracking-widest mb-1">Beautex Technical Training College</h1>
-                                        <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase italic">"Empowering minds, shaping innovations"</p>
-                                    </div>
-                                    <div className="w-16 h-0.5 bg-gold mx-auto mb-6" />
-                                    <p className="text-sm text-black font-black uppercase tracking-[0.2em]">Institutional Activity Report ({activeTab})</p>
-                                </div>
+                    <div id="report-print-capture" className="absolute top-0 left-[-9999px] bg-white w-[794px] font-sans print:relative print:left-0 print:w-full overflow-hidden">
+                        <div className="mx-auto border-[3px] border-gold min-h-[1123px] relative pb-14">
+                            {activeTab === 'daily' ? (
+                                <div className="p-5 space-y-3">
 
-                                <div className="grid grid-cols-2 gap-8 mb-8 pb-8 border-b border-maroon/10">
-                                    <div>
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date/Period</p>
-                                        <p className="text-base font-bold text-maroon uppercase">
-                                            {activeTab === 'daily' ? new Date(printingReport.report_date).toLocaleDateString() :
-                                                activeTab === 'weekly' ? `${new Date(printingReport.week_start_date).toLocaleDateString()} - ${new Date(printingReport.week_end_date).toLocaleDateString()}` :
-                                                    printingReport.month}
+                                    {/* HEADER */}
+                                    <div className="flex flex-col items-center">
+                                        <div className="bg-white p-1 rounded-full shadow border border-gray-200 mb-1">
+                                            <img src="/app-icon-v2.png" alt="Logo" className="w-12 h-12 object-contain" onError={(e) => { e.target.style.display='none'; }} />
+                                        </div>
+                                        <h1 className="text-[18px] font-black text-maroon uppercase text-center" style={{ fontFamily: 'Georgia, serif', letterSpacing: '0.1em' }}>
+                                            Beautex Technical Training College
+                                        </h1>
+                                        <div className="flex items-center gap-2 my-1">
+                                            <div className="h-[1px] w-14 bg-gold" />
+                                            <div className="w-2 h-2 rotate-45 bg-gold" />
+                                            <div className="h-[1px] w-14 bg-gold" />
+                                        </div>
+                                    </div>
+
+                                    {/* DATE / TITLE / TIME BANNER */}
+                                    <div className="w-full bg-maroon py-2 px-5 flex justify-between items-center">
+                                        <div className="flex flex-col">
+                                            <span className="text-[9px] text-gold font-bold uppercase tracking-widest">
+                                                {printingReport.report_date ? new Date(printingReport.report_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
+                                            </span>
+                                            <span className="text-[10px] font-black text-white uppercase">{printingReport.department || 'General'}</span>
+                                        </div>
+                                        <h2 className="text-[11px] font-black text-white uppercase tracking-[0.18em] text-center flex-1 px-2">College Daily Activity Report</h2>
+                                        <div className="flex flex-col text-right">
+                                            <span className="text-[8px] text-gold font-bold uppercase tracking-widest">System Generated At:</span>
+                                            <span className="text-[12px] font-black text-white">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* ATTENDANCE SUMMARY */}
+                                    <div className="space-y-1.5">
+                                        <div className="bg-maroon rounded py-1.5 px-3 flex items-center gap-2">
+                                            <Users className="w-3.5 h-3.5 text-gold" />
+                                            <span className="text-[10px] font-black text-white uppercase tracking-widest">Attendance Summary</span>
+                                        </div>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
+                                                <Users className="w-4 h-4 text-maroon mb-0.5" />
+                                                <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.total_students_expected || 0}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1 leading-tight">Total Students Expected</span>
+                                            </div>
+                                            <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
+                                                <Users className="w-4 h-4 text-green-600 mb-0.5" />
+                                                <div className="flex items-baseline gap-0.5">
+                                                    <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.total_students_present || 0}</span>
+                                                    {printingReport.total_students_expected > 0 && <span className="text-[9px] font-bold text-green-500">({Math.round((printingReport.total_students_present / printingReport.total_students_expected) * 100)}%)</span>}
+                                                </div>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Students Present</span>
+                                                <CheckCircle className="w-3 h-3 text-green-500 mt-0.5" />
+                                            </div>
+                                            <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
+                                                <Users className="w-4 h-4 text-red-400 mb-0.5" />
+                                                <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.total_students_absent || 0}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Students Absent</span>
+                                            </div>
+                                            <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
+                                                <Users className="w-4 h-4 text-amber-500 mb-0.5" />
+                                                <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.staff_present || 0}/{(printingReport.staff_present || 0) + (printingReport.staff_absent || 0)}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Staff Present</span>
+                                                <User className="w-3 h-3 text-amber-500 mt-0.5" />
+                                            </div>
+                                        </div>
+                                        {/* Absent Students Names */}
+                                        {printingReport.absent_students_list && (
+                                            <div className="bg-red-50 border border-red-100 rounded-lg p-2 mt-1">
+                                                <p className="text-[8px] font-black text-red-600 uppercase tracking-widest mb-1">Absent Students:</p>
+                                                <p className="text-[8.5px] text-gray-700 font-medium">{printingReport.absent_students_list}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* TWO-COLUMN SECTIONS */}
+                                    <div className="grid grid-cols-2 gap-2">
+
+                                        {/* 1. Academic Activities */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><BookOpen className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Academic Activities</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.classes_conducted && <p><span className="font-bold text-gray-700">• Classes Conducted: </span><span className="text-gray-600">{printingReport.classes_conducted}</span></p>}
+                                                {printingReport.topics_covered && <p><span className="font-bold text-gray-700">• Topics Covered: </span><span className="text-gray-600">{printingReport.topics_covered}</span></p>}
+                                                {printingReport.practical_sessions && <p><span className="font-bold text-gray-700">• Practical Sessions: </span><span className="text-gray-600">{printingReport.practical_sessions}</span></p>}
+                                                {!printingReport.classes_conducted && !printingReport.topics_covered && !printingReport.practical_sessions && <p className="text-gray-400 italic">No activities recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 2. Administrative Activities */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Briefcase className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Administrative Activities</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.meetings_held && <p><span className="font-bold text-gray-700">• </span><span className="text-gray-600">{printingReport.meetings_held}</span></p>}
+                                                {(printingReport.admissions_registrations || printingReport.new_enrollments > 0) && (<p><span className="font-bold text-gray-700">• Admissions held</span>{printingReport.new_enrollments > 0 && <span className="text-gray-600"> | {printingReport.new_enrollments} new students</span>}{printingReport.admissions_registrations && <span className="text-gray-600"> — {printingReport.admissions_registrations}</span>}</p>)}
+                                                {printingReport.fees_collection_summary && <p><span className="font-bold text-gray-700">• Fees: </span><span className="text-gray-600">{printingReport.fees_collection_summary}</span></p>}
+                                                {!printingReport.meetings_held && !printingReport.admissions_registrations && !printingReport.new_enrollments && <p className="text-gray-400 italic">No activities recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 3. Facilities & Operations */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Building2 className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Facilities &amp; Operations</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.facilities_issues && <p><span className="font-bold text-gray-700">• Classroom/Lab condition: </span><span className="text-gray-600">{printingReport.facilities_issues}</span></p>}
+                                                {printingReport.equipment_maintenance && <p><span className="font-bold text-gray-700">• Equipment status: </span><span className="text-gray-600">{printingReport.equipment_maintenance}</span></p>}
+                                                {printingReport.cleaning_maintenance && <p><span className="font-bold text-gray-700">• Cleaning/Maintenance: </span><span className="text-gray-600">{printingReport.cleaning_maintenance}</span></p>}
+                                                {printingReport.internet_ict_status && <p><span className="font-bold text-gray-700">• ICT/Internet: </span><span className="text-gray-600">{printingReport.internet_ict_status}</span></p>}
+                                                {!printingReport.facilities_issues && !printingReport.equipment_maintenance && !printingReport.cleaning_maintenance && <p className="text-gray-400 italic">No issues recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 4. Student Affairs */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Heart className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Student Affairs</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.discipline_issues && <p><span className="font-bold text-gray-700">• Discipline issue: </span><span className="text-gray-600">{printingReport.discipline_issues}</span></p>}
+                                                {printingReport.student_feedback && <p><span className="font-bold text-gray-700">• Students feedback: </span><span className="text-gray-600">{printingReport.student_feedback}</span></p>}
+                                                {printingReport.counseling_support && <p><span className="font-bold text-gray-700">• Counseling support: </span><span className="text-gray-600">{printingReport.counseling_support}</span></p>}
+                                                {!printingReport.discipline_issues && !printingReport.student_feedback && !printingReport.counseling_support && <p className="text-gray-400 italic">No issues recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 5. Challenges Faced */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><AlertCircle className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Challenges Faced</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.challenges_faced ? printingReport.challenges_faced.split('\n').filter(Boolean).map((l,i)=><p key={i} className="text-gray-600">• {l.trim()}</p>) : <p className="text-gray-400 italic">None recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 6. Plans for Next Day */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Calendar className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Plans for Next Day</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.plans_for_next_day ? printingReport.plans_for_next_day.split('\n').filter(Boolean).map((l,i)=><p key={i} className="text-gray-600">• {l.trim()}</p>) : <p className="text-gray-400 italic">None recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 7. Actions Taken */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Zap className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Actions Taken</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.actions_taken ? printingReport.actions_taken.split('\n').filter(Boolean).map((l,i)=><p key={i} className="text-gray-600">• {l.trim()}</p>) : <p className="text-gray-400 italic">None recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 8. Marketing & Outreach */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><TrendingUp className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Marketing &amp; Outreach</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {(printingReport.inquiries_received > 0) && <p><span className="font-bold text-gray-700">• Inquiries received: </span><span className="text-gray-600">{printingReport.inquiries_received}</span></p>}
+                                                {(printingReport.walk_ins > 0) && <p><span className="font-bold text-gray-700">• Walk-ins: </span><span className="text-gray-600">{printingReport.walk_ins}</span></p>}
+                                                {printingReport.social_media_activities && <p><span className="font-bold text-gray-700">• Social media post: </span><span className="text-gray-600">{printingReport.social_media_activities}</span></p>}
+                                                {!printingReport.inquiries_received && !printingReport.walk_ins && !printingReport.social_media_activities && <p className="text-gray-400 italic">None recorded</p>}
+                                            </div>
+                                        </div>
+
+                                        {/* 9. General Remarks - full width */}
+                                        <div className="col-span-2 space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Info className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">General Remarks</span></div>
+                                            <div className="px-2 text-[8.5px]"><span className="text-gray-600">{printingReport.additional_notes || 'No general remarks recorded.'}</span></div>
+                                        </div>
+
+                                    </div>
+
+                                    {/* AUTHORIZATION BLOCK */}
+                                    <div className="pt-3">
+                                        <p className="text-center text-[9px] font-black text-gold uppercase tracking-[0.3em] mb-4">Report Authorized By:</p>
+                                        <div className="grid grid-cols-3 gap-6">
+                                            {[
+                                                { name: printingReport.reported_by || '', title: 'PREPARED BY (Registrar)' },
+                                                { name: '', title: 'VERIFIED BY (Assistant Director)' },
+                                                { name: '', title: 'APPROVED BY (Director)' }
+                                            ].map((signer, sIdx) => (
+                                                <div key={sIdx} className="flex flex-col items-center">
+                                                    <div className="h-8 w-full flex items-end justify-center">
+                                                        {signer.name && <span className="italic font-serif text-lg text-gray-400 opacity-50 select-none pb-1">{signer.name.split(' ').map(n=>n[0]).join('')}</span>}
+                                                    </div>
+                                                    <div className="w-full h-[1px] bg-gray-500" />
+                                                    <span className="text-[8px] font-black text-gray-800 tracking-wide mt-1 text-center">{signer.name ? signer.name.toUpperCase() : ''}</span>
+                                                    <span className="text-[7px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">{signer.title}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* FOOTER */}
+                                    <div className="absolute bottom-0 left-0 right-0 bg-maroon py-2 flex items-center justify-center">
+                                        <p className="text-[9px] font-black text-white uppercase tracking-[0.25em]">Beautex Technical Training College | Excellence In Skills</p>
+                                    </div>
+
+                                </div>
+                            ) : activeTab === 'weekly' ? (
+                                <div className="p-8 space-y-8">
+                                    <div className="space-y-6 text-[11px] leading-tight">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="p-4 border border-blue-100 rounded-xl bg-blue-50/20">
+                                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-2 border-b border-blue-100 pb-1">Academic Summary</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div><p className="text-[8px] text-gray-500 uppercase">Total Classes</p><p className="font-bold">{printingReport.total_classes_conducted}</p></div>
+                                                    <div><p className="text-[8px] text-gray-500 uppercase">Avg Attendance</p><p className="font-bold text-maroon">{printingReport.average_attendance}%</p></div>
+                                                    <div><p className="text-[8px] text-gray-500 uppercase">Assessments</p><p className="font-bold">{printingReport.total_assessments}</p></div>
+                                                    <div><p className="text-[8px] text-gray-500 uppercase">Completions</p><p className="font-bold">{printingReport.courses_completed || 0}</p></div>
+                                                </div>
+                                            </div>
+
+                                            <div className="p-4 border border-emerald-100 rounded-xl bg-emerald-50/20">
+                                                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2 border-b border-emerald-100 pb-1">Administrative Growth</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div><p className="text-[8px] text-gray-500 uppercase">New Enrollments</p><p className="font-bold text-blue-600">+{printingReport.new_enrollments || 0}</p></div>
+                                                    <div><p className="text-[8px] text-gray-500 uppercase">Active Students</p><p className="font-bold">{printingReport.active_students}</p></div>
+                                                    <div className="col-span-2"><p className="text-[8px] text-gray-500 uppercase">Revenue Collected</p><p className="font-bold text-emerald-700">KES {parseFloat(printingReport.revenue_collected || 0).toLocaleString()}</p></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="p-4 border border-amber-100 rounded-xl bg-amber-50/20">
+                                            <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2 border-b border-amber-100 pb-1">Strategic Insights</p>
+                                            <div className="space-y-4">
+                                                {printingReport.key_achievements && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Key Achievements</p>
+                                                        <p className="text-sm">{printingReport.key_achievements}</p>
+                                                    </div>
+                                                )}
+                                                {printingReport.challenges_faced && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-red-500 uppercase tracking-widest mb-1">Challenges Faced</p>
+                                                        <p className="text-sm italic">{printingReport.challenges_faced}</p>
+                                                    </div>
+                                                )}
+                                                {printingReport.action_items && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mb-1">Action Items (Next Week)</p>
+                                                        <p className="font-bold">{printingReport.action_items}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="p-3 border border-red-50 rounded-xl">
+                                                <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mb-1">Disciplinary Matters</p>
+                                                <p className="font-bold">{printingReport.disciplinary_cases || 0} Cases Documented</p>
+                                            </div>
+                                            {printingReport.notes && (
+                                                <div className="p-3 border border-gray-100 rounded-xl">
+                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">General Notes</p>
+                                                    <p className="italic text-gray-500">"{printingReport.notes}"</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {/* Institutional Footer */}
+                                    <div className="absolute bottom-0 left-0 right-0 h-10 bg-maroon flex items-center justify-center">
+                                        <p className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
+                                            Beautex Technical Training College | Excellence In Skills
                                         </p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Reported By</p>
-                                        <p className="text-base font-bold text-maroon uppercase">{printingReport.reported_by}</p>
+                                </div>
+                            ) : (
+                                <div className="p-8 space-y-8">
+                                    <div className="space-y-6 text-[11px] leading-tight">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {/* Financial Performance */}
+                                            <div className="p-4 border border-emerald-100 rounded-xl bg-emerald-50/20">
+                                                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2 border-b border-emerald-100 pb-1">Institutional Finance</p>
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between"><span>Total Revenue</span><span className="font-bold">KES {parseFloat(printingReport.revenue || 0).toLocaleString()}</span></div>
+                                                    <div className="flex justify-between text-red-600"><span>Operating Expenses</span><span className="font-bold">KES {parseFloat(printingReport.expenses || 0).toLocaleString()}</span></div>
+                                                    <div className="flex justify-between border-t border-emerald-100 pt-1 font-black text-emerald-800">
+                                                        <span>Net Operating Surplus</span>
+                                                        <span>KES {parseFloat((printingReport.revenue || 0) - (printingReport.expenses || 0)).toLocaleString()}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Academic Analytics */}
+                                            <div className="p-4 border border-indigo-100 rounded-xl bg-indigo-50/20">
+                                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest mb-2 border-b border-indigo-100 pb-1">Academic Analytics</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div><p className="text-[8px] text-gray-400 uppercase">Classes</p><p className="font-bold">{printingReport.total_classes}</p></div>
+                                                    <div><p className="text-[8px] text-gray-400 uppercase">Avg Att.</p><p className="font-bold text-maroon">{printingReport.average_attendance}%</p></div>
+                                                    <div><p className="text-[8px] text-gray-400 uppercase">Assessments</p><p className="font-bold">{printingReport.total_assessments || 0}</p></div>
+                                                    <div><p className="text-[8px] text-gray-400 uppercase">Pass Rate</p><p className="font-bold text-green-600">{printingReport.average_pass_rate || 0}%</p></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-4">
+                                            {/* Student Flux */}
+                                            <div className="p-4 border border-blue-100 rounded-xl">
+                                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-2 border-b border-blue-100 pb-1">Enrollment Pipeline</p>
+                                                <div className="space-y-1">
+                                                    <p><strong>Total Pop:</strong> {printingReport.total_students}</p>
+                                                    <p className="text-blue-600"><strong>New Entry:</strong> +{printingReport.new_enrollments || 0}</p>
+                                                    <p className="text-gold-600"><strong>Graduates:</strong> {printingReport.graduations || 0}</p>
+                                                    <p className="text-red-500"><strong>Dropouts:</strong> {printingReport.dropouts || 0}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Staffing */}
+                                            <div className="p-4 border border-purple-100 rounded-xl break-inside-avoid">
+                                                <p className="text-[9px] font-black text-purple-600 uppercase tracking-widest mb-2 border-b border-purple-100 pb-1">Faculty & Personnel</p>
+                                                <div className="space-y-1">
+                                                    <p><strong>Total Faculty:</strong> {printingReport.total_faculty || 0}</p>
+                                                    <p className="text-green-600"><strong>New Hires:</strong> +{printingReport.new_hires || 0}</p>
+                                                    <p className="text-red-600"><strong>Departures:</strong> -{printingReport.faculty_departures || 0}</p>
+                                                </div>
+                                            </div>
+
+                                            {/* Strategic Summary */}
+                                            <div className="p-4 border border-gray-100 rounded-xl bg-gray-50/50 flex flex-col justify-center text-center">
+                                                <p className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-1">Intelligence Status</p>
+                                                <p className="text-[8px] text-gray-400 uppercase">Verified Audit Document</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Strategic Initiatives & Goals */}
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 border border-green-50 rounded-xl">
+                                                    <p className="text-[9px] font-black text-green-600 uppercase tracking-widest mb-1">Major Achievements</p>
+                                                    <p className="text-sm">{printingReport.major_achievements || 'Routine Excellence'}</p>
+                                                </div>
+                                                <div className="p-4 border border-red-50 rounded-xl">
+                                                    <p className="text-[9px] font-black text-red-600 uppercase tracking-widest mb-1">Critical Challenges</p>
+                                                    <p className="text-sm italic">{printingReport.challenges || 'Managed'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="p-4 border border-blue-100 rounded-xl bg-blue-50/10">
+                                                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Strategic Initiatives & Future Goals</p>
+                                                <p className="text-sm mb-2">{printingReport.strategic_initiatives}</p>
+                                                <p className="text-sm font-bold border-t border-blue-50 pt-2">Next Month: {printingReport.goals_next_month || 'Continued Growth'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {/* Institutional Footer */}
+                                    <div className="absolute bottom-0 left-0 right-0 h-10 bg-maroon flex items-center justify-center">
+                                        <p className="text-[9px] font-black text-white uppercase tracking-[0.2em]">
+                                            Beautex Technical Training College | Excellence In Skills
+                                        </p>
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-y-6 gap-x-12">
-                                    {activeTab === 'daily' ? (
-                                        <>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Classes</p><p className="font-bold">{printingReport.classes_conducted}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Attendance</p><p className="font-bold">{printingReport.total_attendance_percentage}%</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Students Present</p><p className="font-bold text-green-600">{printingReport.total_students_present}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Students Absent</p><p className="font-bold text-red-600">{printingReport.total_students_absent}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Staff Presence</p><p className="font-bold">{printingReport.staff_present || 0} / {(parseInt(printingReport.staff_present || 0) + parseInt(printingReport.staff_absent || 0))}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Disciplinary</p><p className="font-bold">{printingReport.disciplinary_cases || 0}</p></div>
-                                            <div className="col-span-2 border-t pt-4">
-                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Activities & Observations</p>
-                                                <p className="text-xs mb-2"><strong>Events:</strong> {printingReport.notable_events || 'None documented.'}</p>
-                                                <p className="text-xs mb-2"><strong>Incidents:</strong> {printingReport.incidents || 'None documented.'}</p>
-                                                <p className="text-xs mb-2"><strong>Facilities:</strong> {printingReport.facilities_issues || 'No issues reported.'}</p>
-                                                <p className="text-xs"><strong>Equipment:</strong> {printingReport.equipment_maintenance || 'No maintenance reported.'}</p>
-                                            </div>
-                                        </>
-                                    ) : activeTab === 'weekly' ? (
-                                        <>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Classes</p><p className="font-bold">{printingReport.total_classes_conducted}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Avg Attendance</p><p className="font-bold">{printingReport.average_attendance}%</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Active Students</p><p className="font-bold">{printingReport.active_students}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Assessments</p><p className="font-bold">{printingReport.total_assessments}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Revenue Collected</p><p className="font-bold">KES {parseFloat(printingReport.revenue_collected || 0).toLocaleString()}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">New Enrollments</p><p className="font-bold">{printingReport.new_enrollments || 0}</p></div>
-                                            <div className="col-span-2 border-t pt-4">
-                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Key Achievements</p>
-                                                <p className="text-sm">{printingReport.key_achievements || 'None documented.'}</p>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Students</p><p className="font-bold">{printingReport.total_students}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Avg Attendance</p><p className="font-bold">{printingReport.average_attendance}%</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Total Revenue</p><p className="font-bold">KES {parseFloat(printingReport.revenue || 0).toLocaleString()}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Month Graduations</p><p className="font-bold">{printingReport.graduations || 0}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">New Enrollments</p><p className="font-bold">{printingReport.new_enrollments || 0}</p></div>
-                                            <div><p className="text-[10px] text-gray-400 uppercase">Faculty Count</p><p className="font-bold">{printingReport.total_faculty || 0}</p></div>
-                                            <div className="col-span-2 border-t pt-4">
-                                                <p className="text-[10px] text-gray-400 uppercase mb-1">Strategic Initiatives</p>
-                                                <p className="text-sm italic">{printingReport.strategic_initiatives || 'None documented.'}</p>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="mt-12 border-t border-maroon/10 pt-8 text-center shrink-0">
-                                <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">
-                                    Beautex Technical Training College - Registry Operations
-                                </p>
-                                <p className="text-[8px] text-gray-400 uppercase tracking-widest leading-relaxed">
-                                    Location: Utawala, Geokarma behind Astrol Petrol Station | Contact: 0708247557 <br />
-                                    Verified Institutional Document | Generated: {new Date().toLocaleString()}
-                                </p>
-                            </div>
+                            )}
                         </div>
                     </div>
                 </>

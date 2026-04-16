@@ -161,22 +161,55 @@ CREATE TABLE IF NOT EXISTS daily_activity_reports (
   id SERIAL PRIMARY KEY,
   report_date DATE NOT NULL UNIQUE,
   reported_by TEXT NOT NULL,
-  classes_conducted INTEGER DEFAULT 0,
-  total_attendance_percentage DECIMAL DEFAULT 0.0,
-  assessments_conducted INTEGER DEFAULT 0,
+  department TEXT,
+  
+  -- Attendance Summary
+  total_students_expected INTEGER DEFAULT 0,
   total_students_present INTEGER DEFAULT 0,
   total_students_absent INTEGER DEFAULT 0,
-  late_arrivals INTEGER DEFAULT 0,
-  new_enrollments INTEGER DEFAULT 0,
   staff_present INTEGER DEFAULT 0,
   staff_absent INTEGER DEFAULT 0,
+  late_arrivals INTEGER DEFAULT 0,
+  
+  -- Academic Activities
+  classes_conducted TEXT,
+  topics_covered TEXT,
+  practical_sessions TEXT,
+  assessments_conducted INTEGER DEFAULT 0,
+  total_attendance_percentage DECIMAL DEFAULT 0.0,
+  
+  -- Administrative Activities
+  meetings_held TEXT,
+  admissions_registrations TEXT,
+  new_enrollments INTEGER DEFAULT 0,
+  fees_collection_summary TEXT,
+  
+  -- Student Affairs
   disciplinary_cases INTEGER DEFAULT 0,
+  discipline_issues TEXT,
+  student_feedback TEXT,
+  counseling_support TEXT,
+  
+  -- Facilities & Operations
   facilities_issues TEXT,
   equipment_maintenance TEXT,
+  cleaning_maintenance TEXT,
+  internet_ict_status TEXT,
+  
+  -- Marketing & Outreach
+  inquiries_received INTEGER DEFAULT 0,
+  walk_ins INTEGER DEFAULT 0,
+  social_media_activities TEXT,
+  
+  -- Operational Intelligence
+  challenges_faced TEXT,
+  actions_taken TEXT,
+  plans_for_next_day TEXT,
   notable_events TEXT,
   incidents TEXT,
   achievements TEXT,
   additional_notes TEXT,
+  
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

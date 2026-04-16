@@ -447,6 +447,45 @@ async function runPostgresMigrations(database) {
             console.log('✅ equipment_maintenance column added to daily_activity_reports');
         }
 
+        // New Daily Report Format Columns (Postgres)
+        const newDailyCols = [
+            { name: 'department', type: 'TEXT' },
+            { name: 'total_students_expected', type: 'INTEGER DEFAULT 0' },
+            { name: 'topics_covered', type: 'TEXT' },
+            { name: 'practical_sessions', type: 'TEXT' },
+            { name: 'meetings_held', type: 'TEXT' },
+            { name: 'admissions_registrations', type: 'TEXT' },
+            { name: 'fees_collection_summary', type: 'TEXT' },
+            { name: 'discipline_issues', type: 'TEXT' },
+            { name: 'student_feedback', type: 'TEXT' },
+            { name: 'counseling_support', type: 'TEXT' },
+            { name: 'cleaning_maintenance', type: 'TEXT' },
+            { name: 'internet_ict_status', type: 'TEXT' },
+            { name: 'inquiries_received', type: 'INTEGER DEFAULT 0' },
+            { name: 'walk_ins', type: 'INTEGER DEFAULT 0' },
+            { name: 'social_media_activities', type: 'TEXT' },
+            { name: 'challenges_faced', type: 'TEXT' },
+            { name: 'actions_taken', type: 'TEXT' },
+            { name: 'plans_for_next_day', type: 'TEXT' }
+        ];
+
+        for (const col of newDailyCols) {
+            if (!existingDailyCols.includes(col.name)) {
+                console.log(`🔄 Postgres Migration: Adding ${col.name} to daily_activity_reports...`);
+                await database.query(`ALTER TABLE daily_activity_reports ADD COLUMN ${col.name} ${col.type}`);
+            }
+        }
+
+        // Change classes_conducted from INTEGER to TEXT if needed
+        const checkClassesType = await database.query(`
+            SELECT data_type FROM information_schema.columns 
+            WHERE table_name='daily_activity_reports' AND column_name='classes_conducted'
+        `);
+        if (checkClassesType.rows[0]?.data_type === 'integer') {
+            console.log('🔄 Postgres Migration: Changing classes_conducted to TEXT...');
+            await database.query('ALTER TABLE daily_activity_reports ALTER COLUMN classes_conducted TYPE TEXT USING classes_conducted::text');
+        }
+
         // Check for reset_token columns (for forgot-password flow)
         const checkResetToken = await database.query(`
             SELECT column_name FROM information_schema.columns
@@ -693,6 +732,35 @@ async function runSqliteMigrations(database) {
         if (!existingDailySQLite.includes('equipment_maintenance')) {
             await database.run('ALTER TABLE daily_activity_reports ADD COLUMN equipment_maintenance TEXT');
             console.log('✅ equipment_maintenance column added to daily_activity_reports');
+        }
+
+        // New Daily Report Format Columns (SQLite)
+        const newDailyColsSQLite = [
+            { name: 'department', type: 'TEXT' },
+            { name: 'total_students_expected', type: 'INTEGER DEFAULT 0' },
+            { name: 'topics_covered', type: 'TEXT' },
+            { name: 'practical_sessions', type: 'TEXT' },
+            { name: 'meetings_held', type: 'TEXT' },
+            { name: 'admissions_registrations', type: 'TEXT' },
+            { name: 'fees_collection_summary', type: 'TEXT' },
+            { name: 'discipline_issues', type: 'TEXT' },
+            { name: 'student_feedback', type: 'TEXT' },
+            { name: 'counseling_support', type: 'TEXT' },
+            { name: 'cleaning_maintenance', type: 'TEXT' },
+            { name: 'internet_ict_status', type: 'TEXT' },
+            { name: 'inquiries_received', type: 'INTEGER DEFAULT 0' },
+            { name: 'walk_ins', type: 'INTEGER DEFAULT 0' },
+            { name: 'social_media_activities', type: 'TEXT' },
+            { name: 'challenges_faced', type: 'TEXT' },
+            { name: 'actions_taken', type: 'TEXT' },
+            { name: 'plans_for_next_day', type: 'TEXT' }
+        ];
+
+        for (const col of newDailyColsSQLite) {
+            if (!existingDailySQLite.includes(col.name)) {
+                console.log(`🔄 SQLite Migration: Adding ${col.name} to daily_activity_reports...`);
+                await database.run(`ALTER TABLE daily_activity_reports ADD COLUMN ${col.name} ${col.type}`);
+            }
         }
 
         // course_materials — add file metadata columns (file_name, file_size, mime_type)

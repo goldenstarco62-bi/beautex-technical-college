@@ -69,35 +69,68 @@ export const createDailyReport = async (req, res) => {
             return res.status(201).json({ success: true, data: { id: savedReport._id } });
         }
 
-        const { report_date, classes_conducted, total_attendance_percentage, assessments_conducted,
-            total_students_present, total_students_absent, late_arrivals, new_enrollments,
-            staff_present, staff_absent, disciplinary_cases, facilities_issues, equipment_maintenance,
-            notable_events, incidents, achievements, additional_notes } = req.body;
+        const {
+            report_date, department,
+            total_students_expected, total_students_present, total_students_absent, staff_present, staff_absent, late_arrivals,
+            classes_conducted, topics_covered, practical_sessions, assessments_conducted, total_attendance_percentage,
+            meetings_held, admissions_registrations, new_enrollments, fees_collection_summary,
+            disciplinary_cases, discipline_issues, student_feedback, counseling_support,
+            facilities_issues, equipment_maintenance, cleaning_maintenance, internet_ict_status,
+            inquiries_received, walk_ins, social_media_activities,
+            challenges_faced, actions_taken, plans_for_next_day,
+            notable_events, incidents, achievements, additional_notes
+        } = req.body;
 
         if (!report_date) {
             return res.status(400).json({ success: false, error: 'Report date is required' });
         }
 
         const result = await run(
-            `INSERT INTO daily_activity_reports (report_date, reported_by, classes_conducted, total_attendance_percentage,
-             assessments_conducted, total_students_present, total_students_absent, late_arrivals, new_enrollments,
-             staff_present, staff_absent, disciplinary_cases, facilities_issues, equipment_maintenance, notable_events, incidents, achievements, additional_notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO daily_activity_reports (
+                report_date, reported_by, department,
+                total_students_expected, total_students_present, total_students_absent, staff_present, staff_absent, late_arrivals,
+                classes_conducted, topics_covered, practical_sessions, assessments_conducted, total_attendance_percentage,
+                meetings_held, admissions_registrations, new_enrollments, fees_collection_summary,
+                disciplinary_cases, discipline_issues, student_feedback, counseling_support,
+                facilities_issues, equipment_maintenance, cleaning_maintenance, internet_ict_status,
+                inquiries_received, walk_ins, social_media_activities,
+                challenges_faced, actions_taken, plans_for_next_day,
+                notable_events, incidents, achievements, additional_notes
+             )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 report_date,
                 req.user.name || req.user.email,
-                parseNum(classes_conducted),
-                parseNum(total_attendance_percentage),
-                parseNum(assessments_conducted),
+                department,
+                parseNum(total_students_expected),
                 parseNum(total_students_present),
                 parseNum(total_students_absent),
-                parseNum(late_arrivals),
-                parseNum(new_enrollments),
                 parseNum(staff_present),
                 parseNum(staff_absent),
+                parseNum(late_arrivals),
+                classes_conducted,
+                topics_covered,
+                practical_sessions,
+                parseNum(assessments_conducted),
+                parseNum(total_attendance_percentage),
+                meetings_held,
+                admissions_registrations,
+                parseNum(new_enrollments),
+                fees_collection_summary,
                 parseNum(disciplinary_cases),
+                discipline_issues,
+                student_feedback,
+                counseling_support,
                 facilities_issues,
                 equipment_maintenance,
+                cleaning_maintenance,
+                internet_ict_status,
+                parseNum(inquiries_received),
+                parseNum(walk_ins),
+                social_media_activities,
+                challenges_faced,
+                actions_taken,
+                plans_for_next_day,
                 notable_events,
                 incidents,
                 achievements,
