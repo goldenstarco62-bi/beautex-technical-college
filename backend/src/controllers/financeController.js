@@ -2,6 +2,92 @@ import { query, queryOne, run, getProcessedDatabaseUrl } from '../config/databas
 
 const isMongo = () => !!process.env.MONGODB_URI;
 
+/**
+ * Centrally recalculates and updates a student's fee summary based on their payment history.
+ * This is the source of truth for all financial status updates.
+ */
+async function internalSyncStudentFee(studentId) {
+    try {
+        if (isMongo()) {
+            const Payment = (await import('../models/mongo/Payment.js')).default;
+            const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
+            const Course = (await import('../models/mongo/Course.js')).default;
+
+            const payments = await Payment.find({ student_id: studentId });
+            const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+            let lastPaymentDate = null;
+            if (payments.length > 0) {
+                const dates = payments.map(p => new Date(p.payment_date)).filter(d => !isNaN(d));
+                if (dates.length > 0) lastPaymentDate = new Date(Math.max(...dates));
+            }
+
+            let fee = await StudentFee.findOne({ student_id: studentId });
+
+            // If no fee summary exists, try to initialize it
+            if (!fee) {
+                const student = await Student.findOne({ id: studentId });
+                let totalDue = 0;
+                if (student?.course) {
+                    const primaryCourseName = Array.isArray(student.course) ? student.course[0] : student.course;
+                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${primaryCourseName}$`, 'i') } });
+                    if (courseObj) {
+                        const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
+                        if (structure) totalDue = structure.amount;
+                    }
+                }
+                fee = new StudentFee({ student_id: studentId, total_due: totalDue });
+            }
+
+            const balance = fee.total_due - totalPaid;
+            const status = (balance <= 0 && fee.total_due > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
+            await StudentFee.findOneAndUpdate(
+                { student_id: studentId },
+                { total_paid: totalPaid, balance, status, last_payment_date: lastPaymentDate },
+                { upsert: true, new: true }
+            );
+        } else {
+            // SQL Path
+            const paidRow = await queryOne(
+                'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE student_id = ?',
+                [studentId]
+            );
+            const totalPaid = Number(paidRow?.total_paid || 0);
+            const lastDate = paidRow?.last_date;
+
+            let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
+
+            // If no fee summary exists, try to initialize it
+            if (!fee) {
+                const student = await queryOne('SELECT course FROM students WHERE id = ?', [studentId]);
+                let totalDue = 0;
+                if (student?.course) {
+                    const courseObj = await queryOne('SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))', [student.course]);
+                    if (courseObj) {
+                        const structure = await queryOne("SELECT amount FROM fee_structures WHERE course_id = ? AND category = 'Tuition Fee'", [courseObj.id]);
+                        if (structure) totalDue = Number(structure.amount);
+                    }
+                }
+                await run('INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)', [studentId, totalDue, 0, totalDue, 'Pending']);
+                fee = { student_id: studentId, total_due: totalDue };
+            }
+
+            const balance = fee.total_due - totalPaid;
+            const status = (balance <= 0 && fee.total_due > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
+            await run(
+                'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE student_id = ?',
+                [totalPaid, balance, status, lastDate, studentId]
+            );
+        }
+    } catch (err) {
+        console.error(`❌ Sync failed for student ${studentId}:`, err);
+    }
+}
+
 // Fee Structures
 export async function getFeeStructures(req, res) {
     try {
@@ -341,20 +427,28 @@ export async function recordPayment(req, res) {
             });
             await newPayment.save();
 
-            const fee = await StudentFee.findOne({ student_id });
-            const finalTotalDue = manual_total_due !== undefined && manual_total_due !== '' ? parseFloat(manual_total_due) : (fee?.total_due || 0);
-            const finalTotalPaid = manual_total_paid !== undefined && manual_total_paid !== '' ? parseFloat(manual_total_paid) : ((fee?.total_paid || 0) + parseFloat(amount));
-            const finalBalance = manual_balance !== undefined && manual_balance !== '' ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
-            const newStatus = finalBalance <= 0 ? 'Paid' : 'Partial';
-
-            if (fee) {
+            // If manual overrides are provided (Ledger Adjustment mode), apply them
+            if (manual_total_due !== undefined && manual_total_due !== '') {
+                const due = parseFloat(manual_total_due);
+                const paid = manual_total_paid !== undefined && manual_total_paid !== '' ? parseFloat(manual_total_paid) : (due - (parseFloat(manual_balance) || 0));
+                const bal = manual_balance !== undefined && manual_balance !== '' ? parseFloat(manual_balance) : (due - paid);
+                
                 await StudentFee.findOneAndUpdate(
                     { student_id },
-                    { total_due: finalTotalDue, total_paid: finalTotalPaid, balance: finalBalance, status: newStatus, last_payment_date: new Date() }
+                    { 
+                        total_due: due, 
+                        total_paid: paid, 
+                        balance: bal, 
+                        status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending'),
+                        last_payment_date: new Date() 
+                    },
+                    { upsert: true }
                 );
             } else {
-                await new StudentFee({ student_id, total_due: finalTotalDue, total_paid: finalTotalPaid, balance: finalBalance, status: newStatus, last_payment_date: new Date() }).save();
+                // Standard mode: sync from payments source
+                await internalSyncStudentFee(student_id);
             }
+            
             return res.status(201).json({ message: 'Payment recorded successfully' });
         }
 
@@ -364,36 +458,28 @@ export async function recordPayment(req, res) {
             [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date()]
         );
 
-        let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [student_id]);
+        // If manual overrides are provided
+        if (manual_total_due !== undefined && manual_total_due !== '') {
+            const finalTotalDue = parseFloat(manual_total_due);
+            const finalTotalPaid = (manual_total_paid !== undefined && manual_total_paid !== '') ? parseFloat(manual_total_paid) : 0;
+            const finalBalance = (manual_balance !== undefined && manual_balance !== '') ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
+            const newStatus = (finalBalance <= 0 && finalTotalDue > 0) ? 'Paid' : (finalTotalPaid > 0 ? 'Partial' : 'Pending');
 
-        // If fee record doesn't exist, try to find course and structure to auto-assign total_due
-        let initialDue = fee?.total_due || 0;
-        if (!fee) {
-            const student = await queryOne('SELECT course FROM students WHERE id = ?', [student_id]);
-            if (student?.course) {
-                const courseObj = await queryOne('SELECT id FROM courses WHERE LOWER(name) = ?', [student.course.toLowerCase().trim()]);
-                if (courseObj) {
-                    const structure = await queryOne('SELECT amount FROM fee_structures WHERE course_id = ? AND category = ?', [courseObj.id, 'Tuition Fee']);
-                    if (structure) initialDue = structure.amount;
-                }
+            const existing = await queryOne('SELECT student_id FROM student_fees WHERE student_id = ?', [student_id]);
+            if (existing) {
+                await run(
+                    'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
+                    [finalTotalDue, finalTotalPaid, finalBalance, newStatus, student_id]
+                );
+            } else {
+                await run(
+                    'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                    [student_id, finalTotalDue, finalTotalPaid, finalBalance, newStatus]
+                );
             }
-        }
-
-        const finalTotalDue = (manual_total_due !== undefined && manual_total_due !== '') ? parseFloat(manual_total_due) : initialDue;
-        const finalTotalPaid = (manual_total_paid !== undefined && manual_total_paid !== '') ? parseFloat(manual_total_paid) : ((fee?.total_paid || 0) + parseFloat(amount));
-        const finalBalance = (manual_balance !== undefined && manual_balance !== '') ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
-        const newStatus = (finalBalance <= 0 && finalTotalDue > 0) ? 'Paid' : (finalTotalPaid > 0 ? 'Partial' : 'Pending');
-
-        if (fee) {
-            await run(
-                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
-                [finalTotalDue, finalTotalPaid, finalBalance, newStatus, student_id]
-            );
         } else {
-            await run(
-                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                [student_id, finalTotalDue, finalTotalPaid, finalBalance, newStatus]
-            );
+            // Standard synchronization
+            await internalSyncStudentFee(student_id);
         }
 
         res.status(201).json({ message: 'Payment recorded successfully' });
@@ -672,26 +758,14 @@ export async function updatePayment(req, res) {
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
-            const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
-
             const updated = await Payment.findByIdAndUpdate(id, {
                 amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date
             }, { new: true });
 
             if (!updated) return res.status(404).json({ error: 'Payment record not found' });
 
-            // Sync summary
-            const allPayments = await Payment.find({ student_id: updated.student_id });
-            const totalPaid = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-            const fee = await StudentFee.findOne({ student_id: updated.student_id });
-            if (fee) {
-                const balance = fee.total_due - totalPaid;
-                const status = balance <= 0 && fee.total_due > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
-                await StudentFee.findOneAndUpdate(
-                    { student_id: updated.student_id },
-                    { total_paid: totalPaid, balance, status }
-                );
-            }
+            // Sync from payments source
+            await internalSyncStudentFee(updated.student_id);
 
             return res.json({ message: 'Payment updated successfully', data: updated });
         }
@@ -705,23 +779,8 @@ export async function updatePayment(req, res) {
             [amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date || new Date(), id]
         );
 
-        // Sync local summary
-        await run(`
-            UPDATE student_fees 
-            SET total_paid = (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE student_id = ?),
-                balance = total_due - (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE student_id = ?)
-            WHERE student_id = ?
-        `, [oldPayment.student_id, oldPayment.student_id, oldPayment.student_id]);
-
-        await run(`
-            UPDATE student_fees 
-            SET status = CASE 
-                WHEN balance <= 0 AND total_due > 0 THEN 'Paid'
-                WHEN total_paid > 0 THEN 'Partial'
-                ELSE 'Pending'
-            END
-            WHERE student_id = ?
-        `, [oldPayment.student_id]);
+        // Sync from payments source
+        await internalSyncStudentFee(oldPayment.student_id);
 
         res.json({ message: 'Payment updated successfully' });
     } catch (error) {
@@ -738,26 +797,14 @@ export async function deletePayment(req, res) {
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
-            const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
-
             const payment = await Payment.findById(id);
             if (!payment) return res.status(404).json({ error: 'Payment not found' });
 
             const studentId = payment.student_id;
             await Payment.findByIdAndDelete(id);
 
-            // Recalculate summary
-            const allPayments = await Payment.find({ student_id: studentId });
-            const totalPaid = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-            const fee = await StudentFee.findOne({ student_id: studentId });
-            if (fee) {
-                const balance = fee.total_due - totalPaid;
-                const status = balance <= 0 && fee.total_due > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
-                await StudentFee.findOneAndUpdate(
-                    { student_id: studentId },
-                    { total_paid: totalPaid, balance, status }
-                );
-            }
+            // Recalculate summary from source
+            await internalSyncStudentFee(studentId);
 
             return res.json({ message: 'Payment deleted' });
         }
@@ -769,23 +816,8 @@ export async function deletePayment(req, res) {
         const studentId = payment.student_id;
         await run('DELETE FROM payments WHERE id = ?', [id]);
 
-        // Sync summary
-        await run(`
-            UPDATE student_fees 
-            SET total_paid = (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE student_id = ?),
-                balance = total_due - (SELECT COALESCE(SUM(amount), 0) FROM payments WHERE student_id = ?)
-            WHERE student_id = ?
-        `, [studentId, studentId, studentId]);
-
-        await run(`
-            UPDATE student_fees 
-            SET status = CASE 
-                WHEN balance <= 0 AND total_due > 0 THEN 'Paid'
-                WHEN total_paid > 0 THEN 'Partial'
-                ELSE 'Pending'
-            END
-            WHERE student_id = ?
-        `, [studentId]);
+        // Sync summary from source
+        await internalSyncStudentFee(studentId);
 
         res.json({ message: 'Payment deleted successfully' });
     } catch (error) {

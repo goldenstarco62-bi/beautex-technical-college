@@ -1249,7 +1249,9 @@ export default function Finance() {
                                                             onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, method: e.target.value } })}
                                                             className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm cursor-pointer"
                                                         >
-                                                            {['Cash', 'Bank Transfer', 'Cheque', 'Other'].map(m => <option key={m}>{m}</option>)}
+                                                            {['Cash', 'Bank Transfer', 'Cheque', 'M-Pesa', 'Other'].map(m => (
+                                                                <option key={m} value={m}>{m}</option>
+                                                            ))}
                                                         </select>
                                                     </div>
                                                 </div>
