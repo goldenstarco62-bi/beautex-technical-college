@@ -486,71 +486,90 @@ export default function ActivityReports() {
         }
     };
 
-    const handlePrint = (report) => {
-        setPrintingReport(report);
-        const type = activeTab;
-        setTimeout(() => {
-            window.print();
-            setPrintingReport(null);
-        }, 1000);
+    const handlePrint = async (report) => {
+        try {
+            setLoading(true);
+            const { data } = await activityReportsAPI.getById(report.id || report._id, activeTab);
+            setPrintingReport(data.data);
+            setTimeout(() => {
+                window.print();
+                setPrintingReport(null);
+                setLoading(false);
+            }, 1000);
+        } catch (error) {
+            console.error('Print preparation failed:', error);
+            toast.error('Failed to prepare document for printing');
+            setLoading(false);
+        }
     };
 
     const handleDownload = async (report) => {
-        setPrintingReport(report);
-        const type = activeTab;
-        setTimeout(async () => {
-            const element = document.getElementById('report-print-capture');
-            if (!element) return;
-            try {
-                // Pre-capture style adjustments to ensure perfection
-                element.style.padding = '0px'; 
-                
-                const canvas = await html2canvas(element, {
-                    scale: 2.5, // Optimized 'Golden Scale' for high-res without glitching
-                    useCORS: true,
-                    backgroundColor: '#ffffff',
-                    windowWidth: 794, 
-                    logging: false,
-                    imageTimeout: 0,
-                    onclone: (clonedDoc) => {
-                        const el = clonedDoc.getElementById('report-print-capture');
-                        if (el) el.style.padding = '0';
-                    }
-                });
+        try {
+            setLoading(true);
+            const { data } = await activityReportsAPI.getById(report.id || report._id, activeTab);
+            const fullReport = data.data;
+            setPrintingReport(fullReport);
+            
+            const type = activeTab;
+            setTimeout(async () => {
+                const element = document.getElementById('report-print-capture');
+                if (!element) return;
+                try {
+                    // Pre-capture style adjustments to ensure perfection
+                    element.style.padding = '0px'; 
+                    
+                    const canvas = await html2canvas(element, {
+                        scale: 2.5, // Optimized 'Golden Scale' for high-res without glitching
+                        useCORS: true,
+                        backgroundColor: '#ffffff',
+                        windowWidth: 794, 
+                        logging: false,
+                        imageTimeout: 0,
+                        onclone: (clonedDoc) => {
+                            const el = clonedDoc.getElementById('report-print-capture');
+                            if (el) el.style.padding = '0';
+                        }
+                    });
 
-                // Lossless PNG for crisp text without JPEG artifacts
-                const imgData = canvas.toDataURL('image/png'); 
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
+                    // Lossless PNG for crisp text without JPEG artifacts
+                    const imgData = canvas.toDataURL('image/png'); 
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                    const pdfHeight = pdf.internal.pageSize.getHeight();
 
-                const imgProps = pdf.getImageProperties(imgData);
-                const ratio = imgProps.height / imgProps.width;
-                const totalRenderedHeight = pdfWidth * ratio;
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const ratio = imgProps.height / imgProps.width;
+                    const totalRenderedHeight = pdfWidth * ratio;
 
-                let heightLeft = totalRenderedHeight;
-                let position = 0;
+                    let heightLeft = totalRenderedHeight;
+                    let position = 0;
 
-                // Precision addition with manual paging
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'SLOW');
-                heightLeft -= pdfHeight;
-
-                while (heightLeft > 0) {
-                    position -= pdfHeight;
-                    pdf.addPage();
+                    // Precision addition with manual paging
                     pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'SLOW');
                     heightLeft -= pdfHeight;
-                }
 
-                pdf.save(`${type.charAt(0).toUpperCase() + type.slice(1)}_Activity_Report_${report.report_date || report.week_start_date || report.month}.pdf`);
-                toast.success('High-Fidelity Archive Exported');
-            } catch (error) {
-                console.error('Download failed:', error);
-                toast.error('Document generation sequence interrupted');
-            } finally {
-                setPrintingReport(null);
-            }
-        }, 1000);
+                    while (heightLeft > 0) {
+                        position -= pdfHeight;
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'SLOW');
+                        heightLeft -= pdfHeight;
+                    }
+
+                    pdf.save(`${type.charAt(0).toUpperCase() + type.slice(1)}_Activity_Report_${fullReport.report_date || fullReport.week_start_date || fullReport.month}.pdf`);
+                    toast.success('High-Fidelity Archive Exported');
+                } catch (error) {
+                    console.error('Download failed:', error);
+                    toast.error('Document generation sequence interrupted');
+                } finally {
+                    setPrintingReport(null);
+                    setLoading(false);
+                }
+            }, 1000);
+        } catch (error) {
+            console.error('Download preparation failed:', error);
+            toast.error('Failed to prepare document for download');
+            setLoading(false);
+        }
     };
 
     if (loading && !dailyReports.length && !weeklyReports.length) {
@@ -1104,6 +1123,15 @@ export default function ActivityReports() {
                                                 />
                                             </div>
                                             <div>
+                                                <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1 text-gold-600">Late Arrivals</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.late_arrivals}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, late_arrivals: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-blue-100 focus:border-gold-500 focus:ring-4 focus:ring-gold-500/5 outline-none transition-all font-bold text-gold-600"
+                                                />
+                                            </div>
+                                            <div>
                                                 <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2 ml-1">Staff Present</label>
                                                 <input
                                                     type="number"
@@ -1173,6 +1201,15 @@ export default function ActivityReports() {
                                                     onChange={(e) => setDailyForm({ ...dailyForm, practical_sessions: e.target.value })}
                                                     placeholder="Lab work, salon practice, site visits..."
                                                     className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Assessments Conducted (Count)</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.assessments_conducted}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, assessments_conducted: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700"
                                                 />
                                             </div>
                                         </div>
@@ -1247,7 +1284,14 @@ export default function ActivityReports() {
                                                 <textarea
                                                     value={dailyForm.discipline_issues}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, discipline_issues: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none mb-3"
+                                                />
+                                                <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1">Disciplinary Cases (Count)</label>
+                                                <input
+                                                    type="number"
+                                                    value={dailyForm.disciplinary_cases}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, disciplinary_cases: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700"
                                                 />
                                             </div>
                                             <div>
@@ -1403,11 +1447,37 @@ export default function ActivityReports() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">11. Remarks (Optional)</label>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-gold-600">11. Notable Events</label>
+                                                <textarea
+                                                    value={dailyForm.notable_events}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, notable_events: e.target.value })}
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-gold-500 focus:ring-4 focus:ring-gold-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-600 font-black">12. Incidents</label>
+                                                <textarea
+                                                    value={dailyForm.incidents}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, incidents: e.target.value })}
+                                                    placeholder="Security issues, accidents, or disruptions..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-red-600 focus:ring-4 focus:ring-red-600/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-emerald-600 font-black">13. Key Achievements</label>
+                                                <textarea
+                                                    value={dailyForm.achievements}
+                                                    onChange={(e) => setDailyForm({ ...dailyForm, achievements: e.target.value })}
+                                                    placeholder="Special milestones reached today..."
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                />
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">14. General Remarks (Optional)</label>
                                                 <textarea
                                                     value={dailyForm.additional_notes}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, additional_notes: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700 h-24 resize-none"
                                                 />
                                             </div>
                                         </div>
@@ -2164,31 +2234,34 @@ export default function ActivityReports() {
                                             <Users className="w-3.5 h-3.5 text-gold" />
                                             <span className="text-[10px] font-black text-white uppercase tracking-widest">Attendance Summary</span>
                                         </div>
-                                        <div className="grid grid-cols-4 gap-2">
+                                        <div className="grid grid-cols-5 gap-2">
                                             <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
                                                 <Users className="w-4 h-4 text-maroon mb-0.5" />
-                                                <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.total_students_expected || 0}</span>
-                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1 leading-tight">Total Students Expected</span>
+                                                <span className="text-[18px] font-black text-gray-800 leading-none">{printingReport.total_students_expected || 0}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1 leading-tight">Expected</span>
                                             </div>
                                             <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
                                                 <Users className="w-4 h-4 text-green-600 mb-0.5" />
                                                 <div className="flex items-baseline gap-0.5">
-                                                    <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.total_students_present || 0}</span>
-                                                    {printingReport.total_students_expected > 0 && <span className="text-[9px] font-bold text-green-500">({Math.round((printingReport.total_students_present / printingReport.total_students_expected) * 100)}%)</span>}
+                                                    <span className="text-[18px] font-black text-gray-800 leading-none">{printingReport.total_students_present || 0}</span>
+                                                    {printingReport.total_students_expected > 0 && <span className="text-[8px] font-bold text-green-500">({Math.round((printingReport.total_students_present / printingReport.total_students_expected) * 100)}%)</span>}
                                                 </div>
-                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Students Present</span>
-                                                <CheckCircle className="w-3 h-3 text-green-500 mt-0.5" />
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Present</span>
                                             </div>
                                             <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
-                                                <Users className="w-4 h-4 text-red-400 mb-0.5" />
-                                                <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.total_students_absent || 0}</span>
-                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Students Absent</span>
+                                                <Users className="w-4 h-4 text-red-500 mb-0.5" />
+                                                <span className="text-[18px] font-black text-gray-800 leading-none">{printingReport.total_students_absent || 0}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Absent</span>
+                                            </div>
+                                            <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
+                                                <Users className="w-4 h-4 text-gold mb-0.5" />
+                                                <span className="text-[18px] font-black text-gray-800 leading-none">{printingReport.late_arrivals || 0}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Late</span>
                                             </div>
                                             <div className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col items-center text-center">
                                                 <Users className="w-4 h-4 text-amber-500 mb-0.5" />
-                                                <span className="text-[22px] font-black text-gray-800 leading-none">{printingReport.staff_present || 0}/{(printingReport.staff_present || 0) + (printingReport.staff_absent || 0)}</span>
-                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Staff Present</span>
-                                                <User className="w-3 h-3 text-amber-500 mt-0.5" />
+                                                <span className="text-[18px] font-black text-gray-800 leading-none">{printingReport.staff_present || 0}/{(printingReport.staff_present || 0) + (printingReport.staff_absent || 0)}</span>
+                                                <span className="text-[7px] font-bold text-maroon uppercase tracking-tight mt-1">Staff</span>
                                             </div>
                                         </div>
                                         {/* Absent Students Names */}
@@ -2210,7 +2283,8 @@ export default function ActivityReports() {
                                                 {printingReport.classes_conducted && <p><span className="font-bold text-gray-700">• Classes Conducted: </span><span className="text-gray-600">{printingReport.classes_conducted}</span></p>}
                                                 {printingReport.topics_covered && <p><span className="font-bold text-gray-700">• Topics Covered: </span><span className="text-gray-600">{printingReport.topics_covered}</span></p>}
                                                 {printingReport.practical_sessions && <p><span className="font-bold text-gray-700">• Practical Sessions: </span><span className="text-gray-600">{printingReport.practical_sessions}</span></p>}
-                                                {!printingReport.classes_conducted && !printingReport.topics_covered && !printingReport.practical_sessions && <p className="text-gray-400 italic">No activities recorded</p>}
+                                                {printingReport.assessments_conducted > 0 && <p><span className="font-bold text-gray-700">• Assessments Conducted: </span><span className="text-gray-600 font-black">{printingReport.assessments_conducted} sessions</span></p>}
+                                                {!printingReport.classes_conducted && !printingReport.topics_covered && !printingReport.practical_sessions && !printingReport.assessments_conducted && <p className="text-gray-400 italic">No activities recorded</p>}
                                             </div>
                                         </div>
 
@@ -2241,22 +2315,33 @@ export default function ActivityReports() {
                                         <div className="space-y-1">
                                             <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Heart className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Student Affairs</span></div>
                                             <div className="px-2 space-y-0.5 text-[8.5px]">
-                                                {printingReport.discipline_issues && <p><span className="font-bold text-gray-700">• Discipline issue: </span><span className="text-gray-600">{printingReport.discipline_issues}</span></p>}
+                                                {printingReport.disciplinary_cases > 0 && <p className="text-red-600 font-bold">• Disciplinary Cases: {printingReport.disciplinary_cases}</p>}
+                                                {printingReport.discipline_issues && <p><span className="font-bold text-gray-700">• Discipline details: </span><span className="text-gray-600">{printingReport.discipline_issues}</span></p>}
                                                 {printingReport.student_feedback && <p><span className="font-bold text-gray-700">• Students feedback: </span><span className="text-gray-600">{printingReport.student_feedback}</span></p>}
                                                 {printingReport.counseling_support && <p><span className="font-bold text-gray-700">• Counseling support: </span><span className="text-gray-600">{printingReport.counseling_support}</span></p>}
-                                                {!printingReport.discipline_issues && !printingReport.student_feedback && !printingReport.counseling_support && <p className="text-gray-400 italic">No issues recorded</p>}
+                                                {!printingReport.disciplinary_cases && !printingReport.discipline_issues && !printingReport.student_feedback && !printingReport.counseling_support && <p className="text-gray-400 italic">No issues recorded</p>}
                                             </div>
                                         </div>
 
                                         {/* 5. Challenges Faced */}
                                         <div className="space-y-1">
-                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><AlertCircle className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Challenges Faced</span></div>
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><AlertCircle className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Challenges & Incidents</span></div>
                                             <div className="px-2 space-y-0.5 text-[8.5px]">
-                                                {printingReport.challenges_faced ? printingReport.challenges_faced.split('\n').filter(Boolean).map((l,i)=><p key={i} className="text-gray-600">• {l.trim()}</p>) : <p className="text-gray-400 italic">None recorded</p>}
+                                                {printingReport.challenges_faced && <p className="text-red-600 font-bold">• Challenges: <span className="text-gray-600 font-normal">{printingReport.challenges_faced}</span></p>}
+                                                {printingReport.incidents && <p className="text-red-700 font-black italic">• MAJOR INCIDENTS: <span className="text-gray-700 font-bold not-italic">{printingReport.incidents}</span></p>}
+                                                {!printingReport.challenges_faced && !printingReport.incidents && <p className="text-gray-400 italic">No critical issues</p>}
                                             </div>
                                         </div>
 
-                                        {/* 6. Plans for Next Day */}
+                                        <div className="space-y-1">
+                                            <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><CheckCircle className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Notable Events & Achievements</span></div>
+                                            <div className="px-2 space-y-0.5 text-[8.5px]">
+                                                {printingReport.notable_events && <p><span className="font-bold text-gray-700">• Events: </span><span className="text-gray-600">{printingReport.notable_events}</span></p>}
+                                                {printingReport.achievements && <p className="text-emerald-700 font-black">• KEY ACHIEVEMENT: <span className="text-gray-700 font-bold">{printingReport.achievements}</span></p>}
+                                                {!printingReport.notable_events && !printingReport.achievements && <p className="text-gray-400 italic">No special events</p>}
+                                            </div>
+                                        </div>
+
                                         <div className="space-y-1">
                                             <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Calendar className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Plans for Next Day</span></div>
                                             <div className="px-2 space-y-0.5 text-[8.5px]">
@@ -2264,7 +2349,6 @@ export default function ActivityReports() {
                                             </div>
                                         </div>
 
-                                        {/* 7. Actions Taken */}
                                         <div className="space-y-1">
                                             <div className="bg-maroon rounded py-1 px-3 flex items-center gap-2"><Zap className="w-3 h-3 text-gold" /><span className="text-[9px] font-black text-white uppercase tracking-widest">Actions Taken</span></div>
                                             <div className="px-2 space-y-0.5 text-[8.5px]">
