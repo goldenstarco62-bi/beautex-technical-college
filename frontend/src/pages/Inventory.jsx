@@ -90,6 +90,7 @@ function ItemsTab() {
     const [moveDeptDest, setMoveDeptDest] = useState('');
     const [moveDeptLocation, setMoveDeptLocation] = useState('');
     const [clientPage, setClientPage] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
     const ITEMS_PER_PAGE = 10;
 
     const showToast = (msg, type = 'success') => {
@@ -99,22 +100,32 @@ function ItemsTab() {
 
     const loadData = useCallback(() => {
         setLoading(true);
-        // Fetch all items (no limit) so client-side filtering + pagination works correctly
-        const params = { search, limit: 9999, sortBy, sortOrder };
+        // Use server-side filters and pagination
+        const params = { 
+            search, 
+            page: clientPage, 
+            limit: ITEMS_PER_PAGE, 
+            sortBy, 
+            sortOrder,
+            category_id: filterCategory !== 'ALL' ? filterCategory : undefined,
+            purchase_date: filterDate || undefined
+        };
 
         Promise.all([
             inventoryAPI.getItems(params),
             inventoryAPI.getCategories(),
             inventoryAPI.getLocations()
         ]).then(([i, c, l]) => {
-            setItems(i.data.data || i.data || []);
+            const result = i.data;
+            setItems(result.data || []);
+            setTotalItems(result.pagination?.total || (result.data ? result.data.length : 0));
             setCategories(c.data);
             setLocations(l.data);
         }).catch(err => {
             showToast('LOGISTICS SYNC FAILED', 'error');
             console.error(err);
         }).finally(() => setLoading(false));
-    }, [search, sortBy, sortOrder]);
+    }, [search, sortBy, sortOrder, clientPage, filterCategory]);
 
     useEffect(() => { loadData(); }, [loadData]);
     // Reset to page 1 whenever any filter changes
@@ -239,27 +250,6 @@ function ItemsTab() {
         showToast('MANIFEST EXPORTED');
     };
 
-    const filteredItems = items
-        .filter(item => {
-            const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
-                                 item.item_code.toLowerCase().includes(search.toLowerCase()) ||
-                                 item.serial_number?.toLowerCase().includes(search.toLowerCase());
-            const cat = item.category_name?.toLowerCase() || '';
-            const matchesCat = filterCategory === 'ALL'
-                || (filterCategory === 'BEAUTY' && cat.includes('beauty'))
-                || (filterCategory === 'HAIR'   && (cat.includes('hair') || cat.includes('hairdress')))
-                || (filterCategory === 'ICT'    && cat.includes('ict'))
-                || (filterCategory === 'ADMIN'  && (cat.includes('admin') || cat.includes('administration')));
-            const matchesDate = !filterDate || (item.date_purchased && item.date_purchased.startsWith(filterDate));
-            return matchesSearch && matchesCat && matchesDate;
-        })
-        .sort((a, b) => {
-            const factor = sortOrder === 'asc' ? 1 : -1;
-            if (sortBy === 'qty') return (a.quantity - b.quantity) * factor;
-            if (sortBy === 'price') return (a.purchase_price - b.purchase_price) * factor;
-            return a.name.localeCompare(b.name) * factor;
-        });
-
     const toggleSort = (val) => {
         if (sortBy === val) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
         else {
@@ -268,9 +258,9 @@ function ItemsTab() {
         }
     };
 
-    // Client-side pagination over filtered items
-    const totalClientPages = Math.max(1, Math.ceil(filteredItems.length / ITEMS_PER_PAGE));
-    const pagedItems = filteredItems.slice((clientPage - 1) * ITEMS_PER_PAGE, clientPage * ITEMS_PER_PAGE);
+    // Pagination calculation
+    const totalClientPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
+    const pagedItems = items; // Already paginated by server
 
     const PaginationControl = () => {
         if (totalClientPages <= 1) return null;
@@ -280,9 +270,8 @@ function ItemsTab() {
                 <div className="flex items-center gap-2">
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                         Showing <span className="text-maroon dark:text-gold">
-                            {Math.min(filteredItems.length, (clientPage - 1) * ITEMS_PER_PAGE + pagedItems.length)}
-                        </span> of <span className="text-maroon dark:text-gold">{filteredItems.length}</span> Assets
-                        {filterCategory !== 'ALL' && <span className="ml-1 text-gray-300">({items.length} total)</span>}
+                            {Math.min(totalItems, (clientPage - 1) * ITEMS_PER_PAGE + pagedItems.length)}
+                        </span> of <span className="text-maroon dark:text-gold">{totalItems}</span> Assets
                     </p>
                 </div>
                 <div className="flex items-center gap-1">
@@ -436,12 +425,12 @@ function ItemsTab() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : filteredItems.length === 0 ? (
+                            ) : items.length === 0 ? (
                                 <tr>
                                     <td colSpan="6" className="py-20 text-center">
                                         <div className="flex flex-col items-center gap-4">
                                             <PackageOpen className="w-12 h-12 text-gray-200" />
-                                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em]">No assets found {filterCategory !== 'ALL' ? `in ${filterCategory} department` : ''}</p>
+                                            <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.3em]">No assets found</p>
                                         </div>
                                     </td>
                                 </tr>

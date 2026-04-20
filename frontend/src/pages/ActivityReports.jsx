@@ -1,7 +1,7 @@
-﻿import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
     Calendar, TrendingUp, BarChart3, FileText, Plus, RefreshCw, Download, Info, Users, BookOpen, Building2, Heart,
-    X, Eye, Edit, Trash2, Zap, AlertCircle, User, Clock, FileDown, ChevronRight, Printer, CheckCircle, Check, Briefcase, Minus, QrCode, Fingerprint
+    X, Eye, Edit, Trash2, Zap, AlertCircle, User, Clock, FileDown, ChevronRight, ChevronLeft, Printer, CheckCircle, Check, Briefcase, Minus, QrCode, Fingerprint
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -32,6 +32,10 @@ export default function ActivityReports() {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
     const chartData = useMemo(() => {
         if (activeTab === 'daily') {
             return dailyReports.slice(0, 7).reverse().map(r => ({
@@ -48,6 +52,67 @@ export default function ActivityReports() {
         }
         return [];
     }, [dailyReports, weeklyReports, activeTab]);
+
+    // FIX: Memoize filtered and sorted reports to avoid double-computation in JSX
+    const filteredDailyReports = useMemo(() => {
+        return dailyReports
+            .filter(r => {
+                // Normalize date to YYYY-MM-DD string for comparison
+                const d = r.report_date ? new Date(r.report_date).toISOString().split('T')[0] : '';
+                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+            })
+            .sort((a, b) => {
+                const dateA = a.report_date ? new Date(a.report_date).toISOString() : '';
+                const dateB = b.report_date ? new Date(b.report_date).toISOString() : '';
+                return dateB.localeCompare(dateA);
+            });
+    }, [dailyReports, filterDateFrom, filterDateTo]);
+
+    // Resets page when filters or tabs change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterDateFrom, filterDateTo, activeTab]);
+
+    const paginatedDailyReports = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredDailyReports.slice(start, start + itemsPerPage);
+    }, [filteredDailyReports, currentPage]);
+
+    const filteredWeeklyReports = useMemo(() => {
+        return weeklyReports
+            .filter(r => {
+                const d = (r.week_start_date || r.report_date) ? new Date(r.week_start_date || r.report_date).toISOString().split('T')[0] : '';
+                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+            })
+            .sort((a, b) => {
+                const dateA = (a.week_start_date || a.report_date) ? new Date(a.week_start_date || a.report_date).toISOString() : '';
+                const dateB = (b.week_start_date || b.report_date) ? new Date(b.week_start_date || b.report_date).toISOString() : '';
+                return dateB.localeCompare(dateA);
+            });
+    }, [weeklyReports, filterDateFrom, filterDateTo]);
+
+    const filteredMonthlyReports = useMemo(() => {
+        return monthlyReports
+            .filter(r => {
+                const d = (r.month_start_date || r.report_date) ? new Date(r.month_start_date || r.report_date).toISOString().split('T')[0] : '';
+                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
+            })
+            .sort((a, b) => {
+                const dateA = (a.month_start_date || a.report_date) ? new Date(a.month_start_date || a.report_date).toISOString() : '';
+                const dateB = (b.month_start_date || b.report_date) ? new Date(b.month_start_date || b.report_date).toISOString() : '';
+                return dateB.localeCompare(dateA);
+            });
+    }, [monthlyReports, filterDateFrom, filterDateTo]);
+
+    const paginatedWeeklyReports = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredWeeklyReports.slice(start, start + itemsPerPage);
+    }, [filteredWeeklyReports, currentPage]);
+
+    const paginatedMonthlyReports = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredMonthlyReports.slice(start, start + itemsPerPage);
+    }, [filteredMonthlyReports, currentPage]);
 
     // Daily Report Form State
     const [dailyForm, setDailyForm] = useState({
@@ -141,10 +206,10 @@ export default function ActivityReports() {
         setLoading(true);
         try {
             if (activeTab === 'daily') {
-                const res = await activityReportsAPI.getDailyReports({ limit: 30 });
+                const res = await activityReportsAPI.getDailyReports({ limit: 50 });
                 setDailyReports(res.data.data || []);
             } else if (activeTab === 'weekly') {
-                const res = await activityReportsAPI.getWeeklyReports({ limit: 20 });
+                const res = await activityReportsAPI.getWeeklyReports({ limit: 30 });
                 setWeeklyReports(res.data.data || []);
             } else if (activeTab === 'monthly') {
                 const res = await activityReportsAPI.getMonthlyReports({ limit: 12 });
@@ -521,22 +586,30 @@ export default function ActivityReports() {
             const fullReport = data.data;
             setPrintingReport({ ...fullReport, reportType: activeTab });
             
-            // Wait for DOM to sync - 1000ms is generally sufficient after state update
-            setTimeout(() => {
+            // FIX: Store timer for cleanup and use a robust condition for printing
+            const printTimer = setTimeout(() => {
                 const element = document.getElementById('report-print-capture');
                 if (!element) {
                     console.error('Print capture element not found');
                     setLoading(false);
+                    setPrintingReport(null);
                     return;
                 }
+                
+                // Note: window.print() still prints the whole window, but since printingReport is set,
+                // the CSS @media print should be configured to only show #report-print-capture.
                 window.print();
                 setPrintingReport(null);
                 setLoading(false);
             }, 1000);
+
+            // Cleanup handle for the timer
+            return () => clearTimeout(printTimer);
         } catch (error) {
             console.error('Print preparation failed:', error);
             toast.error('Print engine initialization failed');
             setLoading(false);
+            setPrintingReport(null);
         }
     };
 
@@ -597,16 +670,18 @@ export default function ActivityReports() {
             setPrintingReport({ ...fullReport, reportType: activeTab });
             
             const type = activeTab;
-            // Wait for DOM to sync - 1000ms is generally sufficient
-            setTimeout(async () => {
+            // FIX: Cleanup handle for memory leak prevention
+            const downloadTimer = setTimeout(async () => {
                 const element = document.getElementById('report-print-capture');
-                if (!element) return;
+                if (!element) {
+                    setLoading(false);
+                    setPrintingReport(null);
+                    return;
+                }
                 try {
-                    // Pre-capture style adjustments to ensure perfection
-                    element.style.padding = '0px'; 
-                    
+                    // FIX: Removed live DOM mutation. Pass overrides to onclone instead.
                     const canvas = await html2canvas(element, {
-                        scale: 2.0, // High-performance scale for clarity without overhead
+                        scale: 2.0, 
                         useCORS: true,
                         backgroundColor: '#ffffff',
                         windowWidth: 794, 
@@ -614,11 +689,15 @@ export default function ActivityReports() {
                         imageTimeout: 0,
                         onclone: (clonedDoc) => {
                             const el = clonedDoc.getElementById('report-print-capture');
-                            if (el) el.style.padding = '0';
+                            if (el) {
+                                el.style.padding = '0';
+                                // Ensure it's not hidden for capture
+                                el.style.left = '0';
+                                el.style.position = 'relative';
+                            }
                         }
                     });
 
-                    // JPEG format significantly reduces payload size vs PNG
                     const imgData = canvas.toDataURL('image/jpeg', 0.95); 
                     const pdf = new jsPDF('p', 'mm', 'a4');
                     const pdfWidth = pdf.internal.pageSize.getWidth();
@@ -631,7 +710,6 @@ export default function ActivityReports() {
                     let heightLeft = totalRenderedHeight;
                     let position = 0;
 
-                    // Fast compression for rapid document generation
                     pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'FAST');
                     heightLeft -= pdfHeight;
 
@@ -652,10 +730,13 @@ export default function ActivityReports() {
                     setLoading(false);
                 }
             }, 1000);
+
+            return () => clearTimeout(downloadTimer);
         } catch (error) {
             console.error('Download preparation failed:', error);
             toast.error('Failed to prepare document for download');
             setLoading(false);
+            setPrintingReport(null);
         }
     };
 
@@ -670,6 +751,63 @@ export default function ActivityReports() {
             </div>
         );
     }
+
+    // --- Pagination Component ---
+    const PaginationControls = ({ totalItems, currentPage, setCurrentPage, itemsPerPage }) => {
+        const totalPages = Math.ceil(totalItems / itemsPerPage);
+        if (totalPages <= 1) return null;
+
+        const pages = [];
+        for (let i = 1; i <= totalPages; i++) {
+            if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                pages.push(i);
+            } else if (pages[pages.length - 1] !== '...') {
+                pages.push('...');
+            }
+        }
+
+        return (
+            <div className="flex items-center justify-between mt-12 bg-white/50 backdrop-blur-md p-4 rounded-3xl border border-maroon/5 shadow-xl">
+                <div className="text-[10px] font-black text-maroon/40 uppercase tracking-widest pl-4">
+                    Showing <span className="text-maroon">{(currentPage - 1) * itemsPerPage + 1}</span> - <span className="text-maroon">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of <span className="text-maroon">{totalItems}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        className="p-3 rounded-xl border border-maroon/10 text-maroon disabled:opacity-30 hover:bg-maroon hover:text-gold transition-all"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center gap-1">
+                        {pages.map((p, idx) => (
+                            p === '...' ? (
+                                <span key={`dots-${idx}`} className="px-4 text-maroon/40 font-black">...</span>
+                            ) : (
+                                <button
+                                    key={p}
+                                    onClick={() => setCurrentPage(p)}
+                                    className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all ${currentPage === p
+                                        ? 'bg-maroon text-gold shadow-lg shadow-maroon/20 translate-y-[-2px]'
+                                        : 'text-maroon/60 hover:bg-maroon/5 hover:text-maroon'
+                                    }`}
+                                >
+                                    {p}
+                                </button>
+                            )
+                        ))}
+                    </div>
+                    <button
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-3 rounded-xl border border-maroon/10 text-maroon disabled:opacity-30 hover:bg-maroon hover:text-gold transition-all"
+                    >
+                        <ChevronRight className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+        );
+    };
 
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in slide-in-from-bottom-6 duration-1000">
@@ -845,22 +983,17 @@ export default function ActivityReports() {
                     <div className="grid grid-cols-1 gap-6">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Chronological Daily Audit Logs</h2>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{dailyReports.length} Entries Archived</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{filteredDailyReports.length} Entries Archived</span>
                         </div>
 
-                        {dailyReports.filter(r => {
-                                const d = r.report_date || '';
-                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
-                            }).sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '')).length === 0 ? (
+                        {filteredDailyReports.length === 0 ? (
                             <div className="text-center py-20 bg-maroon/[0.02] rounded-[2rem] border border-maroon/5 border-dashed">
                                 <Calendar className="w-12 h-12 text-maroon/10 mx-auto mb-4" />
                                 <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">No operational logs for this cycle</p>
                             </div>
                         ) : (
-                            dailyReports.filter(r => {
-                                const d = r.report_date || '';
-                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
-                            }).sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '')).map((report) => (
+                            <>
+                            {paginatedDailyReports.map((report) => (
                                 <div key={report.id} className="group relative bg-white rounded-[2rem] p-6 border border-maroon/5 hover:border-maroon/20 hover:shadow-2xl transition-all duration-500 overflow-hidden">
                                     <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-maroon to-gold transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 rounded-r-full"></div>
                                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
@@ -873,55 +1006,50 @@ export default function ActivityReports() {
                                                 <h3 className="font-black text-lg text-maroon uppercase tracking-tight">{report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'No Date'}</h3>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-gold"></div>
-                                                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Filed by {report.reported_by || 'Unknown Officer'}</p>
+                                                    <span className="text-[10px] font-black text-maroon/60 uppercase tracking-widest">{report.department || 'INSTITUTIONAL'}</span>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-4 px-6 border-l border-r border-maroon/5">
-                                            <div>
-                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Attendance</p>
-                                                <p className="text-xl font-black text-maroon">{report.total_attendance_percentage != null && report.total_attendance_percentage !== '' ? parseFloat(report.total_attendance_percentage).toFixed(1) + '%' : 'â€”'}</p>
+                                        <div className="flex items-center gap-4 flex-1 justify-center px-10 border-l border-maroon/5">
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Attendance</p>
+                                                <p className="text-xl font-black text-maroon">{report.total_attendance_percentage}%</p>
                                             </div>
-                                            <div>
-                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Classes</p>
+                                            <div className="w-px h-10 bg-maroon/5 mx-4"></div>
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Students</p>
+                                                <p className="text-xl font-black text-maroon">{report.total_students_present}/{report.total_students_expected}</p>
+                                            </div>
+                                            <div className="w-px h-10 bg-maroon/5 mx-4"></div>
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Classes</p>
                                                 <p className="text-xl font-black text-maroon">{report.classes_conducted}</p>
                                             </div>
-                                            <div>
-                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Net Enroll</p>
-                                                <p className="text-xl font-black text-blue-600">+{report.new_enrollments || 0}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Discipline</p>
-                                                <p className="text-xl font-black text-amber-500">{report.disciplinary_cases || 0}</p>
-                                            </div>
                                         </div>
-                                        <div className="flex gap-2 print:hidden">
+                                        <div className="flex items-center gap-3 print:hidden">
                                             <button
                                                 onClick={() => handleRetroSync(report)}
-                                                className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm group"
-                                                title="Re-Sync Audit Data"
+                                                className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm"
+                                                title="Sync Audit Data"
                                             >
                                                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                                             </button>
-                                            <button onClick={() => setViewingReport(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5" title="View Report">
+                                            <button onClick={() => setViewingReport(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5">
                                                 <Eye className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => openEditModal(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5" title="Edit">
+                                            <button onClick={() => openEditModal(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5">
                                                 <Edit className="w-4 h-4" />
                                             </button>
-                                            <button onClick={() => handleDelete(report.id, 'daily')} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-red-600 hover:text-white transition-all border border-maroon/5" title="Delete">
+                                            <button onClick={() => handleDownload(report)} className="p-3 bg-gold/5 text-maroon rounded-xl hover:bg-gold hover:text-maroon transition-all border border-gold/10">
+                                                <FileDown className="w-4 h-4" />
+                                            </button>
+                                            <button onClick={() => handleDelete(report.id, 'daily')} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-red-600 hover:text-white transition-all border border-maroon/5">
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
-                                    {(report.achievements || report.incidents) && (
-                                        <div className="mt-6 pt-6 border-t border-maroon/5 flex flex-wrap gap-3">
-                                            {report.achievements && (
-                                                <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-2xl px-4 py-2">
-                                                    <Zap className="w-3 h-3 text-green-600" />
-                                                    <span className="text-[10px] font-black text-green-700 uppercase tracking-wider">{report.achievements.length > 40 ? report.achievements.substring(0, 40) + '...' : report.achievements}</span>
-                                                </div>
-                                            )}
+                                    {report.incidents && (
+                                        <div className="mt-4 flex flex-wrap gap-2 pt-4 border-t border-maroon/5">
                                             {report.incidents && (
                                                 <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-2xl px-4 py-2">
                                                     <AlertCircle className="w-3 h-3 text-red-500" />
@@ -931,7 +1059,15 @@ export default function ActivityReports() {
                                         </div>
                                     )}
                                 </div>
-                            ))
+                            ))}
+                            <PaginationControls 
+                                totalItems={filteredDailyReports.length} 
+                                currentPage={currentPage} 
+                                setCurrentPage={setCurrentPage} 
+                                itemsPerPage={itemsPerPage} 
+                            />
+                            </>
+
                         )}
                     </div>
                 )}
@@ -940,21 +1076,16 @@ export default function ActivityReports() {
                     <div className="space-y-6">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Aggregated Weekly Strategic Summaries</h2>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{weeklyReports.length} Summaries Compiled</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{filteredWeeklyReports.length} Summaries Compiled</span>
                         </div>
-                        {weeklyReports.filter(r => {
-                            const d = r.week_start_date || r.report_date || '';
-                            return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
-                        }).sort((a, b) => (b.week_start_date || b.report_date || '').localeCompare(a.week_start_date || a.report_date || '')).length === 0 ? (
+                        {filteredWeeklyReports.length === 0 ? (
                             <div className="text-center py-20 bg-maroon/[0.02] rounded-[2rem] border border-maroon/5 border-dashed">
                                 <TrendingUp className="w-12 h-12 text-maroon/10 mx-auto mb-4" />
                                 <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">Strategic summary queue empty</p>
                             </div>
                         ) : (
-                            weeklyReports.filter(r => {
-                                const d = r.week_start_date || r.report_date || '';
-                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
-                            }).sort((a, b) => (b.week_start_date || b.report_date || '').localeCompare(a.week_start_date || a.report_date || '')).map((report) => (
+                            <>
+                            {paginatedWeeklyReports.map((report) => (
                                 <div key={report.id} className="group relative bg-white rounded-[2rem] p-6 border border-gold/10 hover:border-gold/30 hover:shadow-2xl transition-all duration-500 overflow-hidden">
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-gold/5 rounded-full -mr-10 -mt-10 group-hover:scale-150 transition-transform duration-700"></div>
                                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 relative z-10">
@@ -964,7 +1095,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <h3 className="font-black text-xl text-maroon uppercase tracking-tight">
-                                                    {report.week_start_date ? new Date(report.week_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'N/A'} â€” {report.week_end_date ? new Date(report.week_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                                                    {report.week_start_date ? new Date(report.week_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'N/A'} — {report.week_end_date ? new Date(report.week_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
                                                 </h3>
                                                 <p className="text-[10px] text-maroon/40 font-black uppercase tracking-widest mt-1">Compiled by {report.reported_by}</p>
                                             </div>
@@ -972,7 +1103,7 @@ export default function ActivityReports() {
                                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 flex-1 px-6 border-l border-gold/10">
                                             <div>
                                                 <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Avg Attendance</p>
-                                                <p className="text-xl font-black text-maroon">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : 'â€”'}</p>
+                                                <p className="text-xl font-black text-maroon">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">New Students</p>
@@ -1013,7 +1144,14 @@ export default function ActivityReports() {
                                         </div>
                                     )}
                                 </div>
-                            ))
+                            ))}
+                            <PaginationControls 
+                                totalItems={filteredWeeklyReports.length} 
+                                currentPage={currentPage} 
+                                setCurrentPage={setCurrentPage} 
+                                itemsPerPage={itemsPerPage} 
+                            />
+                            </>
                         )}
                     </div>
                 )}
@@ -1022,21 +1160,16 @@ export default function ActivityReports() {
                     <div className="space-y-8">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Executive Institutional Intelligence Reports</h2>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{monthlyReports.length} Executive Audits</span>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{filteredMonthlyReports.length} Executive Audits</span>
                         </div>
-                        {monthlyReports.filter(r => {
-                            const d = r.month_start_date || r.report_date || '';
-                            return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
-                        }).length === 0 ? (
+                        {filteredMonthlyReports.length === 0 ? (
                             <div className="text-center py-20 bg-maroon/[0.02] rounded-[3rem] border border-maroon/5 border-dashed">
                                 <BarChart3 className="w-16 h-16 text-maroon/10 mx-auto mb-4" />
                                 <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">Executive Intelligence pipeline empty</p>
                             </div>
                         ) : (
-                            monthlyReports.filter(r => {
-                                const d = r.month_start_date || r.report_date || '';
-                                return (!filterDateFrom || d >= filterDateFrom) && (!filterDateTo || d <= filterDateTo);
-                            }).sort((a, b) => (b.month_start_date || b.report_date || '').localeCompare(a.month_start_date || a.report_date || '')).map((report) => (
+                            <>
+                            {paginatedMonthlyReports.map((report) => (
                                 <div key={report.id} className="group relative bg-white rounded-[3rem] p-8 border border-maroon/5 hover:border-gold/30 hover:shadow-2xl transition-all duration-700 overflow-hidden">
                                     <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-maroon/[0.03] rounded-full blur-2xl group-hover:bg-maroon/[0.06] transition-all duration-700"></div>
                                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 relative z-10">
@@ -1063,7 +1196,7 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Avg Attendance</p>
-                                                <p className="text-2xl font-black text-maroon">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : 'â€”'}</p>
+                                                <p className="text-2xl font-black text-maroon">{report.average_attendance != null && report.average_attendance !== '' ? parseFloat(report.average_attendance).toFixed(1) + '%' : '—'}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Pass Rate</p>
@@ -1109,7 +1242,14 @@ export default function ActivityReports() {
                                         </div>
                                     )}
                                 </div>
-                            ))
+                            ))}
+                            <PaginationControls 
+                                totalItems={filteredMonthlyReports.length} 
+                                currentPage={currentPage} 
+                                setCurrentPage={setCurrentPage} 
+                                itemsPerPage={itemsPerPage} 
+                            />
+                            </>
                         )}
                     </div>
                 )}
@@ -1199,8 +1339,9 @@ export default function ActivityReports() {
                                     </div>
                                     
                                     <button 
-                                        onClick={() => {
-                                            setPrintingReport({
+                                        onClick={async () => {
+                                            setLoading(true);
+                                            const boardReport = {
                                                 ...consolidatedData.stats,
                                                 id: 'INST-' + new Date().getTime(),
                                                 report_date: filterDateFrom,
@@ -1211,11 +1352,40 @@ export default function ActivityReports() {
                                                 startDate: filterDateFrom,
                                                 endDate: filterDateTo,
                                                 data: consolidatedData
-                                            });
-                                            setTimeout(() => {
-                                                window.print();
-                                                setPrintingReport(null);
-                                            }, 1000);
+                                            };
+                                            
+                                            setPrintingReport(boardReport);
+                                            
+                                            // Trigger high-fidelity PDF generation
+                                            setTimeout(async () => {
+                                                const element = document.getElementById('report-print-capture');
+                                                if (!element) {
+                                                    setLoading(false);
+                                                    setPrintingReport(null);
+                                                    return;
+                                                }
+                                                try {
+                                                    const canvas = await html2canvas(element, {
+                                                        scale: 2.0, 
+                                                        useCORS: true,
+                                                        backgroundColor: '#ffffff',
+                                                        windowWidth: 794
+                                                    });
+                                                    const imgData = canvas.toDataURL('image/png');
+                                                    const pdf = new jsPDF('p', 'mm', 'a4');
+                                                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                                                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                                                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                                                    pdf.save(`Institutional_Audit_${filterDateFrom}_to_${filterDateTo}.pdf`);
+                                                    toast.success('INSTITUTIONAL PDF GENERATED');
+                                                } catch (err) {
+                                                    console.error('PDF generation error:', err);
+                                                    toast.error('PDF ENGINE FAILURE');
+                                                } finally {
+                                                    setPrintingReport(null);
+                                                    setLoading(false);
+                                                }
+                                            }, 1500); // Slightly longer delay for heavy consolidated data
                                         }}
                                         className="w-full bg-emerald-600 text-white p-6 rounded-[2rem] font-black text-xs uppercase tracking-widest shadow-2xl shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"
                                     >

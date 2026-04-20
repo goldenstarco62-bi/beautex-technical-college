@@ -16,6 +16,39 @@ let db;
 let pgPool;
 let mongoConnection;
 
+/**
+ * Determine the active SQL engine for query portability.
+ * Prioritizes MONGODB_URI (if using Mongo logic), then DATABASE_URL (for Postgres), then SQLite.
+ */
+export const getActiveDbEngine = () => {
+    if (!!process.env.MONGODB_URI) return 'mongodb';
+    const processedUrl = getProcessedDatabaseUrl();
+    if (processedUrl && processedUrl.startsWith('postgres')) return 'postgres';
+    return 'sqlite';
+};
+
+/**
+ * Returns the appropriate SQL function for 'today' based on the active engine.
+ * PostgreSQL uses CURRENT_DATE, while SQLite uses date('now').
+ */
+export const getCurrentDateSQL = () => {
+    return getActiveDbEngine() === 'postgres' ? 'CURRENT_DATE' : "date('now')";
+};
+
+/**
+ * Returns the appropriate SQL function for date math (e.g., today + 30 days).
+ */
+export const getDateIntervalSQL = (days) => {
+    const engine = getActiveDbEngine();
+    if (engine === 'postgres') {
+        const op = days >= 0 ? '+' : '-';
+        return `CURRENT_DATE ${op} INTERVAL '${Math.abs(days)} days'`;
+    }
+    const op = days >= 0 ? '+' : '-';
+    return `date('now', '${op}${Math.abs(days)} days')`;
+};
+
+
 export const getProcessedDatabaseUrl = () => {
     let url = process.env.DATABASE_URL;
     if (!url) return null;
@@ -484,6 +517,30 @@ async function runPostgresMigrations(database) {
         if (checkClassesType.rows[0]?.data_type === 'integer') {
             console.log('🔄 Postgres Migration: Changing classes_conducted to TEXT...');
             await database.query('ALTER TABLE daily_activity_reports ALTER COLUMN classes_conducted TYPE TEXT USING classes_conducted::text');
+        }
+
+        // Migration: Relax UNIQUE constraint on daily_activity_reports (report_date -> report_date, department)
+        try {
+            const checkConstraint = await database.query(`
+                SELECT conname FROM pg_constraint 
+                WHERE conname = 'daily_activity_reports_report_date_key'
+            `);
+            if (checkConstraint.rows.length > 0) {
+                console.log('🔄 Postgres Migration: Relaxing daily_activity_reports UNIQUE constraint...');
+                await database.query('ALTER TABLE daily_activity_reports DROP CONSTRAINT daily_activity_reports_report_date_key');
+            }
+            
+            // Add composite unique constraint if department is not null
+            const checkComposite = await database.query(`
+                SELECT conname FROM pg_constraint 
+                WHERE conname = 'daily_activity_reports_date_dept_key'
+            `);
+            if (checkComposite.rows.length === 0) {
+                await database.query('ALTER TABLE daily_activity_reports ADD CONSTRAINT daily_activity_reports_date_dept_key UNIQUE (report_date, department)');
+                console.log('✅ Composite UNIQUE constraint added (report_date, department)');
+            }
+        } catch (e) {
+            console.warn('⚠️ daily_activity_reports constraint migration warning:', e.message);
         }
 
         // Check for reset_token columns (for forgot-password flow)

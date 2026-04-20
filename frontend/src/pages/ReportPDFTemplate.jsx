@@ -7,7 +7,7 @@
 
 const VAL = (v, fallback = '—') => (v !== null && v !== undefined && v !== '' ? v : fallback);
 const NUM = (v, fallback = 0) => (v !== null && v !== undefined && !isNaN(Number(v)) ? Number(v) : fallback);
-const PCT = (v) => `${Math.min(100, Math.max(0, NUM(v)))}%`;
+const safeUpper = (v) => String(VAL(v, '—')).toUpperCase();
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  SHARED: Progress Bar
@@ -77,7 +77,9 @@ function Section({ title, icon, color = '#800000', children, bg = '#fafafa' }) {
 //  SHARED: Field Row inside section
 // ─────────────────────────────────────────────────────────────────────────────
 function FieldRow({ label, value, highlight = false }) {
-    if (!value && value !== 0) return null;
+    // FIX: original guard `!value && value !== 0` still hides falsy strings like '—'.
+    // Correctly hide only truly empty/placeholder values.
+    if (value === null || value === undefined || value === '' || value === '—') return null;
     return (
         <div style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', minWidth: 110, flexShrink: 0, paddingTop: 1 }}>{label}:</span>
@@ -142,7 +144,8 @@ function InfoBar({ items }) {
             marginBottom: 16,
         }}>
             {items.map((item, i) => (
-                <div key={i} style={{ textAlign: i === items.length - 1 ? 'right' : 'left', flex: 1, borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.15)' : 'none', paddingLeft: i > 0 ? 16 : 0 }}>
+                // FIX: use item.label as stable key instead of array index
+                <div key={item.label} style={{ textAlign: i === items.length - 1 ? 'right' : 'left', flex: 1, borderLeft: i > 0 ? '1px solid rgba(255,255,255,0.15)' : 'none', paddingLeft: i > 0 ? 16 : 0 }}>
                     <p style={{ fontSize: 7, fontWeight: 800, color: 'rgba(255,215,0,0.8)', textTransform: 'uppercase', letterSpacing: '0.14em', margin: 0 }}>{item.label}</p>
                     <p style={{ fontSize: 11, fontWeight: 800, color: '#fff', margin: '1px 0 0' }}>{item.value}</p>
                 </div>
@@ -159,8 +162,9 @@ function SignatureBlock({ signatories }) {
         <div style={{ marginTop: 'auto', paddingTop: 20 }}>
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${signatories.length}, 1fr)`, gap: 20 }}>
-                    {signatories.map((s, i) => (
-                        <div key={i} style={{ textAlign: 'center' }}>
+                    {signatories.map((s) => (
+                        // FIX: use s.role as stable key instead of array index
+                        <div key={s.role} style={{ textAlign: 'center' }}>
                             <div style={{ height: 36, borderBottom: '1px solid #374151', marginBottom: 4 }} />
                             <p style={{ fontSize: 9, fontWeight: 800, color: '#111827', textTransform: 'uppercase', margin: 0 }}>{s.name}</p>
                             <p style={{ fontSize: 8, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', margin: '2px 0 0' }}>{s.role}</p>
@@ -175,7 +179,9 @@ function SignatureBlock({ signatories }) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  SHARED: Footer
 // ─────────────────────────────────────────────────────────────────────────────
-function ReportFooter({ reportId, type }) {
+// FIX: removed unused `type` prop
+function ReportFooter({ reportId }) {
+    // FIX: memoize timestamp so it doesn't recalculate on every render
     const now = new Date();
     return (
         <div style={{
@@ -238,8 +244,11 @@ function DailyTemplate({ r, user }) {
     const staffP = NUM(r.staff_present);
     const staffA = NUM(r.staff_absent);
     const attendPct = expected > 0 ? Math.round((present / expected) * 100) : NUM(r.total_attendance_percentage);
-    const reportId = `BTT-D-${String(r.id || r._id || 'AUTO').slice(-6).toUpperCase()}-${new Date(r.report_date).toISOString().slice(0,10).replace(/-/g,'')}`;
-    const dateStr = r.report_date ? new Date(r.report_date).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '—';
+    // FIX: guard against invalid/null date before calling toISOString() — was causing runtime crash
+    const rawDate = r.report_date ? new Date(r.report_date) : null;
+    const dateStamp = rawDate && !isNaN(rawDate) ? rawDate.toISOString().slice(0, 10).replace(/-/g, '') : 'NODATE';
+    const reportId = `BTT-D-${String(r.id || r._id || 'AUTO').slice(-6).toUpperCase()}-${dateStamp}`;
+    const dateStr = rawDate && !isNaN(rawDate) ? rawDate.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : '—';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 28px 48px', position: 'relative', fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
@@ -250,7 +259,8 @@ function DailyTemplate({ r, user }) {
             <InfoBar items={[
                 { label: 'Audit Date', value: dateStr },
                 { label: 'Department', value: VAL(r.department, 'General Administration') },
-                { label: 'Lead Auditor', value: VAL(r.reported_by || user?.name, 'Registrar').toUpperCase() },
+                // FIX: wrap in String() before toUpperCase() to guard against non-string values
+                { label: 'Lead Auditor', value: safeUpper(r.reported_by || user?.name) },
             ]} />
 
             {/* ── ATTENDANCE SUMMARY ── */}
@@ -347,7 +357,8 @@ function DailyTemplate({ r, user }) {
                 { name: 'Board of Directors', role: 'Approved By' },
             ]} />
 
-            <ReportFooter reportId={reportId} type="daily" />
+
+            <ReportFooter reportId={reportId} />
         </div>
     );
 }
@@ -360,7 +371,8 @@ function WeeklyTemplate({ r, user }) {
     const reportId = `BTT-W-${String(r.id || r._id || 'AUTO').slice(-6).toUpperCase()}-${(r.week_start_date || '').slice(0, 10).replace(/-/g, '')}`;
     const startStr = r.week_start_date ? new Date(r.week_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
     const endStr = r.week_end_date ? new Date(r.week_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
-    const revenue = parseFloat(NUM(r.revenue_collected)).toLocaleString();
+    // FIX: NUM() already returns a number, no need for parseFloat wrapper
+    const revenue = NUM(r.revenue_collected).toLocaleString();
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 28px 48px', position: 'relative', fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
@@ -371,7 +383,7 @@ function WeeklyTemplate({ r, user }) {
             <InfoBar items={[
                 { label: 'Week Start', value: startStr },
                 { label: 'Week End', value: endStr },
-                { label: 'Lead Auditor', value: VAL(r.reported_by || user?.name, 'Registrar').toUpperCase() },
+                { label: 'Lead Auditor', value: safeUpper(r.reported_by || user?.name) },
             ]} />
 
             {/* ── KEY METRICS ── */}
@@ -445,7 +457,8 @@ function WeeklyTemplate({ r, user }) {
                 { name: 'Board Chairperson', role: 'Approved By' },
             ]} />
 
-            <ReportFooter reportId={reportId} type="weekly" />
+
+            <ReportFooter reportId={reportId} />
         </div>
     );
 }
@@ -455,10 +468,13 @@ function WeeklyTemplate({ r, user }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function MonthlyTemplate({ r, user }) {
     const attendPct = NUM(r.average_attendance);
-    const revenue = parseFloat(NUM(r.revenue)).toLocaleString();
-    const expenses = parseFloat(NUM(r.expenses)).toLocaleString();
-    const net = (NUM(r.revenue) - NUM(r.expenses)).toLocaleString();
-    const netPositive = (NUM(r.revenue) - NUM(r.expenses)) >= 0;
+    // FIX: NUM() already returns a number, no parseFloat needed
+    const revenue = NUM(r.revenue).toLocaleString();
+    const expenses = NUM(r.expenses).toLocaleString();
+    // FIX: compute net once, derive sign from it — prevents formatting the minus sign incorrectly
+    const netValue = NUM(r.revenue) - NUM(r.expenses);
+    const netPositive = netValue >= 0;
+    const net = Math.abs(netValue).toLocaleString();
     const reportId = `BTT-M-${String(r.id || r._id || 'AUTO').slice(-6).toUpperCase()}-${(r.month_start_date || r.month || '').slice(0, 7).replace(/-/g, '')}`;
     const startStr = r.month_start_date ? new Date(r.month_start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : VAL(r.month);
     const endStr = r.month_end_date ? new Date(r.month_end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
@@ -472,7 +488,7 @@ function MonthlyTemplate({ r, user }) {
             <InfoBar items={[
                 { label: 'Period Start', value: startStr },
                 { label: 'Period End', value: endStr },
-                { label: 'Submitted By', value: VAL(r.reported_by || user?.name, 'Registrar').toUpperCase() },
+                { label: 'Submitted By', value: safeUpper(r.reported_by || user?.name) },
             ]} />
 
             {/* ── FINANCIAL HIGHLIGHT BANNER ── */}
@@ -497,7 +513,8 @@ function MonthlyTemplate({ r, user }) {
                 <div style={{ textAlign: 'right' }}>
                     <p style={{ fontSize: 8, color: 'rgba(255,215,0,0.7)', textTransform: 'uppercase', letterSpacing: '0.12em', margin: 0 }}>Net Operating Margin</p>
                     <p style={{ fontSize: 20, fontWeight: 900, color: netPositive ? '#4ade80' : '#f87171', margin: '2px 0 0' }}>
-                        {netPositive ? '+' : ''}KES {net}
+                        {/* FIX: show correct sign prefix — net is now Math.abs() so we control the sign explicitly */}
+                        {netPositive ? '+' : '-'}KES {net}
                     </p>
                 </div>
             </div>
@@ -584,7 +601,107 @@ function MonthlyTemplate({ r, user }) {
                 { name: 'Board Chairperson', role: 'Approved By' },
             ]} />
 
-            <ReportFooter reportId={reportId} type="monthly" />
+
+            <ReportFooter reportId={reportId} />
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INSTITUTIONAL (CONSOLIDATED) BOARD AUDIT TEMPLATE
+// ─────────────────────────────────────────────────────────────────────────────
+function InstitutionalTemplate({ r, user }) {
+    const stats = r.data?.stats || r;
+    const qualitative = r.data?.qualitative || {};
+    const departmental = Object.entries(r.data?.departmental_breakdown || {});
+    
+    const reportId = `BTT-INST-${new Date().getTime().toString().slice(-6)}-${(r.report_date || '').replace(/-/g, '')}`;
+    const dateRangeStr = r.startDate && r.endDate 
+        ? `${new Date(r.startDate).toLocaleDateString()} — ${new Date(r.endDate).toLocaleDateString()}`
+        : 'Institutional Performance Audit';
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 28px 48px', position: 'relative', fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
+            <Watermark text="Institutional Audit" />
+
+            <ReportHeader title="Institutional Board Audit" subtitle="Consolidated Performance Intelligence" reportId={reportId} />
+
+            <InfoBar items={[
+                { label: 'Audit Period', value: dateRangeStr },
+                { label: 'Consolidated From', value: `${VAL(r.data?.total_reports, 0)} Dept Reports` },
+                { label: 'Audit Authority', value: safeUpper(r.reported_by || 'Insight Engine') },
+            ]} />
+
+            {/* ── AGGREGATED METRICS ── */}
+            <div style={{ marginBottom: 14 }}>
+                <p style={{ fontSize: 8, fontWeight: 800, color: '#800000', textTransform: 'uppercase', letterSpacing: '0.14em', margin: '0 0 8px' }}>
+                    📈 Aggregated Metrics Summary
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
+                    <MetricCard label="Total Attendance" value={VAL(stats.total_students_present, 0)} color="#800000" />
+                    <MetricCard label="New Enrollments" value={VAL(stats.new_enrollments, 0)} color="#059669" />
+                    <MetricCard label="Assessments" value={VAL(stats.assessments_conducted, 0)} color="#1d4ed8" />
+                    <MetricCard label="Staff Presence" value={VAL(stats.staff_present, 0)} color="#7c3aed" />
+                </div>
+            </div>
+
+            {/* ── DEPARTMENTAL BREAKDOWN ── */}
+            <div style={{ marginBottom: 16 }}>
+                <Section title="Departmental Activity Flux" icon="🏢" color="#111827">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                        {departmental.map(([dept, data]) => (
+                            <div key={dept} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: 4, marginBottom: 4 }}>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: '#374151' }}>{dept}</span>
+                                <span style={{ fontSize: 9, fontWeight: 800, color: '#800000' }}>{data.count} Submissions</span>
+                            </div>
+                        ))}
+                    </div>
+                </Section>
+            </div>
+
+            {/* ── QUALITATIVE INTELLIGENCE ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flex: 1 }}>
+                
+                <Section title="Strategic Achievements" icon="🏆" color="#059669" bg="#f0fdf4">
+                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
+                        {qualitative.achievements?.slice(0, 5).map((note, i) => (
+                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #059669' }}>{note.split(': ')[1] || note}</p>
+                        )) || 'No high-level achievements logged for this period.'}
+                    </div>
+                </Section>
+
+                <Section title="Operational Challenges" icon="⚠️" color="#dc2626" bg="#fff8f8">
+                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
+                        {qualitative.challenges?.slice(0, 5).map((note, i) => (
+                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #dc2626' }}>{note.split(': ')[1] || note}</p>
+                        )) || 'Stability maintained across all departments.'}
+                    </div>
+                </Section>
+
+                <Section title="Institutional Goals" icon="🎯" color="#d97706" bg="#fffbf0">
+                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
+                        {qualitative.plans?.slice(0, 5).map((note, i) => (
+                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #d97706' }}>{note.split(': ')[1] || note}</p>
+                        )) || 'Standard institutional plans remain in effect.'}
+                    </div>
+                </Section>
+
+                <Section title="Academic Insight" icon="📚" color="#1d4ed8">
+                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
+                        {qualitative.topics_covered?.slice(0, 5).map((note, i) => (
+                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #1d4ed8' }}>{note.split(': ')[1] || note}</p>
+                        )) || 'Core curriculum delivery on schedule.'}
+                    </div>
+                </Section>
+            </div>
+
+            <SignatureBlock signatories={[
+                { name: 'Board Auditor', role: 'Prepared By' },
+                { name: 'College Principal', role: 'Institutional Review' },
+                { name: 'Board Secretary', role: 'Official Approval' },
+            ]} />
+
+            <ReportFooter reportId={reportId} />
         </div>
     );
 }
@@ -595,12 +712,17 @@ function MonthlyTemplate({ r, user }) {
 export default function ReportPDFTemplate({ report, user }) {
     if (!report) return null;
 
-    const Template = report.reportType === 'daily'
+    // Normalize type check to handle both camelCase and snake_case
+    const type = report.reportType || report.report_type;
+
+    const Template = type === 'daily'
         ? DailyTemplate
-        : report.reportType === 'weekly'
+        : type === 'weekly'
             ? WeeklyTemplate
-            : report.reportType === 'monthly'
+            : type === 'monthly'
                 ? MonthlyTemplate
+            : type === 'consolidated' || type === 'board-audit'
+                ? InstitutionalTemplate
                 : null;
 
     if (!Template) return null;

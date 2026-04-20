@@ -22,7 +22,28 @@ export const getAllDailyReports = async (req, res) => {
         }
 
         console.log('Executing SQL query for daily reports...');
-        const reports = await query('SELECT * FROM daily_activity_reports ORDER BY report_date DESC LIMIT 30');
+        const { limit = 30, startDate, endDate } = req.query;
+        let sql = 'SELECT * FROM daily_activity_reports';
+        let params = [];
+        let whereClauses = [];
+
+        if (startDate) {
+            whereClauses.push('report_date >= ?');
+            params.push(startDate);
+        }
+        if (endDate) {
+            whereClauses.push('report_date <= ?');
+            params.push(endDate);
+        }
+
+        if (whereClauses.length > 0) {
+            sql += ' WHERE ' + whereClauses.join(' AND ');
+        }
+
+        sql += ' ORDER BY report_date DESC LIMIT ?';
+        params.push(parseInt(limit));
+
+        const reports = await query(sql, params);
         console.log(`Found ${reports.length} daily reports.`);
         res.json({ success: true, data: reports });
     } catch (error) {
@@ -223,7 +244,8 @@ export const getAllWeeklyReports = async (req, res) => {
         }
 
         console.log('Executing SQL query for weekly reports...');
-        const reports = await query('SELECT * FROM weekly_summary_reports ORDER BY week_start_date DESC LIMIT 20');
+        const { limit = 20 } = req.query;
+        const reports = await query('SELECT * FROM weekly_summary_reports ORDER BY week_start_date DESC LIMIT ?', [parseInt(limit)]);
         console.log(`Found ${reports.length} weekly reports.`);
         res.json({ success: true, data: reports });
     } catch (error) {
@@ -356,7 +378,8 @@ export const getAllMonthlyReports = async (req, res) => {
         }
 
         console.log('Executing SQL query for monthly reports...');
-        const reports = await query('SELECT * FROM monthly_summary_reports ORDER BY month_start_date DESC LIMIT 12');
+        const { limit = 12 } = req.query;
+        const reports = await query('SELECT * FROM monthly_summary_reports ORDER BY month_start_date DESC LIMIT ?', [parseInt(limit)]);
         console.log(`Found ${reports.length} monthly reports.`);
         res.json({ success: true, data: reports });
     } catch (error) {

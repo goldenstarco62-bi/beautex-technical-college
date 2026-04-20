@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS academic_reports (
 -- Daily Activity Reports
 CREATE TABLE IF NOT EXISTS daily_activity_reports (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  report_date DATE NOT NULL UNIQUE,
+  report_date DATE NOT NULL,
   reported_by TEXT NOT NULL,
   department TEXT,
   
@@ -223,14 +223,14 @@ CREATE TABLE IF NOT EXISTS daily_activity_reports (
   challenges_faced TEXT,
   actions_taken TEXT,
   plans_for_next_day TEXT,
-  absent_students_list TEXT,
   notable_events TEXT,
   incidents TEXT,
   achievements TEXT,
   additional_notes TEXT,
   
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(report_date, department)
 );
 
 -- Weekly Summary Reports
@@ -466,6 +466,3 @@ CREATE TABLE IF NOT EXISTS student_daily_reports (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
-
-
-

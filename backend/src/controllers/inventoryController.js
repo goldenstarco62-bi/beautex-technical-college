@@ -1,4 +1,4 @@
-import { query, queryOne, run } from '../config/database.js';
+import { query, queryOne, run, getCurrentDateSQL, getDateIntervalSQL } from '../config/database.js';
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 const generateCode = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -24,12 +24,12 @@ export const getDashboardStats = async (req, res) => {
             queryOne('SELECT COUNT(*) as count, SUM(quantity) as total_qty FROM inv_items WHERE status != ?', ['Discontinued']),
             queryOne('SELECT SUM(quantity * purchase_price) as value FROM inv_items WHERE status != ?', ['Discontinued']),
             query('SELECT COUNT(*) as count FROM inv_items WHERE quantity <= minimum_stock_level AND quantity > 0 AND status = ?', ['Available']),
-            queryOne(`SELECT COUNT(*) as count FROM inv_stock_out WHERE date_issued = date('now') ${!isAdmin ? 'AND issued_to_email = ?' : ''}`, !isAdmin ? [userEmail] : []),
+            queryOne(`SELECT COUNT(*) as count FROM inv_stock_out WHERE date_issued = ${getCurrentDateSQL()} ${!isAdmin ? 'AND issued_to_email = ?' : ''}`, !isAdmin ? [userEmail] : []),
             queryOne(`SELECT COUNT(*) as count FROM inv_department_requests WHERE status = 'Pending' ${!isAdmin ? 'AND requested_by = ?' : ''}`, !isAdmin ? [userEmail] : []),
             query(`SELECT i.name, i.expiry_date, i.quantity, c.name as category 
                    FROM inv_items i LEFT JOIN inv_categories c ON i.category_id = c.id 
-                   WHERE i.expiry_date IS NOT NULL AND i.expiry_date >= date('now') 
-                   AND i.expiry_date <= date('now', '+30 days') AND i.status = 'Available'
+                   WHERE i.expiry_date IS NOT NULL AND i.expiry_date >= ${getCurrentDateSQL()} 
+                   AND i.expiry_date <= ${getDateIntervalSQL(30)} AND i.status = 'Available'
                    ORDER BY i.expiry_date ASC LIMIT 10`),
             query(`SELECT so.*, i.name as item_name, i.unit_type 
                    FROM inv_stock_out so LEFT JOIN inv_items i ON so.item_id = i.id 
@@ -41,9 +41,9 @@ export const getDashboardStats = async (req, res) => {
         ]);
 
         if (isAdmin) {
-            const expiredItems = await queryOne(`SELECT COUNT(*) as count FROM inv_items WHERE expiry_date < date('now') AND status = 'Available'`);
+            const expiredItems = await queryOne(`SELECT COUNT(*) as count FROM inv_items WHERE expiry_date < ${getCurrentDateSQL()} AND status = 'Available'`);
             const outOfStock = await query('SELECT COUNT(*) as count FROM inv_items WHERE quantity = 0 AND status = ?', ['Available']);
-            const damagedItems = await query(`SELECT COUNT(*) as count FROM inv_damage_logs WHERE report_date >= date('now', '-30 days')`);
+            const damagedItems = await query(`SELECT COUNT(*) as count FROM inv_damage_logs WHERE report_date >= ${getDateIntervalSQL(-30)}`);
 
             res.json({
                 totalItems: totalItems?.count || 0,
@@ -160,7 +160,7 @@ export const getItems = async (req, res) => {
             params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`); 
         }
         if (low_stock === 'true') { baseSql += ' AND i.quantity <= i.minimum_stock_level'; }
-        if (expiring === 'true') { baseSql += " AND i.expiry_date IS NOT NULL AND i.expiry_date <= date('now', '+30 days') AND i.expiry_date >= date('now')"; }
+        if (expiring === 'true') { baseSql += ` AND i.expiry_date IS NOT NULL AND i.expiry_date <= ${getDateIntervalSQL(30)} AND i.expiry_date >= ${getCurrentDateSQL()}`; }
 
         // Get total count for pagination
         const countSql = `SELECT COUNT(*) as total ${baseSql}`;
@@ -539,7 +539,7 @@ export const updateDepartmentRequest = async (req, res) => {
         const approved_by = req.user.email;
 
         await run(
-            `UPDATE inv_department_requests SET status=?, approved_by=?, approved_date=date('now'), 
+            `UPDATE inv_department_requests SET status=?, approved_by=?, approved_date=${getCurrentDateSQL()}, 
              rejection_reason=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
             [status, status !== 'Pending' ? approved_by : null, rejection_reason, notes, id]
         );
@@ -550,14 +550,13 @@ export const updateDepartmentRequest = async (req, res) => {
             if (req_row?.item_id) {
                 const item = await queryOne('SELECT * FROM inv_items WHERE id=?', [req_row.item_id]);
                 if (item && item.quantity >= req_row.quantity) {
-                    await run(
-                        `INSERT INTO inv_stock_out (item_id, quantity_issued, department, issued_to, issued_to_email, 
-                         purpose, approved_by, date_issued) VALUES (?, ?, ?, ?, ?, ?, ?, date('now'))`,
+                    await run(`INSERT INTO inv_stock_out (item_id, quantity_issued, department, issued_to, issued_to_email, 
+                         purpose, approved_by, date_issued) VALUES (?, ?, ?, ?, ?, ?, ?, ${getCurrentDateSQL()})`,
                         [req_row.item_id, req_row.quantity, req_row.department,
                             req_row.requested_by_name, req_row.requested_by, req_row.purpose, approved_by]
                     );
                     await run('UPDATE inv_items SET quantity = quantity - ? WHERE id=?', [req_row.quantity, req_row.item_id]);
-                    await run(`UPDATE inv_department_requests SET issued_date=date('now') WHERE id=?`, [id]);
+                    await run(`UPDATE inv_department_requests SET issued_date=${getCurrentDateSQL()} WHERE id=?`, [id]);
                 }
             }
         }

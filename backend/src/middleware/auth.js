@@ -1,23 +1,42 @@
 import jwt from 'jsonwebtoken';
 
+// In-memory cache to debounce last_seen updates (5-minute interval)
+const lastSeenCache = new Map();
+const HEARTBEAT_THROTTLE_MS = 5 * 60 * 1000; 
+
+
 /**
  * Fire-and-forget: update last_seen_at for the authenticated user.
  * Runs asynchronously — never blocks the request pipeline.
  * FIX: Now correctly handles both MongoDB and SQLite databases.
  */
 function touchLastSeen(userId) {
-    const now = new Date().toISOString();
-    import('../config/database.js').then(({ run: dbRun, getProcessedDatabaseUrl }) => {
-        // FIX: Only run SQL update when NOT using MongoDB
+    const nowTs = Date.now();
+    const lastUpdate = lastSeenCache.get(userId) || 0;
+
+    // Only update DB if 5 minutes have passed since last update for this user
+    if (nowTs - lastUpdate < HEARTBEAT_THROTTLE_MS) return;
+
+    lastSeenCache.set(userId, nowTs);
+    const nowStr = new Date(nowTs).toISOString();
+
+    import('../config/database.js').then(({ run: dbRun }) => {
         if (!process.env.MONGODB_URI) {
-            dbRun('UPDATE users SET last_seen_at = ? WHERE id = ?', [now, userId]).catch(() => { });
+            dbRun('UPDATE users SET last_seen_at = ? WHERE id = ?', [nowStr, userId]).catch(() => { });
         } else {
-            // MongoDB: update via Mongoose model
             import('../models/mongo/User.js').then(({ default: User }) => {
-                User.findByIdAndUpdate(userId, { last_seen_at: new Date(now) }).catch(() => { });
+                User.findByIdAndUpdate(userId, { last_seen_at: new Date(nowTs) }).catch(() => { });
             }).catch(() => { });
         }
     }).catch(() => { });
+
+    // Cleanup cache periodically (simple leak prevention)
+    if (lastSeenCache.size > 1000) {
+        const threshold = nowTs - (HEARTBEAT_THROTTLE_MS * 2);
+        for (const [id, ts] of lastSeenCache.entries()) {
+            if (ts < threshold) lastSeenCache.delete(id);
+        }
+    }
 }
 
 export function authenticateToken(req, res, next) {

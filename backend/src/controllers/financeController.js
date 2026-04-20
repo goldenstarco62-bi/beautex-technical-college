@@ -1,4 +1,4 @@
-import { query, queryOne, run, getProcessedDatabaseUrl } from '../config/database.js';
+import { query, queryOne, run, getProcessedDatabaseUrl, getCurrentDateSQL, getDateIntervalSQL, getActiveDbEngine } from '../config/database.js';
 
 const isMongo = () => !!process.env.MONGODB_URI;
 
@@ -632,11 +632,11 @@ export async function getFinanceAnalytics(req, res) {
         ]);
 
         // Velocity SQL (Improved Cross-DB Compatibility)
-        const isPostgres = getProcessedDatabaseUrl()?.startsWith('postgres');
-        const thisMonthStart = isPostgres
+        const engine = getActiveDbEngine();
+        const thisMonthStart = engine === 'postgres'
             ? "date_trunc('month', CURRENT_DATE)"
             : "date('now', 'start of month')";
-        const lastMonthStart = isPostgres
+        const lastMonthStart = engine === 'postgres'
             ? "date_trunc('month', CURRENT_DATE - INTERVAL '1 month')"
             : "date('now', 'start of month', '-1 month')";
 
@@ -681,6 +681,15 @@ export async function getFinanceAnalytics(req, res) {
  */
 export async function mpesaCallback(req, res) {
     try {
+        // SECURITY: Basic verification of source (Header-based)
+        // In production, this should check Safaricom's specific authentication headers or certificates.
+        const authHeader = req.headers['x-mpesa-verification'];
+        // For now, we allow it to proceed but log an audit trail if the header is missing
+        if (!authHeader && process.env.NODE_ENV === 'production') {
+            console.warn('⚠️ Untrusted M-Pesa Callback received (missing verification header)');
+            // return res.status(401).end(); // Uncomment this when headers are configured in Safaricom Portal
+        }
+
         const body = req.body.Body.stkCallback;
         console.log('📱 M-Pesa Callback Received:', JSON.stringify(body, null, 2));
 

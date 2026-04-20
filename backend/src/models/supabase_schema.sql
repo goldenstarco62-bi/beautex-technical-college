@@ -145,8 +145,7 @@ CREATE TABLE IF NOT EXISTS academic_reports (
   theory_score DECIMAL,
   theory_remarks TEXT,
   practical_tasks TEXT,
-  equipment_used TEXT,
-  skill_level TEXT,
+  equipment_used TEXT, Skill_level TEXT,
   safety_compliance TEXT,
   discipline_issues TEXT,
   trainer_observations TEXT,
@@ -159,7 +158,7 @@ CREATE TABLE IF NOT EXISTS academic_reports (
 -- Daily Activity Reports
 CREATE TABLE IF NOT EXISTS daily_activity_reports (
   id SERIAL PRIMARY KEY,
-  report_date DATE NOT NULL UNIQUE,
+  report_date DATE NOT NULL,
   reported_by TEXT NOT NULL,
   department TEXT,
   
@@ -212,7 +211,8 @@ CREATE TABLE IF NOT EXISTS daily_activity_reports (
   additional_notes TEXT,
   
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(report_date, department)
 );
 
 -- Weekly Summary Reports
@@ -419,4 +419,3 @@ CREATE TABLE IF NOT EXISTS student_daily_reports (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-

@@ -44,6 +44,11 @@ export function AuthProvider({ children }) {
                         }
                     } catch (err) {
                         console.error('Auto-refresh user failed:', err);
+                        // If we get a 401/403, our token is likely stale or invalid
+                        if (err.response?.status === 401 || err.response?.status === 403) {
+                            console.warn('Session expired. Logging out...');
+                            logout();
+                        }
                     }
                 };
                 fetchUpdatedUser();
