@@ -143,6 +143,10 @@ export const activityReportsAPI = {
     updateMonthlyReport: (id, data) => api.put(`activity-reports/monthly/${id}`, data),
     deleteMonthlyReport: (id) => api.delete(`activity-reports/monthly/${id}`),
     getSummary: () => api.get('activity-reports/summary'),
+    getById: (id, type) => {
+        if (type === 'daily') return api.get(`activity-reports/daily/id/${id}`);
+        return api.get(`activity-reports/${type}/${id}`);
+    },
     getAutoCapture: (params) => api.get('activity-reports/auto-capture', { params }),
 };
 

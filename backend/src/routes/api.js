@@ -178,6 +178,7 @@ router.delete('/reports/:id', authenticateToken, authorizeRoles('teacher', 'admi
 // Daily Reports
 router.get('/activity-reports/daily', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAllDailyReports);
 router.get('/activity-reports/daily/:date', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getDailyReport);
+router.get('/activity-reports/daily/id/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getDailyReportById);
 router.post('/activity-reports/daily', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.createDailyReport);
 router.put('/activity-reports/daily/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.updateDailyReport);
 router.delete('/activity-reports/daily/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.deleteDailyReport);
@@ -199,6 +200,7 @@ router.delete('/activity-reports/monthly/:id', authenticateToken, authorizeRoles
 // Reports Summary
 router.get('/activity-reports/summary', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getReportsSummary);
 router.get('/activity-reports/auto-capture', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAutoCaptureStats);
+router.get('/activity-reports/consolidated', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getConsolidatedReport);
 
 
 // Dashboard Stats

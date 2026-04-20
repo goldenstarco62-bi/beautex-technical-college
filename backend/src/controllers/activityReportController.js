@@ -50,6 +50,25 @@ export const getDailyReport = async (req, res) => {
     }
 };
 
+export const getDailyReportById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (await isMongo()) {
+            const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
+            const report = await ActivityReport.findById(id);
+            if (!report || report.report_type !== 'daily') return res.status(404).json({ success: false, error: 'Report not found' });
+            return res.json({ success: true, data: report });
+        }
+
+        const report = await queryOne('SELECT * FROM daily_activity_reports WHERE id = ?', [id]);
+        if (!report) return res.status(404).json({ success: false, error: 'Report not found' });
+        res.json({ success: true, data: report });
+    } catch (error) {
+        console.error('Error fetching daily report by ID:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 export const createDailyReport = async (req, res) => {
     // Sanitize numeric inputs for SQL compatibility
     const parseNum = (val) => {
@@ -71,7 +90,7 @@ export const createDailyReport = async (req, res) => {
 
         const {
             report_date, department,
-            total_students_expected, total_students_present, total_students_absent, staff_present, staff_absent, late_arrivals,
+            total_students_expected, total_students_present, total_students_absent, absent_students_list, staff_present, staff_absent, late_arrivals,
             classes_conducted, topics_covered, practical_sessions, assessments_conducted, total_attendance_percentage,
             meetings_held, admissions_registrations, new_enrollments, fees_collection_summary,
             disciplinary_cases, discipline_issues, student_feedback, counseling_support,
@@ -88,7 +107,7 @@ export const createDailyReport = async (req, res) => {
         const result = await run(
             `INSERT INTO daily_activity_reports (
                 report_date, reported_by, department,
-                total_students_expected, total_students_present, total_students_absent, staff_present, staff_absent, late_arrivals,
+                total_students_expected, total_students_present, total_students_absent, absent_students_list, staff_present, staff_absent, late_arrivals,
                 classes_conducted, topics_covered, practical_sessions, assessments_conducted, total_attendance_percentage,
                 meetings_held, admissions_registrations, new_enrollments, fees_collection_summary,
                 disciplinary_cases, discipline_issues, student_feedback, counseling_support,
@@ -97,7 +116,7 @@ export const createDailyReport = async (req, res) => {
                 challenges_faced, actions_taken, plans_for_next_day,
                 notable_events, incidents, achievements, additional_notes
              )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 report_date,
                 req.user.name || req.user.email,
@@ -105,6 +124,7 @@ export const createDailyReport = async (req, res) => {
                 parseNum(total_students_expected),
                 parseNum(total_students_present),
                 parseNum(total_students_absent),
+                absent_students_list,
                 parseNum(staff_present),
                 parseNum(staff_absent),
                 parseNum(late_arrivals),
@@ -481,6 +501,15 @@ export const getAutoCaptureStats = async (req, res) => {
             ]);
 
             const facultyCount = await Faculty.countDocuments({});
+            
+            // NEW: Fetch absent student names for auto-population
+            const absentStudents = await Attendance.aggregate([
+                { $match: { date: { $gte: start, $lte: end }, status: 'Absent' } },
+                { $lookup: { from: 'students', localField: 'student_id', foreignField: 'id', as: 'student' } },
+                { $unwind: '$student' },
+                { $project: { name: '$student.name' } }
+            ]);
+            const absentNames = absentStudents.map(s => s.name);
 
             const stats = {
                 attendance: {
@@ -490,7 +519,8 @@ export const getAutoCaptureStats = async (req, res) => {
                 },
                 new_enrollments: newStudents,
                 revenue_collected: revenue[0]?.total || 0,
-                total_faculty: facultyCount
+                total_faculty: facultyCount,
+                absent_student_names: absentNames
             };
 
             return res.json({ success: true, data: stats });
@@ -529,6 +559,15 @@ export const getAutoCaptureStats = async (req, res) => {
             isPostgres ? 'SELECT COUNT(*) as count FROM faculty' : 'SELECT COUNT(*) as count FROM faculty'
         );
 
+        // NEW: Fetch absent student names for auto-population (SQL)
+        const absentRows = await query(
+            isPostgres
+                ? 'SELECT s.name FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.date BETWEEN $1 AND $2 AND a.status = \'Absent\''
+                : 'SELECT s.name FROM attendance a JOIN students s ON a.student_id = s.id WHERE a.date BETWEEN ? AND ? AND a.status = \'Absent\'',
+            [start, end]
+        );
+        const absentNames = absentRows.map(r => r.name);
+
         const rows = Array.isArray(attendanceRows) ? attendanceRows : [];
         const stats = {
             attendance: {
@@ -538,7 +577,8 @@ export const getAutoCaptureStats = async (req, res) => {
             },
             new_enrollments: enrollments?.count || 0,
             revenue_collected: parseFloat(payments?.total || 0),
-            total_faculty: faculty?.count || 0
+            total_faculty: faculty?.count || 0,
+            absent_student_names: absentNames
         };
 
         res.json({ success: true, data: stats });
@@ -583,3 +623,103 @@ export const getReportsSummary = async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 };
+
+// ============ CONSOLIDATED INSTITUTIONAL AUDIT ============
+
+export const getConsolidatedReport = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        if (!startDate || !endDate) {
+            return res.status(400).json({ success: false, error: 'Start and end dates are required' });
+        }
+
+        let reports = [];
+        if (await isMongo()) {
+            const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
+            reports = await ActivityReport.find({
+                report_type: 'daily',
+                report_date: { $gte: new Date(startDate), $lte: new Date(endDate) }
+            });
+        } else {
+            reports = await query(
+                'SELECT * FROM daily_activity_reports WHERE report_date BETWEEN ? AND ? ORDER BY report_date ASC',
+                [startDate, endDate]
+            );
+        }
+
+        if (reports.length === 0) {
+            return res.json({ success: true, data: null, message: 'No reports found for this period' });
+        }
+
+        // Initialize Aggregation
+        const consolidated = {
+            total_reports: reports.length,
+            stats: {
+                total_students_present: 0,
+                total_students_absent: 0,
+                staff_present: 0,
+                staff_absent: 0,
+                late_arrivals: 0,
+                new_enrollments: 0,
+                inquiries_received: 0,
+                walk_ins: 0,
+                assessments_conducted: 0
+            },
+            departmental_breakdown: {},
+            qualitative: {
+                topics_covered: [],
+                practical_sessions: [],
+                meetings_held: [],
+                disciplinary_cases: [],
+                challenges: [],
+                achievements: [],
+                incidents: [],
+                notable_events: [],
+                plans: [],
+                additional_notes: []
+            }
+        };
+
+        reports.forEach(report => {
+            const dept = report.department || 'General';
+            
+            // Sum stats
+            consolidated.stats.total_students_present += (report.total_students_present || 0);
+            consolidated.stats.total_students_absent += (report.total_students_absent || 0);
+            consolidated.stats.staff_present += (report.staff_present || 0);
+            consolidated.stats.staff_absent += (report.staff_absent || 0);
+            consolidated.stats.late_arrivals += (report.late_arrivals || 0);
+            consolidated.stats.new_enrollments += (report.new_enrollments || 0);
+            consolidated.stats.inquiries_received += (report.inquiries_received || 0);
+            consolidated.stats.walk_ins += (report.walk_ins || 0);
+            consolidated.stats.assessments_conducted += (report.assessments_conducted || 0);
+
+            // Per Department Data
+            if (!consolidated.departmental_breakdown[dept]) {
+                consolidated.departmental_breakdown[dept] = { count: 0, attendance_sum: 0 };
+            }
+            consolidated.departmental_breakdown[dept].count++;
+            
+            // Collect qualitative entries with department/date context
+            const dateStr = new Date(report.report_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+            const prefix = `[${dept} - ${dateStr}]: `;
+
+            if (report.topics_covered) consolidated.qualitative.topics_covered.push(prefix + report.topics_covered);
+            if (report.practical_sessions) consolidated.qualitative.practical_sessions.push(prefix + report.practical_sessions);
+            if (report.meetings_held) consolidated.qualitative.meetings_held.push(prefix + report.meetings_held);
+            if (report.discipline_issues) consolidated.qualitative.disciplinary_cases.push(prefix + report.discipline_issues);
+            if (report.challenges_faced) consolidated.qualitative.challenges.push(prefix + report.challenges_faced);
+            if (report.achievements) consolidated.qualitative.achievements.push(prefix + report.achievements);
+            if (report.incidents) consolidated.qualitative.incidents.push(prefix + report.incidents);
+            if (report.notable_events) consolidated.qualitative.notable_events.push(prefix + report.notable_events);
+            if (report.plans_for_next_day) consolidated.qualitative.plans.push(prefix + report.plans_for_next_day);
+            if (report.additional_notes) consolidated.qualitative.additional_notes.push(prefix + report.additional_notes);
+        });
+
+        res.json({ success: true, data: consolidated });
+    } catch (error) {
+        console.error('Error consolidating reports:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+

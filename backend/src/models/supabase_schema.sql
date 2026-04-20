@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS daily_activity_reports (
   total_students_expected INTEGER DEFAULT 0,
   total_students_present INTEGER DEFAULT 0,
   total_students_absent INTEGER DEFAULT 0,
+  absent_students_list TEXT,
   staff_present INTEGER DEFAULT 0,
   staff_absent INTEGER DEFAULT 0,
   late_arrivals INTEGER DEFAULT 0,
