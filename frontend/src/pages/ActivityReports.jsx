@@ -226,40 +226,60 @@ export default function ActivityReports() {
     const handleSubmitDaily = async (e) => {
         if (e) e.preventDefault();
         
+        console.log('🚀 [ActivityReports] Starting Daily Submission...', {
+            modalMode,
+            report_date: dailyForm.report_date,
+            department: dailyForm.department
+        });
+
         // Manual Validation to prevent silent browser blocks
         if (!dailyForm.report_date) {
+            console.warn('❌ [ActivityReports] Validation Failed: report_date missing');
             toast.error('Report date is required');
             return;
         }
         if (!dailyForm.department) {
+            console.warn('❌ [ActivityReports] Validation Failed: department missing');
             toast.error('Department is required');
             return;
         }
 
         const reportId = editingReport?.id || editingReport?._id || dailyForm.id || dailyForm._id;
-        setLoading(true);
+        console.log('🆔 [ActivityReports] Target Report ID:', reportId);
         
+        setLoading(true);
+
         try {
             if (modalMode === 'create') {
+                console.log('🆕 [ActivityReports] Calling createDailyReport API with payload:', dailyForm);
                 await activityReportsAPI.createDailyReport(dailyForm);
                 toast.success('Daily report archived successfully');
             } else {
                 if (!reportId) {
-                    console.error('Missing ID:', { editingReport, dailyForm });
+                    console.error('❌ [ActivityReports] Update Failed: Missing ID', { editingReport, dailyForm });
                     throw new Error('Institutional Reference ID missing');
                 }
+                console.log(`🆙 [ActivityReports] Updating report ${reportId}...`);
                 await activityReportsAPI.updateDailyReport(reportId, dailyForm);
                 toast.success('Report revision authorized');
             }
+            console.log('✅ [ActivityReports] Submission Successful. Closing modal...');
             setShowModal(false);
             resetForms();
             fetchReports();
         } catch (error) {
-            console.error('Daily submission error:', error);
+            console.error('❌ [ActivityReports] Daily submission error:', error);
             const errorMsg = error.response?.data?.error || error.message || 'Archive sequence failed';
-            toast.error(errorMsg);
+            
+            // Specialized handling for duplicates
+            if (errorMsg.toLowerCase().includes('unique') || errorMsg.toLowerCase().includes('already exists')) {
+                toast.error(`A report for ${dailyForm.report_date} in ${dailyForm.department} already exists.`);
+            } else {
+                toast.error(errorMsg);
+            }
         } finally {
             setLoading(false);
+            console.log('🔚 [ActivityReports] Submission procedure complete.');
         }
     };
 
@@ -1914,9 +1934,17 @@ export default function ActivityReports() {
                                         </button>
                                         <button
                                             type="submit"
-                                            className="px-8 py-4 rounded-2xl bg-maroon text-gold font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon/90 transition-all shadow-xl hover:-translate-y-1 active:scale-95 border border-gold/20"
+                                            disabled={loading}
+                                            className={`px-8 py-4 rounded-2xl bg-maroon text-gold font-black text-[10px] uppercase tracking-[0.2em] transition-all shadow-xl border border-gold/20 ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-maroon/90 hover:-translate-y-1 active:scale-95'}`}
                                         >
-                                            {modalMode === 'create' ? 'Seal & Submit Audit' : 'Confirm Revision'}
+                                            {loading ? (
+                                                <div className="flex items-center gap-2">
+                                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                                    <span>{modalMode === 'create' ? 'Archiving...' : 'Updating...'}</span>
+                                                </div>
+                                            ) : (
+                                                modalMode === 'create' ? 'Seal & Submit Audit' : 'Confirm Revision'
+                                            )}
                                         </button>
                                     </div>
                                 </form>

@@ -125,6 +125,7 @@ export const createDailyReport = async (req, res) => {
             return res.status(400).json({ success: false, error: 'Report date is required' });
         }
 
+        console.log(`🆕 [activityReportController] Creating daily report for ${report_date} / ${department}`);
         const result = await run(
             `INSERT INTO daily_activity_reports (
                 report_date, reported_by, department,
@@ -178,10 +179,16 @@ export const createDailyReport = async (req, res) => {
                 additional_notes
             ]
         );
+        console.log(`✅ [activityReportController] Report created successfully. ID: ${result.lastID}`);
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
-        console.error('Error creating daily report:', error);
-        res.status(500).json({ success: false, error: error.message, detail: error.stack });
+        console.error('❌ [activityReportController] Error creating daily report:', error);
+        // Provide more detailed feedback for common SQL constraints
+        let errorMsg = error.message;
+        if (error.message.includes('UNIQUE constraint failed') || error.code === '23505') {
+            errorMsg = `A report for this date (${req.body.report_date}) and department already exists.`;
+        }
+        res.status(500).json({ success: false, error: errorMsg, detail: error.stack });
     }
 };
 
@@ -189,6 +196,7 @@ export const updateDailyReport = async (req, res) => {
     try {
         const { id } = req.params;
         const { report_date } = req.body;
+        console.log(`🆙 [activityReportController] Updating daily report ID: ${id}`);
 
         if (await isMongo()) {
             const ActivityReport = (await import('../models/mongo/ActivityReport.js')).default;
@@ -202,14 +210,37 @@ export const updateDailyReport = async (req, res) => {
             return res.json({ success: true, message: 'Report updated successfully' });
         }
 
-        const fields = Object.keys(req.body).filter(k => k !== 'id');
+        // --- SQL Path: Sanitize input fields to prevent query failures on extra fields ---
+        const allowedColumns = [
+            'report_date', 'department', 'total_students_expected', 'total_students_present', 
+            'total_students_absent', 'absent_students_list', 'staff_present', 'staff_absent', 
+            'late_arrivals', 'classes_conducted', 'topics_covered', 'practical_sessions', 
+            'assessments_conducted', 'total_attendance_percentage', 'meetings_held', 
+            'admissions_registrations', 'new_enrollments', 'fees_collection_summary', 
+            'disciplinary_cases', 'discipline_issues', 'student_feedback', 'counseling_support', 
+            'facilities_issues', 'equipment_maintenance', 'cleaning_maintenance', 
+            'internet_ict_status', 'inquiries_received', 'walk_ins', 'social_media_activities', 
+            'challenges_faced', 'actions_taken', 'plans_for_next_day', 'notable_events', 
+            'incidents', 'achievements', 'additional_notes'
+        ];
+
+        const fields = Object.keys(req.body).filter(k => allowedColumns.includes(k));
+        if (fields.length === 0) {
+            console.warn('⚠️ [activityReportController] Update attempt with no valid fields');
+            return res.status(400).json({ success: false, error: 'No valid fields provided for update' });
+        }
+
         const setClause = fields.map(f => `${f} = ?`).join(', ');
         const values = fields.map(f => req.body[f]);
         values.push(id);
-        await run(`UPDATE daily_activity_reports SET ${setClause} WHERE id = ?`, values);
+        
+        console.log(`📝 [activityReportController] SQL Update query fields: ${fields.join(', ')}`);
+        await run(`UPDATE daily_activity_reports SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, values);
+        
+        console.log(`✅ [activityReportController] Report updated successfully.`);
         res.json({ success: true, message: 'Report updated successfully' });
     } catch (error) {
-        console.error('Error updating daily report:', error);
+        console.error('❌ [activityReportController] Error updating daily report:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 };
