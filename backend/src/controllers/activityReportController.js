@@ -604,8 +604,9 @@ export const getAutoCaptureStats = async (req, res) => {
         // Date casting varies between SQLite and PostgreSQL
         const dateCast = isPostgres ? 'CAST(payment_date AS DATE)' : 'DATE(payment_date)';
         const paymentPlaceholders = isPostgres ? '$1 AND $2' : '? AND ?';
+        // FIX: Wrap BETWEEN in parens so "AND status" is a separate condition, not part of BETWEEN expression
         const payments = await queryOne(
-            `SELECT SUM(amount) as total FROM payments WHERE ${dateCast} BETWEEN ${paymentPlaceholders} AND status = 'Completed'`,
+            `SELECT SUM(amount) as total FROM payments WHERE (${dateCast} BETWEEN ${paymentPlaceholders}) AND status = 'Completed'`,
             [start, end]
         );
 

@@ -148,6 +148,7 @@ export const activityReportsAPI = {
         return api.get(`activity-reports/${type}/${id}`);
     },
     getAutoCapture: (params) => api.get('activity-reports/auto-capture', { params }),
+    getConsolidated: (params) => api.get('activity-reports/consolidated', { params }),
 };
 
 

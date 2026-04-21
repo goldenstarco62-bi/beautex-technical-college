@@ -177,8 +177,9 @@ router.delete('/reports/:id', authenticateToken, authorizeRoles('teacher', 'admi
 // Activity Reports (Admin/Superadmin Only)
 // Daily Reports
 router.get('/activity-reports/daily', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAllDailyReports);
-router.get('/activity-reports/daily/:date', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getDailyReport);
+// FIX: Specific routes must come before parameterized wildcard routes to avoid shadowing
 router.get('/activity-reports/daily/id/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getDailyReportById);
+router.get('/activity-reports/daily/:date', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getDailyReport);
 router.post('/activity-reports/daily', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.createDailyReport);
 router.put('/activity-reports/daily/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.updateDailyReport);
 router.delete('/activity-reports/daily/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.deleteDailyReport);
