@@ -275,6 +275,14 @@ async function runPostgresMigrations(database) {
         try {
             await database.query('ALTER TABLE academic_reports DROP CONSTRAINT IF EXISTS academic_reports_student_id_fkey');
             console.log('✅ Postgres Migration: Relaxed academic_reports constraints');
+            
+            // New Migration: Add report_date to academic_reports if missing
+            try {
+                await database.query('ALTER TABLE academic_reports ADD COLUMN IF NOT EXISTS report_date DATE');
+                console.log('✅ Postgres Migration: Added report_date to academic_reports');
+            } catch (err) {
+                console.warn('⚠️ Postgres Migration warning (academic_reports report_date):', err.message);
+            }
         } catch (e) {
             // Might fail if constraint name is different or doesn't exist, ignore
         }
@@ -859,6 +867,14 @@ async function runSqliteMigrations(database) {
                 FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
             )
         `);
+
+        // Migration: Add report_date to academic_reports (SQLite)
+        const academicInfo = await database.all("PRAGMA table_info('academic_reports')");
+        if (academicInfo.length > 0 && !academicInfo.some(col => col.name === 'report_date')) {
+            console.log('🔄 SQLite Migration: Adding report_date to academic_reports...');
+            await database.run('ALTER TABLE academic_reports ADD COLUMN report_date DATE');
+            console.log('✅ report_date column added to SQLite academic_reports');
+        }
 
         // Migration: Add student comment columns to existing student_daily_reports
         const sdrInfo = await database.all("PRAGMA table_info('student_daily_reports')");

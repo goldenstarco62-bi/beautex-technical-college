@@ -137,6 +137,7 @@ CREATE TABLE IF NOT EXISTS academic_reports (
   course_unit TEXT NOT NULL,
   trainer_name TEXT NOT NULL,
   trainer_email TEXT NOT NULL,
+  report_date DATE,
   reporting_period TEXT NOT NULL,
   total_lessons INTEGER DEFAULT 0,
   attended_lessons INTEGER DEFAULT 0,

@@ -259,13 +259,15 @@ export default function AcademicReports() {
         try {
             if (editingReport) {
                 await reportsAPI.update(editingReport._id || editingReport.id, reportPayload);
+                alert('Success: Academic report updated successfully.');
             } else {
                 await reportsAPI.create(reportPayload);
+                alert('Success: Academic report committed to portal.');
             }
             setShowModal(false);
             setEditingReport(null);
             setFormData(EMPTY_FORM);
-            fetchReports(true); // Changed 'silent' to 'true' as it's a boolean
+            await fetchReports(true); 
             setTheoryRows([{ topic: '', content: '' }]);
             setPracticalRows([{ task: '', equipment: '' }]);
         } catch (error) {

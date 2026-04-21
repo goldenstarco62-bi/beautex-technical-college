@@ -102,12 +102,15 @@ export const createReport = async (req, res) => {
 
     const {
         student_id, student_name, registration_number, course_unit, reporting_period,
+        report_date: raw_report_date,
         total_lessons, attended_lessons, attendance_percentage,
         theory_topics, theory_score, theory_remarks,
         practical_tasks, equipment_used, skill_level, safety_compliance,
         discipline_issues, trainer_observations,
         progress_summary, recommendation
     } = reportData;
+
+    const report_date = raw_report_date || new Date().toISOString().split('T')[0];
 
     if (!student_id || !course_unit || !reporting_period) {
         return res.status(400).json({ error: 'Student ID, Course, and Reporting Period are required' });
@@ -125,7 +128,7 @@ export const createReport = async (req, res) => {
             const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
             const newReport = new AcademicReport({
                 student_id, student_name, registration_number, course_unit,
-                trainer_name, trainer_email, reporting_period,
+                trainer_name, trainer_email, reporting_period, report_date,
                 total_lessons: parseNum(total_lessons),
                 attended_lessons: parseNum(attended_lessons),
                 attendance_percentage: parseNum(attendance_percentage),
@@ -145,16 +148,16 @@ export const createReport = async (req, res) => {
         const result = await run(
             `INSERT INTO academic_reports (
                 student_id, student_name, registration_number, course_unit,
-                trainer_name, trainer_email, reporting_period,
+                trainer_name, trainer_email, reporting_period, report_date,
                 total_lessons, attended_lessons, attendance_percentage,
                 theory_topics, theory_score, theory_remarks,
                 practical_tasks, equipment_used, skill_level, safety_compliance,
                 discipline_issues, trainer_observations,
                 progress_summary, recommendation
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 student_id, student_name, registration_number, course_unit,
-                trainer_name, normalizedEmail, reporting_period,
+                trainer_name, normalizedEmail, reporting_period, report_date,
                 parseNum(total_lessons), parseNum(attended_lessons), parseNum(attendance_percentage),
                 theory_topics, parseNum(theory_score), theory_remarks,
                 practical_tasks, equipment_used, skill_level, safety_compliance,
@@ -231,7 +234,7 @@ export const updateReport = async (req, res) => {
 
             const allowedFields = [
                 'student_id', 'student_name', 'registration_number', 'course_unit',
-                'trainer_name', 'reporting_period', 'total_lessons', 'attended_lessons',
+                'trainer_name', 'reporting_period', 'report_date', 'total_lessons', 'attended_lessons',
                 'attendance_percentage', 'theory_topics', 'theory_score', 'theory_remarks',
                 'practical_tasks', 'equipment_used', 'skill_level', 'safety_compliance',
                 'discipline_issues', 'trainer_observations', 'progress_summary', 'recommendation'
@@ -264,7 +267,7 @@ export const updateReport = async (req, res) => {
 
         const allowedFields = [
             'student_id', 'student_name', 'registration_number', 'course_unit',
-            'trainer_name', 'reporting_period', 'total_lessons', 'attended_lessons',
+            'trainer_name', 'reporting_period', 'report_date', 'total_lessons', 'attended_lessons',
             'attendance_percentage', 'theory_topics', 'theory_score', 'theory_remarks',
             'practical_tasks', 'equipment_used', 'skill_level', 'safety_compliance',
             'discipline_issues', 'trainer_observations', 'progress_summary', 'recommendation'
