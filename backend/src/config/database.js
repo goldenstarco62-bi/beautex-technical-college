@@ -501,6 +501,7 @@ async function runPostgresMigrations(database) {
         const newDailyCols = [
             { name: 'department', type: 'TEXT' },
             { name: 'total_students_expected', type: 'INTEGER DEFAULT 0' },
+            { name: 'absent_students_list', type: 'TEXT' },
             { name: 'topics_covered', type: 'TEXT' },
             { name: 'practical_sessions', type: 'TEXT' },
             { name: 'meetings_held', type: 'TEXT' },
@@ -812,6 +813,7 @@ async function runSqliteMigrations(database) {
         const newDailyColsSQLite = [
             { name: 'department', type: 'TEXT' },
             { name: 'total_students_expected', type: 'INTEGER DEFAULT 0' },
+            { name: 'absent_students_list', type: 'TEXT' },
             { name: 'topics_covered', type: 'TEXT' },
             { name: 'practical_sessions', type: 'TEXT' },
             { name: 'meetings_held', type: 'TEXT' },
@@ -1008,11 +1010,6 @@ export async function run(sql, params = []) {
 
             if (targetTable === 'users' || targetTable.endsWith('.users')) {
                 pgSql += ' ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, must_change_password = EXCLUDED.must_change_password, status = EXCLUDED.status';
-            } else if (['students', 'courses', 'faculty'].includes(targetTable) ||
-                targetTable.endsWith('.students') ||
-                targetTable.endsWith('.courses') ||
-                targetTable.endsWith('.faculty')) {
-                pgSql += ' ON CONFLICT (id) DO NOTHING';
             }
         }
 

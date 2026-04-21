@@ -49,7 +49,10 @@ const loginValidation = [
 
 const registerValidation = [
     body('email').isEmail().withMessage('Valid email is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+    body('password')
+        .isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
+        .matches(/\d/).withMessage('Password must contain at least one number')
+        .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage('Password must contain at least one special character'),
     body('role').isIn(['superadmin', 'admin', 'teacher', 'student']).withMessage('Invalid role'),
     validate
 ];

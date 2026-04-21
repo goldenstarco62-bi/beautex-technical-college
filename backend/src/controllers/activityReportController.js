@@ -124,6 +124,9 @@ export const createDailyReport = async (req, res) => {
         if (!report_date) {
             return res.status(400).json({ success: false, error: 'Report date is required' });
         }
+        if (!department) {
+            return res.status(400).json({ success: false, error: 'Department / Section is required' });
+        }
 
         console.log(`🆕 [activityReportController] Creating daily report for ${report_date} / ${department}`);
         const result = await run(
@@ -184,11 +187,18 @@ export const createDailyReport = async (req, res) => {
     } catch (error) {
         console.error('❌ [activityReportController] Error creating daily report:', error);
         // Provide more detailed feedback for common SQL constraints
-        let errorMsg = error.message;
-        if (error.message.includes('UNIQUE constraint failed') || error.code === '23505') {
-            errorMsg = `A report for this date (${req.body.report_date}) and department already exists.`;
+        const isDuplicate = error.message?.includes('UNIQUE constraint failed') ||
+                            error.code === '23505' ||
+                            error.message?.toLowerCase().includes('unique');
+        if (isDuplicate) {
+            const dateStr = req.body.report_date || '';
+            const deptStr = req.body.department || '';
+            return res.status(409).json({
+                success: false,
+                error: `A report for ${dateStr} in ${deptStr} already exists. Edit the existing record instead.`
+            });
         }
-        res.status(500).json({ success: false, error: errorMsg, detail: error.stack });
+        res.status(500).json({ success: false, error: error.message, detail: error.stack });
     }
 };
 
@@ -664,12 +674,13 @@ export const getReportsSummary = async (req, res) => {
         const monthlyCount = await queryOne('SELECT COUNT(*) as count FROM monthly_summary_reports');
         const latestDaily = await queryOne('SELECT * FROM daily_activity_reports ORDER BY report_date DESC LIMIT 1');
 
+        // FIX: PostgreSQL COUNT(*) returns a bigint string — parse to int for JSON safety
         res.json({
             success: true,
             data: {
-                daily_reports: dailyCount?.count || 0,
-                weekly_reports: weeklyCount?.count || 0,
-                monthly_reports: monthlyCount?.count || 0,
+                daily_reports: parseInt(dailyCount?.count || 0, 10),
+                weekly_reports: parseInt(weeklyCount?.count || 0, 10),
+                monthly_reports: parseInt(monthlyCount?.count || 0, 10),
                 latest_daily: latestDaily
             }
         });

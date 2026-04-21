@@ -78,9 +78,12 @@ export async function register(req, res) {
             return res.status(400).json({ error: 'Email, password, and role are required' });
         }
 
-        const existingUser = await findUserByEmail(email);
+        // Normalize email to lowercase before any lookup or storage
+        const normalizedEmail = String(email).toLowerCase().trim();
+
+        const existingUser = await findUserByEmail(normalizedEmail);
         if (existingUser) {
-            return res.status(409).json({ error: 'User already exists' });
+            return res.status(409).json({ error: `An account with email "${normalizedEmail}" already exists.` });
         }
 
         const strength = validatePasswordStrength(password);
@@ -89,15 +92,42 @@ export async function register(req, res) {
         }
 
         const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-        const savedUser = await createUser(email, hashedPassword, role);
+        const savedUser = await createUser(normalizedEmail, hashedPassword, role);
+
+        // Audit log successful registration
+        try {
+            await logActivity({
+                userEmail: req.user?.email || normalizedEmail,
+                action: 'REGISTER_USER',
+                resource: 'users',
+                resourceId: String(savedUser._id || savedUser.id),
+                details: `New ${role} account created for ${normalizedEmail}`,
+                ipAddress: req.ip
+            });
+        } catch (auditErr) {
+            // Audit failure must never break the main flow
+            console.warn('⚠️ Audit log failed for REGISTER_USER:', auditErr.message);
+        }
+
+        console.log(`✅ [authController] User registered: ${normalizedEmail} (${role})`);
 
         res.status(201).json({
-            message: 'User registered successfully',
+            success: true,
+            message: `Account created successfully for ${normalizedEmail}`,
             userId: savedUser._id || savedUser.id
         });
     } catch (error) {
         console.error('Register error:', error);
-        res.status(500).json({ error: 'Failed to register user' });
+
+        // Catch race-condition duplicate (two requests at the same millisecond)
+        const isDuplicate = error.message?.includes('UNIQUE constraint failed') ||
+                            error.code === '23505' ||
+                            error.message?.toLowerCase().includes('duplicate key');
+        if (isDuplicate) {
+            return res.status(409).json({ error: `An account with this email already exists.` });
+        }
+
+        res.status(500).json({ error: 'Failed to register user. Please try again.' });
     }
 }
 

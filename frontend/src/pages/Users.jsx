@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { usersAPI, studentsAPI, facultyAPI } from '../services/api';
+import { usersAPI, authAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 import {
     Shield, User, Mail, Trash2, CheckCircle, XCircle,
-    MoreVertical, Key, Lock, Unlock, FileText,
+    Key, Lock, Unlock, FileText, EyeOff,
     Printer, Download, Eye, Clock, UserPlus, DollarSign,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, AlertCircle, Plus
 } from 'lucide-react';
 
 export default function Users() {
@@ -18,6 +19,13 @@ export default function Users() {
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+
+    // Create User Modal state
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createForm, setCreateForm] = useState({ email: '', password: '', role: 'student' });
+    const [createLoading, setCreateLoading] = useState(false);
+    const [createError, setCreateError] = useState('');
+    const [showCreatePassword, setShowCreatePassword] = useState(false);
 
     const tabs = [
         'All Users', 'Students', 'Trainers', 'Admins', 'Suspended', 'Pending Approval'
@@ -42,13 +50,59 @@ export default function Users() {
         return () => clearInterval(interval);
     }, []);
 
+    const handleCreateUser = async (e) => {
+        e.preventDefault();
+        setCreateError('');
+
+        // Client-side validation matching backend rules
+        if (!createForm.email || !createForm.password || !createForm.role) {
+            setCreateError('All fields are required.');
+            return;
+        }
+        if (createForm.password.length < 8) {
+            setCreateError('Password must be at least 8 characters long.');
+            return;
+        }
+        if (!/\d/.test(createForm.password)) {
+            setCreateError('Password must contain at least one number.');
+            return;
+        }
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(createForm.password)) {
+            setCreateError('Password must contain at least one special character.');
+            return;
+        }
+
+        setCreateLoading(true);
+        try {
+            await authAPI.register(createForm.email, createForm.password, createForm.role);
+            toast.success(`✅ Account created for ${createForm.email}`);
+            setShowCreateModal(false);
+            setCreateForm({ email: '', password: '', role: 'student' });
+            setCreateError('');
+            fetchUsers();
+        } catch (err) {
+            const status = err.response?.status;
+            const msg = err.response?.data?.error || err.message || 'Failed to create account.';
+            if (status === 409) {
+                setCreateError(`⚠️ ${msg}`);
+            } else if (status === 400) {
+                setCreateError(`Validation: ${msg}`);
+            } else {
+                setCreateError(msg);
+            }
+        } finally {
+            setCreateLoading(false);
+        }
+    };
+
     const handleRoleChange = async (userId, newRole) => {
         if (!window.confirm(`Formal Authorization: Confirm role transition to ${newRole}?`)) return;
         try {
             await usersAPI.updateRole(userId, newRole);
             fetchUsers();
+            toast.success(`Role updated to ${newRole}`);
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to update role');
+            toast.error(error.response?.data?.error || 'Failed to update role');
         }
     };
 
@@ -64,8 +118,9 @@ export default function Users() {
             if (selectedUser?.id === userId) {
                 setSelectedUser(prev => ({ ...prev, status: newStatus }));
             }
+            toast.success(`Account status set to ${newStatus}`);
         } catch (error) {
-            alert('Status update failed');
+            toast.error(error.response?.data?.error || 'Status update failed');
         }
     };
 
@@ -73,15 +128,15 @@ export default function Users() {
         if (!window.confirm(`Security Reset: Generate temporary credentials for ${userEmail}?`)) return;
         try {
             await usersAPI.resetPassword(userId);
-            alert(`Temporary credentials dispatched to ${userEmail}.`);
+            toast.success(`Temporary credentials dispatched to ${userEmail}.`, { duration: 5000 });
         } catch (error) {
-            alert(error.response?.data?.error || 'Password reset failed');
+            toast.error(error.response?.data?.error || 'Password reset failed');
         }
     };
 
     const handleDelete = async (userId, userEmail) => {
         if (userId === currentUser.id) {
-            alert('Access Denied: Cannot revoke active administrative session.');
+            toast.error('Access Denied: Cannot revoke active administrative session.');
             return;
         }
         if (!window.confirm(`PERMANENT DISMISSAL: Are you sure you want to remove ${userEmail}? This action is IRREVERSIBLE.`)) return;
@@ -89,8 +144,9 @@ export default function Users() {
             await usersAPI.delete(userId);
             fetchUsers();
             if (showDetailModal) setShowDetailModal(false);
+            toast.success(`Account ${userEmail} permanently removed.`);
         } catch (error) {
-            alert('Dismissal failed');
+            toast.error(error.response?.data?.error || 'Dismissal failed');
         }
     };
 
@@ -105,9 +161,9 @@ export default function Users() {
             if (selectedUser?.id === userId) {
                 setSelectedUser(prev => ({ ...prev, can_edit_finance: !currentFlag }));
             }
-            alert(`Finance editing ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
+            toast.success(`Finance editing ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to update finance permission');
+            toast.error(error.response?.data?.error || 'Failed to update finance permission');
         }
     };
 
@@ -122,9 +178,9 @@ export default function Users() {
             if (selectedUser?.id === userId) {
                 setSelectedUser(prev => ({ ...prev, can_edit_students: !currentFlag }));
             }
-            alert(`Student registry permission ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
+            toast.success(`Student registry permission ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to update student permission');
+            toast.error(error.response?.data?.error || 'Failed to update student permission');
         }
     };
 
@@ -364,6 +420,15 @@ export default function Users() {
                         <p className="text-[11px] text-white/60 font-medium tracking-wide">Governance and Identity Management System</p>
                     </div>
                     <div className="flex gap-3">
+                        {currentUser?.role === 'superadmin' && (
+                            <button
+                                onClick={() => { setShowCreateModal(true); setCreateError(''); setCreateForm({ email: '', password: '', role: 'student' }); }}
+                                className="flex items-center gap-2 px-4 py-3 bg-gold text-maroon font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-gold/90 transition-all shadow-lg border border-gold/20 group"
+                            >
+                                <Plus className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                New User
+                            </button>
+                        )}
                         <button onClick={handlePrint} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all shadow-lg backdrop-blur-md border border-white/5 group">
                             <Printer className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         </button>
@@ -581,6 +646,118 @@ export default function Users() {
 
             {/* Modals */}
             {showDetailModal && <UserDetailModal user={selectedUser} onClose={() => setShowDetailModal(false)} />}
+
+            {/* Create User Modal */}
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
+                    <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-white/10" onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="bg-maroon p-6 text-white flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center">
+                                    <UserPlus className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-base font-black uppercase tracking-tight">Create New Account</h2>
+                                    <p className="text-white/50 text-[10px] font-bold uppercase tracking-widest">Institutional Registry</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowCreateModal(false)} className="p-2 hover:bg-white/10 rounded-xl transition-all">
+                                <XCircle className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={handleCreateUser} className="p-6 space-y-5">
+                            {/* Error Banner */}
+                            {createError && (
+                                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700">
+                                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                                    <p className="text-xs font-bold">{createError}</p>
+                                </div>
+                            )}
+
+                            {/* Email */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Email Address <span className="text-red-500">*</span></label>
+                                <input
+                                    type="email"
+                                    value={createForm.email}
+                                    onChange={e => setCreateForm({ ...createForm, email: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/40 transition-all"
+                                    placeholder="name@institution.edu"
+                                    required
+                                    autoComplete="off"
+                                />
+                            </div>
+
+                            {/* Password */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Password <span className="text-red-500">*</span></label>
+                                <div className="relative">
+                                    <input
+                                        type={showCreatePassword ? 'text' : 'password'}
+                                        value={createForm.password}
+                                        onChange={e => setCreateForm({ ...createForm, password: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/40 transition-all pr-11"
+                                        placeholder="Min 8 chars, number & symbol"
+                                        required
+                                        autoComplete="new-password"
+                                    />
+                                    <button type="button" onClick={() => setShowCreatePassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maroon transition-colors">
+                                        {showCreatePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                {/* Live password strength hints */}
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                    {[
+                                        { label: '8+ chars', pass: createForm.password.length >= 8 },
+                                        { label: 'Number', pass: /\d/.test(createForm.password) },
+                                        { label: 'Special char', pass: /[!@#$%^&*(),.?":{}|<>]/.test(createForm.password) },
+                                    ].map(({ label, pass }) => (
+                                        <span key={label} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border transition-all ${
+                                            createForm.password
+                                                ? pass
+                                                    ? 'bg-green-50 text-green-600 border-green-200'
+                                                    : 'bg-red-50 text-red-500 border-red-200'
+                                                : 'bg-gray-50 text-gray-400 border-gray-200'
+                                        }`}>
+                                            {pass ? '✓' : '✗'} {label}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Role */}
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">System Role <span className="text-red-500">*</span></label>
+                                <select
+                                    value={createForm.role}
+                                    onChange={e => setCreateForm({ ...createForm, role: e.target.value })}
+                                    className="w-full px-4 py-3 rounded-2xl bg-gray-50 border border-gray-200 font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-maroon/20 focus:border-maroon/40 transition-all"
+                                >
+                                    <option value="student">Student</option>
+                                    <option value="teacher">Faculty / Trainer</option>
+                                    <option value="admin">Administrator</option>
+                                    <option value="superadmin">Superadmin</option>
+                                </select>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3 pt-2">
+                                <button type="button" onClick={() => setShowCreateModal(false)}
+                                    className="flex-1 py-3 rounded-2xl border border-gray-200 text-gray-500 font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all">
+                                    Cancel
+                                </button>
+                                <button type="submit" disabled={createLoading}
+                                    className="flex-1 py-3 rounded-2xl bg-maroon text-gold font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-maroon/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {createLoading ? 'Creating...' : 'Create Account'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <footer className="text-center pb-10">
                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.8em]">Institutional Registry Services &copy; 2026</p>

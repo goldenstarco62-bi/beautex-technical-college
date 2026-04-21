@@ -269,13 +269,16 @@ export default function ActivityReports() {
             fetchReports();
         } catch (error) {
             console.error('❌ [ActivityReports] Daily submission error:', error);
+            const status = error.response?.status;
             const errorMsg = error.response?.data?.error || error.message || 'Archive sequence failed';
-            
-            // Specialized handling for duplicates
-            if (errorMsg.toLowerCase().includes('unique') || errorMsg.toLowerCase().includes('already exists')) {
-                toast.error(`A report for ${dailyForm.report_date} in ${dailyForm.department} already exists.`);
+
+            // HTTP 409 = our backend's explicit duplicate signal
+            if (status === 409 || errorMsg.toLowerCase().includes('unique') || errorMsg.toLowerCase().includes('already exists')) {
+                toast.error(`⚠️ Duplicate report: ${dailyForm.report_date} • ${dailyForm.department} already exists. Open the existing record to edit it.`, { duration: 6000 });
+            } else if (status === 400) {
+                toast.error(`Validation: ${errorMsg}`);
             } else {
-                toast.error(errorMsg);
+                toast.error(`Submission failed: ${errorMsg}`);
             }
         } finally {
             setLoading(false);
@@ -286,6 +289,7 @@ export default function ActivityReports() {
     const handleSubmitWeekly = async (e) => {
         e.preventDefault();
         const reportId = editingReport?.id || editingReport?._id;
+        setLoading(true);
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createWeeklyReport(weeklyForm);
@@ -300,13 +304,22 @@ export default function ActivityReports() {
             fetchReports();
         } catch (error) {
             console.error('Error submitting weekly report:', error);
-            toast.error(error.response?.data?.error || error.message || 'Summary finalization failed');
+            const status = error.response?.status;
+            const msg = error.response?.data?.error || error.message || 'Summary finalization failed';
+            if (status === 409 || msg.toLowerCase().includes('already exists')) {
+                toast.error(`⚠️ Duplicate weekly report for this date range already exists.`);
+            } else {
+                toast.error(msg);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleSubmitMonthly = async (e) => {
         e.preventDefault();
         const reportId = editingReport?.id || editingReport?._id;
+        setLoading(true);
         try {
             if (modalMode === 'create') {
                 await activityReportsAPI.createMonthlyReport(monthlyForm);
@@ -321,7 +334,15 @@ export default function ActivityReports() {
             fetchReports();
         } catch (error) {
             console.error('Error submitting monthly report:', error);
-            toast.error(error.response?.data?.error || error.message || 'Archive operation interrupted');
+            const status = error.response?.status;
+            const msg = error.response?.data?.error || error.message || 'Archive operation interrupted';
+            if (status === 409 || msg.toLowerCase().includes('already exists')) {
+                toast.error(`⚠️ Duplicate monthly report for this period already exists.`);
+            } else {
+                toast.error(msg);
+            }
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -1499,13 +1520,20 @@ export default function ActivityReports() {
                                                 </div>
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-2 ml-1">Department / Section</label>
+                                                <label className="block text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-2 ml-1">
+                                                    Department / Section <span className="text-red-500 ml-0.5">*</span>
+                                                </label>
                                                 <select
                                                     value={dailyForm.department}
                                                     onChange={(e) => setDailyForm({ ...dailyForm, department: e.target.value })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700"
+                                                    className={`w-full px-5 py-3.5 bg-white rounded-2xl border focus:ring-4 outline-none transition-all font-bold text-gray-700 ${
+                                                        !dailyForm.department
+                                                            ? 'border-red-300 focus:border-red-500 focus:ring-red-500/5'
+                                                            : 'border-gray-200 focus:border-maroon focus:ring-maroon/5'
+                                                    }`}
+                                                    required
                                                 >
-                                                    <option value="">Select Department</option>
+                                                    <option value="">— Select Department —</option>
                                                     <option value="ICT">ICT Department</option>
                                                     <option value="Cosmetology">Cosmetology & Beauty</option>
                                                     <option value="Business">Business Studies</option>
@@ -1515,6 +1543,9 @@ export default function ActivityReports() {
                                                     <option value="Marketing">Marketing & Outreach</option>
                                                     <option value="Production Unit">Production Unit</option>
                                                 </select>
+                                                {!dailyForm.department && (
+                                                    <p className="text-[9px] text-red-500 font-bold uppercase tracking-wider mt-1 ml-1">Required — select a department to submit</p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -2381,7 +2412,7 @@ export default function ActivityReports() {
                                             <div className="grid grid-cols-1 gap-4">
                                                 <div>
                                                     <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Classroom / Lab Condition</p>
-                                                    <p className="text-sm text-gray-700 font-medium">{viewingReport.classroom_lab_condition || 'Optimal'}</p>
+                                                    <p className="text-sm text-gray-700 font-medium">{viewingReport.facilities_issues || 'Optimal'}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Equipment Status</p>
