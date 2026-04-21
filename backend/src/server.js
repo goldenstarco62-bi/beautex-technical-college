@@ -204,16 +204,26 @@ app.get('/', async (req, res) => {
     else if (process.env.DATABASE_URL?.trim()) dbType = 'PostgreSQL (Supabase)';
     else dbType = 'SQLite';
 
+    const isVercel = !!process.env.VERCEL;
+    const isProduction = process.env.NODE_ENV === 'production';
+
     res.json({
         message: 'Welcome to BTTC Management System API',
-        environment: process.env.NODE_ENV,
-        active_database: dbType,
-        ver_check: '1.2.0',
-        config_check: {
-            db_url_set: !!process.env.DATABASE_URL?.trim(),
-            mongo_uri_set: !!process.env.MONGODB_URI?.trim(),
-            jwt_secret_set: !!process.env.JWT_SECRET?.trim()
+        status: 'Operational',
+        environment: {
+            node_env: process.env.NODE_ENV,
+            is_vercel: isVercel,
+            is_production: isProduction
         },
+        database: {
+            active_type: dbType,
+            config_status: {
+                postgres: !!process.env.DATABASE_URL?.trim(),
+                mongodb: !!process.env.MONGODB_URI?.trim()
+            },
+            storage_persistence: (isProduction || isVercel) && dbType === 'SQLite' ? 'EPHEMERAL (DATA LOSS RISK)' : 'PERSISTENT'
+        },
+        ver_check: '1.2.1',
         timestamp: new Date()
     });
 });

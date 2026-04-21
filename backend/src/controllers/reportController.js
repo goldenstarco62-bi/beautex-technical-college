@@ -140,6 +140,8 @@ export const createReport = async (req, res) => {
             return res.status(201).json(savedReport);
         }
 
+        const normalizedEmail = String(trainer_email || '').toLowerCase().trim();
+
         const result = await run(
             `INSERT INTO academic_reports (
                 student_id, student_name, registration_number, course_unit,
@@ -152,7 +154,7 @@ export const createReport = async (req, res) => {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 student_id, student_name, registration_number, course_unit,
-                trainer_name, trainer_email, reporting_period,
+                trainer_name, normalizedEmail, reporting_period,
                 parseNum(total_lessons), parseNum(attended_lessons), parseNum(attendance_percentage),
                 theory_topics, parseNum(theory_score), theory_remarks,
                 practical_tasks, equipment_used, skill_level, safety_compliance,

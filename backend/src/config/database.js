@@ -121,9 +121,18 @@ export async function getDb() {
 
     // 3. Fallback to SQLite (Only in development)
     if (!db) {
-        if (process.env.NODE_ENV === 'production') {
-            const error = new Error('CRITICAL: No DATABASE_URL or MONGODB_URI provided in production environment. Website cannot start without a cloud database.');
+        const isVercel = !!process.env.VERCEL;
+        const isProduction = process.env.NODE_ENV === 'production';
+
+        if (isProduction || isVercel) {
+            const envType = isVercel ? 'Vercel (Production)' : 'Production';
+            const error = new Error(`CRITICAL: No DATABASE_URL or MONGODB_URI provided in ${envType} environment. Website cannot start with ephemeral SQLite storage.`);
+            console.error('################################################################');
+            console.error('🛑 DATABASE CONFIGURATION ERROR');
             console.error(error.message);
+            console.error('Please set DATABASE_URL (for Supabase) or MONGODB_URI (for Atlas)');
+            console.error('in your environment variables.');
+            console.error('################################################################');
             throw error;
         }
 
@@ -142,7 +151,7 @@ export async function getDb() {
         });
 
         await db.run('PRAGMA foreign_keys = ON');
-        console.log('📂 Connected to local SQLite');
+        console.log('📂 Connected to local SQLite (Development Mode)');
     }
     return db;
 }
