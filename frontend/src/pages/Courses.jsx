@@ -16,7 +16,7 @@ export default function Courses() {
     const [availableFaculty, setAvailableFaculty] = useState([]);
 
     const isStudent = user?.role === 'student';
-    const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business'];
+    const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business', 'Production Unit'];
 
     useEffect(() => {
         fetchCourses();

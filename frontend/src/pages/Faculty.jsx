@@ -221,10 +221,10 @@ export default function Faculty() {
 
     const canResetPassword = currentUser?.role === 'superadmin' || currentUser?.role === 'admin';
 
-    const departments = [...new Set(availableCourses.map(c => c.department))].filter(Boolean);
-    if (departments.length === 0) {
-        departments.push('Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business');
-    }
+    const departments = [...new Set([
+        ...availableCourses.map(c => c.department),
+        'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business', 'Production Unit'
+    ])].filter(Boolean).sort();
 
     const getInitials = (name) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 

@@ -1513,6 +1513,7 @@ export default function ActivityReports() {
                                                     <option value="Admin">Administration</option>
                                                     <option value="Finance">Finance / Accounts</option>
                                                     <option value="Marketing">Marketing & Outreach</option>
+                                                    <option value="Production Unit">Production Unit</option>
                                                 </select>
                                             </div>
                                         </div>

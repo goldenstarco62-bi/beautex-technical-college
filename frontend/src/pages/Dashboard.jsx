@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Users, BookOpen, UserCheck, TrendingUp, Zap, UserPlus, FileText, DollarSign, GraduationCap, Bell, Activity, ArrowUpRight, RefreshCw } from 'lucide-react';
-import { studentsAPI, coursesAPI, facultyAPI, reportsAPI } from '../services/api';
+import { studentsAPI, coursesAPI, facultyAPI, reportsAPI, activityReportsAPI } from '../services/api';
 import api from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +15,8 @@ function AdminDashboard() {
     const [students, setStudents] = useState([]);
     const [courses, setCourses] = useState([]);
     const [recentReports, setRecentReports] = useState([]);
+    const [activityReports, setActivityReports] = useState([]);
+    const [activeTab, setActiveTab] = useState('analytics');
     const [lastUpdated, setLastUpdated] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
 
@@ -27,22 +29,25 @@ function AdminDashboard() {
     const fetchData = async (silent = false) => {
         try {
             if (!silent) setRefreshing(true);
-            const [studentsRes, coursesRes, facultyRes, reportsRes, statsRes] = await Promise.all([
+            const [studentsRes, coursesRes, facultyRes, reportsRes, statsRes, activityRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 facultyAPI.getAll(),
-                reportsAPI.getAll({ limit: 5 }),
-                api.get('/stats/dashboard')
+                reportsAPI.getAll({ limit: 10 }),
+                api.get('/stats/dashboard'),
+                activityReportsAPI.getDailyReports({ limit: 10 })
             ]);
 
             const studentsData = Array.isArray(studentsRes.data) ? studentsRes.data : [];
             const coursesData = Array.isArray(coursesRes.data) ? coursesRes.data : [];
             const reportsData = Array.isArray(reportsRes.data) ? reportsRes.data : [];
+            const activityData = activityRes.data.data || [];
             const statsData = statsRes.data;
 
             setStudents(studentsData);
             setCourses(coursesData);
-            setRecentReports(reportsData.slice(0, 5));
+            setRecentReports(reportsData);
+            setActivityReports(activityData);
             setStats({
                 students: statsData.summary.students,
                 courses: statsData.summary.courses,
@@ -160,84 +165,175 @@ function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Charts & Sidebar */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
-                    <div className="flex justify-between items-center mb-10">
-                        <div>
-                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Enrollment Performance</h2>
-                            <p className="text-[10px] text-gray-400 font-medium mt-1">Students per course unit</p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-maroon"></div><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Enrolled</span></div>
-                        </div>
-                    </div>
-                    <div className="overflow-x-auto pb-4 custom-scrollbar">
-                        <div style={{ minWidth: (chartData.length * 80) > 600 ? `${chartData.length * 80}px` : '100%' }}>
-                            <ResponsiveContainer width="100%" height={320}>
-                                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                    <XAxis dataKey="name" stroke="#475569" fontSize={9} tick={{ fontWeight: 800 }} tickLine={false} axisLine={false} interval={0} angle={-25} textAnchor="end" height={60} />
-                                    <YAxis stroke="#475569" fontSize={10} tick={{ fontWeight: 800 }} tickLine={false} axisLine={false} dx={-10} />
-                                    <Tooltip
-                                        cursor={{ fill: '#f1f5f9' }}
-                                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}
-                                    />
-                                    <Bar dataKey="enrolled" fill="#800000" radius={[6, 6, 0, 0]} barSize={32} activeBar={{ fill: '#FFD700', stroke: '#800000', strokeWidth: 1 }}>
-                                        <LabelList dataKey="enrolled" position="top" fill="#800000" fontSize={10} fontWeight="bold" offset={10} />
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
+            {/* Hub Navigation Tabs */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6 px-2">
+                <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-2xl border border-gray-200/50 dark:border-white/5 backdrop-blur-xl">
+                    {[
+                        { id: 'analytics', label: 'Performance Hub', icon: Activity },
+                        { id: 'activity', label: 'Institutional Logs', icon: FileText },
+                        { id: 'academic', label: 'Academic Records', icon: GraduationCap },
+                    ].map((tab) => {
+                        const Icon = tab.icon;
+                        const active = activeTab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-500 ${
+                                    active 
+                                    ? 'bg-white dark:bg-gray-700 text-maroon dark:text-gold shadow-xl shadow-black/5' 
+                                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                                }`}
+                            >
+                                <Icon className={`w-3.5 h-3.5 ${active ? 'scale-110' : 'opacity-50'}`} />
+                                {tab.label}
+                            </button>
+                        );
+                    })}
                 </div>
+                {activeTab !== 'analytics' && (
+                    <button 
+                        onClick={() => navigate(activeTab === 'activity' ? '/activity-reports' : '/reports')}
+                        className="text-[10px] font-black uppercase tracking-widest text-maroon hover:text-gold transition-colors flex items-center gap-2 group"
+                    >
+                        View Full Registry <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </button>
+                )}
+            </div>
 
-                <div className="space-y-6">
-                    {/* Quick Nav Cards */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">
-                        <div className="w-16 h-16 bg-maroon/5 rounded-[2rem] flex items-center justify-center mx-auto mb-6 group-hover:bg-maroon transition-colors duration-500">
-                            <GraduationCap className="w-8 h-8 text-maroon group-hover:text-gold transition-colors" />
+            {/* Main Content Area */}
+            <div className="grid grid-cols-1 gap-8">
+                {activeTab === 'analytics' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in zoom-in duration-700">
+                    <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                        <div className="flex justify-between items-center mb-10">
+                            <div>
+                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Enrollment Performance</h2>
+                                <p className="text-[10px] text-gray-400 font-medium mt-1">Students per course unit</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-maroon"></div><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Enrolled</span></div>
+                            </div>
                         </div>
-                        <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-2">Student Management</h3>
-                        <p className="text-xs text-gray-400 mb-6 font-medium">Browse, search, and manage student records</p>
-                        <button onClick={() => navigate('/students')} className="text-[10px] font-black uppercase tracking-widest text-maroon border-b-2 border-gold pb-1 hover:text-gold transition-colors">View Students →</button>
+                        <div className="overflow-x-auto pb-4 custom-scrollbar">
+                            <div style={{ minWidth: (chartData.length * 80) > 600 ? `${chartData.length * 80}px` : '100%' }}>
+                                <ResponsiveContainer width="100%" height={320}>
+                                    <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#475569" fontSize={9} tick={{ fontWeight: 800 }} tickLine={false} axisLine={false} interval={0} angle={-25} textAnchor="end" height={60} />
+                                        <YAxis stroke="#475569" fontSize={10} tick={{ fontWeight: 800 }} tickLine={false} axisLine={false} dx={-10} />
+                                        <Tooltip
+                                            cursor={{ fill: '#f1f5f9' }}
+                                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                                        />
+                                        <Bar dataKey="enrolled" fill="#800000" radius={[6, 6, 0, 0]} barSize={32} activeBar={{ fill: '#FFD700', stroke: '#800000', strokeWidth: 1 }}>
+                                            <LabelList dataKey="enrolled" position="top" fill="#800000" fontSize={10} fontWeight="bold" offset={10} />
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">
-                        <div className="w-16 h-16 bg-gold/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6 group-hover:bg-gold transition-colors duration-500">
-                            <Users className="w-8 h-8 text-gold group-hover:text-maroon transition-colors" />
-                        </div>
-                        <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-2">Staff Management</h3>
-                        <p className="text-xs text-gray-400 mb-6 font-medium">Manage faculty and administrative staff</p>
-                        <button onClick={() => navigate('/faculty')} className="text-[10px] font-black uppercase tracking-widest text-maroon border-b-2 border-gold pb-1 hover:text-gold transition-colors">View Staff →</button>
-                    </div>
+                        <div className="space-y-6">
+                            <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">
+                                <div className="w-16 h-16 bg-maroon/5 rounded-[2rem] flex items-center justify-center mx-auto mb-6 group-hover:bg-maroon transition-colors duration-500">
+                                    <GraduationCap className="w-8 h-8 text-maroon group-hover:text-gold transition-colors" />
+                                </div>
+                                <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-2">Student Management</h3>
+                                <p className="text-xs text-gray-400 mb-6 font-medium">Browse, search, and manage student records</p>
+                                <button onClick={() => navigate('/students')} className="text-[10px] font-black uppercase tracking-widest text-maroon border-b-2 border-gold pb-1 hover:text-gold transition-colors">View Students →</button>
+                            </div>
 
-                    {/* Recent Reports */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm group">
-                        <div className="flex items-center gap-2 mb-6">
-                            <FileText className="w-4 h-4 text-maroon" />
-                            <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest">Recent Reports</h3>
+                            <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">
+                                <div className="w-16 h-16 bg-gold/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6 group-hover:bg-gold transition-colors duration-500">
+                                    <Users className="w-8 h-8 text-gold group-hover:text-maroon transition-colors" />
+                                </div>
+                                <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-2">Staff Management</h3>
+                                <p className="text-xs text-gray-400 mb-6 font-medium">Manage faculty and administrative staff</p>
+                                <button onClick={() => navigate('/faculty')} className="text-[10px] font-black uppercase tracking-widest text-maroon border-b-2 border-gold pb-1 hover:text-gold transition-colors">View Staff →</button>
+                            </div>
                         </div>
-                        <div className="space-y-3">
-                            {recentReports.length > 0 ? recentReports.map((report) => (
-                                <div key={report.id} className="flex justify-between items-center bg-gray-50/50 p-3 rounded-xl hover:bg-white hover:shadow-sm transition-all border border-transparent hover:border-maroon/10">
-                                    <div>
-                                        <p className="text-xs font-bold text-gray-800">{report.student_name}</p>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{report.reporting_period}</p>
+                    </div>
+                )}
+
+                {activeTab === 'activity' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {activityReports.length > 0 ? activityReports.map((report) => (
+                                <div key={report.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-all group">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-1">{report.department}</p>
+                                            <h3 className="text-sm font-black text-gray-800">{new Date(report.report_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</h3>
+                                        </div>
+                                        <button onClick={() => navigate('/activity-reports')} className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-maroon group-hover:text-gold transition-all">
+                                            <ArrowUpRight className="w-4 h-4" />
+                                        </button>
                                     </div>
-                                    <span className={`text-[9px] font-black px-2 py-1 rounded-lg ${report.recommendation === 'Proceed' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                                        {report.recommendation}
-                                    </span>
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div className="bg-gray-50 p-3 rounded-xl text-center">
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-tight">Attendance</p>
+                                            <p className="text-xs font-black text-gray-800">{report.total_attendance_percentage}%</p>
+                                        </div>
+                                        <div className="bg-gray-50 p-3 rounded-xl text-center">
+                                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-tight">Staffing</p>
+                                            <p className="text-xs font-black text-gray-800">{report.staff_present} / {report.staff_present + report.staff_absent}</p>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 line-clamp-2 italic">“{report.challenges_faced || 'Routine operations completed without significant challenges.'}”</p>
                                 </div>
                             )) : (
-                                <p className="text-xs text-gray-400 italic py-4">No recent academic submissions.</p>
+                                <div className="col-span-full py-20 text-center bg-gray-50/50 rounded-[2.5rem] border-2 border-dashed border-gray-200">
+                                    <FileText className="w-12 h-12 text-gray-200 mx-auto mb-4" />
+                                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest">No institutional logs archived yet</p>
+                                    <button onClick={() => navigate('/activity-reports')} className="mt-4 text-[10px] font-black text-maroon hover:text-gold uppercase tracking-widest">Submit First Report →</button>
+                                </div>
                             )}
                         </div>
-                        <button onClick={() => navigate('/reports')} className="w-full mt-6 py-3 rounded-xl border border-gray-100 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-maroon hover:border-maroon transition-all">
-                            Full Repository →
-                        </button>
                     </div>
-                </div>
+                )}
+
+                {activeTab === 'academic' && (
+                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="flex items-center justify-between mb-8">
+                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Student Performance Logs</h2>
+                            <button onClick={() => navigate('/reports')} className="text-[10px] font-black text-maroon uppercase tracking-widest border-b border-maroon">Repository Hub</button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="border-b border-gray-50">
+                                    <tr>
+                                        <th className="pb-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Student</th>
+                                        <th className="pb-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Period</th>
+                                        <th className="pb-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Attendance</th>
+                                        <th className="pb-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Avg Grade</th>
+                                        <th className="pb-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Verdict</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50/50">
+                                    {recentReports.length > 0 ? recentReports.map((report) => (
+                                        <tr key={report.id} className="group hover:bg-gray-50/30 transition-colors">
+                                            <td className="py-4 font-bold text-xs text-gray-800">{report.student_name}</td>
+                                            <td className="py-4 text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{report.reporting_period}</td>
+                                            <td className="py-4 text-xs font-black text-maroon">{report.attendance_avg}%</td>
+                                            <td className="py-4 text-xs font-black text-gold">{report.average_grade}</td>
+                                            <td className="py-4">
+                                                <span className={`px-2 py-1 rounded-lg text-[9px] font-black ${report.recommendation === 'Proceed' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                                    {report.recommendation.toUpperCase()}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )) : (
+                                        <tr>
+                                            <td colSpan="5" className="py-10 text-center text-xs text-gray-400 italic">Analytical data pending...</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

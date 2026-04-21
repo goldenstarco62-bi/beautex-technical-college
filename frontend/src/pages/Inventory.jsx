@@ -177,6 +177,11 @@ function ItemsTab() {
             label: 'Hair Dressing', color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20',
             category: 'Hair Dressing', location: 'Hair Salon', unit_type: 'Bottle', emoji: '✂️',
             items: ['Shampoo', 'Conditioner', 'Hair Dye', 'Bleaching Powder', 'Developer', 'Hair Relaxer', 'Hair Oil', 'Hair Serum', 'Hairspray', 'Styling Gel', 'Hair Wax', 'Curling Iron', 'Flat Iron', 'Hair Dryer', 'Scissors', 'Hair Clippers', 'Combs Set', 'Hair Clips', 'Aluminium Foils', 'Mixing Bowl']
+        },
+        PRODUCTION: {
+            label: 'Production Unit', color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20',
+            category: 'Production Unit', location: 'Production Workshop', unit_type: 'Piece', emoji: '🏭',
+            items: ['Raw Material', 'Packaging Box', 'Adhesive Tape', 'Work Bench', 'Safety Gear', 'Measuring Tape', 'Cutter', 'Mold', 'Finishing Kit']
         }
     };
 
@@ -213,6 +218,7 @@ function ItemsTab() {
         { label: 'Hair Dressing', category: 'Hair Dressing', location: 'Hair Salon', color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/20', emoji: '✂️' },
         { label: 'Administration', category: 'Administration', location: 'Admin Office', color: 'text-purple-500', bg: 'bg-purple-500/10', border: 'border-purple-500/20', emoji: '🏛️' },
         { label: 'Barbering', category: 'Barbering', location: 'Barbering Lab', color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', emoji: '🪒' },
+        { label: 'Production Unit', category: 'Production Unit', location: 'Production Workshop', color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20', emoji: '🏭' },
     ];
 
     const handleMoveDept = async () => {

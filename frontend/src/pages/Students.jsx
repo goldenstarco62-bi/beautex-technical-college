@@ -252,10 +252,10 @@ export default function Students() {
     };
 
     const courses = availableCourses.map(c => c.name);
-    const departments = [...new Set(availableCourses.map(c => c.department))].filter(Boolean);
-    if (departments.length === 0) {
-        departments.push('Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Information Technology', 'Fashion & Design');
-    }
+    const departments = [...new Set([
+        ...availableCourses.map(c => c.department),
+        'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Information Technology', 'Fashion & Design', 'Production Unit'
+    ])].filter(Boolean).sort();
 
     const intakes = ['January Intake', 'May Intake', 'September Intake', 'Short Course'];
 
