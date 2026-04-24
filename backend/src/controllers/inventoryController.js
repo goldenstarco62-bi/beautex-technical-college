@@ -2,7 +2,6 @@ import { query, queryOne, run, getCurrentDateSQL, getDateIntervalSQL } from '../
 import notificationService from '../services/notificationService.js';
 
 
-// ─── HELPERS ────────────────────────────────────────────────────────────────
 const generateCode = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
 async function checkLowStock(itemId) {
@@ -34,7 +33,6 @@ async function checkLowStock(itemId) {
 }
 
 
-// ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export const getDashboardStats = async (req, res) => {
     try {
         console.log('[Inventory] Fetching dashboard stats for user:', req.user.email, 'Role:', req.user.role);
@@ -109,7 +107,7 @@ export const getDashboardStats = async (req, res) => {
             });
         }
     } catch (err) {
-        console.error('❌ Inventory Dashboard Critical Error:', {
+        console.error('âŒ Inventory Dashboard Critical Error:', {
             message: err.message,
             stack: err.stack,
             code: err.code
@@ -118,7 +116,6 @@ export const getDashboardStats = async (req, res) => {
     }
 };
 
-// ─── CATEGORIES ──────────────────────────────────────────────────────────────
 export const getCategories = async (req, res) => {
     try {
         const cats = await query(`
@@ -171,7 +168,6 @@ export const deleteCategory = async (req, res) => {
     }
 };
 
-// ─── ITEMS ────────────────────────────────────────────────────────────────────
 export const getItems = async (req, res) => {
     try {
         const { category_id, status, search, low_stock, expiring, page = 1, limit = 10 } = req.query;
@@ -362,7 +358,6 @@ export const deleteItem = async (req, res) => {
     }
 };
 
-// ─── SUPPLIERS ────────────────────────────────────────────────────────────────
 export const getSuppliers = async (req, res) => {
     try {
         const suppliers = await query('SELECT * FROM inv_suppliers ORDER BY name');
@@ -414,7 +409,6 @@ export const deleteSupplier = async (req, res) => {
     }
 };
 
-// ─── STOCK IN ────────────────────────────────────────────────────────────────
 export const getStockIn = async (req, res) => {
     try {
         const records = await query(
@@ -464,7 +458,6 @@ export const createStockIn = async (req, res) => {
     }
 };
 
-// ─── STOCK OUT ────────────────────────────────────────────────────────────────
 export const getStockOut = async (req, res) => {
     try {
         let sql = `SELECT so.*, i.name as item_name, i.unit_type
@@ -522,7 +515,6 @@ export const createStockOut = async (req, res) => {
     }
 };
 
-// ─── DEPARTMENT REQUESTS ─────────────────────────────────────────────────────
 export const getDepartmentRequests = async (req, res) => {
     try {
         const { status, department } = req.query;
@@ -616,7 +608,6 @@ export const deleteDepartmentRequest = async (req, res) => {
     }
 };
 
-// ─── PURCHASE REQUESTS ────────────────────────────────────────────────────────
 export const getPurchaseRequests = async (req, res) => {
     try {
         const records = await query(
@@ -686,7 +677,6 @@ export const deletePurchaseRequest = async (req, res) => {
     }
 };
 
-// ─── ASSETS ───────────────────────────────────────────────────────────────────
 export const getAssets = async (req, res) => {
     try {
         const assets = await query(
@@ -756,7 +746,6 @@ export const deleteAsset = async (req, res) => {
     }
 };
 
-// ─── DAMAGE LOGS ─────────────────────────────────────────────────────────────
 export const getDamageLogs = async (req, res) => {
     try {
         const logs = await query(
@@ -805,7 +794,6 @@ export const createDamageLog = async (req, res) => {
     }
 };
 
-// ─── LOCATIONS ────────────────────────────────────────────────────────────────
 export const getLocations = async (req, res) => {
     try {
         const locations = await query('SELECT * FROM inv_locations ORDER BY name');
@@ -836,7 +824,6 @@ export const deleteLocation = async (req, res) => {
     }
 };
 
-// ─── REPORTS ─────────────────────────────────────────────────────────────────
 export const getReport = async (req, res) => {
     try {
         const { type } = req.params;
@@ -907,7 +894,6 @@ export const getReport = async (req, res) => {
     }
 };
 
-// ─── PROCUREMENT WISHLIST ───────────────────────────────────────────────────
 export const getProcurementWishlist = async (req, res) => {
     try {
         const { status, department } = req.query;

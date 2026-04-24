@@ -7,7 +7,7 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 export async function getAllGrades(req, res) {
     try {
         const mongo = await isMongo();
-        console.log(`📡 Database Mode: ${mongo ? 'MongoDB' : 'SQL'}`);
+        console.log(`ðŸ“¡ Database Mode: ${mongo ? 'MongoDB' : 'SQL'}`);
 
         if (mongo) {
             const Grade = (await import('../models/mongo/Grade.js')).default;
@@ -23,10 +23,10 @@ export async function getAllGrades(req, res) {
             if (userRole === 'student') {
                 studentIdFilter = String(studentId);
                 if (!studentIdFilter || studentIdFilter === 'null') {
-                    console.warn(`⚠️ Student ${req.user.email} attempted to fetch grades without a student_id or user id (Mongo)`);
+                    console.warn(`âš ï¸ Student ${req.user.email} attempted to fetch grades without a student_id or user id (Mongo)`);
                     return res.json([]);
                 }
-                console.log(`🔍 Filtering grades for student ID: ${studentIdFilter} (Mongo)`);
+                console.log(`ðŸ” Filtering grades for student ID: ${studentIdFilter} (Mongo)`);
             } else if (userRole === 'teacher') {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
@@ -85,16 +85,16 @@ export async function getAllGrades(req, res) {
         const studentId = req.user?.student_id || req.user?.id;
         const isAdmin = ['admin', 'superadmin'].includes(userRole);
 
-        console.log(`📊 Fetching grades registry - User: ${req.user?.email}, Role: "${userRole}", isAdmin: ${isAdmin}, StudentID: "${studentId}"`);
+        console.log(`ðŸ“Š Fetching grades registry - User: ${req.user?.email}, Role: "${userRole}", isAdmin: ${isAdmin}, StudentID: "${studentId}"`);
 
         if (userRole === 'student') {
             if (!studentId || studentId === 'null') {
-                console.warn(`⚠️ Student ${req.user.email} attempted to fetch grades without a student_id`);
+                console.warn(`âš ï¸ Student ${req.user.email} attempted to fetch grades without a student_id`);
                 return res.json([]);
             }
             conditions.push('LOWER(TRIM(g.student_id)) = LOWER(TRIM(?))');
             params.push(String(studentId).trim());
-            console.log(`🔍 Applied student filter: ${studentId}`);
+            console.log(`ðŸ” Applied student filter: ${studentId}`);
         } else if (userRole === 'teacher') {
             const userEmail = String(req.user.email || '').toLowerCase().trim();
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
@@ -115,21 +115,21 @@ export async function getAllGrades(req, res) {
                     const placeholders = allTutorCourses.map(() => '?').join(',');
                     conditions.push(`g.course IN (${placeholders})`);
                     params.push(...allTutorCourses);
-                    console.log(`🔍 Applied teacher course filter: ${JSON.stringify(allTutorCourses)}`);
+                    console.log(`ðŸ” Applied teacher course filter: ${JSON.stringify(allTutorCourses)}`);
                 } else {
-                    console.log('ℹ️ Teacher has no courses assigned. Returning empty registry.');
+                    console.log('â„¹ï¸ Teacher has no courses assigned. Returning empty registry.');
                     return res.json([]);
                 }
             } else {
-                console.warn(`⚠️ Faculty profile not found for teacher: ${userEmail}. Role: ${userRole}`);
+                console.warn(`âš ï¸ Faculty profile not found for teacher: ${userEmail}. Role: ${userRole}`);
                 return res.json([]);
             }
         } else if (isAdmin) {
-            console.log('👑 Admin/Superadmin detected. Accessing global registry.');
+            console.log('ðŸ‘‘ Admin/Superadmin detected. Accessing global registry.');
             if (req.query.course) {
                 conditions.push('g.course = ?');
                 params.push(req.query.course);
-                console.log(`🔍 Applied admin course filter: ${req.query.course}`);
+                console.log(`ðŸ” Applied admin course filter: ${req.query.course}`);
             }
         } else if (req.query.course) {
             conditions.push('g.course = ?');
@@ -141,7 +141,7 @@ export async function getAllGrades(req, res) {
         }
 
         sql += ' ORDER BY g.id DESC';
-        console.log('📡 Final SQL Query:', sql, params);
+        console.log('ðŸ“¡ Final SQL Query:', sql, params);
 
         const grades = await query(sql, params);
 
@@ -174,7 +174,7 @@ export async function getBatchStudents(req, res) {
             return res.json(students);
         }
 
-        // Fetch all active students then filter — handles plain string, JSON array, and Postgres {} format
+        // Fetch all active students then filter â€” handles plain string, JSON array, and Postgres {} format
         const allStudents = await query('SELECT id, name, course FROM students WHERE status = ?', ['Active']);
         const normalise = (raw) => {
             if (!raw) return [];

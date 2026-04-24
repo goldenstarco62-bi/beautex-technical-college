@@ -127,19 +127,19 @@ export async function createFaculty(req, res) {
 
         // Send email notification
         try {
-            console.log(`📡 Attempting to send welcome email to: ${email}`);
+            console.log(`ðŸ“¡ Attempting to send welcome email to: ${email}`);
             await sendWelcomeEmail(email, 'teacher', temporaryPassword);
         } catch (emailError) {
-            console.error('❌ Failed to send welcome email:', emailError);
+            console.error('âŒ Failed to send welcome email:', emailError);
         }
 
         // Send SMS notification if contact is provided
         if (contact) {
             try {
-                console.log(`📡 Attempting to send SMS to: ${contact}`);
+                console.log(`ðŸ“¡ Attempting to send SMS to: ${contact}`);
                 await sendLoginCredentials(contact, email, temporaryPassword, 'teacher');
             } catch (smsError) {
-                console.error('❌ Failed to send SMS:', smsError);
+                console.error('âŒ Failed to send SMS:', smsError);
             }
         }
 

@@ -121,7 +121,7 @@ export async function resetUserPassword(req, res) {
             await user.save();
 
             await sendAdminResetPasswordEmail(user.email, tempPassword);
-            return res.json({ message: 'Password reset — temporary credentials emailed' });
+            return res.json({ message: 'Password reset â€” temporary credentials emailed' });
         }
 
         const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [userId]);
@@ -136,10 +136,10 @@ export async function resetUserPassword(req, res) {
 
         const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
         if (!emailSent) {
-            console.warn('⚠️ Email delivery failed for password reset.');
+            console.warn('âš ï¸ Email delivery failed for password reset.');
         }
 
-        res.json({ message: 'Password reset — temporary credentials emailed' });
+        res.json({ message: 'Password reset â€” temporary credentials emailed' });
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
@@ -231,7 +231,7 @@ export async function resetPasswordByEmail(req, res) {
             await user.save();
 
             await sendAdminResetPasswordEmail(user.email, tempPassword);
-            return res.json({ message: 'Password reset — temporary credentials emailed' });
+            return res.json({ message: 'Password reset â€” temporary credentials emailed' });
         }
 
         const user = await queryOne('SELECT id, email, role FROM users WHERE email = ?', [email]);
@@ -246,10 +246,10 @@ export async function resetPasswordByEmail(req, res) {
 
         const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
         if (!emailSent) {
-            console.warn('⚠️ Email delivery failed for password reset by email.');
+            console.warn('âš ï¸ Email delivery failed for password reset by email.');
         }
 
-        res.json({ message: 'Password reset — temporary credentials emailed' });
+        res.json({ message: 'Password reset â€” temporary credentials emailed' });
     } catch (error) {
         console.error('Reset password by email error:', error);
         res.status(500).json({ error: 'Failed to reset password' });

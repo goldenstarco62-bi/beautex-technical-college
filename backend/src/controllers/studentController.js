@@ -157,7 +157,7 @@ export async function getAllStudents(req, res) {
 export async function getStudent(req, res) {
     try {
         if (await isMongo()) {
-            // FIX: Import Student model — was missing causing ReferenceError crash
+            // FIX: Import Student model â€” was missing causing ReferenceError crash
             const Student = (await import('../models/mongo/Student.js')).default;
             const student = await Student.findOne({ id: req.params.id }).lean();
             if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -271,19 +271,19 @@ export async function createStudent(req, res) {
 
         // Send email notification
         try {
-            console.log(`📡 Attempting to send welcome email to: ${email}`);
+            console.log(`ðŸ“¡ Attempting to send welcome email to: ${email}`);
             await sendWelcomeEmail(email, 'student', temporaryPassword);
         } catch (emailError) {
-            console.error('❌ Failed to send welcome email:', emailError);
+            console.error('âŒ Failed to send welcome email:', emailError);
         }
 
         // Send SMS notification if contact is provided
         if (contact) {
             try {
-                console.log(`📡 Attempting to send SMS to: ${contact}`);
+                console.log(`ðŸ“¡ Attempting to send SMS to: ${contact}`);
                 await sendLoginCredentials(contact, email, temporaryPassword, 'student');
             } catch (smsError) {
-                console.error('❌ Failed to send SMS:', smsError);
+                console.error('âŒ Failed to send SMS:', smsError);
             }
         }
 

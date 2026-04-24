@@ -55,7 +55,7 @@ export const createReport = async (req, res) => {
             return res.status(400).json({ error: 'Required fields missing: week_number, report_date, daily_report, record_of_work' });
         }
 
-        // Guard against missing name/email — always guarantee a non-empty trainer_name
+        // Guard against missing name/email â€” always guarantee a non-empty trainer_name
         const trainerEmail = req.user.email || '';
         let trainerName = (req.user.name || '').trim();
         const mongo = await isMongo();
