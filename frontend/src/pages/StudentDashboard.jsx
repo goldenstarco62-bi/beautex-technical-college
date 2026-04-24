@@ -193,7 +193,7 @@ export default function StudentDashboard() {
 
     const remainingTime = calculateRemainingTime(studentProfile?.completion_date);
 
-    const statsConfig = [
+    const statsDisplay = [
         { title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen },
         {
             title: 'Fee Balance Remaining',
