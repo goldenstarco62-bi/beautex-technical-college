@@ -52,6 +52,11 @@ export default function AcademicReports() {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
     const [collapsedDepts, setCollapsedDepts] = useState({});
+    
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
 
     const renderTheoryTopics = (data) => {
         try {
@@ -182,6 +187,18 @@ export default function AcademicReports() {
         });
     }, [reports, filterDept, filterCourse, filterDateFrom, filterDateTo, courses]);
 
+    // Reset page on filter change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filterDept, filterCourse, filterDateFrom, filterDateTo]);
+
+    // Paginated Reports
+    const paginatedReports = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredReports.slice(start, start + itemsPerPage);
+    }, [filteredReports, currentPage]);
+
+
     // Group by department -> course (for admin/superadmin views)
     const groupedReports = useMemo(() => {
         const map = {};
@@ -194,7 +211,8 @@ export default function AcademicReports() {
             map[dept][rCourse].push(r);
         });
         return map;
-    }, [filteredReports, courses]);
+    }, [paginatedReports, courses]);
+
 
     const toggleDept = (dept) => setCollapsedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
 
@@ -558,8 +576,9 @@ export default function AcademicReports() {
                                 No reports captured yet.
                             </div>
                         )}
-                        {filteredReports.map((report) => (
+                        {paginatedReports.map((report) => (
                             <div key={report._id || report.id} className="bg-white border border-maroon/8 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all group">
+
                                 <div className="h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
                                 <div className="p-7">
                                     <div className="flex items-start justify-between mb-5">
@@ -617,6 +636,18 @@ export default function AcademicReports() {
                                 </div>
                             </div>
                         ))}
+                    </div>
+                )}
+
+                {/* Pagination */}
+                {!loading && filteredReports.length > 0 && (
+                    <div className="mt-8">
+                        <PaginationControls 
+                            totalItems={filteredReports.length} 
+                            currentPage={currentPage} 
+                            setCurrentPage={setCurrentPage} 
+                            itemsPerPage={itemsPerPage} 
+                        />
                     </div>
                 )}
 
@@ -1040,4 +1071,57 @@ export default function AcademicReports() {
         </div>
     );
 }
+
+const PaginationControls = ({ totalItems, currentPage, setCurrentPage, itemsPerPage }) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return null;
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+            pages.push(i);
+        } else if (pages[pages.length - 1] !== '...') {
+            pages.push('...');
+        }
+    }
+
+    return (
+        <div className="flex items-center justify-center gap-2 py-8">
+            <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 bg-white border border-maroon/10 rounded-xl disabled:opacity-30 hover:bg-maroon hover:text-gold transition-all shadow-sm"
+            >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+            </button>
+
+            <div className="flex items-center gap-1">
+                {pages.map((p, i) => (
+                    <button
+                        key={i}
+                        onClick={() => typeof p === 'number' && setCurrentPage(p)}
+                        className={`min-w-[40px] h-10 rounded-xl text-[10px] font-black transition-all border ${
+                            p === currentPage 
+                            ? 'bg-maroon text-gold border-maroon shadow-lg' 
+                            : p === '...' 
+                            ? 'bg-transparent border-transparent text-gray-400 cursor-default'
+                            : 'bg-white text-gray-500 border-maroon/10 hover:border-maroon/20'
+                        }`}
+                    >
+                        {p}
+                    </button>
+                ))}
+            </div>
+
+            <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 bg-white border border-maroon/10 rounded-xl disabled:opacity-30 hover:bg-maroon hover:text-gold transition-all shadow-sm"
+            >
+                <ChevronRight className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
+
 

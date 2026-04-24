@@ -234,13 +234,26 @@ export async function createStudent(req, res) {
         } else {
             // Create student record
             const courseVal = Array.isArray(course) ? JSON.stringify(course) : course;
-            const enrolledDate = req.body.enrolled_date || new Date().toISOString();
-            const completionDate = req.body.completion_date || null;
+            
+            // Format dates to YYYY-MM-DD for database compatibility (PostgreSQL DATE type)
+            const formatDate = (dateStr) => {
+                if (!dateStr) return null;
+                try {
+                    const date = new Date(dateStr);
+                    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+                } catch {
+                    return null;
+                }
+            };
+
+            const enrolledDate = formatDate(req.body.enrolled_date) || new Date().toISOString().split('T')[0];
+            const completionDate = formatDate(req.body.completion_date);
+            const dobDate = formatDate(dob);
             
             await run(
                 `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, completion_date, dob, address, guardian_name, guardian_contact, blood_group)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dob, address, guardian_name, guardian_contact, blood_group]
+                [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dobDate, address, guardian_name, guardian_contact, blood_group]
             );
 
             // Create user account for login
@@ -394,5 +407,31 @@ export async function searchStudents(req, res) {
     } catch (error) {
         console.error('Search students error:', error);
         res.status(500).json({ error: 'Failed to search students' });
+    }
+}
+
+export async function bulkUpdateStatus(req, res) {
+    try {
+        const { ids, status } = req.body;
+        if (!ids || !Array.isArray(ids) || ids.length === 0) {
+            return res.status(400).json({ error: 'No student IDs provided' });
+        }
+        if (!['Active', 'Inactive', 'Graduated'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status' });
+        }
+
+        const mongo = await isMongo();
+        if (mongo) {
+            const Student = (await import('../models/mongo/Student.js')).default;
+            await Student.updateMany({ id: { $in: ids } }, { $set: { status } });
+        } else {
+            const placeholders = ids.map(() => '?').join(',');
+            await run(`UPDATE students SET status = ? WHERE id IN (${placeholders})`, [status, ...ids]);
+        }
+
+        res.json({ message: `Successfully updated status for ${ids.length} students` });
+    } catch (error) {
+        console.error('Bulk update status error:', error);
+        res.status(500).json({ error: 'Failed to update students' });
     }
 }

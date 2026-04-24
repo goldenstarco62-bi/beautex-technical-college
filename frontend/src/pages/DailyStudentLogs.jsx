@@ -78,6 +78,10 @@ export default function DailyStudentLogs() {
 
     const [expandedDepts, setExpandedDepts] = useState({});
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
     // Departments derived from courses
     const departments = useMemo(() => {
         const depts = new Set((courses || []).map(c => c.department).filter(Boolean));
@@ -102,6 +106,11 @@ export default function DailyStudentLogs() {
 
     useEffect(() => { fetchInitialData(); }, []);
     useEffect(() => { fetchLogs(); }, [filters]);
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filters]);
 
     const fetchInitialData = async () => {
         try {
@@ -217,10 +226,15 @@ export default function DailyStudentLogs() {
         return searchMatch && feedbackMatch && deptMatch && dateMatch;
     });
 
+    const paginatedLogs = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredLogs.slice(start, start + itemsPerPage);
+    }, [filteredLogs, currentPage]);
+
     const groupedLogs = useMemo(() => {
         if (!isAdmin) return null;
         const grouped = {};
-        filteredLogs.forEach(l => {
+        paginatedLogs.forEach(l => {
             const courseObj = courses.find(c => c.name === l.course);
             const dept = courseObj?.department || 'Miscellaneous';
             const courseName = l.course || 'Unassigned';
@@ -230,7 +244,7 @@ export default function DailyStudentLogs() {
             grouped[dept][courseName].push(l);
         });
         return grouped;
-    }, [filteredLogs, isAdmin, courses]);
+    }, [paginatedLogs, isAdmin, courses]);
 
     const toggleDept = (dept) => {
         setExpandedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
@@ -425,7 +439,7 @@ export default function DailyStudentLogs() {
                     ) : (
                         /* Regular Table View */
                         <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                            <LogTable logs={filteredLogs} isStudent={isStudent} isAdmin={isAdmin} isTeacher={isTeacher} onPdf={handleDownloadPDF} onPrint={handlePrint} onDelete={handleDelete} onView={setViewingLog} />
+                            <LogTable logs={paginatedLogs} isStudent={isStudent} isAdmin={isAdmin} isTeacher={isTeacher} onPdf={handleDownloadPDF} onPrint={handlePrint} onDelete={handleDelete} onView={setViewingLog} />
                         </div>
                     )
                 ) : (
@@ -435,6 +449,14 @@ export default function DailyStudentLogs() {
                             <p className="text-[11px] font-black uppercase tracking-[0.3em]">No academic logs matching your criteria</p>
                         </div>
                     </div>
+                )}
+                {!loading && filteredLogs.length > 0 && (
+                    <PaginationControls 
+                        totalItems={filteredLogs.length} 
+                        currentPage={currentPage} 
+                        setCurrentPage={setCurrentPage} 
+                        itemsPerPage={itemsPerPage} 
+                    />
                 )}
             </div>
 
@@ -700,6 +722,62 @@ export default function DailyStudentLogs() {
         </div>
     );
 }
+
+const PaginationControls = ({ totalItems, currentPage, setCurrentPage, itemsPerPage }) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return null;
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+            pages.push(i);
+        } else if (pages[pages.length - 1] !== '...') {
+            pages.push('...');
+        }
+    }
+
+    return (
+        <div className="flex items-center justify-between mt-12 bg-white/50 backdrop-blur-md p-4 rounded-3xl border border-gray-100 shadow-sm">
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-4">
+                Showing <span className="text-maroon">{(currentPage - 1) * itemsPerPage + 1}</span> - <span className="text-maroon">{Math.min(currentPage * itemsPerPage, totalItems)}</span> of <span className="text-maroon">{totalItems}</span>
+            </div>
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-3 rounded-xl border border-gray-100 text-gray-400 disabled:opacity-30 hover:bg-maroon hover:text-white transition-all"
+                >
+                    <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="flex items-center gap-1">
+                    {pages.map((p, idx) => (
+                        p === '...' ? (
+                            <span key={`dots-${idx}`} className="px-4 text-gray-300 font-black">...</span>
+                        ) : (
+                            <button
+                                key={idx}
+                                onClick={() => setCurrentPage(p)}
+                                className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all ${currentPage === p
+                                    ? 'bg-maroon text-white shadow-lg shadow-maroon/20 translate-y-[-2px]'
+                                    : 'text-gray-400 hover:bg-gray-50 hover:text-maroon'
+                                }`}
+                            >
+                                {p}
+                            </button>
+                        )
+                    ))}
+                </div>
+                <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-3 rounded-xl border border-gray-100 text-gray-400 disabled:opacity-30 hover:bg-maroon hover:text-white transition-all"
+                >
+                    <ChevronRight className="w-4 h-4" />
+                </button>
+            </div>
+        </div>
+    );
+};
 
 const LogTable = ({ logs, isStudent, isAdmin, isTeacher, onPdf, onPrint, onDelete, onView }) => (
     <div className="overflow-x-auto">

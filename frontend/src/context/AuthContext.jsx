@@ -1,7 +1,15 @@
 import { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { authAPI } from '../services/api';
 
-const AuthContext = createContext();
+const AuthContext = createContext({
+    user: null,
+    setUser: () => {},
+    updateUser: () => {},
+    login: async () => {},
+    register: async () => {},
+    logout: () => {},
+    loading: true
+});
 
 const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -110,5 +118,9 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-    return useContext(AuthContext);
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 }

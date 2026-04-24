@@ -46,7 +46,9 @@ export const studentsAPI = {
     update: (id, data) => api.put(`students/${encodeURIComponent(id)}`, data),
     delete: (id) => api.delete(`students/${encodeURIComponent(id)}`),
     search: (query) => api.get(`students/search?q=${query}`),
+    bulkUpdateStatus: (ids, status) => api.put('students/bulk-status', { ids, status }),
 };
+
 
 // Courses
 export const coursesAPI = {
@@ -97,7 +99,14 @@ export const notificationsAPI = {
     markRead: (id) => api.put(`notifications/${encodeURIComponent(id)}/read`),
 };
 
+// Dashboard & Stats
+export const dashboardAPI = {
+    getStats: () => api.get('stats/dashboard'),
+    search: (q) => api.get(`stats/search?q=${encodeURIComponent(q)}`),
+};
+
 // Sessions (Schedule)
+
 export const sessionsAPI = {
     getAll: () => api.get('sessions'),
     create: (data) => api.post('sessions', data),
@@ -149,7 +158,10 @@ export const activityReportsAPI = {
     },
     getAutoCapture: (params) => api.get('activity-reports/auto-capture', { params }),
     getConsolidated: (params) => api.get('activity-reports/consolidated', { params }),
+    getConsolidatedDept: (params) => api.get('activity-reports/consolidated-dept', { params }),
+    getAcademicSummary: (params) => api.get('activity-reports/academic-summary', { params }),
 };
+
 
 
 // Finance

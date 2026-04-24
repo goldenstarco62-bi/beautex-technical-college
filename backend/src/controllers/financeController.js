@@ -1,4 +1,6 @@
 import { query, queryOne, run, getProcessedDatabaseUrl, getCurrentDateSQL, getDateIntervalSQL, getActiveDbEngine } from '../config/database.js';
+import notificationService from '../services/notificationService.js';
+
 
 const isMongo = () => !!process.env.MONGODB_URI;
 
@@ -482,7 +484,38 @@ export async function recordPayment(req, res) {
             await internalSyncStudentFee(student_id);
         }
 
+        // --- Notify Student ---
+        notificationService.notifyStudent(
+            student_id,
+            'Payment Received',
+            `A payment of KSh ${amount} has been successfully recorded to your account via ${method}.`,
+            'success'
+        );
+
+        // --- Notify All Admins ---
+        try {
+            let admins = [];
+            if (isMongo()) {
+                const User = (await import('../models/mongo/User.js')).default;
+                admins = await User.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id');
+            } else {
+                admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin')");
+            }
+            
+            for (const admin of admins) {
+                notificationService.notifyUser(
+                    String(admin._id || admin.id),
+                    'New Payment Recorded',
+                    `A payment of KSh ${amount} for Student ${student_id} was recorded by ${recorded_by}.`,
+                    'info'
+                );
+            }
+        } catch (adminNotifyErr) {
+            console.error('Failed to notify admins of payment:', adminNotifyErr);
+        }
+
         res.status(201).json({ message: 'Payment recorded successfully' });
+
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -611,14 +611,23 @@ function MonthlyTemplate({ r, user }) {
 //  INSTITUTIONAL (CONSOLIDATED) BOARD AUDIT TEMPLATE
 // ─────────────────────────────────────────────────────────────────────────────
 function InstitutionalTemplate({ r, user }) {
-    const stats = r.data?.stats || r;
+    const stats = r.data?.stats || {};
     const qualitative = r.data?.qualitative || {};
-    const departmental = Object.entries(r.data?.departmental_breakdown || {});
     
-    const reportId = `BTT-INST-${new Date().getTime().toString().slice(-6)}-${(r.report_date || '').replace(/-/g, '')}`;
+    const expected = NUM(stats.total_students_expected);
+    const present = NUM(stats.total_students_present);
+    const absent = NUM(stats.total_students_absent);
+    const late = NUM(stats.late_arrivals);
+    const staffP = NUM(stats.staff_present);
+    const staffA = NUM(stats.staff_absent);
+    const attendPct = expected > 0 ? Math.round((present / expected) * 100) : 0;
+
+    const reportId = `BTT-INST-${new Date().getTime().toString().slice(-6)}-${(r.startDate || '').replace(/-/g, '')}`;
     const dateRangeStr = r.startDate && r.endDate 
-        ? `${new Date(r.startDate).toLocaleDateString()} — ${new Date(r.endDate).toLocaleDateString()}`
+        ? `${new Date(r.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${new Date(r.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
         : 'Institutional Performance Audit';
+
+    const join = (arr) => arr && arr.length > 0 ? arr.join('\n') : '—';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 28px 48px', position: 'relative', fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
@@ -628,83 +637,113 @@ function InstitutionalTemplate({ r, user }) {
 
             <InfoBar items={[
                 { label: 'Audit Period', value: dateRangeStr },
-                { label: 'Consolidated From', value: `${VAL(r.data?.total_reports, 0)} Dept Reports` },
-                { label: 'Audit Authority', value: safeUpper(r.reported_by || 'Insight Engine') },
+                { label: 'Total Logs', value: `${VAL(r.data?.total_reports, 0)} Daily | ${VAL(r.data?.total_trainer_reports, 0)} Academic` },
+                { label: 'Consolidated By', value: safeUpper(r.reported_by || 'Insight Engine') },
             ]} />
 
-            {/* ── AGGREGATED METRICS ── */}
+            {/* ── ATTENDANCE SUMMARY ── */}
             <div style={{ marginBottom: 14 }}>
                 <p style={{ fontSize: 8, fontWeight: 800, color: '#800000', textTransform: 'uppercase', letterSpacing: '0.14em', margin: '0 0 8px' }}>
-                    📈 Aggregated Metrics Summary
+                    📊 Aggregated Attendance Summary
                 </p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 10 }}>
-                    <MetricCard label="Total Attendance" value={VAL(stats.total_students_present, 0)} color="#800000" />
-                    <MetricCard label="New Enrollments" value={VAL(stats.new_enrollments, 0)} color="#059669" />
-                    <MetricCard label="Assessments" value={VAL(stats.assessments_conducted, 0)} color="#1d4ed8" />
-                    <MetricCard label="Staff Presence" value={VAL(stats.staff_present, 0)} color="#7c3aed" />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 10 }}>
+                    <MetricCard label="Expected" value={VAL(expected, 0)} color="#374151" />
+                    <MetricCard label="Present" value={VAL(present, 0)} color="#059669" />
+                    <MetricCard label="Absent" value={VAL(absent, 0)} color="#dc2626" />
+                    <MetricCard label="Late" value={VAL(late, 0)} color="#d97706" />
+                    <MetricCard label="Staff" value={`${staffP}/${staffP + staffA}`} color="#7c3aed" sub="Present / Total" />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <ProgressBar value={attendPct} max={100} color="#059669" height={10} />
+                    <span style={{ fontSize: 12, fontWeight: 900, color: '#059669', minWidth: 42, textAlign: 'right' }}>{attendPct}%</span>
+                </div>
+                <p style={{ fontSize: 8, color: '#9ca3af', margin: '2px 0 0' }}>Institutional Student Attendance Rate</p>
+            </div>
+
+            {/* ── SECTIONS GRID ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flex: 1 }}>
+
+                {/* Academic Operations */}
+                <Section title="Academic Operations" icon="📚" color="#1d4ed8">
+                    <FieldRow label="Classes Conducted" value={VAL(stats.classes_conducted)} highlight />
+                    <FieldRow label="Topics Covered" value={join(qualitative.topics_covered)} />
+                    <FieldRow label="Practicals" value={join(qualitative.practical_sessions)} />
+                    <FieldRow label="Assessments" value={VAL(stats.assessments_conducted)} />
+                </Section>
+
+                {/* Administration */}
+                <Section title="Administration" icon="🏢" color="#0891b2">
+                    <FieldRow label="Meetings Held" value={join(qualitative.meetings_held)} />
+                    <FieldRow label="New Enrollments" value={VAL(stats.new_enrollments, 0)} highlight />
+                    <FieldRow label="Admissions" value={join(qualitative.admissions_registrations)} />
+                </Section>
+
+                {/* Facilities & Logistics */}
+                <Section title="Facilities & Logistics" icon="🏗️" color="#b45309">
+                    <FieldRow label="Facilities Issues" value={join(qualitative.facilities_issues)} />
+                    <FieldRow label="Equipment" value={join(qualitative.equipment_maintenance)} />
+                    <FieldRow label="Cleaning" value={join(qualitative.cleaning_maintenance)} />
+                    <FieldRow label="ICT / Internet" value={join(qualitative.internet_ict_status)} />
+                </Section>
+
+                {/* Student Affairs */}
+                <Section title="Student Affairs" icon="👩‍🎓" color="#7c3aed">
+                    <FieldRow label="Disciplinary Cases" value={join(qualitative.disciplinary_cases)} />
+                    <FieldRow label="Student Feedback" value={join(qualitative.student_feedback)} />
+                    <FieldRow label="Counseling" value={join(qualitative.counseling_support)} />
+                </Section>
+
+                {/* Marketing & Growth */}
+                <Section title="Marketing & Growth" icon="📈" color="#059669">
+                    <FieldRow label="Walk-ins" value={VAL(stats.walk_ins, 0)} highlight />
+                    <FieldRow label="Inquiries" value={VAL(stats.inquiries_received, 0)} highlight />
+                    <FieldRow label="Social Media" value={join(qualitative.social_media_activities)} />
+                </Section>
+
+                {/* Challenges & Incidents */}
+                <Section title="Challenges & Incidents" icon="⚠️" color="#dc2626" bg="#fff8f8">
+                    <FieldRow label="Challenges" value={join(qualitative.challenges)} />
+                    <FieldRow label="Incidents" value={join(qualitative.incidents)} />
+                    <FieldRow label="Actions Taken" value={join(qualitative.actions_taken)} />
+                </Section>
+
+                {/* Success & Highlights — spans full width */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <Section title="Trainer Academic Records" icon="👨‍🏫" color="#800000" bg="#fdf2f2">
+                        <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.5 }}>
+                            {join(qualitative.trainer_insights)}
+                        </div>
+                    </Section>
+                </div>
+
+                {/* Success & Highlights — spans full width */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <Section title="Success Highlights & Achievements" icon="🏆" color="#d97706" bg="#fffbf0">
+                        <FieldRow label="Achievements" value={join(qualitative.achievements)} />
+                        <FieldRow label="Notable Events" value={join(qualitative.notable_events)} />
+                    </Section>
+                </div>
+
+                {/* Plans & Remarks — spans full width */}
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <Section title="Institutional Plans & Board Remarks" icon="📝" color="#374151">
+                        <FieldRow label="Strategic Plans" value={join(qualitative.plans)} />
+                        <FieldRow label="Board Notes" value={join(qualitative.additional_notes)} />
+                    </Section>
                 </div>
             </div>
 
-            {/* ── DEPARTMENTAL BREAKDOWN ── */}
-            <div style={{ marginBottom: 16 }}>
-                <Section title="Departmental Activity Flux" icon="🏢" color="#111827">
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        {departmental.map(([dept, data]) => (
-                            <div key={dept} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: 4, marginBottom: 4 }}>
-                                <span style={{ fontSize: 9, fontWeight: 700, color: '#374151' }}>{dept}</span>
-                                <span style={{ fontSize: 9, fontWeight: 800, color: '#800000' }}>{data.count} Submissions</span>
-                            </div>
-                        ))}
-                    </div>
-                </Section>
-            </div>
-
-            {/* ── QUALITATIVE INTELLIGENCE ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flex: 1 }}>
-                
-                <Section title="Strategic Achievements" icon="🏆" color="#059669" bg="#f0fdf4">
-                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
-                        {qualitative.achievements?.slice(0, 5).map((note, i) => (
-                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #059669' }}>{note.split(': ')[1] || note}</p>
-                        )) || 'No high-level achievements logged for this period.'}
-                    </div>
-                </Section>
-
-                <Section title="Operational Challenges" icon="⚠️" color="#dc2626" bg="#fff8f8">
-                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
-                        {qualitative.challenges?.slice(0, 5).map((note, i) => (
-                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #dc2626' }}>{note.split(': ')[1] || note}</p>
-                        )) || 'Stability maintained across all departments.'}
-                    </div>
-                </Section>
-
-                <Section title="Institutional Goals" icon="🎯" color="#d97706" bg="#fffbf0">
-                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
-                        {qualitative.plans?.slice(0, 5).map((note, i) => (
-                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #d97706' }}>{note.split(': ')[1] || note}</p>
-                        )) || 'Standard institutional plans remain in effect.'}
-                    </div>
-                </Section>
-
-                <Section title="Academic Insight" icon="📚" color="#1d4ed8">
-                    <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.4 }}>
-                        {qualitative.topics_covered?.slice(0, 5).map((note, i) => (
-                            <p key={i} style={{ marginBottom: 4, paddingLeft: 8, borderLeft: '2px solid #1d4ed8' }}>{note.split(': ')[1] || note}</p>
-                        )) || 'Core curriculum delivery on schedule.'}
-                    </div>
-                </Section>
-            </div>
-
             <SignatureBlock signatories={[
-                { name: 'Board Auditor', role: 'Prepared By' },
-                { name: 'College Principal', role: 'Institutional Review' },
-                { name: 'Board Secretary', role: 'Official Approval' },
+                { name: 'Institutional Auditor', role: 'Prepared By' },
+                { name: 'College Principal', role: 'Verified By' },
+                { name: 'Board Chairperson', role: 'Approved By' },
             ]} />
 
             <ReportFooter reportId={reportId} />
         </div>
     );
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  MAIN EXPORT: ReportPDFTemplate

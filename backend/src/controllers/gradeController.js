@@ -1,4 +1,6 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
+import notificationService from '../services/notificationService.js';
+
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -228,7 +230,18 @@ export async function createBatchGrades(req, res) {
             }
         }
 
+        // Notify students asynchronously
+        for (const g of grades) {
+            notificationService.notifyStudent(
+                g.student_id,
+                'New Grade Posted',
+                `Your grade for ${g.assignment} (${g.course}) has been posted.`,
+                'success'
+            );
+        }
+
         res.status(201).json({ message: `Successfully recorded ${grades.length} marks`, count: grades.length });
+
     } catch (error) {
         console.error('Batch grade creation error:', error);
         res.status(500).json({ error: 'Failed to record batch marks' });
@@ -304,7 +317,17 @@ export async function createGrade(req, res) {
             [student_id, course, assignment, month, score, max_score, remarks]
         );
         const grade = await queryOne('SELECT * FROM grades WHERE id = ?', [result.lastID]);
+
+        // Notify student
+        notificationService.notifyStudent(
+            student_id,
+            'New Grade Posted',
+            `Your grade for ${assignment} (${course}) has been posted.`,
+            'success'
+        );
+
         res.status(201).json(grade);
+
     } catch (error) {
         console.error('Create grade error:', error);
         res.status(500).json({ error: 'Failed to create grade' });
@@ -415,7 +438,17 @@ export async function updateGrade(req, res) {
         `, [req.params.id]);
 
         if (!updatedGrade) return res.status(404).json({ error: 'Grade not found' });
+
+        // Notify student
+        notificationService.notifyStudent(
+            updatedGrade.student_id,
+            'Grade Updated',
+            `Your grade for ${updatedGrade.assignment} (${updatedGrade.course}) has been updated.`,
+            'info'
+        );
+
         res.json(updatedGrade);
+
     } catch (error) {
         console.error('Update grade error:', error);
         res.status(500).json({ error: 'Failed to update grade' });

@@ -1,5 +1,7 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { sendAnnouncementEmail } from '../services/emailService.js';
+import notificationService from '../services/notificationService.js';
+
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -90,6 +92,14 @@ export async function createAnnouncement(req, res) {
             savedAnnouncement = await queryOne('SELECT * FROM announcements WHERE id = ?', [result.lastID]);
             res.status(201).json(savedAnnouncement);
         }
+
+        // --- Create Global Notification ---
+        notificationService.notifyAll(
+            title,
+            content.substring(0, 200) + (content.length > 200 ? '...' : ''),
+            'announcement'
+        );
+
 
         // ✉️ Trigger Neural Broadcast in background
         console.log('📡 Initiating background broadcast sequence...');

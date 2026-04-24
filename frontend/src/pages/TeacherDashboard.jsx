@@ -128,14 +128,14 @@ export default function TeacherDashboard() {
                 {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className={`bg-white p-6 rounded-[2rem] border ${stat.borderColor} shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group`}>
+                        <div key={index} className={`bg-white dark:bg-[#111] p-6 rounded-[2rem] border ${stat.borderColor} dark:border-white/5 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group`}>
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.title}</p>
-                                    <p className="text-3xl font-black text-gray-800">{stat.value}</p>
+                                    <p className="text-3xl font-black text-gray-800 dark:text-white">{stat.value}</p>
                                 </div>
-                                <div className={`w-12 h-12 ${stat.bg} rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                                    <Icon className={`w-6 h-6 ${stat.iconColor}`} />
+                                <div className={`w-12 h-12 ${stat.bg} dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+                                    <Icon className={`w-6 h-6 ${stat.iconColor} dark:text-gold`} />
                                 </div>
                             </div>
                         </div>
@@ -143,14 +143,16 @@ export default function TeacherDashboard() {
                 })}
             </div>
 
+
             {/* Quick Actions */}
-            <div className="bg-white p-6 sm:p-8 rounded-[2.5rem] border border-gray-100 shadow-lg">
+            <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-lg">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
                         <Zap className="w-4 h-4 text-gold" />
                     </div>
-                    <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Quick Actions</h2>
+                    <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Quick Actions</h2>
                 </div>
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                     {quickActions.map((item, i) => {
                         const Icon = item.icon;
@@ -174,44 +176,46 @@ export default function TeacherDashboard() {
                 <div className="lg:col-span-2 space-y-8">
 
                     {/* My Courses */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                    <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
                         <div className="flex items-center justify-between mb-8">
                             <div className="flex items-center gap-2">
                                 <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
                                     <BookOpen className="w-4 h-4 text-gold" />
                                 </div>
-                                <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Active Curriculum</h2>
+                                <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Active Curriculum</h2>
                             </div>
                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{myCourses.length} Course{myCourses.length !== 1 ? 's' : ''}</span>
                         </div>
+
                         {myCourses.length > 0 ? (
                             <div className="space-y-4">
                                 {myCourses.map(course => {
                                     const fillPct = course.capacity ? Math.round((course.enrolled / course.capacity) * 100) : 0;
                                     return (
-                                        <div key={course.id} className="flex items-center justify-between p-5 bg-gray-50 rounded-2xl border border-gray-100 hover:border-maroon/20 transition-all group">
+                                        <div key={course.id} className="flex items-center justify-between p-5 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 hover:border-maroon/20 transition-all group">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-12 h-12 bg-maroon text-gold rounded-xl flex items-center justify-center font-black text-xs shrink-0">
                                                     {course.id}
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-bold text-gray-800">{course.name}</h3>
+                                                    <h3 className="font-bold text-gray-800 dark:text-white">{course.name}</h3>
                                                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{course.schedule || 'Schedule TBD'}</p>
                                                     {/* Enrollment bar */}
                                                     <div className="flex items-center gap-2 mt-1.5">
-                                                        <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                                            <div className="h-full bg-maroon rounded-full" style={{ width: `${Math.min(fillPct, 100)}%` }} />
+                                                        <div className="w-24 h-1.5 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-maroon dark:bg-gold rounded-full" style={{ width: `${Math.min(fillPct, 100)}%` }} />
                                                         </div>
                                                         <span className="text-[9px] font-bold text-gray-400">{fillPct}% full</span>
                                                     </div>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-sm font-black text-gray-800">{course.enrolled}/{course.capacity}</p>
+                                                <p className="text-sm font-black text-gray-800 dark:text-white">{course.enrolled}/{course.capacity}</p>
                                                 <p className="text-[10px] text-gray-400 font-bold uppercase">Students</p>
                                             </div>
                                         </div>
                                     );
+
                                 })}
                             </div>
                         ) : (

@@ -51,6 +51,11 @@ export default function StudentDailyReportEntry() {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
     const [expandedDepts, setExpandedDepts] = useState({});
+    
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
 
     // Departments derived from all courses
     const allDepartments = useMemo(() => {
@@ -175,6 +180,19 @@ export default function StudentDailyReportEntry() {
         return matchesDate && matchesCourse && matchesDept;
     }).sort((a, b) => new Date(b.report_date) - new Date(a.report_date));
 
+    // Reset page on filter change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, selectedCourse, selectedDepartment, filterDateFrom, filterDateTo, viewMode]);
+
+    // Paginated Reports
+
+    const paginatedReports = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredReports.slice(start, start + itemsPerPage);
+    }, [filteredReports, currentPage]);
+
+
     // Grouping for admin history
     const groupedReports = useMemo(() => {
         if (!isAdmin || viewMode !== 'history') return null;
@@ -190,7 +208,8 @@ export default function StudentDailyReportEntry() {
             grouped[dept][courseName].push(r);
         });
         return grouped;
-    }, [filteredReports, isAdmin, viewMode, allCourses]);
+    }, [paginatedReports, isAdmin, viewMode, allCourses]);
+
 
     const toggleDept = (dept) => {
         setExpandedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
@@ -623,25 +642,93 @@ export default function StudentDailyReportEntry() {
                                             ))
                                         ) : (
                                             /* Regular Teacher Flat View */
-                                            filteredReports.map(report => (
+                                            paginatedReports.map(report => (
                                                 <HistoryCard key={report.id || report._id} report={report} students={students} setSelectedStudent={setSelectedStudent} setReportForm={setReportForm} setViewMode={setViewMode} formatCourse={formatCourse} />
                                             ))
                                         )
                                     ) : (
+
                                         <div className="text-center py-20">
                                             <History className="w-16 h-16 text-gray-100 mx-auto mb-6" />
                                             <p className="text-[11px] font-black text-gray-300 uppercase tracking-widest">Archive is currently empty</p>
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Pagination */}
+                                {!loading && filteredReports.length > 0 && (
+                                    <div className="mt-8">
+                                        <PaginationControls 
+                                            totalItems={filteredReports.length} 
+                                            currentPage={currentPage} 
+                                            setCurrentPage={setCurrentPage} 
+                                            itemsPerPage={itemsPerPage} 
+                                        />
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
+
                 </div>
             </div>
         </div>
     );
 }
+
+
+const PaginationControls = ({ totalItems, currentPage, setCurrentPage, itemsPerPage }) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return null;
+
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+            pages.push(i);
+        } else if (pages[pages.length - 1] !== '...') {
+            pages.push('...');
+        }
+    }
+
+    return (
+        <div className="flex items-center justify-center gap-2 py-8">
+            <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-2 bg-white border border-gray-100 rounded-xl disabled:opacity-30 hover:bg-maroon hover:text-gold transition-all shadow-sm"
+            >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+            </button>
+
+            <div className="flex items-center gap-1">
+                {pages.map((p, i) => (
+                    <button
+                        key={i}
+                        onClick={() => typeof p === 'number' && setCurrentPage(p)}
+                        className={`min-w-[40px] h-10 rounded-xl text-[10px] font-black transition-all border ${
+                            p === currentPage 
+                            ? 'bg-maroon text-gold border-maroon shadow-lg' 
+                            : p === '...' 
+                            ? 'bg-transparent border-transparent text-gray-400 cursor-default'
+                            : 'bg-white text-gray-500 border-gray-100 hover:border-maroon/20'
+                        }`}
+                    >
+                        {p}
+                    </button>
+                ))}
+            </div>
+
+            <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-2 bg-white border border-gray-100 rounded-xl disabled:opacity-30 hover:bg-maroon hover:text-gold transition-all shadow-sm"
+            >
+                <ChevronRight className="w-4 h-4" />
+            </button>
+        </div>
+    );
+};
+
 
 
 const HistoryCard = ({ report, students, setSelectedStudent, setReportForm, setViewMode, formatCourse }) => (

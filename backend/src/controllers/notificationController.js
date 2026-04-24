@@ -9,40 +9,45 @@ const notificationController = {
      */
     getAll: async (req, res) => {
         try {
-            let announcements = [];
+            const userId = req.user.id;
+            let notifications = [];
 
             if (await isMongo()) {
-                const Announcement = (await import('../models/mongo/Announcement.js')).default;
-                const docs = await Announcement.find().sort({ date: -1, _id: -1 }).limit(20).lean();
-                announcements = docs.map(a => ({
-                    id: String(a._id),
-                    title: a.title,
-                    content: a.content,
-                    type: 'announcement',
-                    category: a.category || 'General',
-                    priority: a.priority || 'medium',
-                    time: a.date || new Date().toISOString().split('T')[0],
-                    author: a.author,
-                    read: false // client overrides this from localStorage
+                const Notification = (await import('../models/mongo/Notification.js')).default;
+                const docs = await Notification.find({
+                    $or: [{ user_id: userId }, { user_id: null }]
+                }).sort({ created_at: -1 }).limit(30).lean();
+
+                notifications = docs.map(n => ({
+                    id: String(n._id),
+                    title: n.title,
+                    content: n.content,
+                    type: n.type || 'info',
+                    category: n.type === 'announcement' ? 'General' : 'System',
+                    priority: n.priority || 'medium',
+                    time: n.created_at,
+                    read: n.is_read
                 }));
             } else {
-                const rows = await query(
-                    'SELECT id, title, content, category, priority, date, author FROM announcements ORDER BY date DESC, id DESC LIMIT 20'
-                );
-                announcements = rows.map(a => ({
-                    id: String(a.id),
-                    title: a.title,
-                    content: a.content,
-                    type: 'announcement',
-                    category: a.category || 'General',
-                    priority: a.priority || 'medium',
-                    time: a.date || '',
-                    author: a.author,
-                    read: false
+                const isPostgres = (await import('../config/database.js')).getActiveDbEngine() === 'postgres';
+                const sql = isPostgres
+                    ? 'SELECT id, title, content, type, priority, created_at, is_read FROM notifications WHERE user_id = $1 OR user_id IS NULL ORDER BY created_at DESC LIMIT 30'
+                    : 'SELECT id, title, content, type, priority, created_at, is_read FROM notifications WHERE user_id = ? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30';
+                
+                const rows = await query(sql, [userId]);
+                notifications = rows.map(n => ({
+                    id: String(n.id),
+                    title: n.title,
+                    content: n.content,
+                    type: n.type || 'info',
+                    category: 'System',
+                    priority: n.priority || 'medium',
+                    time: n.created_at,
+                    read: !!n.is_read
                 }));
             }
 
-            res.json(announcements);
+            res.json(notifications);
         } catch (error) {
             console.error('Notification fetch error:', error);
             res.status(500).json({ message: error.message });
@@ -50,10 +55,24 @@ const notificationController = {
     },
 
     markRead: async (req, res) => {
-        // Read state is stored in localStorage on the client.
-        // This endpoint just acknowledges the mark-read action.
-        res.json({ success: true, id: req.params.id });
+        try {
+            const { id } = req.params;
+            if (await isMongo()) {
+                const Notification = (await import('../models/mongo/Notification.js')).default;
+                await Notification.findByIdAndUpdate(id, { is_read: true });
+            } else {
+                const isPostgres = (await import('../config/database.js')).getActiveDbEngine() === 'postgres';
+                const sql = isPostgres 
+                    ? 'UPDATE notifications SET is_read = TRUE WHERE id = $1'
+                    : 'UPDATE notifications SET is_read = 1 WHERE id = ?';
+                await query(sql, [id]);
+            }
+            res.json({ success: true, id });
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
     }
+
 };
 
 export default notificationController;

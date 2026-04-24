@@ -21,7 +21,10 @@ export default function Students() {
     const [editingStudent, setEditingStudent] = useState(null);
     const [resetLoading, setResetLoading] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [bulkLoading, setBulkLoading] = useState(false);
     const PAGE_SIZE = 20;
+
     const [formData, setFormData] = useState({
         id: '', name: '', email: '', course: [], intake: 'January Intake',
         gpa: 0, status: 'Active', contact: '',
@@ -139,6 +142,45 @@ export default function Students() {
             }
         }
     };
+
+    const handleBulkUpdate = async (status) => {
+        if (selectedIds.length === 0) return;
+        if (!confirm(`Are you sure you want to set ${selectedIds.length} students to ${status}?`)) return;
+
+        setBulkLoading(true);
+        try {
+            await studentsAPI.bulkUpdateStatus(selectedIds, status);
+            // Optimistically update local state
+            const updatedAll = allStudents.map(s => selectedIds.includes(s.id) ? { ...s, status } : s);
+            setAllStudents(updatedAll);
+            setStudents(updatedAll.filter(s => {
+                const currentStatusFilter = document.querySelector('select')?.value || 'All Status';
+                return currentStatusFilter === 'All Status' || s.status === currentStatusFilter;
+            }));
+            setSelectedIds([]);
+        } catch (error) {
+            console.error('Bulk update failed:', error);
+            alert('Failed to perform bulk update.');
+        } finally {
+            setBulkLoading(false);
+        }
+    };
+
+    const toggleSelectAll = () => {
+        const pageItems = students.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map(s => s.id);
+        const allSelected = pageItems.every(id => selectedIds.includes(id));
+        
+        if (allSelected) {
+            setSelectedIds(prev => prev.filter(id => !pageItems.includes(id)));
+        } else {
+            setSelectedIds(prev => [...new Set([...prev, ...pageItems])]);
+        }
+    };
+
+    const toggleSelect = (id) => {
+        setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    };
+
 
     const resetForm = () => {
         setFormData({
@@ -372,14 +414,32 @@ export default function Students() {
                     <table className="w-full text-left min-w-[1000px]">
                         <thead>
                             <tr className="bg-gray-50/50 border-b border-gray-100">
+                                <th className="px-6 py-5 w-10">
+                                    <input 
+                                        type="checkbox" 
+                                        className="w-4 h-4 rounded border-gray-300 text-maroon focus:ring-maroon cursor-pointer"
+                                        checked={students.length > 0 && students.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).every(s => selectedIds.includes(s.id))}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </th>
                                 {['Student ID', 'Name', 'Course', 'Intake', 'Enrolled Date', 'Remaining', 'Status', 'Contact', 'Actions'].map(h => (
                                     <th key={h} className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                                 ))}
                             </tr>
                         </thead>
+
                         <tbody className="divide-y divide-gray-50">
                             {students.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE).map((student) => (
-                                <tr key={student.id} className="hover:bg-gray-50/30 transition-colors group">
+                                <tr key={student.id} className={`transition-colors group ${selectedIds.includes(student.id) ? 'bg-maroon/[0.02] hover:bg-maroon/[0.04]' : 'hover:bg-gray-50/30'}`}>
+                                    <td className="px-6 py-5">
+                                        <input 
+                                            type="checkbox" 
+                                            className="w-4 h-4 rounded border-gray-300 text-maroon focus:ring-maroon cursor-pointer"
+                                            checked={selectedIds.includes(student.id)}
+                                            onChange={() => toggleSelect(student.id)}
+                                        />
+                                    </td>
+
                                     <td className="px-6 py-5">
                                         <span className="text-xs font-bold text-gray-500">BT{student.id.toString().padStart(7, '0')}</span>
                                     </td>
@@ -494,7 +554,52 @@ export default function Students() {
                         </div>
                     </div>
                 )}
+
+                {/* Bulk Action Bar */}
+                {selectedIds.length > 0 && isAdmin && (
+                    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[150] animate-in slide-in-from-bottom-10 duration-500">
+                        <div className="bg-gray-900 text-white px-6 py-4 rounded-[2rem] shadow-2xl border border-white/10 flex items-center gap-6 ring-1 ring-white/5">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-gold uppercase tracking-widest">Bulk Actions</span>
+                                <span className="text-[11px] font-bold text-white/60">{selectedIds.length} selected students</span>
+                            </div>
+                            <div className="h-8 w-[1px] bg-white/10 mx-2" />
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    disabled={bulkLoading}
+                                    onClick={() => handleBulkUpdate('Active')}
+                                    className="px-4 py-2 bg-white/5 hover:bg-green-500 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-white/5 disabled:opacity-30"
+                                >
+                                    Active
+                                </button>
+                                <button 
+                                    disabled={bulkLoading}
+                                    onClick={() => handleBulkUpdate('Graduated')}
+                                    className="px-4 py-2 bg-white/5 hover:bg-blue-500 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-white/5 disabled:opacity-30"
+                                >
+                                    Graduated
+                                </button>
+                                <button 
+                                    disabled={bulkLoading}
+                                    onClick={() => handleBulkUpdate('Inactive')}
+                                    className="px-4 py-2 bg-white/5 hover:bg-gray-500 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border border-white/5 disabled:opacity-30"
+                                >
+                                    Inactive
+                                </button>
+                                <div className="h-8 w-[1px] bg-white/10 mx-2" />
+                                <button 
+                                    onClick={() => setSelectedIds([])}
+                                    className="p-2 text-white/40 hover:text-white transition-colors"
+                                    title="Cancel selection"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
+
 
             {/* Student Profile Modal */}
             {showProfileModal && (

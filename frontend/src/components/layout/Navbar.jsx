@@ -1,25 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { Bell, Moon, Sun, LogOut, Menu, Check, CheckCheck, Megaphone, AlertTriangle, Info, X } from 'lucide-react';
+import { Bell, Moon, Sun, LogOut, Menu, Check, CheckCheck, Megaphone, AlertTriangle, Info, X, Search, Command } from 'lucide-react';
+
 import { useNavigate, Link } from 'react-router-dom';
 import { notificationsAPI } from '../../services/api';
 
+// Storage key is kept for legacy but no longer primary source of truth
 const STORAGE_KEY = 'bttc_read_notifications';
 
-function getReadIds() {
-    try {
-        return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
-    } catch {
-        return new Set();
-    }
-}
-
-function saveReadIds(ids) {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
-    } catch {}
-}
 
 const priorityIcon = (priority) => {
     switch ((priority || '').toLowerCase()) {
@@ -37,14 +26,15 @@ const priorityBadge = (priority) => {
     }
 };
 
-export default function Navbar({ onMenuClick }) {
+export default function Navbar({ onMenuClick, onSearchClick }) {
+
     const { user, logout } = useAuth();
     const { darkMode, toggleDarkMode } = useTheme();
     const navigate = useNavigate();
     const [notifications, setNotifications] = useState([]);
     const [showNotifications, setShowNotifications] = useState(false);
-    const [readIds, setReadIds] = useState(getReadIds);
     const [loading, setLoading] = useState(false);
+
     const dropdownRef = useRef(null);
     const bellRef = useRef(null);
 
@@ -90,21 +80,29 @@ export default function Navbar({ onMenuClick }) {
         navigate('/login');
     };
 
-    const markRead = (id) => {
-        setReadIds(prev => {
-            const next = new Set(prev);
-            next.add(String(id));
-            saveReadIds(next);
-            return next;
-        });
+    const markRead = async (id) => {
+        try {
+            // Optimistic update
+            setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+            await notificationsAPI.markRead(id);
+        } catch (error) {
+            console.error('Failed to mark notification as read:', error);
+        }
     };
 
-    const markAllRead = (e) => {
+
+    const markAllRead = async (e) => {
         e.stopPropagation();
-        const allIds = new Set(notifications.map(n => String(n.id)));
-        saveReadIds(allIds);
-        setReadIds(allIds);
+        try {
+            const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+            // Optimistic update
+            setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+            await Promise.all(unreadIds.map(id => notificationsAPI.markRead(id)));
+        } catch (error) {
+            console.error('Failed to mark all as read:', error);
+        }
     };
+
 
     const handleNotificationClick = (notification) => {
         markRead(notification.id);
@@ -112,10 +110,10 @@ export default function Navbar({ onMenuClick }) {
         navigate('/announcements');
     };
 
-    // Enrich notifications with local read state
-    const enriched = notifications.map(n => ({ ...n, read: readIds.has(String(n.id)) }));
-    const unreadCount = enriched.filter(n => !n.read).length;
+    // Local read state is now handled by the backend 'read' property
+    const unreadCount = notifications.filter(n => !n.read).length;
     const hasUnread = unreadCount > 0;
+
 
     return (
         <div className="h-20 bg-maroon backdrop-blur-md px-4 md:px-8 flex items-center justify-between sticky top-0 left-0 w-full z-40 shadow-2xl transition-all duration-300 border-b border-white/5">
@@ -136,7 +134,24 @@ export default function Navbar({ onMenuClick }) {
                 </div>
             </div>
 
+            <div className="flex-1 max-w-md mx-8 hidden lg:block">
+                <button 
+                    onClick={onSearchClick}
+                    className="w-full flex items-center justify-between px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl transition-all group"
+                >
+                    <div className="flex items-center gap-3">
+                        <Search className="w-4 h-4 text-white/40 group-hover:text-white transition-colors" />
+                        <span className="text-[11px] font-black text-white/30 uppercase tracking-widest group-hover:text-white/60">Search Anything...</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-white/20">
+                        <Command className="w-3 h-3" />
+                        <span className="text-[10px] font-black uppercase">K</span>
+                    </div>
+                </button>
+            </div>
+
             <div className="flex items-center gap-2 sm:gap-6">
+
                 {/* Theme Toggle */}
                 <button
                     onClick={toggleDarkMode}
@@ -207,8 +222,9 @@ export default function Navbar({ onMenuClick }) {
                                         <div className="w-6 h-6 border-2 border-maroon/20 border-t-maroon rounded-full animate-spin mx-auto mb-2" />
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Loading...</p>
                                     </div>
-                                ) : enriched.length > 0 ? (
-                                    enriched.map(n => (
+                                ) : notifications.length > 0 ? (
+                                    notifications.map(n => (
+
                                         <div
                                             key={n.id}
                                             onClick={() => handleNotificationClick(n)}

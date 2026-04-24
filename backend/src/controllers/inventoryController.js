@@ -1,7 +1,38 @@
 import { query, queryOne, run, getCurrentDateSQL, getDateIntervalSQL } from '../config/database.js';
+import notificationService from '../services/notificationService.js';
+
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 const generateCode = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+async function checkLowStock(itemId) {
+    try {
+        const item = await queryOne('SELECT id, name, quantity, minimum_stock_level, unit_type FROM inv_items WHERE id = ?', [itemId]);
+        if (item && item.quantity <= item.minimum_stock_level) {
+            // Find all admins
+            let admins = [];
+            const isMongo = !!process.env.MONGODB_URI;
+            if (isMongo) {
+                const User = (await import('../models/mongo/User.js')).default;
+                admins = await User.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id');
+            } else {
+                admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin')");
+            }
+
+            for (const admin of admins) {
+                notificationService.notifyUser(
+                    String(admin._id || admin.id),
+                    'Low Stock Alert',
+                    `Asset "${item.name}" is running low (${item.quantity} ${item.unit_type} remaining). Minimum level is ${item.minimum_stock_level}.`,
+                    'warning'
+                );
+            }
+        }
+    } catch (err) {
+        console.error('Low stock notification failure:', err);
+    }
+}
+
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 export const getDashboardStats = async (req, res) => {
@@ -312,7 +343,11 @@ export const updateItem = async (req, res) => {
                 location_id, status, serial_number || null, image_url || null, id]
         );
         res.json({ message: 'Item updated successfully' });
+        
+        // --- Low Stock Check ---
+        checkLowStock(id);
     } catch (err) {
+
         console.error('Update item error:', err);
         res.status(500).json({ error: 'Failed to update item' });
     }
@@ -477,7 +512,11 @@ export const createStockOut = async (req, res) => {
             [quantity_issued, item_id]);
 
         res.json({ id: result.lastID, message: 'Stock issued successfully' });
+        
+        // --- Low Stock Check ---
+        checkLowStock(item_id);
     } catch (err) {
+
         console.error('Stock out error:', err);
         res.status(500).json({ error: 'Failed to issue stock' });
     }
@@ -756,7 +795,11 @@ export const createDamageLog = async (req, res) => {
         await run('UPDATE inv_items SET quantity = quantity - ? WHERE id=?', [quantity, item_id]);
 
         res.json({ message: 'Damage/loss logged and inventory updated' });
+        
+        // --- Low Stock Check ---
+        checkLowStock(item_id);
     } catch (err) {
+
         console.error('Damage log error:', err);
         res.status(500).json({ error: 'Failed to log damage' });
     }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Users, BookOpen, UserCheck, TrendingUp, Zap, UserPlus, FileText, DollarSign, GraduationCap, Bell, Activity, ArrowUpRight, RefreshCw } from 'lucide-react';
+import { Users, BookOpen, UserCheck, TrendingUp, Zap, UserPlus, FileText, DollarSign, GraduationCap, Bell, Activity, ArrowUpRight, RefreshCw, ClipboardList, Sparkles, BarChart2 } from 'lucide-react';
 import { studentsAPI, coursesAPI, facultyAPI, reportsAPI, activityReportsAPI } from '../services/api';
 import api from '../services/api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell } from 'recharts';
+
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import TeacherDashboard from './TeacherDashboard';
@@ -11,7 +12,8 @@ import StudentDashboard from './StudentDashboard';
 function AdminDashboard() {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const [stats, setStats] = useState({ students: 0, courses: 0, faculty: 0, attendance: 0, revenue: 0 });
+    const [stats, setStats] = useState({ students: 0, courses: 0, faculty: 0, attendance: 0, revenue: 0, total_due: 0 });
+
     const [students, setStudents] = useState([]);
     const [courses, setCourses] = useState([]);
     const [recentReports, setRecentReports] = useState([]);
@@ -19,6 +21,7 @@ function AdminDashboard() {
     const [activeTab, setActiveTab] = useState('analytics');
     const [lastUpdated, setLastUpdated] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
+    const [academicSummary, setAcademicSummary] = useState(null);
 
     const now = new Date();
     const hour = now.getHours();
@@ -29,13 +32,14 @@ function AdminDashboard() {
     const fetchData = async (silent = false) => {
         try {
             if (!silent) setRefreshing(true);
-            const [studentsRes, coursesRes, facultyRes, reportsRes, statsRes, activityRes] = await Promise.all([
+            const [studentsRes, coursesRes, facultyRes, reportsRes, statsRes, activityRes, summaryRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 facultyAPI.getAll(),
                 reportsAPI.getAll({ limit: 10 }),
                 api.get('/stats/dashboard'),
-                activityReportsAPI.getDailyReports({ limit: 10 })
+                activityReportsAPI.getDailyReports({ limit: 10 }),
+                activityReportsAPI.getAcademicSummary({ startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0] })
             ]);
 
             const studentsData = Array.isArray(studentsRes.data) ? studentsRes.data : [];
@@ -43,19 +47,23 @@ function AdminDashboard() {
             const reportsData = Array.isArray(reportsRes.data) ? reportsRes.data : [];
             const activityData = activityRes.data.data || [];
             const statsData = statsRes.data;
+            const summaryData = summaryRes.data.data || null;
 
             setStudents(studentsData);
             setCourses(coursesData);
             setRecentReports(reportsData);
             setActivityReports(activityData);
+            setAcademicSummary(summaryData);
             setStats({
                 students: statsData.summary.students,
                 courses: statsData.summary.courses,
                 faculty: statsData.summary.faculty,
                 attendance: statsData.summary.attendance,
                 revenue: statsData.summary.revenue || 0,
+                total_due: statsData.summary.total_due || 0,
                 distribution: statsData.courseDistribution || []
             });
+
             setLastUpdated(new Date());
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -78,8 +86,14 @@ function AdminDashboard() {
         capacity: item.capacity
     }));
 
+    const revenueChartData = [
+        { name: 'Collected', value: stats.revenue, fill: '#800000' },
+        { name: 'Outstanding', value: Math.max(0, stats.total_due - stats.revenue), fill: '#FFD700' }
+    ];
+
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+
 
             {/* Welcome Banner */}
             <div className="relative overflow-hidden bg-gradient-to-br from-maroon to-maroon/90 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl shadow-maroon/20">
@@ -114,7 +128,8 @@ function AdminDashboard() {
                 {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group overflow-hidden relative">
+                        <div key={index} className="bg-white dark:bg-[#111] p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group overflow-hidden relative">
+
                             <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${stat.trend === 'up' ? 'from-green-400 to-emerald-500' : 'from-red-400 to-rose-500'} opacity-0 group-hover:opacity-100 transition-opacity`} />
                             <div className="flex justify-between items-start relative z-10">
                                 <div>
@@ -135,7 +150,8 @@ function AdminDashboard() {
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-white p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-gray-100 shadow-lg relative overflow-hidden">
+            <div className="bg-white dark:bg-[#111] p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-lg relative overflow-hidden">
+
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
                         <Zap className="w-4 h-4 text-gold" />
@@ -172,6 +188,7 @@ function AdminDashboard() {
                         { id: 'analytics', label: 'Performance Hub', icon: Activity },
                         { id: 'activity', label: 'Institutional Logs', icon: FileText },
                         { id: 'academic', label: 'Academic Records', icon: GraduationCap },
+                        { id: 'academic-summary', label: 'Academic Summary', icon: ClipboardList },
                     ].map((tab) => {
                         const Icon = tab.icon;
                         const active = activeTab === tab.id;
@@ -205,12 +222,13 @@ function AdminDashboard() {
             <div className="grid grid-cols-1 gap-8">
                 {activeTab === 'analytics' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in zoom-in duration-700">
-                    <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                    <div className="lg:col-span-2 bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
                         <div className="flex justify-between items-center mb-10">
                             <div>
-                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Enrollment Performance</h2>
+                                <h2 className="text-sm font-black text-gray-800 dark:text-gold uppercase tracking-widest">Enrollment Performance</h2>
                                 <p className="text-[10px] text-gray-400 font-medium mt-1">Students per course unit</p>
                             </div>
+
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-maroon"></div><span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Enrolled</span></div>
                             </div>
@@ -236,26 +254,46 @@ function AdminDashboard() {
                     </div>
 
                         <div className="space-y-6">
-                            <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">
-                                <div className="w-16 h-16 bg-maroon/5 rounded-[2rem] flex items-center justify-center mx-auto mb-6 group-hover:bg-maroon transition-colors duration-500">
-                                    <GraduationCap className="w-8 h-8 text-maroon group-hover:text-gold transition-colors" />
+                            <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm text-center group h-full flex flex-col items-center justify-center">
+                                <div className="flex items-center justify-between w-full mb-6">
+                                    <h2 className="text-[10px] font-black text-gray-800 dark:text-gold uppercase tracking-widest">Treasury Health</h2>
+                                    <div className="px-2 py-1 bg-maroon/5 rounded-lg text-[8px] font-black text-maroon uppercase">{Math.round((stats.revenue / (stats.total_due || 1)) * 100)}% Collected</div>
                                 </div>
-                                <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-2">Student Management</h3>
-                                <p className="text-xs text-gray-400 mb-6 font-medium">Browse, search, and manage student records</p>
-                                <button onClick={() => navigate('/students')} className="text-[10px] font-black uppercase tracking-widest text-maroon border-b-2 border-gold pb-1 hover:text-gold transition-colors">View Students →</button>
-                            </div>
-
-                            <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm text-center group">
-                                <div className="w-16 h-16 bg-gold/10 rounded-[2rem] flex items-center justify-center mx-auto mb-6 group-hover:bg-gold transition-colors duration-500">
-                                    <Users className="w-8 h-8 text-gold group-hover:text-maroon transition-colors" />
+                                <div className="h-[200px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie
+                                                data={revenueChartData}
+                                                cx="50%"
+                                                cy="50%"
+                                                innerRadius={60}
+                                                outerRadius={80}
+                                                paddingAngle={5}
+                                                dataKey="value"
+                                            >
+                                                {revenueChartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip />
+                                        </PieChart>
+                                    </ResponsiveContainer>
                                 </div>
-                                <h3 className="text-sm font-black text-gray-800 uppercase tracking-widest mb-2">Staff Management</h3>
-                                <p className="text-xs text-gray-400 mb-6 font-medium">Manage faculty and administrative staff</p>
-                                <button onClick={() => navigate('/faculty')} className="text-[10px] font-black uppercase tracking-widest text-maroon border-b-2 border-gold pb-1 hover:text-gold transition-colors">View Staff →</button>
+                                <div className="mt-4 grid grid-cols-2 gap-4 w-full">
+                                    <div className="text-left">
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Collected</p>
+                                        <p className="text-xs font-black text-maroon dark:text-gold">KSh {stats.revenue.toLocaleString()}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Pending</p>
+                                        <p className="text-xs font-black text-gray-800 dark:text-white">KSh {Math.max(0, stats.total_due - stats.revenue).toLocaleString()}</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 )}
+
 
                 {activeTab === 'activity' && (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -331,6 +369,75 @@ function AdminDashboard() {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'academic-summary' && (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
+                                <div className="flex items-center gap-3 mb-6">
+                                    <Sparkles className="w-5 h-5 text-gold" />
+                                    <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Today's Academic Narrative</h2>
+                                </div>
+                                {academicSummary ? (
+                                    <>
+                                        <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed italic font-medium">
+                                            "{academicSummary.aiNarrative}"
+                                        </p>
+                                        <div className="mt-8 pt-6 border-t border-gray-50 dark:border-white/5 grid grid-cols-3 gap-4 text-center">
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Classes</p>
+                                                <p className="text-lg font-black text-maroon">{academicSummary.stats.totalClassesConducted}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Present</p>
+                                                <p className="text-lg font-black text-green-600">{academicSummary.stats.totalStudentsPresent}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Active Depts</p>
+                                                <p className="text-lg font-black text-gold">{academicSummary.stats.activeDepartments}</p>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="py-10 text-center">
+                                        <RefreshCw className="w-8 h-8 text-gray-200 animate-spin mx-auto mb-4" />
+                                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Compiling today's intelligence...</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
+                                <div className="flex items-center justify-between mb-6">
+                                    <div className="flex items-center gap-3">
+                                        <BarChart2 className="w-5 h-5 text-maroon" />
+                                        <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Departmental Pulse</h2>
+                                    </div>
+                                    <button onClick={() => navigate('/academic-summary')} className="text-[10px] font-black text-maroon uppercase tracking-widest">Full Report →</button>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    {academicSummary?.departmentActivity?.slice(0, 4).map((dept, i) => (
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                                            <span className="text-[10px] font-black text-gray-600 dark:text-gray-300 uppercase tracking-wider">{dept.department}</span>
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right">
+                                                    <p className="text-xs font-black text-maroon">{dept.classes}</p>
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Classes</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-xs font-black text-gold">{dept.students}</p>
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tight">Students</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!academicSummary || academicSummary.departmentActivity.length === 0) && (
+                                        <div className="py-10 text-center text-xs text-gray-400 italic">No activity logged today</div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}

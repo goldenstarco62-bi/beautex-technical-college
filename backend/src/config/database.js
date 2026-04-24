@@ -631,7 +631,23 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE student_daily_reports ADD COLUMN student_commented_at TIMESTAMPTZ');
             console.log('✅ student_commented_at column added to student_daily_reports');
         }
+
+        // --- Notifications Table ---
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id TEXT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                type TEXT DEFAULT 'info',
+                priority TEXT DEFAULT 'medium',
+                is_read BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ notifications table ensured (PostgreSQL)');
     } catch (err) {
+
         console.error('⚠️ Postgres migration warning:', err.message);
     }
 
@@ -800,6 +816,22 @@ async function runSqliteMigrations(database) {
             await database.run('ALTER TABLE daily_activity_reports ADD COLUMN staff_absent INTEGER DEFAULT 0');
             console.log('✅ staff_absent column added to daily_activity_reports');
         }
+
+        // --- Notifications Table ---
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                type TEXT DEFAULT 'info',
+                priority TEXT DEFAULT 'medium',
+                is_read INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ notifications table ensured (SQLite)');
+
         if (!existingDailySQLite.includes('facilities_issues')) {
             await database.run('ALTER TABLE daily_activity_reports ADD COLUMN facilities_issues TEXT');
             console.log('✅ facilities_issues column added to daily_activity_reports');

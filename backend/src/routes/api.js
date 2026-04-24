@@ -101,7 +101,9 @@ router.get('/debug/schema/:table', async (req, res) => {
 // Student routes (protected)
 router.get('/students', authenticateToken, studentController.getAllStudents);
 router.get('/students/search', authenticateToken, studentController.searchStudents);
+router.put('/students/bulk-status', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('BULK_UPDATE_STUDENT_STATUS', 'students'), studentController.bulkUpdateStatus);
 router.get('/students/:id', authenticateToken, studentController.getStudent);
+
 router.post('/students', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('CREATE_STUDENT', 'students'), studentController.createStudent);
 router.put('/students/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('UPDATE_STUDENT', 'students'), studentController.updateStudent);
 router.delete('/students/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('DELETE_STUDENT', 'students'), studentController.deleteStudent);
@@ -205,10 +207,16 @@ router.delete('/activity-reports/monthly/:id', authenticateToken, authorizeRoles
 router.get('/activity-reports/summary', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getReportsSummary);
 router.get('/activity-reports/auto-capture', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAutoCaptureStats);
 router.get('/activity-reports/consolidated', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getConsolidatedReport);
+router.get('/activity-reports/consolidated-dept', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getDepartmentalConsolidatedReport);
+// Academic Summary — auto-aggregated intelligence report
+router.get('/activity-reports/academic-summary', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAcademicSummary);
+
 
 
 // Dashboard Stats
 router.get('/stats/dashboard', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), statsController.getDashboardStats);
+router.get('/stats/search', authenticateToken, statsController.globalSearch);
+
 
 // Finance Routes
 // Read-only routes: all admins/superadmins can view

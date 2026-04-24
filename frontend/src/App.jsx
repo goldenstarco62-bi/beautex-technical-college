@@ -26,6 +26,7 @@ import TrainerReports from './pages/TrainerReports';
 import StudentDailyReportEntry from './pages/StudentDailyReportEntry';
 import DailyStudentLogs from './pages/DailyStudentLogs';
 import Inventory from './pages/Inventory';
+import AcademicSummaryReport from './pages/AcademicSummaryReport';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 
@@ -89,6 +90,7 @@ function App() {
                         <Route path="/audit-logs" element={<ProtectedRoute allowedRoles={['superadmin']}><Layout><AuditLogs /></Layout></ProtectedRoute>} />
                         <Route path="/trainer-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><TrainerReports /></Layout></ProtectedRoute>} />
                         <Route path="/student-daily-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><StudentDailyReportEntry /></Layout></ProtectedRoute>} />
+                        <Route path="/academic-summary" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><AcademicSummaryReport /></Layout></ProtectedRoute>} />
 
 
                         <Route path="/" element={<Navigate to="/login" />} />

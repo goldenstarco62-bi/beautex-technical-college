@@ -262,23 +262,25 @@ export default function StudentDashboard() {
             ) : null}
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                {[
-                    { ...statsConfig[0], accent: 'border-l-maroon', iconBg: 'bg-maroon/5', iconColor: 'text-maroon' },
-                    { ...statsConfig[1], accent: 'border-l-gold', iconBg: 'bg-gold/5', iconColor: 'text-gold' },
-                    { ...statsConfig[2], accent: 'border-l-green-500', iconBg: 'bg-green-50', iconColor: 'text-green-600' },
-                    { ...statsConfig[3], accent: 'border-l-blue-500', iconBg: 'bg-blue-50', iconColor: 'text-blue-600' },
-                ].map((stat, index) => {
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className={`bg-white p-6 rounded-[2rem] border border-gray-100 border-l-4 ${stat.accent} shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300`}>
+                        <div key={index} className="bg-white dark:bg-[#111] p-5 md:p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group">
                             <div className="flex justify-between items-start">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.title}</p>
-                                    <p className={`${stat.isCountdown ? 'text-lg' : 'text-3xl'} font-black text-gray-800`}>{stat.value}</p>
+                                    <p className="text-2xl md:text-3xl font-black text-gray-800 dark:text-white">{stat.value}</p>
                                 </div>
-                                <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center`}>
-                                    <Icon className={`w-6 h-6 ${stat.iconColor}`} />
+                                <div className={`w-10 h-10 md:w-12 md:h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative`}>
+                                    {stat.isAttendance ? (
+                                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-100 dark:text-white/10" />
+                                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${stats.attendanceRate}, 100`} className="text-maroon dark:text-gold" />
+                                        </svg>
+                                    ) : (
+                                        <Icon className="w-5 h-5 md:w-6 md:h-6 text-maroon dark:text-gold" />
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -291,65 +293,62 @@ export default function StudentDashboard() {
                 <div className="lg:col-span-2 space-y-8">
 
                     {/* Ongoing Curriculum */}
-                    <div className="bg-maroon p-6 sm:p-8 rounded-[2rem] shadow-2xl relative overflow-hidden group">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-gold/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-gold/20 transition-all duration-700" />
-                        <div className="relative z-10">
-                            <div className="flex items-center gap-2 mb-6">
-                                <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
-                                    <Zap className="w-4 h-4 text-gold" />
-                                </div>
-                                <h2 className="text-xs font-black text-white/60 uppercase tracking-widest">Ongoing Curriculum</h2>
+                    <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-lg">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
+                                <Zap className="w-4 h-4 text-gold" />
                             </div>
-                            {courseDetails ? (
-                                <>
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                                        <div>
-                                            <h3 className="text-2xl font-black text-white mb-2">{courseDetails.name}</h3>
-                                            <p className="text-sm text-white/50 font-medium">Instructor: {courseDetails.instructor} • {courseDetails.room}</p>
-                                        </div>
-                                        <Link to="/grades" className="bg-gold text-maroon px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center">
-                                            View All Results
-                                        </Link>
-                                    </div>
-                                    <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-2 md:grid-cols-5 gap-4">
-                                        <div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Status</p>
-                                            <p className="text-xs font-bold text-green-400 uppercase">Active</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Intake</p>
-                                            <p className="text-xs font-bold text-white uppercase">{studentProfile?.intake || studentProfile?.semester || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Enrolled</p>
-                                            <p className="text-xs font-bold text-white uppercase">{studentProfile?.enrolled_date ? new Date(studentProfile.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Completion</p>
-                                            <p className="text-xs font-bold text-white uppercase">{studentProfile?.completion_date ? new Date(studentProfile.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Time to Completion</p>
-                                            <p className={`text-xs font-bold uppercase ${remainingTime.isExpired ? 'text-red-400' : 'text-white'}`}>
-                                                {remainingTime.formatted}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </>
-                            ) : (
-                                <div className="text-white/60">No active course enrollment found. Contact administration.</div>
-                            )}
+                            <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Digital Student Center</h2>
                         </div>
+                        {courseDetails ? (
+                            <>
+                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                                    <div>
+                                        <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-2">{courseDetails.name}</h3>
+                                        <p className="text-sm text-gray-400 font-medium">Instructor: {courseDetails.instructor} • {courseDetails.room}</p>
+                                    </div>
+                                    <Link to="/grades" className="bg-maroon text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center">
+                                        View All Results
+                                    </Link>
+                                </div>
+                                <div className="mt-8 pt-8 border-t border-gray-100 dark:border-white/5 grid grid-cols-2 md:grid-cols-5 gap-4">
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
+                                        <p className="text-xs font-bold text-green-500 uppercase">Active</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Intake</p>
+                                        <p className="text-xs font-bold text-gray-800 dark:text-white uppercase">{studentProfile?.intake || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Enrolled</p>
+                                        <p className="text-xs font-bold text-gray-800 dark:text-white uppercase">{studentProfile?.enrolled_date ? new Date(studentProfile.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Completion</p>
+                                        <p className="text-xs font-bold text-gray-800 dark:text-white uppercase">{studentProfile?.completion_date ? new Date(studentProfile.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Time to Completion</p>
+                                        <p className={`text-xs font-bold uppercase ${remainingTime.isExpired ? 'text-red-500' : 'text-gray-800 dark:text-white'}`}>
+                                            {remainingTime.formatted}
+                                        </p>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="text-gray-400">No active course enrollment found. Contact administration.</div>
+                        )}
                     </div>
 
                     {/* Recent Performance */}
-                    <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-gray-100 shadow-xl overflow-hidden">
+                    <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-2">
-                                <Award className="w-5 h-5 text-maroon" />
-                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Recent Performance</h2>
+                                <Award className="w-5 h-5 text-maroon dark:text-gold" />
+                                <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Recent Performance</h2>
                             </div>
-                            <Link to="/grades" className="text-[10px] font-black text-maroon hover:underline uppercase tracking-widest bg-maroon/5 px-4 py-2 rounded-xl transition-all">
+                            <Link to="/grades" className="text-[10px] font-black text-maroon dark:text-gold hover:underline uppercase tracking-widest bg-maroon/5 dark:bg-white/5 px-4 py-2 rounded-xl transition-all">
                                 View Full Grade
                             </Link>
                         </div>
@@ -357,7 +356,7 @@ export default function StudentDashboard() {
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead>
-                                        <tr className="border-b border-gray-50">
+                                        <tr className="border-b border-gray-50 dark:border-white/5">
                                             <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest">Type</th>
                                             <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest">Assessment Detail</th>
                                             <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest">Period</th>
@@ -365,23 +364,23 @@ export default function StudentDashboard() {
                                             <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest pl-4">Remarks</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-50">
+                                    <tbody className="divide-y divide-gray-50 dark:divide-white/5">
                                         {recentGrades.map((record, idx) => (
                                             <tr key={record.id || idx} className="group">
                                                 <td className="py-4">
-                                                    <span className={`px-2 py-1 rounded text-[7px] font-black uppercase tracking-tighter ${record.type === 'CAT' ? 'bg-maroon/10 text-maroon' : 'bg-gold/10 text-maroon'}`}>
+                                                    <span className={`px-2 py-1 rounded text-[7px] font-black uppercase tracking-tighter ${record.type === 'CAT' ? 'bg-maroon/10 text-maroon' : 'bg-gold/10 text-gold'}`}>
                                                         {record.type}
                                                     </span>
                                                 </td>
                                                 <td className="py-4">
-                                                    <p className="text-xs font-bold text-gray-800">{record.assignment}</p>
+                                                    <p className="text-xs font-bold text-gray-800 dark:text-white">{record.assignment}</p>
                                                     <p className="text-[8px] text-gray-400 font-medium uppercase tracking-tighter">{record.course || record.course_unit}</p>
                                                 </td>
                                                 <td className="py-4">
                                                     <span className="text-[10px] font-black text-gray-400 uppercase">{record.displayDate || record.month}</span>
                                                 </td>
                                                 <td className="py-4 text-right">
-                                                    <span className="text-xs font-black text-maroon">{Math.round((record.score / record.max_score) * 100)}%</span>
+                                                    <span className="text-xs font-black text-maroon dark:text-gold">{Math.round((record.score / record.max_score) * 100)}%</span>
                                                 </td>
                                                 <td className="py-4 pl-4">
                                                     <p className="text-[9px] font-bold text-gray-400 italic line-clamp-1">{record.performance || 'No official remarks'}</p>
@@ -392,16 +391,16 @@ export default function StudentDashboard() {
                                 </table>
                             </div>
                         ) : (
-                            <div className="py-12 text-center text-gray-300 uppercase font-black text-[10px] tracking-widest">No results committed yet</div>
+                            <div className="py-12 text-center text-gray-300 dark:text-white/20 uppercase font-black text-[10px] tracking-widest">No results committed yet</div>
                         )}
                     </div>
 
                     {/* Daily Academic Registry */}
-                    <div className="bg-white p-6 sm:p-8 rounded-[2rem] border border-gray-100 shadow-xl">
+                    <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl">
                         <div className="flex justify-between items-center mb-8">
                             <div className="flex items-center gap-2">
-                                <History className="w-5 h-5 text-maroon" />
-                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Daily Academic Registry</h2>
+                                <History className="w-5 h-5 text-maroon dark:text-gold" />
+                                <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Daily Academic Registry</h2>
                             </div>
                             <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Last 5 Sessions</span>
                         </div>
@@ -411,19 +410,19 @@ export default function StudentDashboard() {
                                 {dailyReports.map((report, idx) => {
                                     const badge = getLessonBadge(report);
                                     return (
-                                        <div key={report.id || report._id || idx} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 hover:border-maroon/20 transition-all">
+                                        <div key={report.id || report._id || idx} className="p-5 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 hover:border-maroon/20 transition-all">
                                             {/* Report header */}
                                             <div className="flex justify-between items-start mb-3">
                                                 <div>
-                                                    <p className="text-[9px] font-black text-maroon uppercase tracking-widest">
+                                                    <p className="text-[9px] font-black text-maroon dark:text-gold uppercase tracking-widest">
                                                         {new Date(report.report_date).toLocaleDateString()}
                                                     </p>
-                                                    <h4 className="text-xs font-black text-gray-800 uppercase mt-1">{report.course}</h4>
+                                                    <h4 className="text-xs font-black text-gray-800 dark:text-white uppercase mt-1">{report.course}</h4>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-2">
                                                     <div className="text-right">
                                                         <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Trainer</p>
-                                                        <p className="text-[10px] font-bold text-gray-800">{report.trainer_name}</p>
+                                                        <p className="text-[10px] font-bold text-gray-800 dark:text-white">{report.trainer_name}</p>
                                                     </div>
                                                     {badge && (
                                                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest ${badge.color}`}>
@@ -436,30 +435,30 @@ export default function StudentDashboard() {
 
                                             {/* Content */}
                                             <div className="space-y-2">
-                                                <div className="bg-white/50 p-3 rounded-lg border border-gray-100">
-                                                    <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Coverage</p>
-                                                    <p className="text-[11px] text-gray-600 font-medium leading-relaxed">{report.topics_covered}</p>
+                                                <div className="bg-white dark:bg-[#111] p-3 rounded-lg border border-gray-100 dark:border-white/5">
+                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Coverage</p>
+                                                    <p className="text-[11px] text-gray-600 dark:text-gray-300 font-medium leading-relaxed">{report.topics_covered}</p>
                                                 </div>
                                                 {report.trainer_remarks && (
                                                     <div className="flex gap-2 items-start">
-                                                        <MessageSquare className="w-3 h-3 text-maroon mt-0.5" />
+                                                        <MessageSquare className="w-3 h-3 text-maroon dark:text-gold mt-0.5" />
                                                         <p className="text-[10px] text-gray-400 font-bold italic">"{report.trainer_remarks}"</p>
                                                     </div>
                                                 )}
                                                 {report.student_comment && (
-                                                    <div className="flex gap-2 items-start bg-blue-50/60 px-3 py-2 rounded-lg border border-blue-100">
+                                                    <div className="flex gap-2 items-start bg-blue-50/60 dark:bg-blue-900/20 px-3 py-2 rounded-lg border border-blue-100 dark:border-blue-800">
                                                         <Send className="w-3 h-3 text-blue-400 mt-0.5 shrink-0" />
-                                                        <p className="text-[10px] text-blue-500 font-bold italic">Your note: "{report.student_comment}"</p>
+                                                        <p className="text-[10px] text-blue-600 dark:text-blue-300 font-bold italic">Your note: "{report.student_comment}"</p>
                                                     </div>
                                                 )}
                                             </div>
 
                                             {/* Feedback button */}
-                                            <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+                                            <div className="mt-4 pt-3 border-t border-gray-100 dark:border-white/5 flex justify-end">
                                                 <button
                                                     onClick={() => openCommentDialog(report)}
                                                     className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${badge
-                                                            ? 'bg-white text-gray-400 border-gray-200 hover:border-maroon/20 hover:text-maroon'
+                                                            ? 'bg-white dark:bg-[#111] text-gray-400 border-gray-200 dark:border-white/10 hover:border-maroon/20 hover:text-maroon'
                                                             : 'bg-maroon text-gold border-maroon shadow-md shadow-maroon/10 hover:shadow-lg'
                                                         }`}
                                                 >
@@ -472,32 +471,32 @@ export default function StudentDashboard() {
                                 })}
                             </div>
                         ) : (
-                            <div className="py-12 text-center text-gray-300 uppercase font-black text-[10px] tracking-widest">Registry is currently empty</div>
+                            <div className="py-12 text-center text-gray-300 dark:text-white/20 uppercase font-black text-[10px] tracking-widest">Registry is currently empty</div>
                         )}
                     </div>
 
                     {/* Quick Actions */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Link to="/grades" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                        <Link to="/grades" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
+                            <div className="w-12 h-12 bg-blue-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 transition-colors">
                                 <FileText className="w-6 h-6 text-blue-600 group-hover:text-white" />
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Grades</span>
                         </Link>
-                        <Link to="/attendance" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center group-hover:bg-green-600 transition-colors">
+                        <Link to="/attendance" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
+                            <div className="w-12 h-12 bg-green-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-green-600 transition-colors">
                                 <Clock className="w-6 h-6 text-green-600 group-hover:text-white" />
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Attendance</span>
                         </Link>
-                        <button className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center group-hover:bg-purple-600 transition-colors">
+                        <button className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
+                            <div className="w-12 h-12 bg-purple-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-purple-600 transition-colors">
                                 <Zap className="w-6 h-6 text-purple-600 group-hover:text-white" />
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Events</span>
                         </button>
-                        <Link to="/materials" className="flex flex-col items-center gap-3 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-maroon/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
+                        <Link to="/materials" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
+                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
                                 <GraduationCap className="w-6 h-6 text-maroon group-hover:text-white" />
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Library</span>
@@ -507,12 +506,15 @@ export default function StudentDashboard() {
 
                 {/* Sidebar: Notice Board */}
                 <div className="space-y-8">
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                    <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
                         <div className="flex items-center justify-between mb-8">
-                            <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Notice Board</h2>
-                            <Link to="/announcements" className="text-[9px] font-black uppercase tracking-widest text-maroon hover:text-gold transition-colors flex items-center gap-1">
-                                View All <ChevronRight className="w-3 h-3" />
-                            </Link>
+                            <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
+                                    <BookOpen className="w-4 h-4 text-gold" />
+                                </div>
+                                <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">My Curriculum</h2>
+                            </div>
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Academic Year 2024</span>
                         </div>
                         <div className="space-y-6">
                             {recentAnnouncements.length > 0 ? (
