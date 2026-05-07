@@ -62,7 +62,7 @@ async function internalSyncStudentFee(studentId) {
 
             let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
 
-            // If no fee summary exists, try to initialize it
+            // If no fee summary exists, try to initialize it from fee structures
             if (!fee) {
                 const student = await queryOne('SELECT course FROM students WHERE id = ?', [studentId]);
                 let totalDue = 0;
@@ -73,12 +73,18 @@ async function internalSyncStudentFee(studentId) {
                         if (structure) totalDue = Number(structure.amount);
                     }
                 }
-                await run('INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)', [studentId, totalDue, 0, totalDue, 'Pending']);
-                fee = { student_id: studentId, total_due: totalDue };
+                const initBalance = totalDue - totalPaid;
+                const initStatus = (initBalance <= 0 && totalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+                await run('INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)', [studentId, totalDue, totalPaid, initBalance, initStatus]);
+                return; // Already fully synced on insert
             }
 
-            const balance = fee.total_due - totalPaid;
-            const status = (balance <= 0 && fee.total_due > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+            // Preserve existing total_due — only recalculate paid and balance
+            // If no fee amount has been set (total_due = 0), do NOT create a negative balance.
+            // The admin should set total_due first via 'Adjust Totals' mode.
+            const existingTotalDue = Number(fee.total_due || 0);
+            const balance = existingTotalDue > 0 ? (existingTotalDue - totalPaid) : 0;
+            const status = (balance <= 0 && existingTotalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             await run(
                 'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE student_id = ?',
