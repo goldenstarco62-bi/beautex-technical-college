@@ -4,7 +4,7 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 
 export const getAllDailyReports = async (req, res) => {
     try {
-        const { student_id, course, date, trainer_email } = req.query;
+        const { student_id, course, date, trainer_email, date_from, date_to } = req.query;
         const { role, email } = req.user;
 
         if (await isMongo()) {
@@ -14,7 +14,7 @@ export const getAllDailyReports = async (req, res) => {
             if (role === 'student') {
                 mongoFilter.student_id = req.user.student_id || req.user.id;
             } else if (role === 'teacher') {
-                // Teachers see reports for their assigned courses
+                // Teachers see reports they submitted (by trainer_email) OR for their assigned courses
                 const Course = (await import('../models/mongo/Course.js')).default;
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const faculty = await Faculty.findOne({ email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } });
@@ -28,12 +28,21 @@ export const getAllDailyReports = async (req, res) => {
                         status: 'Active'
                     }).select('name');
                     const courseNames = facultyCourses.map(c => c.name);
-                    if (courseNames.length === 0) return res.json([]);
 
-                    const courseRegexes = courseNames.map(n => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
-                    mongoFilter.course = { $in: courseRegexes };
+                    if (courseNames.length > 0) {
+                        const courseRegexes = courseNames.map(n => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
+                        // Show reports for their courses OR any report they personally submitted
+                        mongoFilter.$or = [
+                            { course: { $in: courseRegexes } },
+                            { trainer_email: { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+                        ];
+                    } else {
+                        // No courses assigned — fall back to showing reports they personally submitted
+                        mongoFilter.trainer_email = { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
+                    }
                 } else {
-                    return res.json([]);
+                    // No faculty record — show only reports submitted by this email
+                    mongoFilter.trainer_email = { $regex: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
                 }
             } else if (student_id) {
                 mongoFilter.student_id = student_id;
@@ -47,7 +56,12 @@ export const getAllDailyReports = async (req, res) => {
                 nextDate.setDate(searchDate.getDate() + 1);
                 mongoFilter.report_date = { $gte: searchDate, $lt: nextDate };
             }
-            if (trainer_email) mongoFilter.trainer_email = trainer_email;
+            if (date_from || date_to) {
+                mongoFilter.report_date = mongoFilter.report_date || {};
+                if (date_from) mongoFilter.report_date.$gte = new Date(date_from);
+                if (date_to) { const dt = new Date(date_to); dt.setHours(23,59,59,999); mongoFilter.report_date.$lte = dt; }
+            }
+            if (trainer_email) mongoFilter.trainer_email = { $regex: new RegExp(`^${trainer_email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
 
             const reports = await StudentDailyReport.find(mongoFilter).sort({ report_date: -1 });
             return res.json(reports);
@@ -79,14 +93,19 @@ export const getAllDailyReports = async (req, res) => {
                 const allTutorCourses = [...new Set([...coursesList.map(c => String(c).toLowerCase().trim()), ...instructorCourses.map(c => String(c.name).toLowerCase().trim())])];
 
                 if (allTutorCourses.length > 0) {
+                    // Show reports for their courses OR any report they personally submitted
                     const placeholders = allTutorCourses.map(() => 'LOWER(r.course) = ?').join(' OR ');
-                    conditions.push(`(${placeholders})`);
-                    params.push(...allTutorCourses);
+                    conditions.push(`(${placeholders} OR LOWER(r.trainer_email) = LOWER(?))`);
+                    params.push(...allTutorCourses, email);
                 } else {
-                    return res.json([]);
+                    // No courses assigned — fall back to reports they personally submitted
+                    conditions.push('LOWER(r.trainer_email) = LOWER(?)');
+                    params.push(email);
                 }
             } else {
-                return res.json([]);
+                // No faculty record — show only reports submitted by this email
+                conditions.push('LOWER(r.trainer_email) = LOWER(?)');
+                params.push(email);
             }
         } else if (student_id) {
             conditions.push('r.student_id = ?');
@@ -101,8 +120,17 @@ export const getAllDailyReports = async (req, res) => {
             conditions.push('r.report_date = ?');
             params.push(date);
         }
+        if (date_from) {
+            conditions.push('r.report_date >= ?');
+            params.push(date_from);
+        }
+        if (date_to) {
+            conditions.push('r.report_date <= ?');
+            params.push(date_to);
+        }
+        // FIX: Case-insensitive trainer_email comparison
         if (trainer_email) {
-            conditions.push('r.trainer_email = ?');
+            conditions.push('LOWER(r.trainer_email) = LOWER(?)');
             params.push(trainer_email);
         }
 
@@ -114,7 +142,7 @@ export const getAllDailyReports = async (req, res) => {
 
         const reports = await query(sql, params);
 
-        // FIX: Clean up Postgres array format if present (e.g., {"Computer Packages"} -> Computer Packages)
+        // Clean up Postgres array format if present (e.g., {"Computer Packages"} -> Computer Packages)
         const cleanedReports = reports.map(r => ({
             ...r,
             course: typeof r.course === 'string' && r.course.startsWith('{') && r.course.endsWith('}')

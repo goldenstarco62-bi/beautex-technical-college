@@ -51,6 +51,7 @@ export default function StudentDashboard() {
     const [recentAnnouncements, setRecentAnnouncements] = useState([]);
     const [recentGrades, setRecentGrades] = useState([]);
     const [studentFee, setStudentFee] = useState(null);
+    const [recentPayments, setRecentPayments] = useState([]);
     const [dailyReports, setDailyReports] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -69,12 +70,13 @@ export default function StudentDashboard() {
         try {
             // Use the student_id from JWT, or fall back to matching by email in the students list
             const effectiveStudentId = user.student_id || user.id;
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, , dailyReportsRes] = await Promise.all([
+            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, payRes, materialsRes, dailyReportsRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 announcementsAPI.getAll(),
                 gradesAPI.getAll(),
                 financeAPI.getStudentFees(effectiveStudentId).catch(() => ({ data: null })),
+                financeAPI.getPayments(effectiveStudentId).catch(() => ({ data: [] })),
                 materialsAPI.getAll().catch(() => ({ data: [] })),
                 studentDailyReportsAPI.getAll({ student_id: effectiveStudentId }).catch(() => ({ data: [] }))
             ]);
@@ -89,6 +91,7 @@ export default function StudentDashboard() {
 
             setStudentProfile(profile);
             setStudentFee(feeRes.data);
+            setRecentPayments(Array.isArray(payRes.data) ? payRes.data.slice(0, 5) : []);
             setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.slice(0, 5) : []);
 
             const myGrades = (gradesRes.data || []).filter(g => {
@@ -392,6 +395,56 @@ export default function StudentDashboard() {
                             </div>
                         ) : (
                             <div className="py-12 text-center text-gray-300 dark:text-white/20 uppercase font-black text-[10px] tracking-widest">No results committed yet</div>
+                        )}
+                    </div>
+
+                    {/* Transaction Registry (Payment History) */}
+                    <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl overflow-hidden">
+                        <div className="flex justify-between items-center mb-8">
+                            <div className="flex items-center gap-2">
+                                <CreditCard className="w-5 h-5 text-maroon dark:text-gold" />
+                                <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Transaction Registry</h2>
+                            </div>
+                            <Link to="/finance" className="text-[10px] font-black text-maroon dark:text-gold hover:underline uppercase tracking-widest bg-maroon/5 dark:bg-white/5 px-4 py-2 rounded-xl transition-all">
+                                Full Statement
+                            </Link>
+                        </div>
+                        {recentPayments.length > 0 ? (
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b border-gray-50 dark:border-white/5">
+                                            <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest">Date</th>
+                                            <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest">Category</th>
+                                            <th className="pb-4 text-left text-[8px] font-black text-gray-400 uppercase tracking-widest">Reference</th>
+                                            <th className="pb-4 text-right text-[8px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                                        {recentPayments.map((p, idx) => (
+                                            <tr key={p.id || idx} className="group">
+                                                <td className="py-4">
+                                                    <span className="text-[10px] font-black text-gray-800 dark:text-white">
+                                                        {new Date(p.payment_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4">
+                                                    <p className="text-xs font-bold text-gray-800 dark:text-white">{p.category || 'Tuition Fee'}</p>
+                                                    <p className="text-[8px] text-gray-400 font-medium uppercase tracking-tighter">{p.method}</p>
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className="text-[10px] font-black font-mono text-gray-400 uppercase">{p.transaction_ref}</span>
+                                                </td>
+                                                <td className="py-4 text-right">
+                                                    <span className="text-sm font-black text-emerald-600">KSh {Number(p.amount).toLocaleString()}</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <div className="py-12 text-center text-gray-300 dark:text-white/20 uppercase font-black text-[10px] tracking-widest">No payments recorded yet</div>
                         )}
                     </div>
 

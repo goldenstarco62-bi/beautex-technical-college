@@ -81,8 +81,8 @@ router.post('/auth/forgot-password', authController.forgotPassword);
 router.post('/auth/reset-password', authController.resetPassword);
 router.get('/auth/me', authenticateToken, authController.getMe);
 
-// Debug Route
-router.get('/debug/schema/:table', async (req, res) => {
+// Debug Route (secured — superadmin only)
+router.get('/debug/schema/:table', authenticateToken, authorizeRoles('superadmin'), async (req, res) => {
     try {
         const { table } = req.params;
         const { query } = await import('../config/database.js');
@@ -230,7 +230,8 @@ router.get('/finance/student-fees/:studentId', authenticateToken, financeControl
 router.put('/finance/student-fees/:id', authenticateToken, authorizeFinanceEdit, financeController.updateStudentFee);
 
 router.post('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), paymentValidation, financeController.recordPayment);
-router.get('/finance/payments', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getPayments);
+// Students can read their own payments — IDOR is enforced inside the controller
+router.get('/finance/payments', authenticateToken, financeController.getPayments);
 router.put('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.updatePayment);
 router.delete('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.deletePayment);
 

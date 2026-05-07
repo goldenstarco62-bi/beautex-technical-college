@@ -10,6 +10,8 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 const EMPTY_PAYMENT = {
     student_id: '',
     amount: '',
@@ -18,6 +20,7 @@ const EMPTY_PAYMENT = {
     category: 'Tuition Fee',
     semester: '',
     academic_year: new Date().getFullYear().toString(),
+    payment_date: todayISO(),
     remarks: '',
     // For ledger adjustment mode
     total_due: '',
@@ -798,7 +801,9 @@ export default function Finance() {
     };
 
     const handleRecordPayment = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        if (saving) return;
+
         const { student_id, mode } = paymentForm;
         if (!student_id) {
             alert('Please select a student.');
@@ -809,7 +814,7 @@ export default function Finance() {
             setSaving(true);
 
             if (mode === 'transaction') {
-                const { amount, method, transaction_ref, category, semester, academic_year, remarks } = paymentForm;
+                const { amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date } = paymentForm;
                 if (!amount || !method) {
                     alert('Amount and Method are required.');
                     setSaving(false);
@@ -823,7 +828,8 @@ export default function Finance() {
                     category,
                     semester,
                     academic_year,
-                    remarks
+                    remarks,
+                    payment_date: payment_date || todayISO()
                 });
             } else {
                 const { total_due, total_paid } = paymentForm;
@@ -849,7 +855,9 @@ export default function Finance() {
             fetchAdminData();
             alert('Financial record committed successfully!');
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to update financial records.');
+            console.error('Finance Update Error:', error);
+            const msg = error.response?.data?.error || error.message || 'Failed to update financial records.';
+            alert(msg);
         } finally { setSaving(false); }
     };
 
@@ -1105,6 +1113,30 @@ export default function Finance() {
                                                     />
                                                 </div>
                                             </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Payment Date</label>
+                                                    <input
+                                                        type="date"
+                                                        value={paymentForm.payment_date}
+                                                        max={todayISO()}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                                                        className="w-full px-6 py-4 bg-white border border-emerald-100 rounded-2xl text-sm font-black text-emerald-700 outline-none focus:ring-4 focus:ring-emerald-50 transition-all"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Academic Year</label>
+                                                    <input
+                                                        type="text"
+                                                        value={paymentForm.academic_year}
+                                                        onChange={e => setPaymentForm({ ...paymentForm, academic_year: e.target.value })}
+                                                        placeholder={new Date().getFullYear().toString()}
+                                                        className="w-full px-6 py-4 bg-white border border-emerald-100 rounded-2xl text-sm font-black text-emerald-700 outline-none"
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 ) : (
@@ -1180,7 +1212,6 @@ export default function Finance() {
                         {/* Sticky Action Footer */}
                         <div className="px-10 py-8 border-t border-gray-100 bg-gray-50/80 backdrop-blur-md">
                             <button
-                                type="submit"
                                 onClick={handleRecordPayment}
                                 disabled={saving}
                                 className="w-full group bg-maroon text-gold py-6 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.3em] hover:bg-maroon/90 shadow-2xl shadow-maroon/20 transition-all border border-gold/20 disabled:opacity-60 overflow-hidden relative"

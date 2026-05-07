@@ -675,6 +675,71 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ Procurement wishlist migration warning (PostgreSQL):', e.message);
     }
+
+    // Migration: Activity Report Summary Tables (Weekly & Monthly)
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS weekly_summary_reports (
+                id SERIAL PRIMARY KEY,
+                week_start_date DATE NOT NULL,
+                week_end_date DATE NOT NULL,
+                reported_by TEXT NOT NULL,
+                total_classes_conducted INTEGER DEFAULT 0,
+                average_attendance DECIMAL DEFAULT 0,
+                total_assessments INTEGER DEFAULT 0,
+                active_students INTEGER DEFAULT 0,
+                avg_student_attendance DECIMAL DEFAULT 0,
+                disciplinary_cases INTEGER DEFAULT 0,
+                courses_completed INTEGER DEFAULT 0,
+                new_enrollments INTEGER DEFAULT 0,
+                key_achievements TEXT,
+                challenges_faced TEXT,
+                action_items TEXT,
+                revenue_collected DECIMAL DEFAULT 0,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ weekly_summary_reports table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ weekly_summary_reports migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS monthly_summary_reports (
+                id SERIAL PRIMARY KEY,
+                month TEXT,
+                month_start_date DATE,
+                month_end_date DATE,
+                reported_by TEXT NOT NULL,
+                total_students INTEGER DEFAULT 0,
+                new_enrollments INTEGER DEFAULT 0,
+                graduations INTEGER DEFAULT 0,
+                dropouts INTEGER DEFAULT 0,
+                total_classes INTEGER DEFAULT 0,
+                average_attendance DECIMAL DEFAULT 0,
+                total_assessments INTEGER DEFAULT 0,
+                average_pass_rate DECIMAL DEFAULT 0,
+                total_faculty INTEGER DEFAULT 0,
+                new_hires INTEGER DEFAULT 0,
+                faculty_departures INTEGER DEFAULT 0,
+                revenue DECIMAL DEFAULT 0,
+                expenses DECIMAL DEFAULT 0,
+                major_achievements TEXT,
+                challenges TEXT,
+                strategic_initiatives TEXT,
+                goals_next_month TEXT,
+                additional_notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ monthly_summary_reports table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ monthly_summary_reports migration warning (PostgreSQL):', e.message);
+    }
 }
 
 async function runSqliteMigrations(database) {
@@ -960,6 +1025,63 @@ async function runSqliteMigrations(database) {
             )
         `);
         console.log('✅ Procurement wishlist table ensured (SQLite)');
+
+        // --- Activity Report Summary Tables (Weekly & Monthly) ---
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS weekly_summary_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                week_start_date DATE NOT NULL,
+                week_end_date DATE NOT NULL,
+                reported_by TEXT NOT NULL,
+                total_classes_conducted INTEGER DEFAULT 0,
+                average_attendance REAL DEFAULT 0,
+                total_assessments INTEGER DEFAULT 0,
+                active_students INTEGER DEFAULT 0,
+                avg_student_attendance REAL DEFAULT 0,
+                disciplinary_cases INTEGER DEFAULT 0,
+                courses_completed INTEGER DEFAULT 0,
+                new_enrollments INTEGER DEFAULT 0,
+                key_achievements TEXT,
+                challenges_faced TEXT,
+                action_items TEXT,
+                revenue_collected REAL DEFAULT 0,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ weekly_summary_reports table ensured (SQLite)');
+
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS monthly_summary_reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                month TEXT,
+                month_start_date DATE,
+                month_end_date DATE,
+                reported_by TEXT NOT NULL,
+                total_students INTEGER DEFAULT 0,
+                new_enrollments INTEGER DEFAULT 0,
+                graduations INTEGER DEFAULT 0,
+                dropouts INTEGER DEFAULT 0,
+                total_classes INTEGER DEFAULT 0,
+                average_attendance REAL DEFAULT 0,
+                total_assessments INTEGER DEFAULT 0,
+                average_pass_rate REAL DEFAULT 0,
+                total_faculty INTEGER DEFAULT 0,
+                new_hires INTEGER DEFAULT 0,
+                faculty_departures INTEGER DEFAULT 0,
+                revenue REAL DEFAULT 0,
+                expenses REAL DEFAULT 0,
+                major_achievements TEXT,
+                challenges TEXT,
+                strategic_initiatives TEXT,
+                goals_next_month TEXT,
+                additional_notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ monthly_summary_reports table ensured (SQLite)');
 
     } catch (error) {
         console.error('⚠️ SQLite migration warning:', error.message);

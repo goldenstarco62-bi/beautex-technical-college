@@ -84,6 +84,16 @@ export default function StudentDailyReportEntry() {
         fetchInitialData();
     }, []);
 
+    // Shared helper: fetch reports with role-aware params
+    const fetchReports = async () => {
+        // For teacher: the backend already filters by their courses OR trainer_email.
+        // Passing trainer_email as an extra AND would over-restrict results, so we
+        // only pass it for admin/superadmin to optionally scope results.
+        const params = {};
+        const reportsRes = await studentDailyReportsAPI.getAll(params);
+        setRecentReports(reportsRes.data || []);
+    };
+
     const fetchInitialData = async () => {
         try {
             setLoading(true);
@@ -115,10 +125,8 @@ export default function StudentDailyReportEntry() {
             }
             setStudents(studentList || []);
 
-            // Fetch reports
-            const reportsParams = isAdmin ? {} : { trainer_email: user.email };
-            const reportsRes = await studentDailyReportsAPI.getAll(reportsParams);
-            setRecentReports(reportsRes.data || []);
+            // Fetch reports using shared role-aware helper
+            await fetchReports();
 
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -264,9 +272,8 @@ export default function StudentDailyReportEntry() {
             await studentDailyReportsAPI.create(payload);
             toast.success('Academic progress recorded successfully');
 
-            // Refresh history
-            const reportsRes = await studentDailyReportsAPI.getAll({ trainer_email: user.email });
-            setRecentReports(reportsRes.data || []);
+            // Refresh history using the same role-aware params as initial load
+            await fetchReports();
 
         } catch (error) {
             console.error('Error saving report:', error);

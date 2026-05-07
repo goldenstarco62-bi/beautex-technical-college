@@ -381,7 +381,7 @@ CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id TEXT NOT NULL,
   amount REAL NOT NULL,
-  method TEXT NOT NULL CHECK(method IN ('M-Pesa', 'Bank', 'Cash')),
+  method TEXT NOT NULL CHECK(method IN ('M-Pesa', 'Bank', 'Cash', 'Bank Transfer', 'Cheque', 'Other')),
   transaction_ref TEXT UNIQUE,
   payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
   recorded_by TEXT, -- Admin email

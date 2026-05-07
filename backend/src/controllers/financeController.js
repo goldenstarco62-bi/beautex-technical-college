@@ -57,7 +57,7 @@ async function internalSyncStudentFee(studentId) {
                 'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE student_id = ?',
                 [studentId]
             );
-            const totalPaid = Number(paidRow?.total_paid || 0);
+            const totalPaid = parseFloat(paidRow?.total_paid || 0);
             const lastDate = paidRow?.last_date;
 
             let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
@@ -73,7 +73,7 @@ async function internalSyncStudentFee(studentId) {
                         if (structure) totalDue = Number(structure.amount);
                     }
                 }
-                const initBalance = totalDue - totalPaid;
+                const initBalance = Math.max(0, totalDue - totalPaid);
                 const initStatus = (initBalance <= 0 && totalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
                 await run('INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)', [studentId, totalDue, totalPaid, initBalance, initStatus]);
                 return; // Already fully synced on insert
@@ -83,7 +83,7 @@ async function internalSyncStudentFee(studentId) {
             // If no fee amount has been set (total_due = 0), do NOT create a negative balance.
             // The admin should set total_due first via 'Adjust Totals' mode.
             const existingTotalDue = Number(fee.total_due || 0);
-            const balance = existingTotalDue > 0 ? (existingTotalDue - totalPaid) : 0;
+            const balance = existingTotalDue > 0 ? Math.max(0, (existingTotalDue - totalPaid)) : 0;
             const status = (balance <= 0 && existingTotalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             await run(
@@ -92,7 +92,7 @@ async function internalSyncStudentFee(studentId) {
             );
         }
     } catch (err) {
-        console.error(`âŒ Sync failed for student ${studentId}:`, err);
+        console.error(`❌ Sync failed for student ${studentId}:`, err);
     }
 }
 
@@ -175,7 +175,7 @@ export async function getStudentFees(req, res) {
 
                 const payments = await Payment.find({ student_id: studentId });
                 const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-                const balance = totalDue - totalPaid;
+                const balance = Math.max(0, totalDue - totalPaid);
                 const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
                 // Upsert so future calls return quickly
@@ -215,8 +215,8 @@ export async function getStudentFees(req, res) {
                 'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
                 [studentId]
             );
-            const totalPaid = Number(paidRow?.total_paid || 0);
-            const balance = totalDue - totalPaid;
+            const totalPaid = parseFloat(paidRow?.total_paid || 0);
+            const balance = Math.max(0, totalDue - totalPaid);
             const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             // Insert the auto-calculated row so subsequent requests are fast
@@ -422,7 +422,10 @@ export async function recordPayment(req, res) {
             manual_total_due, manual_total_paid, manual_balance,
             payment_date
         } = req.body;
-        const recorded_by = req.user.name || req.user.email;
+
+        console.log(`💰 Recording payment for ${student_id}: KSh ${amount} via ${method}`);
+
+        const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
 
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
@@ -448,7 +451,7 @@ export async function recordPayment(req, res) {
                         total_paid: paid, 
                         balance: bal, 
                         status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending'),
-                        last_payment_date: new Date() 
+                        last_payment_date: payment_date || new Date() 
                     },
                     { upsert: true }
                 );
@@ -463,7 +466,7 @@ export async function recordPayment(req, res) {
         // SQLite / PG path
         await run(
             'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date()]
+            [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
         );
 
         // If manual overrides are provided
@@ -476,13 +479,13 @@ export async function recordPayment(req, res) {
             const existing = await queryOne('SELECT student_id FROM student_fees WHERE student_id = ?', [student_id]);
             if (existing) {
                 await run(
-                    'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
-                    [finalTotalDue, finalTotalPaid, finalBalance, newStatus, student_id]
+                    'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE student_id = ?',
+                    [finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date().toISOString(), student_id]
                 );
             } else {
                 await run(
-                    'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                    [student_id, finalTotalDue, finalTotalPaid, finalBalance, newStatus]
+                    'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
+                    [student_id, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
                 );
             }
         } else {
@@ -491,7 +494,7 @@ export async function recordPayment(req, res) {
         }
 
         // --- Notify Student ---
-        notificationService.notifyStudent(
+        await notificationService.notifyStudent(
             student_id,
             'Payment Received',
             `A payment of KSh ${amount} has been successfully recorded to your account via ${method}.`,
@@ -532,9 +535,10 @@ export async function getPayments(req, res) {
         const { studentId } = req.query;
 
         // IDOR Protection: Students can only view their own payments
+        let effectiveId = studentId;
         if (req.user.role === 'student') {
-            const effectiveId = studentId || req.user.student_id;
-            if (String(effectiveId) !== String(req.user.student_id)) {
+            effectiveId = req.user.student_id;
+            if (studentId && String(studentId) !== String(req.user.student_id)) {
                 return res.status(403).json({ error: 'Access denied. You can only view your own payment records.' });
             }
         }
@@ -561,8 +565,8 @@ export async function getPayments(req, res) {
         }
 
         let payments;
-        if (studentId) {
-            payments = await query('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC', [studentId]);
+        if (effectiveId) {
+            payments = await query('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC', [effectiveId]);
         } else {
             payments = await query(`
                 SELECT p.*, s.name as student_name 
