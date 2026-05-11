@@ -72,7 +72,7 @@ export const sendWelcomeEmail = async (email, role, tempPassword) => {
                         <h2 style="color: #800000; margin-top: 0; font-size: 20px;">Welcome to the College!</h2>
                         <p style="line-height: 1.6; color: #4a5568;">Dear member, your academic account has been successfully provisioned. You now have full access to the <strong>${role.toUpperCase()} Portal</strong>.</p>
                         
-                        <div style="background-color: #fff9f0; border: 1px border-left: 4px solid #800000; padding: 25px; border-radius: 8px; margin: 30px 0;">
+                        <div style="background-color: #fff9f0; border: 1px solid #e2e8f0; border-left: 4px solid #800000; padding: 25px; border-radius: 8px; margin: 30px 0;">
                             <p style="margin: 0 0 15px 0; font-size: 13px; color: #800000; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Your Secure Login Credentials</p>
                             <p style="margin: 0; font-size: 15px;"><strong>Official Email:</strong> <span style="color: #2d3748;">${email}</span></p>
                             <p style="margin: 10px 0 0; font-size: 15px;"><strong>Temporary Password:</strong> <span style="background-color: #800000; color: #ffffff; padding: 2px 8px; border-radius: 4px; font-family: monospace;">${tempPassword}</span></p>

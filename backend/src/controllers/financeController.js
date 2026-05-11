@@ -547,10 +547,10 @@ export async function getPayments(req, res) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
 
-            let query = {};
-            if (studentId) query.student_id = studentId;
+            let paymentQuery = {};
+            if (studentId) paymentQuery.student_id = studentId;
 
-            const payments = await Payment.find(query).sort({ payment_date: -1 });
+            const payments = await Payment.find(paymentQuery).sort({ payment_date: -1 });
 
             const enriched = await Promise.all(payments.map(async (p) => {
                 const obj = p.toObject();

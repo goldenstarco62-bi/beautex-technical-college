@@ -77,7 +77,10 @@ const allowedOrigins = [
     // Deployed frontend — always allowed
     'https://bttc.vercel.app',
     'https://beautexcollege-01.vercel.app',
-    'https://beautex-technical-college-pvk4.vercel.app'
+    'https://beautex-technical-college.vercel.app',
+    'https://beautex-technical-college-pvk4.vercel.app',
+    'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app',
+    'https://beautex-technical-college-tkp1.vercel.app'
 ];
 
 if (process.env.FRONTEND_URL) {
@@ -102,7 +105,11 @@ app.use(cors({
         }
 
         // In production: check against the explicit allowedOrigins list only
-        const isAllowed = allowedOrigins.some(o => origin === o || origin.startsWith(o));
+        const isAllowed = allowedOrigins.some(o => {
+            const normalizedOrigin = origin.replace(/\/$/, '');
+            const normalizedAllowed = o.replace(/\/$/, '');
+            return normalizedOrigin === normalizedAllowed || normalizedOrigin.startsWith(normalizedAllowed + '-');
+        });
 
         if (isAllowed) {
             callback(null, true);

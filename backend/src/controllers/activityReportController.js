@@ -585,8 +585,9 @@ export const getAutoCaptureStats = async (req, res) => {
         // SQLite / PostgreSQL logic
         const start = startDate;
         const end = endDate;
-        // Use env var directly to avoid a broken dynamic re-import
-        const isPostgres = !!process.env.DATABASE_URL;
+        // Use centralized helper for robust engine detection
+        const { getActiveDbEngine } = await import('../config/database.js');
+        const isPostgres = getActiveDbEngine() === 'postgres';
 
         // Use query() (not queryOne()) so we get an array we can .find() on
         const attendanceRows = await query(
@@ -812,6 +813,7 @@ export const getConsolidatedReport = async (req, res) => {
         consolidated.qualitative.trainer_insights = [];
         trainerReports.forEach(tr => {
             const dateStr = new Date(tr.report_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+            const entry = `[Trainer ${tr.trainer_name} - ${dateStr}]: ${tr.daily_report}`;
             consolidated.qualitative.trainer_insights.push(entry);
             
             // Also keep them in topics/practicals for general overview
