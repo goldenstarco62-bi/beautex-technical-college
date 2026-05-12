@@ -25,12 +25,25 @@ export default function Students() {
     const [bulkLoading, setBulkLoading] = useState(false);
     const PAGE_SIZE = 20;
 
+    const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState({
-        id: '', name: '', email: '', course: [], intake: 'January Intake',
-        gpa: 0, status: 'Active', contact: '',
-        dob: '', address: '', guardian_name: '', guardian_contact: '',
-        photo: '', completion_date: '', enrolled_date: new Date().toISOString().split('T')[0],
-        department: '', level: 'Module 1'
+        id: '',
+        name: '',
+        email: '',
+        course: [],
+        intake: 'May Intake',
+        contact: '',
+        photo: '',
+        dob: '',
+        address: '',
+        guardian_name: '',
+        guardian_contact: '',
+        blood_group: 'A+',
+        status: 'Active',
+        department: '',
+        level: 'Module 1',
+        completion_date: '',
+        enrolled_date: new Date().toISOString().split('T')[0]
     });
     const [printingStudent, setPrintingStudent] = useState(null);
     const [availableCourses, setAvailableCourses] = useState([]);
@@ -87,8 +100,28 @@ export default function Students() {
         return null;
     };
 
+    const generateNextId = () => {
+        const year = new Date().getFullYear();
+        const yearPrefix = `/${year}/`;
+        
+        // Find existing IDs for the current year
+        const yearIds = allStudents
+            .map(s => s.id?.toString() || '')
+            .filter(id => id.includes(yearPrefix));
+        
+        let maxNum = 0;
+        yearIds.forEach(id => {
+            const parts = id.split('/');
+            const num = parseInt(parts[parts.length - 1]);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+        
+        return `${yearPrefix}${(maxNum + 1).toString().padStart(3, '0')}`;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (saving) return;
 
         const validationError = validateForm();
         if (validationError) {
@@ -96,30 +129,31 @@ export default function Students() {
             return;
         }
 
+        setSaving(true);
         try {
             if (editingStudent) {
                 await studentsAPI.update(editingStudent.id, formData);
-                // Optimistically update the edited student in the list
                 const updatedList = allStudents.map(s => s.id === editingStudent.id ? { ...s, ...formData } : s);
                 setAllStudents(updatedList);
                 setStudents(updatedList);
             } else {
                 await studentsAPI.create(formData);
-                // Optimistically prepend the new student so it appears immediately
                 const newStudent = { ...formData, course: Array.isArray(formData.course) ? formData.course : [formData.course] };
                 const updatedList = [newStudent, ...allStudents];
                 setAllStudents(updatedList);
                 setStudents(updatedList);
-                setCurrentPage(1); // Jump to first page to see the new student
+                setCurrentPage(1);
             }
             setShowModal(false);
             setEditingStudent(null);
             resetForm();
-            // Background refresh to sync any server-side changes (auto-generated fields, etc.)
             setTimeout(() => fetchStudents(), 800);
         } catch (error) {
             console.error('Error saving student:', error);
-            alert(error.response?.data?.error || 'Failed to save student record.');
+            const msg = error.response?.data?.error || error.message;
+            alert(msg.includes('duplicate key') || msg.includes('23505') ? 'A student with this ID or Email already exists.' : `Failed to save student record: ${msg}`);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -184,10 +218,23 @@ export default function Students() {
 
     const resetForm = () => {
         setFormData({
-            id: '', name: '', email: '', course: [], intake: 'January Intake',
-            gpa: 0, status: 'Active', contact: '',
-            dob: '', address: '', guardian_name: '', guardian_contact: '',
-            photo: '', department: '', level: 'Module 1', completion_date: '', enrolled_date: new Date().toISOString().split('T')[0]
+            id: generateNextId(),
+            name: '',
+            email: '',
+            course: [],
+            intake: 'May Intake',
+            contact: '',
+            photo: '',
+            dob: '',
+            address: '',
+            guardian_name: '',
+            guardian_contact: '',
+            blood_group: 'A+',
+            status: 'Active',
+            department: '',
+            level: 'Module 1',
+            completion_date: '',
+            enrolled_date: new Date().toISOString().split('T')[0]
         });
     };
 
@@ -441,7 +488,10 @@ export default function Students() {
                                     </td>
 
                                     <td className="px-6 py-5">
-                                        <span className="text-xs font-bold text-gray-500">BT{student.id.toString().padStart(7, '0')}</span>
+                                                                                <span className="text-xs font-bold text-gray-500">
+                                            {student.id?.toString().startsWith('BT') ? student.id : `BT${student.id}`}
+                                        </span>
+
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-3">
@@ -970,8 +1020,19 @@ export default function Students() {
                                 </div>
                             </div>
 
-                            <button type="submit" className="w-full bg-maroon text-gold py-6 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] hover:bg-elite-maroon shadow-xl transition-all mt-4 border border-gold/20 shrink-0">
-                                {editingStudent ? 'Synchronize Registry' : 'Finalize Enrollment'}
+                            <button 
+                                type="submit" 
+                                disabled={saving}
+                                className={`w-full ${saving ? 'bg-gray-400 cursor-not-allowed' : 'bg-maroon hover:bg-elite-maroon'} text-gold py-6 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] shadow-xl transition-all mt-4 border border-gold/20 shrink-0 flex items-center justify-center gap-3`}
+                            >
+                                {saving ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-gold/30 border-t-gold rounded-full animate-spin" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    editingStudent ? 'Synchronize Registry' : 'Finalize Enrollment'
+                                )}
                             </button>
                         </form>
                     </div>

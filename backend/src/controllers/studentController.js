@@ -290,8 +290,21 @@ export async function createStudent(req, res) {
         res.status(201).json(savedStudent);
     } catch (error) {
         console.error('Create student error:', error);
-        if (error.code === 'SQLITE_CONSTRAINT' || error.code === 23505 || error.code === 11000) {
-            return res.status(400).json({ error: 'A student with this ID or email already exists.' });
+        
+        // Handle unique constraint violations across different DB engines
+        // SQLITE_CONSTRAINT: SQLite
+        // 23505: PostgreSQL (string)
+        // 11000: MongoDB (number or string)
+        const isDuplicate = 
+            error.code === 'SQLITE_CONSTRAINT' || 
+            error.code === '23505' || 
+            error.code === 23505 || 
+            error.code === 11000 || 
+            error.code === '11000' ||
+            (error.message && error.message.includes('unique constraint'));
+
+        if (isDuplicate) {
+            return res.status(400).json({ error: 'A student with this ID or email already exists. Please verify the credentials.' });
         }
         res.status(500).json({ error: `Server Error: ${error.message}` });
     }
