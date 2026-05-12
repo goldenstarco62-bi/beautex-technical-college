@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import RichTextEditor from '../components/shared/RichTextEditor';
 
 // dynamic courses will be used
 
@@ -617,7 +618,7 @@ export default function AcademicReports() {
                                     {report.trainer_observations && (
                                         <div className="bg-maroon/3 rounded-xl p-4 border border-maroon/5 mb-4">
                                             <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Trainer Observations</p>
-                                            <p className="text-xs text-maroon/70 font-medium leading-relaxed">{report.trainer_observations}</p>
+                                            <div className="text-xs text-maroon/70 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: report.trainer_observations }} />
                                         </div>
                                     )}
                                     <div className="flex items-center justify-between border-t border-maroon/5 pt-4 mt-auto">
@@ -877,17 +878,21 @@ export default function AcademicReports() {
                                 <div className="space-y-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Trainer Observations</label>
-                                        <textarea value={formData.trainer_observations}
-                                            onChange={(e) => setFormData({ ...formData, trainer_observations: e.target.value })}
-                                            placeholder="General performance and engagement..."
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 h-24 resize-none text-xs" />
+                                        <RichTextEditor
+                                            value={formData.trainer_observations}
+                                            onChange={(val) => setFormData({ ...formData, trainer_observations: val })}
+                                            placeholder="Comment on student performance, engagement, and behavior..."
+                                            minHeight="120px"
+                                        />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Progress Summary</label>
-                                        <textarea value={formData.progress_summary}
-                                            onChange={(e) => setFormData({ ...formData, progress_summary: e.target.value })}
-                                            placeholder="Summary of progress for this period..."
-                                            className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10 h-20 resize-none text-xs" />
+                                        <RichTextEditor
+                                            value={formData.progress_summary}
+                                            onChange={(val) => setFormData({ ...formData, progress_summary: val })}
+                                            placeholder="Summarize key learning outcomes and areas for improvement..."
+                                            minHeight="120px"
+                                        />
                                     </div>
                                 </div>
 
@@ -966,12 +971,12 @@ export default function AcademicReports() {
                                     {renderPracticalTasks(viewingReport.practical_tasks)}
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Trainer Observations</p>
-                                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-gray-100">{viewingReport.trainer_observations || 'No observations recorded.'}</p>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Observations</p>
+                                    <div className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.trainer_observations }} />
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Progress Summary</p>
-                                    <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-gray-100">{viewingReport.progress_summary || 'No summary recorded.'}</p>
+                                    <div className="text-sm text-gray-700 leading-relaxed bg-maroon/[0.02] p-6 rounded-[2rem] border border-maroon/5 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.progress_summary }} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-6">
                                     <div>
@@ -1011,6 +1016,28 @@ export default function AcademicReports() {
                                 box-sizing: border-box !important;
                             }
                             #academic-report-print { position: static !important; overflow: visible !important; }
+                            
+                            .rich-text-content {
+                                line-height: 1.6;
+                            }
+                            .rich-text-content b, .rich-text-content strong {
+                                font-weight: 800 !important;
+                            }
+                            .rich-text-content u {
+                                text-decoration: underline !important;
+                            }
+                            .rich-text-content ol {
+                                list-style-type: decimal !important;
+                                margin-left: 20px !important;
+                                margin-top: 4px !important;
+                                margin-bottom: 4px !important;
+                            }
+                            .rich-text-content li {
+                                margin-bottom: 2px !important;
+                            }
+                            .rich-text-content p {
+                                margin-bottom: 4px !important;
+                            }
                         }
                     `}</style>
                     <div id="academic-report-print" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
@@ -1045,13 +1072,13 @@ export default function AcademicReports() {
                                 {printingReport.trainer_observations && (
                                     <div className="mt-4 p-4 border border-gray-200 rounded-xl">
                                         <p className="text-xs font-black text-gray-400 uppercase mb-2">Trainer Observations</p>
-                                        <p className="text-sm text-gray-700">{printingReport.trainer_observations}</p>
+                                        <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: printingReport.trainer_observations }} />
                                     </div>
                                 )}
                                 {printingReport.progress_summary && (
                                     <div className="mt-4 p-4 border border-gray-200 rounded-xl">
                                         <p className="text-xs font-black text-gray-400 uppercase mb-2">Progress Summary</p>
-                                        <p className="text-sm text-gray-700">{printingReport.progress_summary}</p>
+                                        <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: printingReport.progress_summary }} />
                                     </div>
                                 )}
                             </div>

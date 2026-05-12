@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
 import { trainerReportsAPI, coursesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown, Eye, ChevronDown } from 'lucide-react';
+import RichTextEditor from '../components/shared/RichTextEditor';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -455,18 +455,15 @@ export default function TrainerReports() {
                                     />
                                 </div>
                             </div>
-
-                            <div className="space-y-2 text-left">
-                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-1">Daily Operations Report</label>
-                                <textarea
-                                    required
-                                    rows="4"
-                                    value={formData.daily_report}
-                                    onChange={(e) => setFormData({ ...formData, daily_report: e.target.value })}
-                                    placeholder="Document daily activities, observations, and incidents..."
-                                    className="w-full px-6 py-4 bg-gray-50 border-none rounded-3xl text-sm font-medium text-gray-700 outline-none focus:ring-4 focus:ring-maroon/5 transition-all min-h-[120px] shadow-inner"
-                                />
-                            </div>
+                             <div className="space-y-2 text-left">
+                                 <label className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.2em] ml-1">Daily Operations Report</label>
+                                 <RichTextEditor
+                                     value={formData.daily_report}
+                                     onChange={(val) => setFormData({ ...formData, daily_report: val })}
+                                     placeholder="Document daily activities, observations, and incidents..."
+                                     minHeight="120px"
+                                 />
+                             </div>
 
                             <div className="space-y-4 text-left">
                                 <div className="flex justify-between items-center">
@@ -688,7 +685,7 @@ export default function TrainerReports() {
                             <div className="pt-6 border-t border-maroon/5 space-y-6 text-left text-gray-700">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Daily Operations Report</p>
-                                    <p className="text-sm leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 whitespace-pre-wrap">{viewingReport.daily_report}</p>
+                                    <div className="text-sm leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.daily_report }} />
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Record of Work</p>
@@ -717,6 +714,28 @@ export default function TrainerReports() {
                                 box-sizing: border-box !important;
                             }
                             #trainer-report-print { position: static !important; overflow: visible !important; }
+
+                            .rich-text-content {
+                                line-height: 1.6;
+                            }
+                            .rich-text-content b, .rich-text-content strong {
+                                font-weight: 800 !important;
+                            }
+                            .rich-text-content u {
+                                text-decoration: underline !important;
+                            }
+                            .rich-text-content ol {
+                                list-style-type: decimal !important;
+                                margin-left: 20px !important;
+                                margin-top: 4px !important;
+                                margin-bottom: 4px !important;
+                            }
+                            .rich-text-content li {
+                                margin-bottom: 2px !important;
+                            }
+                            .rich-text-content p {
+                                margin-bottom: 4px !important;
+                            }
                         }
                     `}</style>
                     <div id="trainer-report-print" className="fixed inset-0 bg-white z-[9999] p-8 font-serif overflow-auto print:absolute print:inset-0 print:p-0">
@@ -759,9 +778,7 @@ export default function TrainerReports() {
                                             <FileText className="w-4 h-4 text-maroon opacity-40" />
                                             <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Daily Operations Report</h3>
                                         </div>
-                                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                                            {printingReport.daily_report}
-                                        </p>
+                                        <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: printingReport.daily_report }} />
                                     </div>
 
                                     <div className="bg-maroon/[0.02] p-6 rounded-2xl border border-maroon/5">
@@ -870,9 +887,7 @@ const TrainerReportCard = ({ report, user, isAdmin, onView, onDownload, onPrint,
                         <FileText className="w-4 h-4 text-maroon opacity-40" />
                         <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Daily Operations Report</h3>
                     </div>
-                    <p className="text-sm text-gray-700 font-medium leading-relaxed whitespace-pre-wrap">
-                        {report.daily_report}
-                    </p>
+                    <div className="text-sm text-gray-700 font-medium leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: report.daily_report }} />
                 </div>
                 <div className="bg-gold/5 rounded-3xl p-6 border border-gold/20 flex flex-col">
                     <div className="flex items-center gap-2 mb-4 shrink-0">

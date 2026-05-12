@@ -9,6 +9,7 @@ import {
 import { toast } from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import RichTextEditor from '../components/shared/RichTextEditor';
 import { activityReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import ReportPDFTemplate from './ReportPDFTemplate';
@@ -1723,11 +1724,12 @@ export default function ActivityReports() {
                                         {/* Absent Students List */}
                                         <div className="md:col-span-5 mt-2">
                                             <label className="block text-[10px] font-black text-red-400 uppercase tracking-widest mb-2 ml-1">Absent Students (Names)</label>
-                                            <textarea
+                                            <RichTextEditor
                                                 value={dailyForm.absent_students_list}
-                                                onChange={(e) => setDailyForm({ ...dailyForm, absent_students_list: e.target.value })}
+                                                onChange={(val) => setDailyForm({ ...dailyForm, absent_students_list: val })}
                                                 placeholder="e.g. John Doe, Jane Smith, Omar Ali..."
-                                                className="w-full px-5 py-4 bg-white rounded-2xl border border-red-100 focus:border-red-400 focus:ring-4 focus:ring-red-400/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
+                                                className="border-red-100"
+                                                minHeight="80px"
                                             />
                                             <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-1 ml-1">Separate names with commas or enter one per line</p>
                                         </div>
@@ -1747,28 +1749,31 @@ export default function ActivityReports() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div className="md:col-span-2">
                                                 <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Classes Conducted (List Subjects/Courses)</label>
-                                                <textarea
+                                                <RichTextEditor
                                                     value={dailyForm.classes_conducted}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, classes_conducted: e.target.value })}
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, classes_conducted: val })}
                                                     placeholder="e.g. Intro to Programming, Advanced Styling..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
+                                                    className="border-purple-100"
+                                                    minHeight="80px"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Topics Covered</label>
-                                                <textarea
+                                                <RichTextEditor
                                                     value={dailyForm.topics_covered}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, topics_covered: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, topics_covered: val })}
+                                                    className="border-purple-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-purple-400 uppercase tracking-widest mb-2 ml-1">Practical Sessions</label>
-                                                <textarea
+                                                <RichTextEditor
                                                     value={dailyForm.practical_sessions}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, practical_sessions: e.target.value })}
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, practical_sessions: val })}
                                                     placeholder="Lab work, salon practice, site visits..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-purple-100 focus:border-purple-500 focus:ring-4 focus:ring-purple-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    className="border-purple-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
@@ -1797,18 +1802,20 @@ export default function ActivityReports() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Meetings Held</label>
-                                                <textarea
+                                                <RichTextEditor
                                                     value={dailyForm.meetings_held}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, meetings_held: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, meetings_held: val })}
+                                                    className="border-emerald-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Admissions / Registrations</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Admissions & Registrations</label>
+                                                <RichTextEditor
                                                     value={dailyForm.admissions_registrations}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, admissions_registrations: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700 h-20 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, admissions_registrations: val })}
+                                                    className="border-emerald-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
@@ -1822,12 +1829,11 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2 ml-1">Fees Collection Summary</label>
-                                                <input
-                                                    type="text"
+                                                <RichTextEditor
                                                     value={dailyForm.fees_collection_summary}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, fees_collection_summary: e.target.value })}
-                                                    placeholder="Total collected, significant payments..."
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-emerald-100 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, fees_collection_summary: val })}
+                                                    className="border-emerald-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                         </div>
@@ -1846,11 +1852,12 @@ export default function ActivityReports() {
 
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1 text-red-600">Discipline Issues</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1 text-red-600 font-black">Discipline Issues</label>
+                                                <RichTextEditor
                                                     value={dailyForm.discipline_issues}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, discipline_issues: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none mb-3"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, discipline_issues: val })}
+                                                    className="border-red-100"
+                                                    minHeight="120px"
                                                 />
                                                 <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1">Disciplinary Cases (Count)</label>
                                                 <input
@@ -1862,18 +1869,20 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1">Student Feedback / Concerns</label>
-                                                <textarea
+                                                <RichTextEditor
                                                     value={dailyForm.student_feedback}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, student_feedback: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, student_feedback: val })}
+                                                    className="border-rose-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-rose-400 uppercase tracking-widest mb-2 ml-1">Counseling / Support</label>
-                                                <textarea
+                                                <RichTextEditor
                                                     value={dailyForm.counseling_support}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, counseling_support: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-rose-100 focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, counseling_support: val })}
+                                                    className="border-rose-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                         </div>
@@ -1892,39 +1901,39 @@ export default function ActivityReports() {
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Classroom / Lab Condition</label>
-                                                <input
-                                                    type="text"
+                                                <label className="block text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 ml-1">Facilities / Cleaning Issues</label>
+                                                <RichTextEditor
                                                     value={dailyForm.facilities_issues}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, facilities_issues: e.target.value })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, facilities_issues: val })}
+                                                    className="border-amber-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Equipment Status</label>
-                                                <input
-                                                    type="text"
+                                                <label className="block text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 ml-1">Equipment Maintenance</label>
+                                                <RichTextEditor
                                                     value={dailyForm.equipment_maintenance}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, equipment_maintenance: e.target.value })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, equipment_maintenance: val })}
+                                                    className="border-amber-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Cleaning & Maintenance</label>
-                                                <input
-                                                    type="text"
+                                                <label className="block text-[10px] font-black text-amber-600 uppercase tracking-widest mb-2 ml-1">Cleaning Maintenance</label>
+                                                <RichTextEditor
                                                     value={dailyForm.cleaning_maintenance}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, cleaning_maintenance: e.target.value })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, cleaning_maintenance: val })}
+                                                    className="border-amber-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-amber-400 uppercase tracking-widest mb-2 ml-1">Internet / ICT Status</label>
-                                                <input
-                                                    type="text"
+                                                <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 ml-1">Internet / ICT Status</label>
+                                                <RichTextEditor
                                                     value={dailyForm.internet_ict_status}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, internet_ict_status: e.target.value })}
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-amber-100 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, internet_ict_status: val })}
+                                                    className="border-blue-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                         </div>
@@ -1963,12 +1972,11 @@ export default function ActivityReports() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 ml-1">Social Media Activities</label>
-                                                <input
-                                                    type="text"
+                                                <RichTextEditor
                                                     value={dailyForm.social_media_activities}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, social_media_activities: e.target.value })}
-                                                    placeholder="Posts, ads, engagement..."
-                                                    className="w-full px-5 py-3.5 bg-white rounded-2xl border border-indigo-100 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-bold text-gray-700"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, social_media_activities: val })}
+                                                    className="border-indigo-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                         </div>
@@ -1988,61 +1996,67 @@ export default function ActivityReports() {
 
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-500">8. Challenges Faced</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-600">9. Challenges Faced</label>
+                                                <RichTextEditor
                                                     value={dailyForm.challenges_faced}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, challenges_faced: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, challenges_faced: val })}
+                                                    className="border-red-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-green-600">9. Actions Taken</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-green-600">10. Actions Taken</label>
+                                                <RichTextEditor
                                                     value={dailyForm.actions_taken}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, actions_taken: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-green-500 focus:ring-4 focus:ring-green-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, actions_taken: val })}
+                                                    className="border-green-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-blue-600">10. Plans for Next Day</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-blue-600">11. Plans for Next Day</label>
+                                                <RichTextEditor
                                                     value={dailyForm.plans_for_next_day}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, plans_for_next_day: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, plans_for_next_day: val })}
+                                                    className="border-blue-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-gold-600">11. Notable Events</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-gold-600">12. Notable Events</label>
+                                                <RichTextEditor
                                                     value={dailyForm.notable_events}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, notable_events: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-gold-500 focus:ring-4 focus:ring-gold-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, notable_events: val })}
+                                                    className="border-gold-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-600 font-black">12. Incidents</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-red-600 font-black">13. Incidents</label>
+                                                <RichTextEditor
                                                     value={dailyForm.incidents}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, incidents: e.target.value })}
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, incidents: val })}
                                                     placeholder="Security issues, accidents, or disruptions..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-red-600 focus:ring-4 focus:ring-red-600/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    className="border-red-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-emerald-600 font-black">13. Key Achievements</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1 text-emerald-600 font-black">14. Key Achievements</label>
+                                                <RichTextEditor
                                                     value={dailyForm.achievements}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, achievements: e.target.value })}
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, achievements: val })}
                                                     placeholder="Special milestones reached today..."
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 outline-none transition-all font-bold text-gray-700 h-28 resize-none"
+                                                    className="border-emerald-100"
+                                                    minHeight="120px"
                                                 />
                                             </div>
                                             <div className="md:col-span-2">
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">14. General Remarks (Optional)</label>
-                                                <textarea
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">15. General Remarks (Optional)</label>
+                                                <RichTextEditor
                                                     value={dailyForm.additional_notes}
-                                                    onChange={(e) => setDailyForm({ ...dailyForm, additional_notes: e.target.value })}
-                                                    className="w-full px-5 py-4 bg-white rounded-2xl border border-gray-200 focus:border-maroon focus:ring-4 focus:ring-maroon/5 outline-none transition-all font-bold text-gray-700 h-24 resize-none"
+                                                    onChange={(val) => setDailyForm({ ...dailyForm, additional_notes: val })}
+                                                    minHeight="100px"
                                                 />
                                             </div>
                                         </div>
@@ -2139,28 +2153,28 @@ export default function ActivityReports() {
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Key Achievements</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={weeklyForm.key_achievements}
-                                            onChange={(e) => setWeeklyForm({ ...weeklyForm, key_achievements: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setWeeklyForm({ ...weeklyForm, key_achievements: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Challenges Faced</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={weeklyForm.challenges_faced}
-                                            onChange={(e) => setWeeklyForm({ ...weeklyForm, challenges_faced: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setWeeklyForm({ ...weeklyForm, challenges_faced: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Action Items</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={weeklyForm.action_items}
-                                            onChange={(e) => setWeeklyForm({ ...weeklyForm, action_items: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setWeeklyForm({ ...weeklyForm, action_items: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
@@ -2276,37 +2290,37 @@ export default function ActivityReports() {
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Major Achievements</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={monthlyForm.major_achievements}
-                                            onChange={(e) => setMonthlyForm({ ...monthlyForm, major_achievements: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setMonthlyForm({ ...monthlyForm, major_achievements: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Challenges</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={monthlyForm.challenges}
-                                            onChange={(e) => setMonthlyForm({ ...monthlyForm, challenges: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setMonthlyForm({ ...monthlyForm, challenges: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Strategic Initiatives</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={monthlyForm.strategic_initiatives}
-                                            onChange={(e) => setMonthlyForm({ ...monthlyForm, strategic_initiatives: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setMonthlyForm({ ...monthlyForm, strategic_initiatives: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
                                     <div>
                                         <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Goals for Next Month</label>
-                                        <textarea
+                                        <RichTextEditor
                                             value={monthlyForm.goals_next_month}
-                                            onChange={(e) => setMonthlyForm({ ...monthlyForm, goals_next_month: e.target.value })}
-                                            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-maroon outline-none transition-colors h-24"
+                                            onChange={(val) => setMonthlyForm({ ...monthlyForm, goals_next_month: val })}
+                                            minHeight="100px"
                                         />
                                     </div>
 
@@ -2440,11 +2454,11 @@ export default function ActivityReports() {
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Topics Covered</p>
-                                                        <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.topics_covered}</p>
+                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.topics_covered }} />
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Practical Sessions</p>
-                                                        <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.practical_sessions}</p>
+                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.practical_sessions }} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -2460,7 +2474,7 @@ export default function ActivityReports() {
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Admissions & Growth</p>
-                                                        <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.admissions_registrations}</p>
+                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.admissions_registrations }} />
                                                     </div>
                                                     <div className="flex gap-4">
                                                         <div>
@@ -2485,16 +2499,16 @@ export default function ActivityReports() {
                                                 {viewingReport.discipline_issues && (
                                                     <div>
                                                         <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Discipline Issues</p>
-                                                        <p className="text-sm text-gray-700 font-medium">{viewingReport.discipline_issues}</p>
+                                                        <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.discipline_issues }} />
                                                     </div>
                                                 )}
                                                 <div>
                                                     <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">Feedback & Concerns</p>
-                                                    <p className="text-sm text-gray-600 leading-relaxed">{viewingReport.student_feedback || 'No concerns recorded'}</p>
+                                                    <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.student_feedback || 'No concerns recorded' }} />
                                                 </div>
                                                 <div>
                                                     <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">Support Provided</p>
-                                                    <p className="text-sm text-gray-600 leading-relaxed italic">{viewingReport.counseling_support || 'Standard support'}</p>
+                                                    <div className="text-sm text-gray-600 leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.counseling_support || 'Standard support' }} />
                                                 </div>
                                             </div>
                                         </div>
@@ -2504,11 +2518,11 @@ export default function ActivityReports() {
                                             <div className="grid grid-cols-1 gap-4">
                                                 <div>
                                                     <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Classroom / Lab Condition</p>
-                                                    <p className="text-sm text-gray-700 font-medium">{viewingReport.facilities_issues || 'Optimal'}</p>
+                                                    <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.facilities_issues || 'Optimal' }} />
                                                 </div>
                                                 <div>
                                                     <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Equipment Status</p>
-                                                    <p className="text-sm text-gray-700 font-medium">{viewingReport.equipment_maintenance || 'Operational'}</p>
+                                                    <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.equipment_maintenance || 'Operational' }} />
                                                 </div>
                                                 <div className="flex gap-4">
                                                     <div className="flex-1">
@@ -2546,15 +2560,15 @@ export default function ActivityReports() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 <div className="p-5 bg-red-50/50 rounded-2xl border border-red-50">
                                                     <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2">Challenges Faced</p>
-                                                    <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.challenges_faced || 'No major challenges reported'}</p>
+                                                    <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.challenges_faced || 'No major challenges reported' }} />
                                                 </div>
                                                 <div className="p-5 bg-green-50/50 rounded-2xl border border-green-50">
                                                     <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-2">Actions Taken</p>
-                                                    <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.actions_taken || 'Routine operations'}</p>
+                                                    <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.actions_taken || 'Routine operations' }} />
                                                 </div>
                                                 <div className="md:col-span-2 p-5 bg-blue-50/50 rounded-2xl border border-blue-50">
                                                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Plans for Next Day</p>
-                                                    <p className="text-sm text-gray-700 leading-relaxed font-bold">{viewingReport.plans_for_next_day || 'Continue standard curriculum'}</p>
+                                                    <div className="text-sm text-gray-700 leading-relaxed font-bold rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.plans_for_next_day || 'Continue standard curriculum' }} />
                                                 </div>
                                             </div>
                                         </div>
@@ -2562,7 +2576,7 @@ export default function ActivityReports() {
                                         {viewingReport.additional_notes && (
                                             <div className="p-6 bg-gray-50 rounded-2xl border-l-4 border-maroon">
                                                 <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-2">Final Remarks</p>
-                                                <p className="text-sm text-gray-600 italic leading-relaxed">"{viewingReport.additional_notes}"</p>
+                                                <div className="text-sm text-gray-600 italic leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.additional_notes }} />
                                             </div>
                                         )}
                                     </div>
@@ -2629,19 +2643,19 @@ export default function ActivityReports() {
                                         {viewingReport.key_achievements && (
                                             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
                                                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Key Achievements</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.key_achievements}</p>
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.key_achievements }} />
                                             </div>
                                         )}
                                         {viewingReport.challenges_faced && (
                                             <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
                                                 <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Challenges Faced</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.challenges_faced}</p>
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.challenges_faced }} />
                                             </div>
                                         )}
                                         {viewingReport.action_items && (
                                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Action Items (Next Week)</p>
-                                                <p className="text-sm text-gray-700 font-bold leading-relaxed whitespace-pre-wrap">{viewingReport.action_items}</p>
+                                                <div className="text-sm text-gray-700 font-bold leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.action_items }} />
                                             </div>
                                         )}
                                         {viewingReport.notes && (
@@ -2734,25 +2748,25 @@ export default function ActivityReports() {
                                         {viewingReport.major_achievements && (
                                             <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
                                                 <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Major Achievements</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.major_achievements}</p>
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.major_achievements }} />
                                             </div>
                                         )}
                                         {viewingReport.challenges && (
                                             <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
                                                 <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Critical Challenges</p>
-                                                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{viewingReport.challenges}</p>
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.challenges }} />
                                             </div>
                                         )}
                                         {viewingReport.strategic_initiatives && (
                                             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
                                                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Strategic Initiatives</p>
-                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{viewingReport.strategic_initiatives}</p>
+                                                <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.strategic_initiatives }} />
                                             </div>
                                         )}
                                         {viewingReport.goals_next_month && (
                                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Goals for Next Month</p>
-                                                <p className="text-sm text-gray-700 font-bold whitespace-pre-wrap">{viewingReport.goals_next_month}</p>
+                                                <div className="text-sm text-gray-700 font-bold rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.goals_next_month }} />
                                             </div>
                                         )}
                                     </div>

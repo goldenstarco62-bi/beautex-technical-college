@@ -11,10 +11,10 @@ import {
     ShieldCheck,
     History,
     CheckCircle2,
-    AlertCircle,
     Activity,
     CheckCircle
 } from 'lucide-react';
+import RichTextEditor from '../components/shared/RichTextEditor';
 import { studentsAPI, coursesAPI, studentDailyReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -479,12 +479,11 @@ export default function StudentDailyReportEntry() {
                                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-2">
                                                 <FileText className="w-3 h-3" /> Topics Covered & Content Delivery
                                             </label>
-                                            <textarea
+                                            <RichTextEditor
                                                 value={reportForm.topics_covered}
-                                                onChange={(e) => setReportForm({ ...reportForm, topics_covered: e.target.value })}
+                                                onChange={(val) => setReportForm({ ...reportForm, topics_covered: val })}
                                                 placeholder="Detail the modules, chapters, or specific skills covered in this session..."
-                                                className="w-full px-8 py-6 bg-white border-2 border-gray-100 rounded-[2rem] text-sm font-bold text-gray-700 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all min-h-[160px] shadow-sm custom-scrollbar"
-                                                required
+                                                minHeight="160px"
                                             />
                                         </div>
 
@@ -493,11 +492,11 @@ export default function StudentDailyReportEntry() {
                                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-2">
                                                 <MessageSquare className="w-3 h-3" /> Trainer Remarks & Performance Observations
                                             </label>
-                                            <textarea
+                                            <RichTextEditor
                                                 value={reportForm.trainer_remarks}
-                                                onChange={(e) => setReportForm({ ...reportForm, trainer_remarks: e.target.value })}
-                                                placeholder="Observations on student understanding, practical participation, or specific areas for improvement..."
-                                                className="w-full px-8 py-6 bg-white border-2 border-gray-100 rounded-[2rem] text-sm font-bold text-gray-600 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all min-h-[120px] shadow-sm custom-scrollbar"
+                                                onChange={(val) => setReportForm({ ...reportForm, trainer_remarks: val })}
+                                                placeholder="Individual student progress, discipline, or specific achievements..."
+                                                minHeight="160px"
                                             />
                                         </div>
 
@@ -770,12 +769,12 @@ const HistoryCard = ({ report, students, setSelectedStudent, setReportForm, setV
         <div className="space-y-3 font-left">
             <div className="p-4 bg-white/50 rounded-xl border border-gray-100">
                 <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2">Coverage Detail</p>
-                <p className="text-xs text-gray-600 leading-relaxed font-medium">{report.topics_covered}</p>
+                <div className="text-xs text-gray-600 leading-relaxed font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: report.topics_covered }} />
             </div>
             {report.trainer_remarks && (
                 <div className="flex gap-3 items-start opacity-70 group-hover:opacity-100 transition-opacity">
                     <History className="w-3 h-3 text-maroon mt-1 shrink-0" />
-                    <p className="text-[11px] text-gray-700 font-bold italic line-clamp-2">{report.trainer_remarks}</p>
+                    <div className="text-[11px] text-gray-700 font-bold italic line-clamp-2 rich-text-content" dangerouslySetInnerHTML={{ __html: report.trainer_remarks }} />
                 </div>
             )}
         </div>

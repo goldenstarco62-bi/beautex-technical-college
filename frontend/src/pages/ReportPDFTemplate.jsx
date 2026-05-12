@@ -83,7 +83,11 @@ function FieldRow({ label, value, highlight = false }) {
     return (
         <div style={{ display: 'flex', gap: 8, marginBottom: 4, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', minWidth: 110, flexShrink: 0, paddingTop: 1 }}>{label}:</span>
-            <span style={{ fontSize: 10, fontWeight: highlight ? 700 : 500, color: highlight ? '#111827' : '#374151', flex: 1, lineHeight: 1.5 }}>{value}</span>
+            <div 
+                style={{ fontSize: 10, fontWeight: highlight ? 700 : 500, color: highlight ? '#111827' : '#374151', flex: 1, lineHeight: 1.5 }}
+                className="rich-text-content-pdf"
+                dangerouslySetInnerHTML={{ __html: value }}
+            />
         </div>
     );
 }
@@ -415,23 +419,29 @@ function WeeklyTemplate({ r, user }) {
 
                 {/* Key Achievements */}
                 <Section title="Key Achievements" icon="🏆" color="#059669" bg="#f0fdf4">
-                    <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                        {VAL(r.key_achievements, 'No achievements recorded for this week.')}
-                    </p>
+                    <div 
+                        style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                        className="rich-text-content-pdf"
+                        dangerouslySetInnerHTML={{ __html: VAL(r.key_achievements, 'No achievements recorded for this week.') }}
+                    />
                 </Section>
 
                 {/* Challenges Faced */}
                 <Section title="Challenges Faced" icon="⚠️" color="#dc2626" bg="#fff8f8">
-                    <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                        {VAL(r.challenges_faced, 'No significant challenges reported.')}
-                    </p>
+                    <div 
+                        style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                        className="rich-text-content-pdf"
+                        dangerouslySetInnerHTML={{ __html: VAL(r.challenges_faced, 'No significant challenges reported.') }}
+                    />
                 </Section>
 
                 {/* Action Items */}
                 <Section title="Action Items" icon="✅" color="#d97706" bg="#fffbf0">
-                    <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                        {VAL(r.action_items, 'No action items pending.')}
-                    </p>
+                    <div 
+                        style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                        className="rich-text-content-pdf"
+                        dangerouslySetInnerHTML={{ __html: VAL(r.action_items, 'No action items pending.') }}
+                    />
                 </Section>
 
                 {/* Disciplinary */}
@@ -443,9 +453,11 @@ function WeeklyTemplate({ r, user }) {
                 {/* Notes — full width */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Section title="Additional Weekly Notes" icon="📝" color="#374151">
-                        <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                            {VAL(r.notes, 'No additional notes for this reporting period.')}
-                        </p>
+                        <div 
+                            style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                            className="rich-text-content-pdf"
+                            dangerouslySetInnerHTML={{ __html: VAL(r.notes, 'No additional notes for this reporting period.') }}
+                        />
                     </Section>
                 </div>
             </div>
@@ -556,40 +568,50 @@ function MonthlyTemplate({ r, user }) {
 
                 {/* Strategic Initiatives */}
                 <Section title="Strategic Initiatives" icon="🚀" color="#7c3aed" bg="#fdf4ff">
-                    <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                        {VAL(r.strategic_initiatives, 'No strategic initiatives reported this month.')}
-                    </p>
+                    <div 
+                        style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                        className="rich-text-content-pdf"
+                        dangerouslySetInnerHTML={{ __html: VAL(r.strategic_initiatives, 'No strategic initiatives reported this month.') }}
+                    />
                 </Section>
 
                 {/* Major Achievements */}
                 <Section title="Major Achievements" icon="🏆" color="#059669" bg="#f0fdf4">
-                    <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                        {VAL(r.major_achievements, 'No major achievements logged.')}
-                    </p>
+                    <div 
+                        style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                        className="rich-text-content-pdf"
+                        dangerouslySetInnerHTML={{ __html: VAL(r.major_achievements, 'No major achievements logged.') }}
+                    />
                 </Section>
 
                 {/* Challenges */}
                 <Section title="Challenges & Risks" icon="⚠️" color="#dc2626" bg="#fff8f8">
-                    <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                        {VAL(r.challenges, 'Operational challenges were managed effectively.')}
-                    </p>
+                    <div 
+                        style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                        className="rich-text-content-pdf"
+                        dangerouslySetInnerHTML={{ __html: VAL(r.challenges, 'Operational challenges were managed effectively.') }}
+                    />
                 </Section>
 
                 {/* Goals Next Month — full width */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Section title="Strategic Goals (Next Month)" icon="🎯" color="#d97706" bg="#fffbf0">
-                        <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                            {VAL(r.goals_next_month, 'Quality enhancement & institutional capacity scaling.')}
-                        </p>
+                        <div 
+                            style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                            className="rich-text-content-pdf"
+                            dangerouslySetInnerHTML={{ __html: VAL(r.goals_next_month, 'Quality enhancement & institutional capacity scaling.') }}
+                        />
                     </Section>
                 </div>
 
                 {/* Additional Notes — full width */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Section title="Board Notes & Remarks" icon="📋" color="#374151">
-                        <p style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, whiteSpace: 'pre-line', margin: 0 }}>
-                            {VAL(r.additional_notes, 'Standard institutional operations maintained per academic calendar.')}
-                        </p>
+                        <div 
+                            style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
+                            className="rich-text-content-pdf"
+                            dangerouslySetInnerHTML={{ __html: VAL(r.additional_notes, 'Standard institutional operations maintained per academic calendar.') }}
+                        />
                     </Section>
                 </div>
             </div>
@@ -627,7 +649,16 @@ function InstitutionalTemplate({ r, user }) {
         ? `${new Date(r.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} — ${new Date(r.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
         : 'Institutional Performance Audit';
 
-    const join = (arr) => arr && arr.length > 0 ? arr.join('\n') : '—';
+    const renderJoinedHtml = (arr) => {
+        if (!arr || arr.length === 0) return <span style={{ color: '#9ca3af' }}>—</span>;
+        return (
+            <div className="rich-text-content-pdf">
+                {arr.map((item, i) => (
+                    <div key={i} style={{ marginBottom: 6, borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none', paddingBottom: 4 }} dangerouslySetInnerHTML={{ __html: item }} />
+                ))}
+            </div>
+        );
+    };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '24px 28px 48px', position: 'relative', fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' }}>
@@ -666,52 +697,52 @@ function InstitutionalTemplate({ r, user }) {
                 {/* Academic Operations */}
                 <Section title="Academic Operations" icon="📚" color="#1d4ed8">
                     <FieldRow label="Classes Conducted" value={VAL(stats.classes_conducted)} highlight />
-                    <FieldRow label="Topics Covered" value={join(qualitative.topics_covered)} />
-                    <FieldRow label="Practicals" value={join(qualitative.practical_sessions)} />
+                    <FieldRow label="Topics Covered" value={renderJoinedHtml(qualitative.topics_covered)} />
+                    <FieldRow label="Practicals" value={renderJoinedHtml(qualitative.practical_sessions)} />
                     <FieldRow label="Assessments" value={VAL(stats.assessments_conducted)} />
                 </Section>
 
                 {/* Administration */}
                 <Section title="Administration" icon="🏢" color="#0891b2">
-                    <FieldRow label="Meetings Held" value={join(qualitative.meetings_held)} />
+                    <FieldRow label="Meetings Held" value={renderJoinedHtml(qualitative.meetings_held)} />
                     <FieldRow label="New Enrollments" value={VAL(stats.new_enrollments, 0)} highlight />
-                    <FieldRow label="Admissions" value={join(qualitative.admissions_registrations)} />
+                    <FieldRow label="Admissions" value={renderJoinedHtml(qualitative.admissions_registrations)} />
                 </Section>
 
                 {/* Facilities & Logistics */}
                 <Section title="Facilities & Logistics" icon="🏗️" color="#b45309">
-                    <FieldRow label="Facilities Issues" value={join(qualitative.facilities_issues)} />
-                    <FieldRow label="Equipment" value={join(qualitative.equipment_maintenance)} />
-                    <FieldRow label="Cleaning" value={join(qualitative.cleaning_maintenance)} />
-                    <FieldRow label="ICT / Internet" value={join(qualitative.internet_ict_status)} />
+                    <FieldRow label="Facilities Issues" value={renderJoinedHtml(qualitative.facilities_issues)} />
+                    <FieldRow label="Equipment" value={renderJoinedHtml(qualitative.equipment_maintenance)} />
+                    <FieldRow label="Cleaning" value={renderJoinedHtml(qualitative.cleaning_maintenance)} />
+                    <FieldRow label="ICT / Internet" value={renderJoinedHtml(qualitative.internet_ict_status)} />
                 </Section>
 
                 {/* Student Affairs */}
                 <Section title="Student Affairs" icon="👩‍🎓" color="#7c3aed">
-                    <FieldRow label="Disciplinary Cases" value={join(qualitative.disciplinary_cases)} />
-                    <FieldRow label="Student Feedback" value={join(qualitative.student_feedback)} />
-                    <FieldRow label="Counseling" value={join(qualitative.counseling_support)} />
+                    <FieldRow label="Disciplinary Cases" value={renderJoinedHtml(qualitative.disciplinary_cases)} />
+                    <FieldRow label="Student Feedback" value={renderJoinedHtml(qualitative.student_feedback)} />
+                    <FieldRow label="Counseling" value={renderJoinedHtml(qualitative.counseling_support)} />
                 </Section>
 
                 {/* Marketing & Growth */}
                 <Section title="Marketing & Growth" icon="📈" color="#059669">
                     <FieldRow label="Walk-ins" value={VAL(stats.walk_ins, 0)} highlight />
                     <FieldRow label="Inquiries" value={VAL(stats.inquiries_received, 0)} highlight />
-                    <FieldRow label="Social Media" value={join(qualitative.social_media_activities)} />
+                    <FieldRow label="Social Media" value={renderJoinedHtml(qualitative.social_media_activities)} />
                 </Section>
 
                 {/* Challenges & Incidents */}
                 <Section title="Challenges & Incidents" icon="⚠️" color="#dc2626" bg="#fff8f8">
-                    <FieldRow label="Challenges" value={join(qualitative.challenges)} />
-                    <FieldRow label="Incidents" value={join(qualitative.incidents)} />
-                    <FieldRow label="Actions Taken" value={join(qualitative.actions_taken)} />
+                    <FieldRow label="Challenges" value={renderJoinedHtml(qualitative.challenges)} />
+                    <FieldRow label="Incidents" value={renderJoinedHtml(qualitative.incidents)} />
+                    <FieldRow label="Actions Taken" value={renderJoinedHtml(qualitative.actions_taken)} />
                 </Section>
 
                 {/* Success & Highlights — spans full width */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Section title="Trainer Academic Records" icon="👨‍🏫" color="#800000" bg="#fdf2f2">
                         <div style={{ fontSize: 8, color: '#4b5563', lineHeight: 1.5 }}>
-                            {join(qualitative.trainer_insights)}
+                            {renderJoinedHtml(qualitative.trainer_insights)}
                         </div>
                     </Section>
                 </div>
@@ -719,16 +750,16 @@ function InstitutionalTemplate({ r, user }) {
                 {/* Success & Highlights — spans full width */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Section title="Success Highlights & Achievements" icon="🏆" color="#d97706" bg="#fffbf0">
-                        <FieldRow label="Achievements" value={join(qualitative.achievements)} />
-                        <FieldRow label="Notable Events" value={join(qualitative.notable_events)} />
+                        <FieldRow label="Achievements" value={renderJoinedHtml(qualitative.achievements)} />
+                        <FieldRow label="Notable Events" value={renderJoinedHtml(qualitative.notable_events)} />
                     </Section>
                 </div>
 
                 {/* Plans & Remarks — spans full width */}
                 <div style={{ gridColumn: '1 / -1' }}>
                     <Section title="Institutional Plans & Board Remarks" icon="📝" color="#374151">
-                        <FieldRow label="Strategic Plans" value={join(qualitative.plans)} />
-                        <FieldRow label="Board Notes" value={join(qualitative.additional_notes)} />
+                        <FieldRow label="Strategic Plans" value={renderJoinedHtml(qualitative.plans)} />
+                        <FieldRow label="Board Notes" value={renderJoinedHtml(qualitative.additional_notes)} />
                     </Section>
                 </div>
             </div>
@@ -782,6 +813,33 @@ export default function ReportPDFTemplate({ report, user }) {
             }}
         >
             <Template r={report} user={user} />
+
+            <style>{`
+                .rich-text-content-pdf {
+                    line-height: 1.6;
+                }
+                .rich-text-content-pdf b, .rich-text-content-pdf strong {
+                    font-weight: 800 !important;
+                }
+                .rich-text-content-pdf u {
+                    text-decoration: underline !important;
+                }
+                .rich-text-content-pdf ol {
+                    list-style-type: decimal !important;
+                    margin-left: 20px !important;
+                    margin-top: 4px !important;
+                    margin-bottom: 4px !important;
+                }
+                .rich-text-content-pdf li {
+                    margin-bottom: 2px !important;
+                }
+                .rich-text-content-pdf p {
+                    margin-bottom: 4px !important;
+                }
+                .rich-text-content-pdf div {
+                    display: block !important;
+                }
+            `}</style>
         </div>
     );
 }
