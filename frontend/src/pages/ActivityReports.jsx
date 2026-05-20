@@ -785,7 +785,7 @@ export default function ActivityReports() {
     };
 
     const handleGenerateAttendancePDFs = async () => {
-        const date = activeTab === 'daily' ? dailyForm.report_date : moment().format('YYYY-MM-DD');
+        const date = activeTab === 'daily' ? dailyForm.report_date : new Date().toISOString().split('T')[0];
         setLoading(true);
         try {
             const res = await activityReportsAPI.generateDailyAttendanceReport(date);

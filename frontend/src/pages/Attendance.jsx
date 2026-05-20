@@ -9,6 +9,7 @@ export default function Attendance() {
     const { user } = useAuth();
     const isStudent = (user?.role ? String(user.role).toLowerCase() : '') === 'student';
     const isTeacher = (user?.role ? String(user.role).toLowerCase() : '') === 'teacher';
+    const isAdmin = ['admin', 'superadmin'].includes(user?.role ? String(user.role).toLowerCase() : '');
 
     const [courses, setCourses] = useState([]);
     const [selectedCourse, setSelectedCourse] = useState('');
@@ -31,7 +32,7 @@ export default function Attendance() {
         try {
             setLoading(true);
             setError('');
-            if (!isStudent) fetchGeneratedReports();
+            if (isAdmin) fetchGeneratedReports();
 
             if (isTeacher) {
                 // Fetch both courses and faculty in parallel for teachers
@@ -328,7 +329,7 @@ export default function Attendance() {
                     </p>
                 </div>
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                    { !isStudent && (
+                    { isAdmin && (
                         <button
                             onClick={handleGenerateAttendancePDFs}
                             disabled={loading}
@@ -355,7 +356,7 @@ export default function Attendance() {
             </div>
             
             {/* Recent Automated Reports Section */}
-            {!isStudent && generatedReports.length > 0 && (
+            {isAdmin && generatedReports.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
                     {generatedReports.slice(0, 4).map((report, idx) => (
                         <div 
