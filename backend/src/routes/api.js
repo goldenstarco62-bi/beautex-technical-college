@@ -211,6 +211,11 @@ router.get('/activity-reports/consolidated-dept', authenticateToken, authorizeRo
 // Academic Summary — auto-aggregated intelligence report
 router.get('/activity-reports/academic-summary', authenticateToken, authorizeRoles('admin', 'superadmin'), activityReportController.getAcademicSummary);
 
+// Daily Attendance Report Generation (Automated)
+router.post('/activity-reports/generate-daily-attendance', authenticateToken, authorizeRoles('admin', 'superadmin'), reportController.generateDailyAttendanceReport);
+router.get('/activity-reports/attendance-list', authenticateToken, authorizeRoles('admin', 'superadmin'), reportController.listAttendanceReports);
+router.get('/activity-reports/attendance-download/:fileName', authenticateToken, authorizeRoles('admin', 'superadmin'), reportController.downloadAttendanceReport);
+
 
 
 // Dashboard Stats

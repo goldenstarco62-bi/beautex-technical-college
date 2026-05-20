@@ -784,6 +784,25 @@ export default function ActivityReports() {
         }
     };
 
+    const handleGenerateAttendancePDFs = async () => {
+        const date = activeTab === 'daily' ? dailyForm.report_date : moment().format('YYYY-MM-DD');
+        setLoading(true);
+        try {
+            const res = await activityReportsAPI.generateDailyAttendanceReport(date);
+            if (res.data.success) {
+                toast.success(res.data.message, { duration: 5000 });
+                // We could potentially list the generated files here or provide links if we had a "Downloads" section
+            } else {
+                toast.error('Generation completed with no results.');
+            }
+        } catch (error) {
+            console.error('Error generating attendance PDFs:', error);
+            toast.error(error.response?.data?.error || 'Automation sequence failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     if (loading && !dailyReports.length && !weeklyReports.length) {
         return (
             <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-4">
@@ -891,11 +910,21 @@ export default function ActivityReports() {
                             Print Manifest
                         </button>
                         <button
-                            onClick={openCreateModal}
-                            className="bg-maroon text-gold px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.3em] hover:bg-black transition-all shadow-[0_20px_40px_-15px_rgba(128,0,0,0.3)] hover:-translate-y-1 active:translate-y-0 border border-maroon-900 group"
+                            onClick={handleGenerateAttendancePDFs}
+                            disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2 bg-gold/10 text-gold border border-gold/20 rounded-xl hover:bg-gold/20 transition-all text-sm font-bold disabled:opacity-50"
+                            title="Automate Daily Attendance Reports for all Departments"
                         >
-                            <Plus className="w-4 h-4 inline-block mr-2 group-hover:rotate-90 transition-transform" />
-                            Execute Report
+                            <Fingerprint className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} />
+                            <span className="hidden sm:inline">Automate Attendance Reports</span>
+                        </button>
+
+                        <button
+                            onClick={openCreateModal}
+                            className="flex items-center gap-2 px-4 py-2 bg-maroon text-white rounded-xl hover:bg-maroon/90 transition-all shadow-lg shadow-maroon/20 text-sm font-bold"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span className="hidden sm:inline">Create Report</span>
                         </button>
                     </div>
                 </div>
@@ -1067,7 +1096,7 @@ export default function ActivityReports() {
                                             <div className="w-px h-10 bg-maroon/5 mx-4"></div>
                                             <div className="text-center">
                                                 <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Classes</p>
-                                                <p className="text-xl font-black text-maroon">{report.classes_conducted}</p>
+                                                <p className="text-xl font-black text-maroon" dangerouslySetInnerHTML={{ __html: report.classes_conducted }} />
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3 print:hidden">
@@ -2450,7 +2479,7 @@ export default function ActivityReports() {
                                                 <div className="space-y-4">
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Classes Conducted</p>
-                                                        <p className="text-sm font-bold text-gray-700">{viewingReport.classes_conducted || 'None reported'}</p>
+                                                        <p className="text-sm font-bold text-gray-700" dangerouslySetInnerHTML={{ __html: viewingReport.classes_conducted || 'None reported' }} />
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Topics Covered</p>
@@ -2470,7 +2499,7 @@ export default function ActivityReports() {
                                                 <div className="space-y-4">
                                                     <div>
                                                         <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Meetings Held</p>
-                                                        <p className="text-sm font-bold text-gray-700">{viewingReport.meetings_held || 'No meetings reported'}</p>
+                                                        <p className="text-sm font-bold text-gray-700" dangerouslySetInnerHTML={{ __html: viewingReport.meetings_held || 'No meetings reported' }} />
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Admissions & Growth</p>

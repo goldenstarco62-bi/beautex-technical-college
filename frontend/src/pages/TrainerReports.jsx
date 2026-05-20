@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import { trainerReportsAPI, coursesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown, Eye, ChevronDown } from 'lucide-react';

@@ -36,6 +36,8 @@
     "mongoose": "^8.0.0",
     "multer": "^2.0.2",
     "nodemailer": "^8.0.1",
+    "pdfkit": "^0.18.0",
+    "pdfkit-table": "^0.1.99",
     "pg": "^8.18.0",
     "xss": "^1.0.15"
   },

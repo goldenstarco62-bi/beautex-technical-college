@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, facultyAPI } from '../services/api';
+import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, facultyAPI, activityReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen, Fingerprint } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import moment from 'moment';
 import { calculateRemainingTime } from '../utils/dateUtils';
 export default function Attendance() {
     const { user } = useAuth();
@@ -20,6 +21,7 @@ export default function Attendance() {
     const [topicsCovered, setTopicsCovered] = useState('');
     const [trainerRemarks, setTrainerRemarks] = useState('');
     const [dailyReports, setDailyReports] = useState([]);
+    const [generatedReports, setGeneratedReports] = useState([]);
 
     useEffect(() => {
         fetchInitialData();
@@ -29,6 +31,7 @@ export default function Attendance() {
         try {
             setLoading(true);
             setError('');
+            if (!isStudent) fetchGeneratedReports();
 
             if (isTeacher) {
                 // Fetch both courses and faculty in parallel for teachers
@@ -93,6 +96,15 @@ export default function Attendance() {
             setError('Failed to load courses. Please refresh the page.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchGeneratedReports = async () => {
+        try {
+            const res = await activityReportsAPI.listAttendanceReports();
+            setGeneratedReports(res.data || []);
+        } catch (err) {
+            console.error('Error fetching generated reports:', err);
         }
     };
 
@@ -279,6 +291,24 @@ export default function Attendance() {
         }
     };
 
+    const handleGenerateAttendancePDFs = async () => {
+        setLoading(true);
+        try {
+            const res = await activityReportsAPI.generateDailyAttendanceReport(selectedDate);
+            if (res.data.success) {
+                toast.success(res.data.message, { duration: 5000 });
+                fetchGeneratedReports();
+            } else {
+                toast.error('Generation completed with no results.');
+            }
+        } catch (error) {
+            console.error('Error generating attendance PDFs:', error);
+            toast.error(error.response?.data?.error || 'Automation sequence failed');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     if (loading) return (
         <div className="p-8 text-center font-black uppercase tracking-widest text-maroon">
             Accessing Registry...
@@ -297,19 +327,60 @@ export default function Attendance() {
                         {isStudent ? 'Your Daily Participation Log' : 'Academic Audit • Daily Registry Protocol'}
                     </p>
                 </div>
-                {isTeacher && courses.length === 0 && (
-                    <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-700 px-5 py-3 rounded-2xl text-xs font-bold">
-                        <BookOpen className="w-4 h-4 shrink-0" />
-                        No courses are assigned to your account yet. Contact an administrator.
-                    </div>
-                )}
-                {isTeacher && courses.length > 0 && (
-                    <div className="flex items-center gap-2 bg-maroon/5 border border-maroon/10 text-maroon px-5 py-3 rounded-2xl text-xs font-bold">
-                        <BookOpen className="w-4 h-4" />
-                        Showing {courses.length} assigned course{courses.length !== 1 ? 's' : ''}
-                    </div>
-                )}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                    { !isStudent && (
+                        <button
+                            onClick={handleGenerateAttendancePDFs}
+                            disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2 bg-gold/10 text-gold border border-gold/20 rounded-xl hover:bg-gold/20 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                            title="Automate Daily Attendance Reports for all Departments"
+                        >
+                            <Fingerprint className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} />
+                            <span className="hidden sm:inline">Automate Reports</span>
+                        </button>
+                    )}
+                    {isTeacher && courses.length === 0 && (
+                        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-700 px-5 py-3 rounded-2xl text-xs font-bold">
+                            <BookOpen className="w-4 h-4 shrink-0" />
+                            No courses are assigned to your account yet. Contact an administrator.
+                        </div>
+                    )}
+                    {isTeacher && courses.length > 0 && (
+                        <div className="flex items-center gap-2 bg-maroon/5 border border-maroon/10 text-maroon px-5 py-3 rounded-2xl text-xs font-bold">
+                            <BookOpen className="w-4 h-4" />
+                            Showing {courses.length} assigned course{courses.length !== 1 ? 's' : ''}
+                        </div>
+                    )}
+                </div>
             </div>
+            
+            {/* Recent Automated Reports Section */}
+            {!isStudent && generatedReports.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                    {generatedReports.slice(0, 4).map((report, idx) => (
+                        <div 
+                            key={idx}
+                            onClick={() => activityReportsAPI.downloadAttendanceReport(report.name)}
+                            className="group bg-white p-4 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gold/30 transition-all cursor-pointer relative overflow-hidden"
+                        >
+                            <div className="absolute top-0 right-0 w-16 h-16 bg-gold/5 rounded-full translate-x-1/2 -translate-y-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-gold/10 rounded-2xl flex items-center justify-center text-gold group-hover:bg-gold group-hover:text-white transition-colors">
+                                    <CheckCircle2 className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="text-[10px] font-black text-gray-800 uppercase tracking-widest truncate">
+                                        {report.name.split('_')[2]} Report
+                                    </h3>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">
+                                        {moment(report.createdAt).fromNow()} • {(report.size / 1024).toFixed(1)} KB
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {error && (
                 <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-[1.5rem] text-xs font-bold animate-in slide-in-from-top-2">
@@ -439,7 +510,10 @@ export default function Attendance() {
                                             <td className="px-8 py-6 text-[11px] font-black text-gray-600 uppercase tracking-widest">{student.date}</td>
                                             <td className="px-8 py-6 text-xs font-bold text-gray-800 uppercase">{student.course}</td>
                                             <td className="px-8 py-6 max-w-xs">
-                                                <p className="text-[10px] font-bold text-gray-400 line-clamp-2 italic">"{student.report?.topics_covered || '—'}"</p>
+                                                <div 
+                                                    className="text-[10px] font-bold text-gray-400 line-clamp-2 italic prose prose-sm"
+                                                    dangerouslySetInnerHTML={{ __html: student.report?.topics_covered || '—' }}
+                                                />
                                             </td>
                                             <td className="px-8 py-6">
                                                 <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.status === 'Present' ? 'bg-green-100 text-green-700' : student.status === 'Late' ? 'bg-yellow-100 text-yellow-700' : student.status === 'Pending' ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'}`}>

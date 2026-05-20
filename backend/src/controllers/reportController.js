@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getDb, query, queryOne, run } from '../config/database.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
@@ -290,5 +293,71 @@ export const updateReport = async (req, res) => {
     } catch (error) {
         console.error('Error updating report:', error);
         res.status(500).json({ error: 'Internal server error', detail: error.message });
+    }
+};
+
+export const generateDailyAttendanceReport = async (req, res) => {
+    try {
+        const { date } = req.body;
+        const { generateDailyAttendanceReports } = await import('../services/attendanceReportService.js');
+        
+        const results = await generateDailyAttendanceReports(date);
+        
+        res.json({
+            success: true,
+            message: `Generated ${results.length} departmental reports`,
+            reports: results
+        });
+    } catch (error) {
+        console.error('Error in generateDailyAttendanceReport controller:', error);
+        res.status(500).json({ error: 'Failed to generate attendance reports', detail: error.message });
+    }
+};
+
+export const listAttendanceReports = async (req, res) => {
+    try {
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        const REPORTS_DIR = path.join(__dirname, '../../uploads/attendance_reports');
+
+        if (!fs.existsSync(REPORTS_DIR)) {
+            return res.json([]);
+        }
+
+        const files = fs.readdirSync(REPORTS_DIR)
+            .filter(file => file.endsWith('.pdf'))
+            .map(file => {
+                const stats = fs.statSync(path.join(REPORTS_DIR, file));
+                return {
+                    name: file,
+                    size: stats.size,
+                    createdAt: stats.birthtime,
+                    url: `/api/activity-reports/attendance-download/${encodeURIComponent(file)}`
+                };
+            })
+            .sort((a, b) => b.createdAt - a.createdAt);
+
+        res.json(files);
+    } catch (error) {
+        console.error('Error listing attendance reports:', error);
+        res.status(500).json({ error: 'Failed to list reports' });
+    }
+};
+
+export const downloadAttendanceReport = async (req, res) => {
+    try {
+        const { fileName } = req.params;
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        const filePath = path.join(__dirname, '../../uploads/attendance_reports', fileName);
+
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Report not found' });
+        }
+
+        res.download(filePath);
+    } catch (error) {
+        console.error('Error downloading attendance report:', error);
+        res.status(500).json({ error: 'Failed to download report' });
     }
 };

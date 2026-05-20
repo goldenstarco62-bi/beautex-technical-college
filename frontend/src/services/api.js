@@ -160,6 +160,17 @@ export const activityReportsAPI = {
     getConsolidated: (params) => api.get('activity-reports/consolidated', { params }),
     getConsolidatedDept: (params) => api.get('activity-reports/consolidated-dept', { params }),
     getAcademicSummary: (params) => api.get('activity-reports/academic-summary', { params }),
+    generateDailyAttendanceReport: (date) => api.post('activity-reports/generate-daily-attendance', { date }),
+    listAttendanceReports: () => api.get('activity-reports/attendance-list'),
+    downloadAttendanceReport: (fileName) => api.get(`activity-reports/attendance-download/${encodeURIComponent(fileName)}`, { responseType: 'blob' })
+        .then(res => {
+            const url = URL.createObjectURL(res.data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }),
 };
 
 
