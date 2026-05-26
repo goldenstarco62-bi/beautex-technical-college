@@ -52,7 +52,7 @@ const StatusBadge = ({ status }) => {
 function StudentFinanceView({ studentFee, payments }) {
     const totalDue = studentFee?.total_due || 0;
     const totalPaid = studentFee?.total_paid || 0;
-    const balance = studentFee?.balance ?? (totalDue - totalPaid);
+    const balance = studentFee?.balance ?? Math.max(0, totalDue - totalPaid);
     const progress = totalDue > 0 ? Math.min((totalPaid / totalDue) * 100, 100) : 0;
     const status = studentFee?.status || 'Pending';
 
@@ -840,7 +840,7 @@ export default function Finance() {
                 }
                 const due = parseFloat(total_due);
                 const paid = parseFloat(total_paid);
-                const bal = due - paid;
+                const bal = Math.max(0, due - paid);
 
                 await financeAPI.updateStudentFee(student_id, {
                     total_due: due,
@@ -1384,7 +1384,7 @@ export default function Finance() {
                                                                     data: {
                                                                         ...editingRecord.data,
                                                                         total_due: due,
-                                                                        balance: due - (editingRecord.data.total_paid || 0)
+                                                                        balance: Math.max(0, due - (editingRecord.data.total_paid || 0))
                                                                     }
                                                                 });
                                                             }}
@@ -1405,7 +1405,7 @@ export default function Finance() {
                                                                     data: {
                                                                         ...editingRecord.data,
                                                                         total_paid: paid,
-                                                                        balance: (editingRecord.data.total_due || 0) - paid
+                                                                        balance: Math.max(0, (editingRecord.data.total_due || 0) - paid)
                                                                     }
                                                                 });
                                                             }}

@@ -43,7 +43,7 @@ async function internalSyncStudentFee(studentId) {
                 fee = new StudentFee({ student_id: studentId, total_due: totalDue });
             }
 
-            const balance = fee.total_due - totalPaid;
+            const balance = Math.max(0, fee.total_due - totalPaid);
             const status = (balance <= 0 && fee.total_due > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             await StudentFee.findOneAndUpdate(
@@ -321,7 +321,7 @@ export async function syncAllFees(req, res) {
                     }
                 }
 
-                const balance = totalDue - totalPaid;
+                const balance = Math.max(0, totalDue - totalPaid);
                 const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
                 await StudentFee.findOneAndUpdate(
@@ -396,7 +396,7 @@ export async function syncAllFees(req, res) {
 
         await run(`
             UPDATE student_fees 
-            SET balance = total_due - total_paid
+            SET balance = CASE WHEN total_due - total_paid < 0 THEN 0 ELSE total_due - total_paid END
         `);
 
         await run(`
@@ -768,17 +768,17 @@ export async function mpesaCallback(req, res) {
                 let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [student_id]);
                 if (fee) {
                     const newPaid = (Number(fee.total_paid) || 0) + Number(amount);
-                    const newBalance = (Number(fee.total_due) || 0) - newPaid;
-                    const newStatus = newBalance <= 0 ? 'Paid' : 'Partial';
+                    const newBalance = Math.max(0, (Number(fee.total_due) || 0) - newPaid);
+                    const newStatus = newBalance <= 0 && (Number(fee.total_due) || 0) > 0 ? 'Paid' : 'Partial';
                     await run(
                         'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
                         [newPaid, newBalance, newStatus, student_id]
                     );
                 } else {
-                    // Create summary if missing
+                    // Create summary if missing — balance is 0 because total_due has not been set yet
                     await run(
                         'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                        [student_id, 0, amount, -amount, 'Partial']
+                        [student_id, 0, amount, 0, 'Partial']
                     );
                 }
                 console.log(`âœ… Ledger updated for ${student.name} (${student_id})`);
@@ -883,13 +883,21 @@ export async function deletePayment(req, res) {
 export async function updateStudentFee(req, res) {
     try {
         const { id } = req.params; // This will be the ID or student_id
-        const { total_due, total_paid, balance, status } = req.body;
+        const { total_due, total_paid } = req.body;
+
+        // Always recompute balance and status server-side to prevent client-supplied bad data
+        const due = Number(total_due) || 0;
+        const paid = Number(total_paid) || 0;
+        const computedBalance = Math.max(0, due - paid);
+        const computedStatus = computedBalance <= 0 && due > 0
+            ? 'Paid'
+            : (paid > 0 ? 'Partial' : 'Pending');
 
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const updated = await StudentFee.findOneAndUpdate(
                 { student_id: id },
-                { total_due, total_paid, balance: total_due - total_paid, status },
+                { total_due: due, total_paid: paid, balance: computedBalance, status: computedStatus },
                 { new: true, upsert: true }
             );
             return res.json({ message: 'Fee record synchronized successfully', data: updated });
@@ -899,12 +907,12 @@ export async function updateStudentFee(req, res) {
         if (existing) {
             await run(
                 'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ? WHERE student_id = ?',
-                [total_due, total_paid, total_due - total_paid, status, id]
+                [due, paid, computedBalance, computedStatus, id]
             );
         } else {
             await run(
                 'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
-                [id, total_due, total_paid, total_due - total_paid, status]
+                [id, due, paid, computedBalance, computedStatus]
             );
         }
         res.json({ message: 'Fee record synchronized successfully' });
