@@ -190,6 +190,24 @@ export const financeAPI = {
     getAnalytics: () => api.get('finance/analytics'),
     syncLedger: () => api.post('finance/sync'),
     createFeeStructure: (data) => api.post('finance/fees', data),
+
+    // Monthly Fee Tracking
+    getMonthlyTracking: (params) => api.get('finance/monthly-tracking', { params }),
+    getMonthlyStatus: (params) => api.get('finance/monthly-tracking/status', { params }),
+    getStudentMonthlyTracking: (studentId) => api.get(`finance/monthly-tracking/${encodeURIComponent(studentId)}`),
+    recordMonthlyPayment: (data) => api.post('finance/monthly-tracking/record', data),
+    initMonthlyRecords: (data) => api.post('finance/monthly-tracking/init', data),
+    getMonthlyAlerts: () => api.get('finance/monthly-alerts'),
+    getMonthlyReport: (params) => api.get('finance/monthly-report', { params }),
+    exportMonthlyReport: (params, fileName) => api.get('finance/monthly-export', { params, responseType: 'blob' })
+        .then(res => {
+            const url = URL.createObjectURL(res.data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }),
 };
 
 // Materials

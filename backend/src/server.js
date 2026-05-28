@@ -177,6 +177,15 @@ const ensureServices = async (req, res, next) => {
             console.log('🏗️ First request received. Initializing services...');
             await initializeDatabase();
             dbInitialized = true;
+
+            // Auto initialize monthly fee records for the current month
+            try {
+                const { autoInitializeCurrentMonth } = await import('./controllers/monthlyFeeController.js');
+                await autoInitializeCurrentMonth();
+                console.log('✅ Monthly fee tracker initialized successfully');
+            } catch (monthlyFeeErr) {
+                console.error('⚠️ Monthly fee tracker auto-initialization warning:', monthlyFeeErr.message);
+            }
         }
 
         if (!loadedApiRoutes) {

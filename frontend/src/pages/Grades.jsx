@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { gradesAPI, coursesAPI, studentsAPI, reportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History, Users, CheckCircle, Printer, FileDown, MessageSquare, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import Interactions from '../components/shared/Interactions';
+
 
 export default function Grades() {
     const { user } = useAuth();
@@ -21,6 +22,53 @@ export default function Grades() {
     const [discussionEntity, setDiscussionEntity] = useState(null);
     const [viewType, setViewType] = useState('CAT'); // 'CAT' or 'REPORTS'
     const [searchTerm, setSearchTerm] = useState('');
+    const searchInputRef = useRef(null);
+    const searchWrapperRef = useRef(null);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [suggestionIndex, setSuggestionIndex] = useState(-1);
+
+    // Suggestions: top 8 matching students while typing
+    const suggestions = searchTerm.trim().length > 0
+        ? students.filter(s => {
+            const q = searchTerm.toLowerCase();
+            return (
+                s.name?.toLowerCase().includes(q) ||
+                s.id?.toString().toLowerCase().includes(q)
+            );
+          }).slice(0, 8)
+        : [];
+
+    const handleSuggestionKeyDown = (e) => {
+        if (!showSuggestions || suggestions.length === 0) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSuggestionIndex(i => Math.min(i + 1, suggestions.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSuggestionIndex(i => Math.max(i - 1, 0));
+        } else if (e.key === 'Enter' && suggestionIndex >= 0) {
+            e.preventDefault();
+            const selected = suggestions[suggestionIndex];
+            setSearchTerm(selected.name);
+            setShowSuggestions(false);
+            setSuggestionIndex(-1);
+        } else if (e.key === 'Escape') {
+            setSearchTerm('');
+            setShowSuggestions(false);
+        }
+    };
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
     const [catCourseFilter, setCatCourseFilter] = useState(''); // filter matrix by course
     const [showBatchModal, setShowBatchModal] = useState(false);
     const [batchCourse, setBatchCourse] = useState('');
@@ -538,15 +586,69 @@ export default function Grades() {
                                         ))}
                                     </select>
                                 )}
-                                <div className="flex-1 flex items-center gap-3 bg-white border border-black/5 p-2 px-4 sm:px-6 rounded-2xl shadow-sm">
-                                    <Search className="w-4 h-4 text-maroon shrink-0" />
+                                <div ref={searchWrapperRef} className="flex-1 relative flex items-center gap-3 bg-white border border-black/5 p-2 px-4 sm:px-6 rounded-2xl shadow-sm">
+                                    <Search className={`w-4 h-4 transition-colors z-10 ${searchTerm ? 'text-maroon' : 'text-gray-300'}`} />
                                     <input
+                                        ref={searchInputRef}
                                         type="text"
                                         placeholder="Search students..."
                                         value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-full sm:w-36"
+                                        onChange={(e) => { setSearchTerm(e.target.value); setShowSuggestions(true); }}
+                                        onFocus={() => setShowSuggestions(true)}
+                                        onKeyDown={handleSuggestionKeyDown}
+                                        className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-full focus:ring-0 focus:outline-none"
                                     />
+                                    {searchTerm && (
+                                        <button
+                                            onClick={() => { setSearchTerm(''); setShowSuggestions(false); searchInputRef.current?.focus(); }}
+                                            className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100 transition-all z-10"
+                                            title="Clear search"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+
+                                    {/* Autocomplete Dropdown */}
+                                    {showSuggestions && suggestions.length > 0 && (
+                                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="px-4 py-2 border-b border-gray-50 flex items-center justify-between">
+                                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Suggestions</span>
+                                                <span className="text-[9px] font-bold text-gray-300">{suggestions.length} match{suggestions.length !== 1 ? 'es' : ''}</span>
+                                            </div>
+                                            {suggestions.map((s, idx) => (
+                                                <button
+                                                    key={s.id}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        setSearchTerm(s.name);
+                                                        setShowSuggestions(false);
+                                                        setSuggestionIndex(-1);
+                                                    }}
+                                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-gray-50 last:border-0 ${
+                                                        idx === suggestionIndex ? 'bg-maroon/5' : 'hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    {/* Avatar */}
+                                                    <div className="w-8 h-8 rounded-xl bg-maroon/10 border border-maroon/10 flex items-center justify-center shrink-0">
+                                                        <span className="text-[10px] font-black text-maroon/50">{s.name?.[0]?.toUpperCase()}</span>
+                                                    </div>
+                                                    {/* Info */}
+                                                    <div className="flex-1 min-w-0 font-normal">
+                                                        <p className="text-xs font-black text-gray-800 truncate">
+                                                            {s.name.split(new RegExp(`(${searchTerm})`, 'gi')).map((part, i) =>
+                                                                part.toLowerCase() === searchTerm.toLowerCase()
+                                                                    ? <span key={i} className="text-maroon bg-gold/20 rounded px-0.5">{part}</span>
+                                                                    : <span key={i}>{part}</span>
+                                                            )}
+                                                        </p>
+                                                        <p className="text-[9px] text-gray-400 font-mono mt-0.5 truncate">
+                                                            {s.id?.toString().startsWith('BT') ? s.id : `BT${s.id}`} · {Array.isArray(s.course) ? s.course[0] : s.course}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => window.print()}

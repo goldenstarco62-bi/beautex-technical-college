@@ -22,6 +22,7 @@ import * as interactionController from '../controllers/interactionController.js'
 import * as trainerReportController from '../controllers/trainerReportController.js';
 import * as studentDailyReportController from '../controllers/studentDailyReportController.js';
 import * as inventoryController from '../controllers/inventoryController.js';
+import * as monthlyFeeController from '../controllers/monthlyFeeController.js';
 import { authorizeRoles } from '../middleware/auth.js';
 import { authorizeFinanceEdit } from '../middleware/auth.js';
 import { authorizeStudentEdit } from '../middleware/auth.js';
@@ -242,6 +243,16 @@ router.delete('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, 
 
 router.post('/finance/mpesa-callback', financeController.mpesaCallback);
 router.get('/finance/analytics', authenticateToken, authorizeRoles('admin', 'superadmin'), financeController.getFinanceAnalytics);
+
+// Monthly Fee Tracking Routes
+router.get('/finance/monthly-tracking', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getAllMonthlyTracking);
+router.get('/finance/monthly-tracking/status', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getCurrentMonthStatus);
+router.get('/finance/monthly-tracking/:sid', authenticateToken, monthlyFeeController.getStudentMonthlyTracking);
+router.post('/finance/monthly-tracking/record', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.recordMonthlyPayment);
+router.post('/finance/monthly-tracking/init', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.initializeMonthlyRecords);
+router.get('/finance/monthly-alerts', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getAdminAlerts);
+router.get('/finance/monthly-report', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getMonthlyReport);
+router.get('/finance/monthly-export', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.exportReport);
 
 // Academic Master Routes
 router.get('/academic/departments', authenticateToken, academicController.getDepartments);

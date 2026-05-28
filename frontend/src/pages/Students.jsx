@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { studentsAPI, usersAPI, coursesAPI } from '../services/api';
 import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download, Clock } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -14,6 +14,10 @@ export default function Students() {
     const [students, setStudents] = useState([]);
     const [allStudents, setAllStudents] = useState([]); // FIX: master list for filtering
     const [searchQuery, setSearchQuery] = useState('');
+    const searchInputRef = useRef(null);
+    const searchWrapperRef = useRef(null);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [suggestionIndex, setSuggestionIndex] = useState(-1);
     const [studentsError, setStudentsError] = useState('');
     const [studentsLoading, setStudentsLoading] = useState(false);
     const [showModal, setShowModal] = useState(false);
@@ -74,6 +78,84 @@ export default function Students() {
             setStudentsError('Failed to load student records. Please refresh the page.');
         } finally {
             setStudentsLoading(false);
+        }
+    };
+
+    // Real-time local search with 200ms debounce
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (!searchQuery.trim()) {
+                setStudents(allStudents);
+            } else {
+                const q = searchQuery.toLowerCase();
+                setStudents(allStudents.filter(s =>
+                    s.name?.toLowerCase().includes(q) ||
+                    s.id?.toString().toLowerCase().includes(q) ||
+                    s.email?.toLowerCase().includes(q) ||
+                    (Array.isArray(s.course) ? s.course.join(' ') : s.course || '').toLowerCase().includes(q) ||
+                    s.contact?.toLowerCase().includes(q) ||
+                    s.department?.toLowerCase().includes(q)
+                ));
+            }
+            setCurrentPage(1);
+            setSuggestionIndex(-1);
+        }, 200);
+        return () => clearTimeout(timer);
+    }, [searchQuery, allStudents]);
+
+    // Ctrl+K shortcut to focus search
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+                setShowSuggestions(true);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (searchWrapperRef.current && !searchWrapperRef.current.contains(e.target)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Suggestions: top 8 matches while typing
+    const suggestions = searchQuery.trim().length > 0
+        ? allStudents.filter(s => {
+            const q = searchQuery.toLowerCase();
+            return (
+                s.name?.toLowerCase().includes(q) ||
+                s.id?.toString().toLowerCase().includes(q) ||
+                s.email?.toLowerCase().includes(q)
+            );
+          }).slice(0, 8)
+        : [];
+
+    const handleSuggestionKeyDown = (e) => {
+        if (!showSuggestions || suggestions.length === 0) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setSuggestionIndex(i => Math.min(i + 1, suggestions.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setSuggestionIndex(i => Math.max(i - 1, 0));
+        } else if (e.key === 'Enter' && suggestionIndex >= 0) {
+            e.preventDefault();
+            const selected = suggestions[suggestionIndex];
+            setSearchQuery(selected.name);
+            setShowSuggestions(false);
+            setSuggestionIndex(-1);
+        } else if (e.key === 'Escape') {
+            setSearchQuery('');
+            setShowSuggestions(false);
         }
     };
 
@@ -426,16 +508,81 @@ export default function Students() {
 
                 {/* Integrated Search */}
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                    <div ref={searchWrapperRef} className="flex-1 relative">
+                        <Search className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors z-10 ${searchQuery ? 'text-maroon' : 'text-gray-300'}`} />
                         <input
+                            ref={searchInputRef}
                             type="text"
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                            placeholder="Search students..."
-                            className="w-full pl-12 pr-4 py-3 bg-gray-50/50 border border-gray-100 rounded-xl text-sm font-medium text-gray-700 placeholder-gray-300 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all"
+                            onChange={(e) => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+                            onFocus={() => setShowSuggestions(true)}
+                            onKeyDown={handleSuggestionKeyDown}
+                            placeholder="Search by name, ID, email, course, department..."
+                            className="w-full pl-12 pr-10 py-3 bg-gray-50/50 border border-gray-100 rounded-xl text-sm font-medium text-gray-700 placeholder-gray-300 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all"
                         />
+                        {searchQuery ? (
+                            <button
+                                onClick={() => { setSearchQuery(''); setShowSuggestions(false); searchInputRef.current?.focus(); }}
+                                title="Clear search (Esc)"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-200 transition-all z-10"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        ) : (
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-gray-300 bg-gray-100 px-1.5 py-0.5 rounded hidden md:inline">Ctrl+K</span>
+                        )}
+
+                        {/* Autocomplete Dropdown */}
+                        {showSuggestions && suggestions.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="px-4 py-2 border-b border-gray-50 flex items-center justify-between">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Suggestions</span>
+                                    <span className="text-[9px] font-bold text-gray-300">{suggestions.length} match{suggestions.length !== 1 ? 'es' : ''}</span>
+                                </div>
+                                {suggestions.map((s, idx) => (
+                                    <button
+                                        key={s.id}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            setSearchQuery(s.name);
+                                            setShowSuggestions(false);
+                                            setSuggestionIndex(-1);
+                                        }}
+                                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-b border-gray-50 last:border-0 ${
+                                            idx === suggestionIndex ? 'bg-maroon/5' : 'hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {/* Avatar */}
+                                        <div className="w-9 h-9 rounded-xl bg-maroon/10 border border-maroon/10 flex items-center justify-center overflow-hidden shrink-0">
+                                            {s.photo
+                                                ? <img src={s.photo} alt={s.name} className="w-full h-full object-cover" />
+                                                : <span className="text-[11px] font-black text-maroon/50">{s.name?.[0]?.toUpperCase()}</span>
+                                            }
+                                        </div>
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-black text-gray-800 truncate">
+                                                {/* Highlight the matched part */}
+                                                {s.name.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
+                                                    part.toLowerCase() === searchQuery.toLowerCase()
+                                                        ? <span key={i} className="text-maroon bg-gold/20 rounded px-0.5">{part}</span>
+                                                        : <span key={i}>{part}</span>
+                                                )}
+                                            </p>
+                                            <p className="text-[9px] text-gray-400 font-mono mt-0.5 truncate">
+                                                {s.id?.toString().startsWith('BT') ? s.id : `BT${s.id}`} · {Array.isArray(s.course) ? s.course[0] : s.course}
+                                            </p>
+                                        </div>
+                                        {/* Status */}
+                                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ${
+                                            s.status === 'Active' ? 'bg-emerald-50 text-emerald-600' :
+                                            s.status === 'Graduated' ? 'bg-blue-50 text-blue-600' :
+                                            'bg-gray-100 text-gray-400'
+                                        }`}>{s.status || 'Active'}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     <select
                         onChange={(e) => {
@@ -455,6 +602,17 @@ export default function Students() {
                         <option>Graduated</option>
                     </select>
                 </div>
+
+                {/* Live search result count */}
+                {searchQuery && (
+                    <div className="flex items-center gap-2 px-1 animate-in fade-in duration-200">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Found:</span>
+                        <span className="bg-maroon text-gold text-[10px] font-black px-3 py-1 rounded-full">{students.length}</span>
+                        <span className="text-[10px] text-gray-400 font-bold">
+                            student{students.length !== 1 ? 's' : ''} matching <span className="text-maroon font-black">"{searchQuery}"</span>
+                        </span>
+                    </div>
+                )}
 
                 {/* Table wrapper for horizontal scroll */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-xl overflow-x-auto custom-scrollbar">

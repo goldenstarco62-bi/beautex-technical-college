@@ -27,6 +27,7 @@ import StudentDailyReportEntry from './pages/StudentDailyReportEntry';
 import DailyStudentLogs from './pages/DailyStudentLogs';
 import Inventory from './pages/Inventory';
 import AcademicSummaryReport from './pages/AcademicSummaryReport';
+import MonthlyFeeTracker from './pages/MonthlyFeeTracker';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 
@@ -82,6 +83,7 @@ function App() {
                         <Route path="/reports" element={<ProtectedRoute allowedRoles={['teacher', 'admin', 'superadmin']}><Layout><AcademicReports /></Layout></ProtectedRoute>} />
                         <Route path="/academic-master" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><AcademicMaster /></Layout></ProtectedRoute>} />
                         <Route path="/finance" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'student']}><Layout><Finance /></Layout></ProtectedRoute>} />
+                        <Route path="/monthly-fee-tracker" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><MonthlyFeeTracker /></Layout></ProtectedRoute>} />
                         <Route path="/inventory" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><Inventory /></Layout></ProtectedRoute>} />
                         <Route path="/materials" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Materials /></Layout></ProtectedRoute>} />
                         <Route path="/activity-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><ActivityReports /></Layout></ProtectedRoute>} />

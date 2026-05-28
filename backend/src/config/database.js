@@ -740,6 +740,49 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ monthly_summary_reports migration warning (PostgreSQL):', e.message);
     }
+
+    // Migration: Monthly Fee Tracking Module (Postgres)
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS monthly_fee_tracking (
+                id SERIAL PRIMARY KEY,
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                month_label TEXT NOT NULL,
+                amount_due DECIMAL DEFAULT 0.0,
+                amount_paid DECIMAL DEFAULT 0.0,
+                balance DECIMAL DEFAULT 0.0,
+                status TEXT DEFAULT 'Not Paid' CHECK(status IN ('Paid', 'Not Paid', 'Partial')),
+                due_date DATE,
+                paid_date TIMESTAMP,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, year, month)
+            )
+        `);
+        console.log('✅ monthly_fee_tracking table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ monthly_fee_tracking migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS monthly_fee_notifications (
+                id SERIAL PRIMARY KEY,
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                notification_type TEXT NOT NULL,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                message TEXT NOT NULL
+            )
+        `);
+        console.log('✅ monthly_fee_notifications table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ monthly_fee_notifications migration warning (PostgreSQL):', e.message);
+    }
 }
 
 async function runSqliteMigrations(database) {
@@ -1085,6 +1128,51 @@ async function runSqliteMigrations(database) {
 
     } catch (error) {
         console.error('⚠️ SQLite migration warning:', error.message);
+    }
+
+    // Migration: Monthly Fee Tracking Module (SQLite)
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS monthly_fee_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                month_label TEXT NOT NULL,
+                amount_due REAL DEFAULT 0.0,
+                amount_paid REAL DEFAULT 0.0,
+                balance REAL DEFAULT 0.0,
+                status TEXT DEFAULT 'Not Paid' CHECK(status IN ('Paid', 'Not Paid', 'Partial')),
+                due_date DATE,
+                paid_date DATETIME,
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                UNIQUE(student_id, year, month)
+            )
+        `);
+        console.log('✅ monthly_fee_tracking table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ monthly_fee_tracking migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS monthly_fee_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                notification_type TEXT NOT NULL,
+                sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                message TEXT NOT NULL,
+                FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+            )
+        `);
+        console.log('✅ monthly_fee_notifications table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ monthly_fee_notifications migration warning (SQLite):', e.message);
     }
 }
 

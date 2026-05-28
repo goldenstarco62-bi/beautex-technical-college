@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Users, BookOpen, UserCheck, TrendingUp, Zap, UserPlus, FileText, DollarSign, GraduationCap, Bell, Activity, ArrowUpRight, RefreshCw, ClipboardList, Sparkles, BarChart2 } from 'lucide-react';
-import { studentsAPI, coursesAPI, facultyAPI, reportsAPI, activityReportsAPI } from '../services/api';
+import { Users, BookOpen, UserCheck, TrendingUp, Zap, UserPlus, FileText, DollarSign, GraduationCap, Bell, Activity, ArrowUpRight, RefreshCw, ClipboardList, Sparkles, BarChart2, AlertCircle } from 'lucide-react';
+import { studentsAPI, coursesAPI, facultyAPI, reportsAPI, activityReportsAPI, financeAPI } from '../services/api';
 import api from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList, PieChart, Pie, Cell } from 'recharts';
 
@@ -22,6 +22,7 @@ function AdminDashboard() {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [academicSummary, setAcademicSummary] = useState(null);
+    const [feeAlerts, setFeeAlerts] = useState({ defaulterCount: 0, totalPending: 0 });
 
     const now = new Date();
     const hour = now.getHours();
@@ -32,14 +33,15 @@ function AdminDashboard() {
     const fetchData = async (silent = false) => {
         try {
             if (!silent) setRefreshing(true);
-            const [studentsRes, coursesRes, facultyRes, reportsRes, statsRes, activityRes, summaryRes] = await Promise.all([
+            const [studentsRes, coursesRes, facultyRes, reportsRes, statsRes, activityRes, summaryRes, alertsRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 facultyAPI.getAll(),
                 reportsAPI.getAll({ limit: 10 }),
                 api.get('/stats/dashboard'),
                 activityReportsAPI.getDailyReports({ limit: 10 }),
-                activityReportsAPI.getAcademicSummary({ startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0] })
+                activityReportsAPI.getAcademicSummary({ startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0] }),
+                financeAPI.getMonthlyAlerts().catch(() => ({ data: { defaulterCount: 0, totalPending: 0 } }))
             ]);
 
             const studentsData = Array.isArray(studentsRes.data) ? studentsRes.data : [];
@@ -54,6 +56,7 @@ function AdminDashboard() {
             setRecentReports(reportsData);
             setActivityReports(activityData);
             setAcademicSummary(summaryData);
+            setFeeAlerts(alertsRes.data || alertsRes || { defaulterCount: 0, totalPending: 0 });
             setStats({
                 students: statsData.summary.students,
                 courses: statsData.summary.courses,
@@ -122,6 +125,29 @@ function AdminDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* Fee Alerts Strip */}
+            {feeAlerts.defaulterCount > 0 && (
+                <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-500/20 rounded-[1.5rem] p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-red-100 dark:bg-red-900/50 rounded-xl flex items-center justify-center text-red-600 shrink-0">
+                            <AlertCircle className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black text-red-800 dark:text-red-300 uppercase tracking-wider animate-pulse">Unpaid Fee Alert</p>
+                            <p className="text-[10px] text-red-600/80 dark:text-red-400 font-bold uppercase tracking-widest mt-1">
+                                {feeAlerts.defaulterCount} students have unpaid/partial fees this month — <span className="font-black text-red-700 dark:text-red-300">KSh {feeAlerts.totalPending.toLocaleString()}</span> pending.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate('/monthly-fee-tracker')}
+                        className="bg-maroon hover:bg-maroon/90 text-gold font-black text-[9px] uppercase tracking-widest px-6 py-3.5 rounded-xl transition-all shadow-md shrink-0 self-stretch sm:self-auto text-center"
+                    >
+                        View Fee Tracker
+                    </button>
+                </div>
+            )}
 
             {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 md:gap-6">

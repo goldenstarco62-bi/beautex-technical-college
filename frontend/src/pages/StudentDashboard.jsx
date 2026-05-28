@@ -53,6 +53,7 @@ export default function StudentDashboard() {
     const [studentFee, setStudentFee] = useState(null);
     const [recentPayments, setRecentPayments] = useState([]);
     const [dailyReports, setDailyReports] = useState([]);
+    const [monthlyFees, setMonthlyFees] = useState([]);
     const [loading, setLoading] = useState(true);
 
     // Comment Dialog State
@@ -70,7 +71,7 @@ export default function StudentDashboard() {
         try {
             // Use the student_id from JWT, or fall back to matching by email in the students list
             const effectiveStudentId = user.student_id || user.id;
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, payRes, materialsRes, dailyReportsRes] = await Promise.all([
+            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, payRes, materialsRes, dailyReportsRes, monthlyTrackingRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
                 announcementsAPI.getAll(),
@@ -78,7 +79,8 @@ export default function StudentDashboard() {
                 financeAPI.getStudentFees(effectiveStudentId).catch(() => ({ data: null })),
                 financeAPI.getPayments(effectiveStudentId).catch(() => ({ data: [] })),
                 materialsAPI.getAll().catch(() => ({ data: [] })),
-                studentDailyReportsAPI.getAll({ student_id: effectiveStudentId }).catch(() => ({ data: [] }))
+                studentDailyReportsAPI.getAll({ student_id: effectiveStudentId }).catch(() => ({ data: [] })),
+                financeAPI.getStudentMonthlyTracking(effectiveStudentId).catch(() => ({ data: [] }))
             ]);
 
             const userEmail = String(user?.email || '').toLowerCase().trim();
@@ -93,6 +95,7 @@ export default function StudentDashboard() {
             setStudentFee(feeRes.data);
             setRecentPayments(Array.isArray(payRes.data) ? payRes.data.slice(0, 5) : []);
             setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.slice(0, 5) : []);
+            setMonthlyFees(Array.isArray(monthlyTrackingRes.data) ? monthlyTrackingRes.data : (Array.isArray(monthlyTrackingRes) ? monthlyTrackingRes : []));
 
             const myGrades = (gradesRes.data || []).filter(g => {
                 const gSid = String(g.student_id || '').trim().toLowerCase();
@@ -243,6 +246,34 @@ export default function StudentDashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* Monthly Fee Reminder Banner */}
+            {(() => {
+                const curYear = new Date().getFullYear();
+                const curMonth = new Date().getMonth() + 1;
+                const currentMonthRecord = (monthlyFees || []).find(f => f.year === curYear && f.month === curMonth);
+                const hasUnpaidMonthlyFee = currentMonthRecord && (currentMonthRecord.status === 'Not Paid' || currentMonthRecord.status === 'Partial');
+                if (!hasUnpaidMonthlyFee) return null;
+
+                return (
+                    <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-500/20 rounded-[1.8rem] p-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-pulse">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/50 rounded-full flex items-center justify-center shrink-0">
+                                <AlertCircle className="w-6 h-6 text-red-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-red-600 dark:text-red-400 uppercase tracking-widest mb-1">🔔 Fee Payment Reminder</h3>
+                                <p className="text-xs font-bold text-gray-600 dark:text-gray-300">
+                                    Your school fees for <span className="font-black text-maroon dark:text-gold">{currentMonthRecord.month_label}</span> have not been fully cleared (Balance: KSh {Number(currentMonthRecord.balance || 0).toLocaleString()}). Please clear your balance to avoid inconveniences.
+                                </p>
+                            </div>
+                        </div>
+                        <Link to="/finance" className="shrink-0 px-6 py-3.5 bg-maroon hover:bg-maroon/90 text-gold rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all self-stretch sm:self-auto text-center">
+                            View Statement & Pay
+                        </Link>
+                    </div>
+                );
+            })()}
 
             {/* Time Remaining Alert */}
             {remainingTime?.totalDays > 0 && remainingTime?.totalDays <= 7 ? (
@@ -447,6 +478,39 @@ export default function StudentDashboard() {
                             <div className="py-12 text-center text-gray-300 dark:text-white/20 uppercase font-black text-[10px] tracking-widest">No payments recorded yet</div>
                         )}
                     </div>
+
+                    {/* Monthly Fee Timeline */}
+                    {monthlyFees.length > 0 && (
+                        <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl">
+                            <div className="flex justify-between items-center mb-8">
+                                <div className="flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-maroon dark:text-gold" />
+                                    <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Monthly Fee History</h2>
+                                </div>
+                                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Last 6 Months</span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                                {monthlyFees.slice(0, 6).map((item) => (
+                                    <div key={item.id} className="bg-gray-50 dark:bg-white/5 p-4 rounded-2xl border border-gray-100 dark:border-white/5 text-center flex flex-col justify-between items-center h-28 hover:border-maroon/20 transition-all">
+                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider">{item.month_label.split(' ')[0]}</p>
+                                        <p className="text-[8px] text-gray-400 font-bold">{item.month_label.split(' ')[1]}</p>
+                                        <div className="my-2">
+                                            {item.status === 'Paid' && <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />}
+                                            {item.status === 'Partial' && <Clock className="w-6 h-6 text-amber-500 mx-auto" />}
+                                            {item.status === 'Not Paid' && <XCircle className="w-6 h-6 text-rose-500 mx-auto" />}
+                                        </div>
+                                        <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                                            item.status === 'Paid' ? 'bg-emerald-50 text-emerald-700' :
+                                            item.status === 'Partial' ? 'bg-amber-50 text-amber-700' :
+                                            'bg-rose-50 text-rose-700'
+                                        }`}>
+                                            {item.status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Daily Academic Registry */}
                     <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl">

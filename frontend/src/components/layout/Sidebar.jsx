@@ -29,6 +29,7 @@ const navigation = [
     { name: 'User Management', path: '/users', icon: Shield, roles: ['superadmin'] },
     { name: 'Academic Master', path: '/academic-master', icon: Building2, roles: ['admin', 'superadmin'] },
     { name: 'Finance', path: '/finance', icon: CreditCard, roles: ['admin', 'superadmin', 'student'] },
+    { name: 'Fee Tracker', path: '/monthly-fee-tracker', icon: ClipboardList, roles: ['admin', 'superadmin'] },
     { name: 'Inventory', path: '/inventory', icon: LayoutList, roles: ['admin', 'superadmin', 'teacher'] },
     { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin', 'teacher'] },
     { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
