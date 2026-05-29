@@ -127,9 +127,11 @@ router.delete('/faculty/:id', authenticateToken, authorizeRoles('admin', 'supera
 
 
 // Attendance routes (Protected with RBAC)
+router.get('/attendance/summary', authenticateToken, authorizeRoles('admin', 'superadmin', 'teacher'), attendanceController.getAttendanceSummary);
 router.get('/attendance', authenticateToken, attendanceController.getAllAttendance);
 router.post('/attendance', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.markAttendance);
 router.put('/attendance/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.updateAttendance);
+router.delete('/attendance/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), attendanceController.deleteAttendance);
 
 // Grade routes (Protected with RBAC)
 router.get('/grades', authenticateToken, gradeController.getAllGrades);

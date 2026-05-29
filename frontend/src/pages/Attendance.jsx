@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, facultyAPI, activityReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen, Fingerprint } from 'lucide-react';
+import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen, Fingerprint, Clock, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import moment from 'moment';
 import { calculateRemainingTime } from '../utils/dateUtils';
@@ -117,6 +117,23 @@ export default function Attendance() {
         }
     }, [selectedCourse, selectedDate, user]);
 
+    // Helper to parse student course field into array
+    const parseStudentCourses = (courseField) => {
+        if (!courseField) return [];
+        if (Array.isArray(courseField)) return courseField.map(c => String(c).trim()).filter(Boolean);
+        const s = String(courseField).trim();
+        // JSON array
+        if (s.startsWith('[')) {
+            try { return JSON.parse(s).map(c => String(c).trim()).filter(Boolean); } catch (e) {}
+        }
+        // Postgres-style {val1,val2}
+        if (s.startsWith('{') && s.endsWith('}')) {
+            return s.slice(1, -1).split(',').map(c => c.replace(/"/g, '').trim()).filter(Boolean);
+        }
+        // Comma-separated plain string
+        return s.split(',').map(c => c.trim()).filter(Boolean);
+    };
+
     const fetchRegistry = async () => {
         if (!selectedCourse) {
             setStudents([]);
@@ -132,17 +149,17 @@ export default function Attendance() {
 
             const allStudents = Array.isArray(studentsRes.data) ? studentsRes.data : [];
             const selectedCourseLower = selectedCourse.toLowerCase().trim();
+
+            // Improved: parse all course field formats properly
             let filtered = allStudents.filter(s => {
-                const studentCourses = Array.isArray(s.course)
-                    ? s.course
-                    : [s.course].filter(Boolean);
-                const hasCourse = studentCourses.some(c => c && c.toLowerCase().trim() === selectedCourseLower);
-                
+                const studentCourses = parseStudentCourses(s.course);
+                const hasCourse = studentCourses.some(c => c.toLowerCase().trim() === selectedCourseLower);
                 const isFinished = s.status === 'Graduated' || (s.completion_date && calculateRemainingTime(s.completion_date).isExpired);
-                
                 return hasCourse && !isFinished;
             });
 
+            // Sort students alphabetically by name for consistent ordering
+            filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             const existingMap = {};
             (attendanceRes.data || []).forEach(r => { existingMap[r.student_id] = r; });
@@ -197,6 +214,16 @@ export default function Attendance() {
         }
     };
 
+    // Attendance progress stats
+    const attendanceStats = useMemo(() => {
+        const marked = students.filter(s => s.attendance && s.attendance !== 'Pending').length;
+        const present = students.filter(s => s.attendance === 'Present').length;
+        const absent = students.filter(s => s.attendance === 'Absent').length;
+        const late = students.filter(s => s.attendance === 'Late').length;
+        const pending = students.filter(s => !s.attendance || s.attendance === 'Pending').length;
+        return { marked, present, absent, late, pending, total: students.length };
+    }, [students]);
+
     const markAllPresent = async () => {
         if (!window.confirm('Mark all pending students as Present?')) return;
 
@@ -208,6 +235,22 @@ export default function Attendance() {
                 }
             }
             toast.success('Batch update complete', { id: loadingToast });
+            fetchRegistry();
+        } catch (err) {
+            toast.error('Batch update failed', { id: loadingToast });
+        }
+    };
+
+    const markAllAbsent = async () => {
+        if (!window.confirm('Mark all PENDING students as Absent?')) return;
+        const loadingToast = toast.loading('Marking pending as absent...');
+        try {
+            for (const s of students) {
+                if (!s.attendance || s.attendance === 'Pending') {
+                    await updateStatus(s, 'Absent', true);
+                }
+            }
+            toast.success('Batch absent update complete', { id: loadingToast });
             fetchRegistry();
         } catch (err) {
             toast.error('Batch update failed', { id: loadingToast });
@@ -429,16 +472,54 @@ export default function Attendance() {
                                     className="w-full px-5 py-3.5 bg-gray-50 border-transparent rounded-xl text-xs font-bold text-gray-700 focus:bg-white focus:border-maroon/20 outline-none"
                                 />
                             </div>
-                            <div className="flex items-end">
+                            <div className="flex items-end gap-2">
                                 <button
                                     onClick={markAllPresent}
                                     disabled={students.length === 0}
-                                    className="w-full h-[47px] bg-green-50 text-green-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-green-100 disabled:opacity-50"
+                                    className="flex-1 h-[47px] bg-green-50 text-green-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-600 hover:text-white transition-all flex items-center justify-center gap-2 border border-green-100 disabled:opacity-50"
                                 >
-                                    <UserPlus className="w-4 h-4" /> Mark All Present
+                                    <UserPlus className="w-4 h-4" /> All Present
+                                </button>
+                                <button
+                                    onClick={markAllAbsent}
+                                    disabled={students.length === 0}
+                                    className="flex-1 h-[47px] bg-red-50 text-red-500 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 border border-red-100 disabled:opacity-50"
+                                >
+                                    <XCircle className="w-4 h-4" /> All Absent
                                 </button>
                             </div>
                         </div>
+
+                        {/* Attendance Progress Bar */}
+                        {students.length > 0 && (
+                            <div className="mt-6 pt-6 border-t border-gray-50">
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                        Attendance Progress — {attendanceStats.marked}/{attendanceStats.total} Marked
+                                    </span>
+                                    <div className="flex items-center gap-3 text-[9px] font-black">
+                                        <span className="text-emerald-600">✓ {attendanceStats.present} Present</span>
+                                        <span className="text-amber-500">⏱ {attendanceStats.late} Late</span>
+                                        <span className="text-rose-500">✗ {attendanceStats.absent} Absent</span>
+                                        {attendanceStats.pending > 0 && <span className="text-gray-400">⋯ {attendanceStats.pending} Pending</span>}
+                                    </div>
+                                </div>
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex">
+                                    <div
+                                        className="h-full bg-emerald-500 transition-all duration-500"
+                                        style={{ width: `${attendanceStats.total > 0 ? (attendanceStats.present / attendanceStats.total) * 100 : 0}%` }}
+                                    />
+                                    <div
+                                        className="h-full bg-amber-400 transition-all duration-500"
+                                        style={{ width: `${attendanceStats.total > 0 ? (attendanceStats.late / attendanceStats.total) * 100 : 0}%` }}
+                                    />
+                                    <div
+                                        className="h-full bg-rose-400 transition-all duration-500"
+                                        style={{ width: `${attendanceStats.total > 0 ? (attendanceStats.absent / attendanceStats.total) * 100 : 0}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-xl space-y-6">
@@ -486,7 +567,7 @@ export default function Attendance() {
                                         <th key={header} className="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{header}</th>
                                     ))
                                 ) : (
-                                    ['Enrollment ID', 'Learner Identification', 'Participation Status', 'Registry Actions'].map(header => (
+                                    ['#', 'Enrollment ID', 'Learner Identification', 'Participation Status', 'Registry Actions'].map(header => (
                                         <th key={header} className="px-8 py-6 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">{header}</th>
                                     ))
                                 )}
@@ -505,7 +586,7 @@ export default function Attendance() {
                                     </td>
                                 </tr>
                             ) : students.map((student, idx) => (
-                                <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
+                                <tr key={student.id || idx} className="hover:bg-gray-50/50 transition-colors group">
                                     {isStudent ? (
                                         <>
                                             <td className="px-8 py-6 text-[11px] font-black text-gray-600 uppercase tracking-widest">{student.date}</td>
@@ -527,17 +608,23 @@ export default function Attendance() {
                                         </>
                                     ) : (
                                         <>
+                                            <td className="px-8 py-6 text-[10px] font-black text-gray-300">{idx + 1}</td>
                                             <td className="px-8 py-6 text-[10px] font-black text-maroon/40 uppercase tracking-widest">{student.id}</td>
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 bg-maroon/5 rounded-xl flex items-center justify-center text-maroon font-black text-xs uppercase">
-                                                        {student.name.charAt(0)}
+                                                        {(student.name || '?').charAt(0)}
                                                     </div>
                                                     <p className="text-xs font-black text-gray-800 uppercase tracking-tight">{student.name}</p>
                                                 </div>
                                             </td>
                                             <td className="px-8 py-6">
-                                                <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${student.attendance === 'Present' ? 'bg-green-100 text-green-700' : student.attendance === 'Late' ? 'bg-yellow-100 text-yellow-700' : student.attendance === 'Pending' ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-600'}`}>
+                                                <span className={`px-4 py-1.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${
+                                                    student.attendance === 'Present' ? 'bg-green-100 text-green-700'
+                                                    : student.attendance === 'Late' ? 'bg-amber-100 text-amber-700'
+                                                    : student.attendance === 'Absent' ? 'bg-red-50 text-red-600'
+                                                    : 'bg-gray-100 text-gray-400'
+                                                }`}>
                                                     {student.attendance || 'Pending'}
                                                 </span>
                                             </td>
@@ -546,16 +633,38 @@ export default function Attendance() {
                                                     <button
                                                         title="Mark Present"
                                                         onClick={() => updateStatus(student, 'Present')}
-                                                        className="p-3 bg-gray-50 rounded-xl hover:bg-green-600 hover:text-white transition-all border border-gray-100 group-hover:border-green-200"
+                                                        className={`p-2.5 rounded-xl transition-all border text-[9px] font-black flex items-center gap-1 ${
+                                                            student.attendance === 'Present'
+                                                                ? 'bg-green-600 text-white border-green-600'
+                                                                : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-green-600 hover:text-white hover:border-green-600'
+                                                        }`}
                                                     >
-                                                        <CheckCircle2 className="w-4 h-4" />
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        <span className="hidden sm:inline">Present</span>
+                                                    </button>
+                                                    <button
+                                                        title="Mark Late"
+                                                        onClick={() => updateStatus(student, 'Late')}
+                                                        className={`p-2.5 rounded-xl transition-all border text-[9px] font-black flex items-center gap-1 ${
+                                                            student.attendance === 'Late'
+                                                                ? 'bg-amber-500 text-white border-amber-500'
+                                                                : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-amber-500 hover:text-white hover:border-amber-500'
+                                                        }`}
+                                                    >
+                                                        <Clock className="w-3.5 h-3.5" />
+                                                        <span className="hidden sm:inline">Late</span>
                                                     </button>
                                                     <button
                                                         title="Mark Absent"
                                                         onClick={() => updateStatus(student, 'Absent')}
-                                                        className="p-3 bg-gray-50 rounded-xl hover:bg-red-600 hover:text-white transition-all border border-gray-100 group-hover:border-red-200"
+                                                        className={`p-2.5 rounded-xl transition-all border text-[9px] font-black flex items-center gap-1 ${
+                                                            student.attendance === 'Absent'
+                                                                ? 'bg-red-600 text-white border-red-600'
+                                                                : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-red-600 hover:text-white hover:border-red-600'
+                                                        }`}
                                                     >
-                                                        <XCircle className="w-4 h-4" />
+                                                        <XCircle className="w-3.5 h-3.5" />
+                                                        <span className="hidden sm:inline">Absent</span>
                                                     </button>
                                                 </div>
                                             </td>

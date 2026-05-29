@@ -111,22 +111,25 @@ export function parseCourse(raw) {
  */
 async function syncStudentFees(studentId) {
     try {
+        const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [studentId]);
+        const canonicalId = student ? student.id : studentId;
+
         const paidRow = await queryOne(
-            'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE student_id = ? AND status = ?',
-            [studentId, 'Completed']
+            'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND status = ?',
+            [canonicalId, 'Completed']
         );
         const totalPaid = parseFloat(paidRow?.total_paid || 0);
         const lastDate = paidRow?.last_date;
 
-        let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
+        let fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
         if (fee) {
             const existingTotalDue = Number(fee.total_due || 0);
             const balance = existingTotalDue > 0 ? Math.max(0, (existingTotalDue - totalPaid)) : 0;
             const status = (balance <= 0 && existingTotalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             await run(
-                'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE student_id = ?',
-                [totalPaid, balance, status, lastDate, studentId]
+                'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [totalPaid, balance, status, lastDate, canonicalId]
             );
         }
     } catch (err) {
@@ -156,7 +159,7 @@ export async function autoInitializeCurrentMonth(targetYear, targetMonth) {
         const activeStudents = await query(`
             SELECT s.id, s.name, s.course, s.department, s.enrolled_date, sf.total_due
             FROM students s
-            LEFT JOIN student_fees sf ON s.id = sf.student_id
+            LEFT JOIN student_fees sf ON LOWER(TRIM(s.id)) = LOWER(TRIM(sf.student_id))
             WHERE s.status = 'Active'
         `);
 
@@ -211,7 +214,7 @@ export async function autoInitializeCurrentMonth(targetYear, targetMonth) {
 
             // Check if record already exists for this student/month/year
             const existing = await queryOne(
-                'SELECT id FROM monthly_fee_tracking WHERE student_id = ? AND year = ? AND month = ?',
+                'SELECT id FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?',
                 [student.id, year, month]
             );
 
@@ -241,7 +244,7 @@ export async function autoInitializeCurrentMonth(targetYear, targetMonth) {
 
             // Calculate how much was paid in this specific month
             const payments = await query(
-                'SELECT amount, payment_date FROM payments WHERE student_id = ? AND status = ?',
+                'SELECT amount, payment_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND status = ?',
                 [student.id, 'Completed']
             );
             let paidThisMonth = 0;
@@ -470,8 +473,8 @@ export async function getStudentMonthlyTracking(req, res) {
         const records = await query(`
             SELECT mft.*, s.name as student_name, s.course as student_course, s.department as student_department
             FROM monthly_fee_tracking mft
-            JOIN students s ON mft.student_id = s.id
-            WHERE mft.student_id = ?
+            JOIN students s ON LOWER(TRIM(mft.student_id)) = LOWER(TRIM(s.id))
+            WHERE LOWER(TRIM(mft.student_id)) = LOWER(TRIM(?))
             ORDER BY mft.year DESC, mft.month DESC
         `, [sid]);
 
@@ -500,13 +503,16 @@ export async function recordMonthlyPayment(req, res) {
         const numericAmount = parseFloat(amount);
         const recordedBy = (req.user && (req.user.name || req.user.email)) || 'System';
 
+        const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [student_id]);
+        const canonicalId = student ? student.id : student_id;
+
         // 1. Record in overall payments ledger
         await run(`
             INSERT INTO payments 
             (student_id, amount, method, transaction_ref, recorded_by, category, payment_date, remarks, status)
             VALUES (?, ?, ?, ?, ?, 'Tuition Fee', ?, ?, 'Completed')
         `, [
-            student_id, 
+            canonicalId, 
             numericAmount, 
             method, 
             transaction_ref || `TX-${Date.now()}`, 
@@ -517,16 +523,16 @@ export async function recordMonthlyPayment(req, res) {
 
         // 2. Fetch the corresponding monthly tracking block
         let tracking = await queryOne(
-            'SELECT * FROM monthly_fee_tracking WHERE student_id = ? AND year = ? AND month = ?',
-            [student_id, year, month]
+            'SELECT * FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?',
+            [canonicalId, year, month]
         );
 
         if (!tracking) {
             // Auto init just this student/month if missing
             await autoInitializeCurrentMonth(year, month);
             tracking = await queryOne(
-                'SELECT * FROM monthly_fee_tracking WHERE student_id = ? AND year = ? AND month = ?',
-                [student_id, year, month]
+                'SELECT * FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?',
+                [canonicalId, year, month]
             );
         }
 
@@ -543,12 +549,12 @@ export async function recordMonthlyPayment(req, res) {
             await run(`
                 UPDATE monthly_fee_tracking 
                 SET amount_paid = ?, balance = ?, status = ?, paid_date = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE student_id = ? AND year = ? AND month = ?
-            `, [amountPaid, balance, status, payment_date || new Date().toISOString(), student_id, year, month]);
+                WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?
+            `, [amountPaid, balance, status, payment_date || new Date().toISOString(), canonicalId, year, month]);
         }
 
         // 3. Sync the overall student fee summary ledger
-        await syncStudentFees(student_id);
+        await syncStudentFees(canonicalId);
 
         return res.json({ message: 'Monthly payment recorded and synced successfully' });
     } catch (err) {

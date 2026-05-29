@@ -20,6 +20,7 @@ import {
     FileStack,
     Building2,
     LayoutList,
+    TrendingUp,
 } from 'lucide-react';
 
 
@@ -36,6 +37,7 @@ const navigation = [
     { name: 'Study Materials', path: '/materials', icon: FileStack, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
     { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+    { name: 'Attendance Summary', path: '/attendance-summary', icon: TrendingUp, roles: ['admin', 'superadmin', 'teacher'] },
     { name: 'Grades', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Schedule', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
     { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['teacher', 'admin', 'superadmin'] },
@@ -81,7 +83,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                         </div>
                         <div className="flex flex-col">
                             <span className="text-sm font-black text-maroon uppercase tracking-[0.2em]">Beautex</span>
-                            <span className="text-[10px] font-bold text-gold uppercase tracking-widest">Academy</span>
+                            <span className="text-[8px] font-bold text-gold uppercase tracking-[0.1em] leading-tight">Technical Training College</span>
                         </div>
                     </div>
                     {/* Mobile Close Button */}

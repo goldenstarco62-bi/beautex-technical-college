@@ -128,8 +128,8 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                     <span className="text-[10px] font-black text-white uppercase tracking-[0.2em] truncate max-w-[120px]">
                         Beautex
                     </span>
-                    <span className="text-[8px] font-bold text-accent uppercase tracking-[0.1em] opacity-60">
-                        Academy
+                    <span className="text-[7px] font-bold text-accent uppercase tracking-[0.05em] opacity-60 leading-tight">
+                        Technical Training College
                     </span>
                 </div>
             </div>

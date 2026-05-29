@@ -224,7 +224,7 @@ export default function Profile() {
                             <div>
                                 <h4 className="text-sm font-black text-black uppercase tracking-tight">Security Protocol</h4>
                                 <p className="text-xs text-black/60 font-medium leading-relaxed mt-1">
-                                    Beautex Academy uses end-to-end encryption for all personal data. Your profile photo and contact information are only visible to authorized academic administrators. For password changes, please use the official security portal.
+                                    Beautex Technical Training College uses end-to-end encryption for all personal data. Your profile photo and contact information are only visible to authorized academic administrators. For password changes, please use the official security portal.
                                 </p>
                             </div>
                         </div>

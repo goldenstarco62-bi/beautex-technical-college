@@ -73,6 +73,8 @@ export const attendanceAPI = {
     getAll: (course, date, studentId) => api.get('attendance', { params: { course, date, student_id: studentId } }),
     mark: (data) => api.post('attendance', data),
     update: (id, data) => api.put(`attendance/${encodeURIComponent(id)}`, data),
+    delete: (id) => api.delete(`attendance/${encodeURIComponent(id)}`),
+    getSummary: (params) => api.get('attendance/summary', { params }),
 };
 
 // Grades

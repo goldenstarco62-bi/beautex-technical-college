@@ -5,6 +5,29 @@ import notificationService from '../services/notificationService.js';
 const isMongo = () => !!process.env.MONGODB_URI;
 
 /**
+ * Safely parses student course JSON arrays or strings into a clean single course name.
+ */
+function getPrimaryCourseName(courseVal) {
+    if (!courseVal) return '';
+    if (typeof courseVal !== 'string') {
+        if (Array.isArray(courseVal)) return courseVal[0] || '';
+        return String(courseVal);
+    }
+    const trimmed = courseVal.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) return parsed[0] || '';
+            return String(parsed);
+        } catch (e) {
+            // ignore JSON parse error, treat as plain string
+        }
+    }
+    const split = trimmed.split(',');
+    return split[0] ? split[0].trim() : '';
+}
+
+/**
  * Centrally recalculates and updates a student's fee summary based on their payment history.
  * This is the source of truth for all financial status updates.
  */
@@ -17,7 +40,10 @@ async function internalSyncStudentFee(studentId) {
             const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
             const Course = (await import('../models/mongo/Course.js')).default;
 
-            const payments = await Payment.find({ student_id: studentId });
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${studentId.trim()}$`, 'i') } });
+            const canonicalId = student ? student.id : studentId;
+
+            const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${canonicalId}$`, 'i') } });
             const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
             let lastPaymentDate = null;
@@ -26,48 +52,50 @@ async function internalSyncStudentFee(studentId) {
                 if (dates.length > 0) lastPaymentDate = new Date(Math.max(...dates));
             }
 
-            let fee = await StudentFee.findOne({ student_id: studentId });
+            let fee = await StudentFee.findOne({ student_id: canonicalId });
 
             // If no fee summary exists, try to initialize it
             if (!fee) {
-                const student = await Student.findOne({ id: studentId });
                 let totalDue = 0;
                 if (student?.course) {
-                    const primaryCourseName = Array.isArray(student.course) ? student.course[0] : student.course;
+                    const primaryCourseName = getPrimaryCourseName(student.course);
                     const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${primaryCourseName}$`, 'i') } });
                     if (courseObj) {
                         const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
                         if (structure) totalDue = structure.amount;
                     }
                 }
-                fee = new StudentFee({ student_id: studentId, total_due: totalDue });
+                fee = new StudentFee({ student_id: canonicalId, total_due: totalDue });
             }
 
             const balance = Math.max(0, fee.total_due - totalPaid);
             const status = (balance <= 0 && fee.total_due > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             await StudentFee.findOneAndUpdate(
-                { student_id: studentId },
+                { student_id: canonicalId },
                 { total_paid: totalPaid, balance, status, last_payment_date: lastPaymentDate },
                 { upsert: true, new: true }
             );
         } else {
             // SQL Path
+            const student = await queryOne('SELECT id, course FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [studentId]);
+            const canonicalId = student ? student.id : studentId;
+
             const paidRow = await queryOne(
-                'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE student_id = ?',
-                [studentId]
+                'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [canonicalId]
             );
             const totalPaid = parseFloat(paidRow?.total_paid || 0);
             const lastDate = paidRow?.last_date;
 
-            let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
+            let fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
 
             // If no fee summary exists, try to initialize it from fee structures
             if (!fee) {
-                const student = await queryOne('SELECT course FROM students WHERE id = ?', [studentId]);
                 let totalDue = 0;
                 if (student?.course) {
-                    const courseObj = await queryOne('SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))', [student.course]);
+                    const primaryCourseName = getPrimaryCourseName(student.course);
+                    const courseObj = await queryOne('SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))', [primaryCourseName]);
                     if (courseObj) {
                         const structure = await queryOne("SELECT amount FROM fee_structures WHERE course_id = ? AND category = 'Tuition Fee'", [courseObj.id]);
                         if (structure) totalDue = Number(structure.amount);
@@ -75,7 +103,7 @@ async function internalSyncStudentFee(studentId) {
                 }
                 const initBalance = Math.max(0, totalDue - totalPaid);
                 const initStatus = (initBalance <= 0 && totalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
-                await run('INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)', [studentId, totalDue, totalPaid, initBalance, initStatus]);
+                await run('INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)', [canonicalId, totalDue, totalPaid, initBalance, initStatus]);
                 return; // Already fully synced on insert
             }
 
@@ -87,8 +115,8 @@ async function internalSyncStudentFee(studentId) {
             const status = (balance <= 0 && existingTotalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
             await run(
-                'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE student_id = ?',
-                [totalPaid, balance, status, lastDate, studentId]
+                'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [totalPaid, balance, status, lastDate, canonicalId]
             );
         }
     } catch (err) {
@@ -146,7 +174,7 @@ export async function getStudentFees(req, res) {
         const { studentId } = req.params;
 
         // IDOR Protection: Students can only view their own fees
-        if (req.user.role === 'student' && String(req.user.student_id) !== String(studentId)) {
+        if (req.user.role === 'student' && String(req.user.student_id).trim().toLowerCase() !== String(studentId).trim().toLowerCase()) {
             return res.status(403).json({ error: 'Access denied. You can only view your own fee records.' });
         }
 
@@ -157,15 +185,17 @@ export async function getStudentFees(req, res) {
             const Course = (await import('../models/mongo/Course.js')).default;
             const Payment = (await import('../models/mongo/Payment.js')).default;
 
-            let fee = await StudentFee.findOne({ student_id: studentId });
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${studentId.trim()}$`, 'i') } });
+            const canonicalId = student ? student.id : studentId;
+
+            let fee = await StudentFee.findOne({ student_id: canonicalId });
 
             if (!fee) {
                 // Auto-calculate from payments + fee structures
-                const student = await Student.findOne({ id: studentId });
                 let totalDue = 0;
 
                 if (student?.course) {
-                    const primaryCourseName = Array.isArray(student.course) ? student.course[0] : student.course;
+                    const primaryCourseName = getPrimaryCourseName(student.course);
                     const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${primaryCourseName}$`, 'i') } });
                     if (courseObj) {
                         const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
@@ -173,14 +203,14 @@ export async function getStudentFees(req, res) {
                     }
                 }
 
-                const payments = await Payment.find({ student_id: studentId });
+                const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${canonicalId}$`, 'i') } });
                 const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
                 const balance = Math.max(0, totalDue - totalPaid);
                 const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
 
                 // Upsert so future calls return quickly
                 fee = await StudentFee.findOneAndUpdate(
-                    { student_id: studentId },
+                    { student_id: canonicalId },
                     { total_due: totalDue, total_paid: totalPaid, balance, status },
                     { upsert: true, new: true }
                 );
@@ -190,17 +220,20 @@ export async function getStudentFees(req, res) {
         }
 
         // --- SQL path (SQLite / PostgreSQL) ---
-        let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]);
+        const student = await queryOne('SELECT id, course FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [studentId]);
+        const canonicalId = student ? student.id : studentId;
+
+        let fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
 
         if (!fee) {
             // Auto-calculate from payments + fee structures
-            const student = await queryOne('SELECT course FROM students WHERE id = ?', [studentId]);
             let totalDue = 0;
 
             if (student?.course) {
+                const primaryCourseName = getPrimaryCourseName(student.course);
                 const courseObj = await queryOne(
                     'SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))',
-                    [student.course]
+                    [primaryCourseName]
                 );
                 if (courseObj) {
                     const structure = await queryOne(
@@ -213,7 +246,7 @@ export async function getStudentFees(req, res) {
 
             const paidRow = await queryOne(
                 'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                [studentId]
+                [canonicalId]
             );
             const totalPaid = parseFloat(paidRow?.total_paid || 0);
             const balance = Math.max(0, totalDue - totalPaid);
@@ -222,10 +255,10 @@ export async function getStudentFees(req, res) {
             // Insert the auto-calculated row so subsequent requests are fast
             await run(
                 'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
-                [studentId, totalDue, totalPaid, balance, status]
+                [canonicalId, totalDue, totalPaid, balance, status]
             );
 
-            fee = { student_id: studentId, total_due: totalDue, total_paid: totalPaid, balance, status };
+            fee = { student_id: canonicalId, total_due: totalDue, total_paid: totalPaid, balance, status };
         }
 
         res.json(fee);
@@ -254,7 +287,7 @@ export async function getAllStudentFees(req, res) {
         const fees = await query(`
             SELECT sf.*, s.name as student_name, s.course 
             FROM student_fees sf 
-            JOIN students s ON sf.student_id = s.id
+            JOIN students s ON LOWER(TRIM(sf.student_id)) = LOWER(TRIM(s.id))
         `);
         res.json(fees);
     } catch (error) {
@@ -340,14 +373,14 @@ export async function syncAllFees(req, res) {
         }
 
         // --- SQL Path (SQLite / PostgreSQL) ---
-        console.log('ðŸ”„ Syncing SQL Ledger...');
+        console.log('🔄 Syncing SQL Ledger...');
 
         // 1. Ensure all students have a row in student_fees
         await run(`
             INSERT INTO student_fees (student_id, total_due, total_paid, balance, status)
             SELECT id, 0, 0, 0, 'Pending' 
             FROM students 
-            WHERE id NOT IN (SELECT student_id FROM student_fees)
+            WHERE LOWER(TRIM(id)) NOT IN (SELECT LOWER(TRIM(student_id)) FROM student_fees)
         `);
 
         // 2. Fetch data for auto-assignment
@@ -356,27 +389,29 @@ export async function syncAllFees(req, res) {
             query('SELECT * FROM fee_structures WHERE category = ?', ['Tuition Fee']),
             query('SELECT * FROM courses')
         ]);
-        console.log(`â„¹ï¸ Found ${structures.length} fee structures and ${allCourses.length} courses.`);
+        console.log(`â„¹ï¸  Found ${structures.length} fee structures and ${allCourses.length} courses.`);
 
         // 3. Find students with 0 total_due and attempt auto-assignment
         const missingFees = await query(`
             SELECT sf.student_id, s.course as course_name 
             FROM student_fees sf
-            JOIN students s ON sf.student_id = s.id 
+            JOIN students s ON LOWER(TRIM(sf.student_id)) = LOWER(TRIM(s.id)) 
             WHERE sf.total_due <= 0
         `);
 
         for (const f of missingFees) {
             if (!f.course_name) continue;
 
-            const courseObj = allCourses.find(c => String(c.name).toLowerCase().trim() === String(f.course_name).toLowerCase().trim());
+            const primaryCourse = getPrimaryCourseName(f.course_name);
+            const courseObj = allCourses.find(c => String(c.name).toLowerCase().trim() === String(primaryCourse).toLowerCase().trim());
             if (courseObj) {
                 const matchedStructure = structures.find(s => String(s.course_id).toLowerCase().trim() === String(courseObj.id).toLowerCase().trim());
                 if (matchedStructure) {
-                    await run('UPDATE student_fees SET total_due = ? WHERE student_id = ?', [matchedStructure.amount, f.student_id]);
+                    await run('UPDATE student_fees SET total_due = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [matchedStructure.amount, f.student_id]);
                 }
             }
         }
+
 
         // 4. Perform a multi-stage update to sync totals, status, and dates 
         // Using LOWER() and TRIM() to ensure robust ID matching across different DB engines
@@ -430,9 +465,13 @@ export async function recordPayment(req, res) {
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
+            const Student = (await import('../models/mongo/Student.js')).default;
+
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${student_id.trim()}$`, 'i') } });
+            const canonicalId = student ? student.id : student_id;
 
             const newPayment = new Payment({
-                student_id, amount, method, transaction_ref, recorded_by,
+                student_id: canonicalId, amount, method, transaction_ref, recorded_by,
                 category, semester, academic_year, remarks,
                 payment_date: payment_date || new Date()
             });
@@ -445,7 +484,7 @@ export async function recordPayment(req, res) {
                 const bal = manual_balance !== undefined && manual_balance !== '' ? parseFloat(manual_balance) : (due - paid);
                 
                 await StudentFee.findOneAndUpdate(
-                    { student_id },
+                    { student_id: canonicalId },
                     { 
                         total_due: due, 
                         total_paid: paid, 
@@ -457,16 +496,43 @@ export async function recordPayment(req, res) {
                 );
             } else {
                 // Standard mode: sync from payments source
-                await internalSyncStudentFee(student_id);
+                await internalSyncStudentFee(canonicalId);
             }
             
+            // --- Notify Student ---
+            await notificationService.notifyStudent(
+                canonicalId,
+                'Payment Received',
+                `A payment of KSh ${amount} has been successfully recorded to your account via ${method}.`,
+                'success'
+            );
+
+            // --- Notify All Admins ---
+            try {
+                const User = (await import('../models/mongo/User.js')).default;
+                const admins = await User.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id');
+                for (const admin of admins) {
+                    notificationService.notifyUser(
+                        String(admin._id),
+                        'New Payment Recorded',
+                        `A payment of KSh ${amount} for Student ${canonicalId} was recorded by ${recorded_by}.`,
+                        'info'
+                    );
+                }
+            } catch (adminNotifyErr) {
+                console.error('Failed to notify admins of payment:', adminNotifyErr);
+            }
+
             return res.status(201).json({ message: 'Payment recorded successfully' });
         }
 
         // SQLite / PG path
+        const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [student_id]);
+        const canonicalId = student ? student.id : student_id;
+
         await run(
             'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
+            [canonicalId, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
         );
 
         // If manual overrides are provided
@@ -476,26 +542,26 @@ export async function recordPayment(req, res) {
             const finalBalance = (manual_balance !== undefined && manual_balance !== '') ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
             const newStatus = (finalBalance <= 0 && finalTotalDue > 0) ? 'Paid' : (finalTotalPaid > 0 ? 'Partial' : 'Pending');
 
-            const existing = await queryOne('SELECT student_id FROM student_fees WHERE student_id = ?', [student_id]);
+            const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
             if (existing) {
                 await run(
-                    'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE student_id = ?',
-                    [finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date().toISOString(), student_id]
+                    'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                    [finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
                 );
             } else {
                 await run(
                     'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
-                    [student_id, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
+                    [canonicalId, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
                 );
             }
         } else {
             // Standard synchronization
-            await internalSyncStudentFee(student_id);
+            await internalSyncStudentFee(canonicalId);
         }
 
         // --- Notify Student ---
         await notificationService.notifyStudent(
-            student_id,
+            canonicalId,
             'Payment Received',
             `A payment of KSh ${amount} has been successfully recorded to your account via ${method}.`,
             'success'
@@ -503,19 +569,12 @@ export async function recordPayment(req, res) {
 
         // --- Notify All Admins ---
         try {
-            let admins = [];
-            if (isMongo()) {
-                const User = (await import('../models/mongo/User.js')).default;
-                admins = await User.find({ role: { $in: ['admin', 'superadmin'] } }).select('_id');
-            } else {
-                admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin')");
-            }
-            
+            const admins = await query("SELECT id FROM users WHERE role IN ('admin', 'superadmin')");
             for (const admin of admins) {
                 notificationService.notifyUser(
-                    String(admin._id || admin.id),
+                    String(admin.id),
                     'New Payment Recorded',
-                    `A payment of KSh ${amount} for Student ${student_id} was recorded by ${recorded_by}.`,
+                    `A payment of KSh ${amount} for Student ${canonicalId} was recorded by ${recorded_by}.`,
                     'info'
                 );
             }
@@ -538,7 +597,7 @@ export async function getPayments(req, res) {
         let effectiveId = studentId;
         if (req.user.role === 'student') {
             effectiveId = req.user.student_id;
-            if (studentId && String(studentId) !== String(req.user.student_id)) {
+            if (studentId && String(studentId).trim().toLowerCase() !== String(req.user.student_id).trim().toLowerCase()) {
                 return res.status(403).json({ error: 'Access denied. You can only view your own payment records.' });
             }
         }
@@ -548,14 +607,16 @@ export async function getPayments(req, res) {
             const Student = (await import('../models/mongo/Student.js')).default;
 
             let paymentQuery = {};
-            if (studentId) paymentQuery.student_id = studentId;
+            if (effectiveId) {
+                paymentQuery.student_id = { $regex: new RegExp(`^${effectiveId.trim()}$`, 'i') };
+            }
 
             const payments = await Payment.find(paymentQuery).sort({ payment_date: -1 });
 
             const enriched = await Promise.all(payments.map(async (p) => {
                 const obj = p.toObject();
-                if (!studentId) {
-                    const student = await Student.findOne({ id: obj.student_id }).select('name').catch(() => null);
+                if (!effectiveId) {
+                    const student = await Student.findOne({ id: { $regex: new RegExp(`^${obj.student_id.trim()}$`, 'i') } }).select('name').catch(() => null);
                     obj.student_name = student?.name || 'Unknown Student';
                 }
                 return obj;
@@ -566,12 +627,12 @@ export async function getPayments(req, res) {
 
         let payments;
         if (effectiveId) {
-            payments = await query('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC', [effectiveId]);
+            payments = await query('SELECT * FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) ORDER BY payment_date DESC', [effectiveId]);
         } else {
             payments = await query(`
                 SELECT p.*, s.name as student_name 
                 FROM payments p 
-                JOIN students s ON p.student_id = s.id 
+                JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id)) 
                 ORDER BY payment_date DESC
             `);
         }
@@ -696,7 +757,7 @@ export async function getFinanceAnalytics(req, res) {
         const recentPayments = await query(`
             SELECT p.*, s.name as student_name, s.photo as student_photo 
             FROM payments p 
-            JOIN students s ON p.student_id = s.id 
+            JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id)) 
             ORDER BY p.payment_date DESC LIMIT 6
         `);
 
@@ -765,13 +826,13 @@ export async function mpesaCallback(req, res) {
                 );
 
                 // Update the Summary Cache
-                let fee = await queryOne('SELECT * FROM student_fees WHERE student_id = ?', [student_id]);
+                let fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [student_id]);
                 if (fee) {
                     const newPaid = (Number(fee.total_paid) || 0) + Number(amount);
                     const newBalance = Math.max(0, (Number(fee.total_due) || 0) - newPaid);
                     const newStatus = newBalance <= 0 && (Number(fee.total_due) || 0) > 0 ? 'Paid' : 'Partial';
                     await run(
-                        'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE student_id = ?',
+                        'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
                         [newPaid, newBalance, newStatus, student_id]
                     );
                 } else {
@@ -895,24 +956,31 @@ export async function updateStudentFee(req, res) {
 
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${id.trim()}$`, 'i') } });
+            const canonicalId = student ? student.id : id;
+
             const updated = await StudentFee.findOneAndUpdate(
-                { student_id: id },
+                { student_id: canonicalId },
                 { total_due: due, total_paid: paid, balance: computedBalance, status: computedStatus },
                 { new: true, upsert: true }
             );
             return res.json({ message: 'Fee record synchronized successfully', data: updated });
         }
 
-        const existing = await queryOne('SELECT student_id FROM student_fees WHERE student_id = ?', [id]);
+        const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [id]);
+        const canonicalId = student ? student.id : id;
+
+        const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
         if (existing) {
             await run(
-                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ? WHERE student_id = ?',
-                [due, paid, computedBalance, computedStatus, id]
+                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [due, paid, computedBalance, computedStatus, canonicalId]
             );
         } else {
             await run(
                 'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
-                [id, due, paid, computedBalance, computedStatus]
+                [canonicalId, due, paid, computedBalance, computedStatus]
             );
         }
         res.json({ message: 'Fee record synchronized successfully' });
