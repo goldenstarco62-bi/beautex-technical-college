@@ -957,8 +957,31 @@ export async function updateStudentFee(req, res) {
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
+            const Payment = (await import('../models/mongo/Payment.js')).default;
+            
             const student = await Student.findOne({ id: { $regex: new RegExp(`^${id.trim()}$`, 'i') } });
             const canonicalId = student ? student.id : id;
+
+            // Calculate current sum from payments
+            const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${canonicalId.trim()}$`, 'i') } });
+            const currentSum = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const difference = paid - currentSum;
+
+            if (Math.abs(difference) > 0.01) {
+                const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
+                const adjPayment = new Payment({
+                    student_id: canonicalId,
+                    amount: difference,
+                    method: 'Other',
+                    transaction_ref: `ADJ-${Date.now()}`,
+                    recorded_by,
+                    category: 'Tuition Fee',
+                    remarks: 'Ledger Adjustment',
+                    payment_date: new Date(),
+                    status: 'Completed'
+                });
+                await adjPayment.save();
+            }
 
             const updated = await StudentFee.findOneAndUpdate(
                 { student_id: canonicalId },
@@ -970,6 +993,22 @@ export async function updateStudentFee(req, res) {
 
         const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [id]);
         const canonicalId = student ? student.id : id;
+
+        // Calculate current sum from payments
+        const paidRow = await queryOne(
+            'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+            [canonicalId]
+        );
+        const currentSum = parseFloat(paidRow?.total_paid || 0);
+        const difference = paid - currentSum;
+
+        if (Math.abs(difference) > 0.01) {
+            const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
+            await run(
+                'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, remarks, payment_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [canonicalId, difference, 'Other', `ADJ-${Date.now()}`, recorded_by, 'Tuition Fee', 'Ledger Adjustment', new Date().toISOString(), 'Completed']
+            );
+        }
 
         const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
         if (existing) {
@@ -988,6 +1027,7 @@ export async function updateStudentFee(req, res) {
         res.status(500).json({ error: error.message });
     }
 }
+
 /**
  * Update a global fee structure template
  */

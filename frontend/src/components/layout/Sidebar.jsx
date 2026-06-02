@@ -21,118 +21,197 @@ import {
     Building2,
     LayoutList,
     TrendingUp,
+    DollarSign,
+    Receipt,
+    PieChart,
+    BookMarked,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { academicAPI } from '../../services/api';
 
-
-
-const navigation = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'User Management', path: '/users', icon: Shield, roles: ['superadmin'] },
-    { name: 'Academic Master', path: '/academic-master', icon: Building2, roles: ['admin', 'superadmin'] },
-    { name: 'Finance', path: '/finance', icon: CreditCard, roles: ['admin', 'superadmin', 'student'] },
-    { name: 'Fee Tracker', path: '/monthly-fee-tracker', icon: ClipboardList, roles: ['admin', 'superadmin'] },
-    { name: 'Inventory', path: '/inventory', icon: LayoutList, roles: ['admin', 'superadmin', 'teacher'] },
-    { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin', 'teacher'] },
-    { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Study Materials', path: '/materials', icon: FileStack, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
-    { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Attendance Summary', path: '/attendance-summary', icon: TrendingUp, roles: ['admin', 'superadmin', 'teacher'] },
-    { name: 'Grades', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Schedule', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['teacher', 'admin', 'superadmin'] },
-    { name: 'Student Daily Reports', path: '/student-daily-reports', icon: FileStack, roles: ['teacher', 'admin', 'superadmin'] },
-    { name: 'Daily Student Ledger', path: '/daily-student-logs', icon: History, roles: ['teacher', 'admin', 'superadmin', 'student'] },
-    { name: 'Activity Reports', path: '/activity-reports', icon: BarChart3, roles: ['admin', 'superadmin'] },
-    { name: 'Academic Summary', path: '/academic-summary', icon: BarChart3, roles: ['admin', 'superadmin'] },
-    { name: 'Audit Trail', path: '/audit-logs', icon: History, roles: ['superadmin'] },
-    { name: 'Trainer Reports', path: '/trainer-reports', icon: LayoutList, roles: ['admin', 'teacher', 'superadmin'] },
-    { name: 'Announcements', path: '/announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-    { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['superadmin'] },
-    { name: 'My Profile', path: '/profile', icon: UserCircle, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-
+const navSections = [
+    {
+        label: 'MAIN',
+        items: [
+            { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+        ]
+    },
+    {
+        label: 'ACADEMICS',
+        items: [
+            { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin', 'teacher'] },
+            { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
+            { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Grades', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Timetable', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+        ]
+    },
+    {
+        label: 'FINANCE',
+        items: [
+            { name: 'Fee Tracker', path: '/monthly-fee-tracker', icon: CreditCard, roles: ['admin', 'superadmin'] },
+            { name: 'Revenue', path: '/finance', icon: DollarSign, roles: ['admin', 'superadmin', 'student'] },
+            { name: 'Inventory', path: '/inventory', icon: LayoutList, roles: ['admin', 'superadmin', 'teacher'] },
+        ]
+    },
+    {
+        label: 'REPORTS',
+        items: [
+            { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['teacher', 'admin', 'superadmin'] },
+            { name: 'Daily Reports', path: '/activity-reports', icon: BarChart3, roles: ['admin', 'superadmin'] },
+            { name: 'Attendance Summary', path: '/attendance-summary', icon: TrendingUp, roles: ['admin', 'superadmin', 'teacher'] },
+            { name: 'Trainer Reports', path: '/trainer-reports', icon: BookMarked, roles: ['admin', 'teacher', 'superadmin'] },
+            { name: 'Study Materials', path: '/materials', icon: FileStack, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Announcements', path: '/announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+        ]
+    },
+    {
+        label: 'SYSTEM',
+        items: [
+            { name: 'Users', path: '/users', icon: Shield, roles: ['superadmin'] },
+            { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['superadmin'] },
+            { name: 'Audit Logs', path: '/audit-logs', icon: History, roles: ['superadmin'] },
+        ]
+    },
 ];
 
 export default function Sidebar({ isOpen, setIsOpen }) {
     const location = useLocation();
     const { user } = useAuth();
     const userRole = (user?.role ? String(user.role) : '').toLowerCase().trim() || 'student';
+    const [activePeriod, setActivePeriod] = useState(null);
 
-    const filteredNavigation = navigation.filter(item => {
-        const allowedRoles = item.roles.map(r => String(r).toLowerCase().trim());
-        return allowedRoles.includes(userRole);
-    });
+    useEffect(() => {
+        if (['admin', 'superadmin'].includes(userRole)) {
+            academicAPI.getPeriods().then(res => {
+                const periods = Array.isArray(res.data) ? res.data : [];
+                const active = periods.find(p => p.is_active) || periods[0] || null;
+                setActivePeriod(active);
+            }).catch(() => {});
+        }
+    }, [userRole]);
+
+    // Calculate term progress
+    let termProgress = 65;
+    let termLabel = 'Apr - Aug 2026';
+    if (activePeriod) {
+        termLabel = activePeriod.name || termLabel;
+        if (activePeriod.start_date && activePeriod.end_date) {
+            const start = new Date(activePeriod.start_date);
+            const end = new Date(activePeriod.end_date);
+            const now = new Date();
+            const total = end - start;
+            const elapsed = now - start;
+            termProgress = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+        }
+    }
 
     return (
         <>
             {/* Mobile Backdrop */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-maroon/40 backdrop-blur-md z-[55] lg:hidden transition-all duration-500 animate-in fade-in"
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[55] lg:hidden transition-all duration-500 animate-in fade-in"
                     onClick={() => setIsOpen(false)}
                 />
             )}
 
-            <div className={`fixed left-0 top-0 h-screen w-80 bg-white dark:bg-black border-r border-gray-100/10 flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-4xl rounded-r-[3rem] lg:rounded-none
+            <div className={`fixed left-0 top-0 h-screen w-64 bg-[#7a0000] flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-2xl
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
 
-                <div className="px-6 py-10 border-b border-gray-50 mb-2 flex justify-between items-center bg-gradient-to-br from-maroon/[0.03] to-transparent rounded-tr-[3rem]">
+                {/* Logo */}
+                <div className="px-5 py-5 flex items-center justify-between border-b border-white/10">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-white p-1 rounded-2xl flex items-center justify-center overflow-hidden shadow-xl border border-gray-100 group-hover:rotate-6 transition-transform">
+                        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center overflow-hidden shadow-lg shrink-0">
                             <img src="/app-icon-v2.png" alt="Beautex Logo" className="w-full h-full object-cover rounded-xl" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-black text-maroon uppercase tracking-[0.2em]">Beautex</span>
-                            <span className="text-[8px] font-bold text-gold uppercase tracking-[0.1em] leading-tight">Technical Training College</span>
+                            <span className="text-sm font-black text-white uppercase tracking-[0.15em] leading-tight">Beautex</span>
+                            <span className="text-[8px] font-bold text-yellow-300 uppercase tracking-[0.08em] leading-tight">Technical Training College</span>
                         </div>
                     </div>
-                    {/* Mobile Close Button */}
                     <button
                         onClick={() => setIsOpen(false)}
-                        className="lg:hidden p-3 bg-maroon/5 hover:bg-maroon hover:text-white rounded-2xl transition-all active:scale-90"
+                        className="lg:hidden p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all text-white"
                     >
-                        <X className="w-5 h-5" />
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 px-3 py-2 overflow-y-auto">
-                    <ul className="space-y-1">
-                        {filteredNavigation.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = location.pathname === item.path;
+                <nav className="flex-1 px-3 py-3 overflow-y-auto custom-scrollbar-dark">
+                    {navSections.map((section) => {
+                        const filteredItems = section.items.filter(item =>
+                            item.roles.map(r => String(r).toLowerCase().trim()).includes(userRole)
+                        );
+                        if (filteredItems.length === 0) return null;
 
-                            return (
-                                <li key={item.path}>
-                                    <Link
-                                        to={item.path}
-                                        onClick={() => setIsOpen(false)}
-                                        className={`flex items-center gap-4 px-5 py-3.5 rounded-2xl transition-all duration-300 relative group overflow-hidden ${isActive
-                                            ? 'bg-gold text-maroon scale-[1.02] shadow-xl shadow-gold/20'
-                                            : 'text-gray-400 hover:text-maroon hover:bg-maroon/5'
-                                            }`}
-                                    >
-                                        <div className={`transition-transform duration-500 ${isActive ? 'rotate-[10deg] scale-110' : 'group-hover:rotate-12'}`}>
-                                            <Icon className={`w-5 h-5 ${isActive ? 'text-maroon' : 'text-gray-400 group-hover:text-maroon'}`} />
-                                        </div>
-                                        <span className={`text-[11px] font-black uppercase tracking-widest transition-colors ${isActive ? 'text-maroon' : 'group-hover:text-maroon'}`}>
-                                            {item.name}
-                                        </span>
-                                        {isActive && (
-                                            <div className="absolute right-0 top-0 bottom-0 w-1.5 bg-maroon rounded-l-full"></div>
-                                        )}
-                                    </Link>
-                                </li>
-                            );
-                        })}
-                    </ul>
+                        return (
+                            <div key={section.label} className="mb-3">
+                                <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] px-3 mb-1.5">
+                                    {section.label}
+                                </p>
+                                <ul className="space-y-0.5">
+                                    {filteredItems.map((item) => {
+                                        const Icon = item.icon;
+                                        const isActive = location.pathname === item.path;
+                                        return (
+                                            <li key={item.path}>
+                                                <Link
+                                                    to={item.path}
+                                                    onClick={() => setIsOpen(false)}
+                                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
+                                                        ${isActive
+                                                            ? 'bg-[#a00000] text-white shadow-lg'
+                                                            : 'text-white/60 hover:text-white hover:bg-white/10'
+                                                        }`}
+                                                >
+                                                    {isActive && (
+                                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-yellow-400 rounded-r-full" />
+                                                    )}
+                                                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-yellow-400' : 'text-white/50 group-hover:text-white/80'}`} />
+                                                    <span className={`text-[11px] font-semibold truncate ${isActive ? 'text-white' : ''}`}>
+                                                        {item.name}
+                                                    </span>
+                                                </Link>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        );
+                    })}
                 </nav>
 
-                {/* Profile Mini */}
-                <div className="p-4 bg-gray-50/50">
-                </div>
+                {/* Current Term Card */}
+                {['admin', 'superadmin'].includes(userRole) && (
+                    <div className="mx-3 mb-4 p-4 bg-[#5a0000] rounded-2xl border border-white/10">
+                        <div className="flex items-center gap-2 mb-1">
+                            <GraduationCap className="w-4 h-4 text-yellow-400 shrink-0" />
+                            <p className="text-[9px] font-black text-white/50 uppercase tracking-widest">Current Term</p>
+                        </div>
+                        <p className="text-sm font-black text-white mt-1 leading-tight">{termLabel}</p>
+                        <div className="mt-3">
+                            <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[9px] text-white/40 font-bold">{termProgress}% Complete</span>
+                            </div>
+                            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-gradient-to-r from-yellow-400 to-yellow-500 rounded-full transition-all duration-1000"
+                                    style={{ width: `${termProgress}%` }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
+
+            <style>{`
+                .custom-scrollbar-dark::-webkit-scrollbar { width: 4px; }
+                .custom-scrollbar-dark::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar-dark::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+            `}</style>
         </>
     );
 }
-
