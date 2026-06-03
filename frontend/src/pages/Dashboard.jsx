@@ -186,7 +186,7 @@ function AdminDashboard() {
         { id: 1, name: 'Sarah Nyambura', course: 'Beauty Therapy', date: 'Jun 2, 2026', status: 'Active' },
         { id: 2, name: 'James Mwangi', course: 'Hair Dressing', date: 'Jun 1, 2026', status: 'Active' },
         { id: 3, name: 'Faith Wairimu', course: 'Computer Packages', date: 'May 31, 2026', status: 'Active' },
-        { id: 4, name: 'Brian Omondi', course: 'Fashion Design', date: 'May 30, 2026', status: 'Active' },
+        { id: 4, name: 'Brian Omondi', course: 'Nail Technology', date: 'May 30, 2026', status: 'Active' },
         { id: 5, name: 'Lilian Achieng', course: 'Beauty Therapy', date: 'May 30, 2026', status: 'Active' }
     ];
 
@@ -198,7 +198,7 @@ function AdminDashboard() {
         { time: '08:00 AM', name: 'Beauty Therapy', loc: 'Room 101' },
         { time: '10:00 AM', name: 'Hair Dressing', loc: 'Room 102' },
         { time: '01:00 PM', name: 'Computer Packages', loc: 'Lab 1' },
-        { time: '03:00 PM', name: 'Fashion Design', loc: 'Room 103' }
+        { time: '03:00 PM', name: 'Nail Technology', loc: 'Room 103' }
     ];
 
     const displayAnnouncements = announcements.length > 0 ? announcements.slice(0, 2).map(a => ({
@@ -739,12 +739,12 @@ function AdminDashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Course 4: Fashion Design */}
+                                    {/* Course 4: Nail Technology */}
                                     <div>
                                         <div className="flex justify-between items-center text-[10px] mb-1.5">
                                             <div className="flex items-center gap-1.5">
                                                 <div className="w-2 h-2 rounded-full bg-purple-500" />
-                                                <span className="font-black text-gray-700 dark:text-gray-300">Fashion Design</span>
+                                                <span className="font-black text-gray-700 dark:text-gray-300">Nail Technology</span>
                                             </div>
                                             <span className="font-bold text-gray-400">12 Students</span>
                                         </div>

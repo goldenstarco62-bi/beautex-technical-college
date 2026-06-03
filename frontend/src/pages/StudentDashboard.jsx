@@ -519,7 +519,9 @@ export default function StudentDashboard() {
                                 <History className="w-5 h-5 text-maroon dark:text-gold" />
                                 <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Daily Academic Registry</h2>
                             </div>
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Last 5 Sessions</span>
+                            <Link to="/daily-student-logs" className="text-[10px] font-black text-maroon dark:text-gold hover:underline uppercase tracking-widest bg-maroon/5 dark:bg-white/5 px-4 py-2 rounded-xl transition-all">
+                                View Full Ledger
+                            </Link>
                         </div>
 
                         {dailyReports.length > 0 ? (
@@ -606,12 +608,12 @@ export default function StudentDashboard() {
                             </div>
                             <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Attendance</span>
                         </Link>
-                        <button className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
+                        <Link to="/daily-student-logs" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
                             <div className="w-12 h-12 bg-purple-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-purple-600 transition-colors">
-                                <Zap className="w-6 h-6 text-purple-600 group-hover:text-white" />
+                                <History className="w-6 h-6 text-purple-600 group-hover:text-white" />
                             </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Events</span>
-                        </button>
+                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Daily Ledger</span>
+                        </Link>
                         <Link to="/materials" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
                             <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
                                 <GraduationCap className="w-6 h-6 text-maroon group-hover:text-white" />
