@@ -27,7 +27,8 @@ export default function Students() {
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState([]);
     const [bulkLoading, setBulkLoading] = useState(false);
-    const PAGE_SIZE = 20;
+    const userRole = (currentUser?.role ? String(currentUser.role) : '').toLowerCase().trim();
+    const PAGE_SIZE = userRole === 'teacher' ? 10 : 20;
 
     const [saving, setSaving] = useState(false);
     const [formData, setFormData] = useState({
