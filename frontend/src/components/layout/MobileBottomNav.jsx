@@ -35,7 +35,7 @@ export default function MobileBottomNav({ onMenuClick }) {
         { name: 'Home', path: '/dashboard', icon: LayoutDashboard },
         { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin'] },
         { name: 'Courses', path: '/courses', icon: BookOpen },
-        { name: 'Profile', path: '/settings', icon: UserCircle },
+        { name: 'Profile', path: '/profile', icon: UserCircle },
     ];
 
     const filteredItems = navItems.filter(item => {

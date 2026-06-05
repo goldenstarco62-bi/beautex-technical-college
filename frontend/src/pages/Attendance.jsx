@@ -24,6 +24,10 @@ export default function Attendance() {
     const [dailyReports, setDailyReports] = useState([]);
     const [generatedReports, setGeneratedReports] = useState([]);
 
+    // Pagination
+    const PAGE_SIZE = 10;
+    const [currentPage, setCurrentPage] = useState(1);
+
     useEffect(() => {
         fetchInitialData();
     }, []);
@@ -115,6 +119,7 @@ export default function Attendance() {
         } else if (isStudent) {
             fetchStudentHistory();
         }
+        setCurrentPage(1); // reset pagination on course/date change
     }, [selectedCourse, selectedDate, user]);
 
     // Helper to parse student course field into array
@@ -223,6 +228,10 @@ export default function Attendance() {
         const pending = students.filter(s => !s.attendance || s.attendance === 'Pending').length;
         return { marked, present, absent, late, pending, total: students.length };
     }, [students]);
+
+    // Pagination derived values
+    const totalPages = Math.max(1, Math.ceil(students.length / PAGE_SIZE));
+    const paginatedStudents = students.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     const markAllPresent = async () => {
         if (!window.confirm('Mark all pending students as Present?')) return;
@@ -585,7 +594,7 @@ export default function Attendance() {
                                         </div>
                                     </td>
                                 </tr>
-                            ) : students.map((student, idx) => (
+                            ) : paginatedStudents.map((student, idx) => (
                                 <tr key={student.id || idx} className="hover:bg-gray-50/50 transition-colors group">
                                     {isStudent ? (
                                         <>
@@ -608,7 +617,7 @@ export default function Attendance() {
                                         </>
                                     ) : (
                                         <>
-                                            <td className="px-8 py-6 text-[10px] font-black text-gray-300">{idx + 1}</td>
+                                            <td className="px-8 py-6 text-[10px] font-black text-gray-300">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
                                             <td className="px-8 py-6 text-[10px] font-black text-maroon/40 uppercase tracking-widest">{student.id}</td>
                                             <td className="px-8 py-6">
                                                 <div className="flex items-center gap-3">
@@ -676,6 +685,44 @@ export default function Attendance() {
                     </table>
                 </div>
             </div>
+
+            {/* Pagination Controls — visible only for teacher/admin student list */}
+            {!isStudent && students.length > PAGE_SIZE && (
+                <div className="flex items-center justify-between bg-white px-8 py-4 rounded-[2rem] border border-gray-100 shadow-sm">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, students.length)} of {students.length} learners
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-gray-50 border border-gray-100 text-gray-500 hover:bg-maroon hover:text-white hover:border-maroon transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            ← Prev
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                            <button
+                                key={page}
+                                onClick={() => setCurrentPage(page)}
+                                className={`w-9 h-9 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                                    page === currentPage
+                                        ? 'bg-maroon text-white border-maroon shadow-lg shadow-maroon/20'
+                                        : 'bg-gray-50 text-gray-500 border-gray-100 hover:bg-maroon/10 hover:border-maroon/20 hover:text-maroon'
+                                }`}
+                            >
+                                {page}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-gray-50 border border-gray-100 text-gray-500 hover:bg-maroon hover:text-white hover:border-maroon transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            Next →
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <div className="flex justify-center md:justify-end gap-4">
                 {!isStudent && (

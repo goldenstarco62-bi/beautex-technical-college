@@ -30,7 +30,7 @@ export default function TeacherDashboard() {
                 sessionsAPI.getAll()
             ]);
 
-            const teacherProfile = facultyRes.data.find(f => f.email?.toLowerCase() === user.email?.toLowerCase());
+            const teacherProfile = (facultyRes.data || []).find(f => f.email?.toLowerCase() === user.email?.toLowerCase());
             const name = teacherProfile ? teacherProfile.name : (user.name || user.email);
             setTeacherName(name);
 
@@ -60,9 +60,9 @@ export default function TeacherDashboard() {
             }
 
             setMyCourses(myCoursesList);
-            const filteredSessions = sessionsRes.data.filter(s => s.teacher_email?.toLowerCase() === user.email?.toLowerCase());
+            const filteredSessions = (sessionsRes.data || []).filter(s => s.teacher_email?.toLowerCase() === user.email?.toLowerCase());
             setMySessions(filteredSessions);
-            setRecentAnnouncements(announcementsRes.data.slice(0, 4));
+            setRecentAnnouncements((announcementsRes.data || []).slice(0, 4));
         } catch (error) {
             console.error('Error fetching teacher dashboard data:', error);
         } finally {
