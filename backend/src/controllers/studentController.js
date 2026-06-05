@@ -17,6 +17,24 @@ function generatePassword(length = 12) {
 // Helper to check if using MongoDB
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+// Helper to parse faculty courses list robustly
+function parseFacultyCourses(coursesField) {
+    if (!coursesField) return [];
+    if (Array.isArray(coursesField)) return coursesField;
+    if (typeof coursesField === 'string') {
+        const trimmed = coursesField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
 export async function getAllStudents(req, res) {
     try {
         const { role, email } = req.user;
@@ -55,7 +73,7 @@ export async function getAllStudents(req, res) {
                 const facultyCourses = await Course.find({
                     $or: [
                         { instructor: { $regex: new RegExp(`^${faculty.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-                        { name: { $in: faculty.courses || [] } }
+                        { name: { $in: parseFacultyCourses(faculty.courses) } }
                     ],
                     status: 'Active'
                 }).select('name');
@@ -78,10 +96,7 @@ export async function getAllStudents(req, res) {
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!faculty) return res.json([]);
 
-            let coursesList = [];
-            try {
-                coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
-            } catch (e) { }
+            const coursesList = parseFacultyCourses(faculty.courses);
 
             // FIX: Case-insensitive instructor course lookup
             const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);

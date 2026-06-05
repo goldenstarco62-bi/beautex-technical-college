@@ -4,6 +4,24 @@ import notificationService from '../services/notificationService.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+// Helper to parse faculty courses list robustly
+function parseFacultyCourses(coursesField) {
+    if (!coursesField) return [];
+    if (Array.isArray(coursesField)) return coursesField;
+    if (typeof coursesField === 'string') {
+        const trimmed = coursesField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
 export async function getAllGrades(req, res) {
     try {
         const mongo = await isMongo();
@@ -34,7 +52,7 @@ export async function getAllGrades(req, res) {
                 const faculty = await Faculty.findOne({ email: userEmail });
                 if (faculty) {
                     const facultyName = faculty.name;
-                    const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+                    const facultyCourses = parseFacultyCourses(faculty.courses);
                     const instructorCourses = await Course.find({
                         $or: [
                             { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
@@ -99,14 +117,7 @@ export async function getAllGrades(req, res) {
             const userEmail = String(req.user.email || '').toLowerCase().trim();
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (faculty) {
-                let coursesList = [];
-                try {
-                    if (faculty.courses && String(faculty.courses).startsWith('[')) {
-                        coursesList = JSON.parse(faculty.courses);
-                    } else if (faculty.courses) {
-                        coursesList = faculty.courses.split(',').map(s => s.trim());
-                    }
-                } catch (e) { }
+                const coursesList = parseFacultyCourses(faculty.courses);
 
                 const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                 const allTutorCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
@@ -263,7 +274,7 @@ export async function createGrade(req, res) {
                 const faculty = await Faculty.findOne({ email: userEmail });
                 if (faculty) {
                     const facultyName = faculty.name;
-                    const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+                    const facultyCourses = parseFacultyCourses(faculty.courses);
                     const instructorCourses = await Course.find({
                         $or: [
                             { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
@@ -275,14 +286,7 @@ export async function createGrade(req, res) {
             } else {
                 const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (faculty) {
-                    let coursesList = [];
-                    try {
-                        if (faculty.courses && String(faculty.courses).startsWith('[')) {
-                            coursesList = JSON.parse(faculty.courses);
-                        } else if (faculty.courses) {
-                            coursesList = faculty.courses.split(',').map(s => s.trim());
-                        }
-                    } catch (e) { }
+                    const coursesList = parseFacultyCourses(faculty.courses);
                     const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                     allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
                 }
@@ -361,7 +365,7 @@ export async function updateGrade(req, res) {
                 const faculty = await Faculty.findOne({ email: userEmail });
                 if (faculty) {
                     const facultyName = faculty.name;
-                    const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+                    const facultyCourses = parseFacultyCourses(faculty.courses);
                     const instructorCourses = await Course.find({
                         $or: [
                             { instructor: { $regex: new RegExp(`^${facultyName}$`, 'i') } },
@@ -373,14 +377,7 @@ export async function updateGrade(req, res) {
             } else {
                 const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (faculty) {
-                    let coursesList = [];
-                    try {
-                        if (faculty.courses && String(faculty.courses).startsWith('[')) {
-                            coursesList = JSON.parse(faculty.courses);
-                        } else if (faculty.courses) {
-                            coursesList = faculty.courses.split(',').map(s => s.trim());
-                        }
-                    } catch (e) { }
+                    const coursesList = parseFacultyCourses(faculty.courses);
                     const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                     allowedCourses = [...new Set([...coursesList, ...instructorCourses.map(c => c.name)])];
                 }
@@ -490,8 +487,7 @@ export async function deleteGrade(req, res) {
         if (role === 'teacher') {
             const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email.toLowerCase().trim()]);
             if (fac) {
-                let list = [];
-                try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                const list = parseFacultyCourses(fac.courses);
                 const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
                 const teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
                 if (!teacherCourses.some(tc => tc.toLowerCase().trim() === grade.course.toLowerCase().trim())) {

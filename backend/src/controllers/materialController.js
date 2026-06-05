@@ -2,6 +2,24 @@ import { query, queryOne, run, getDb } from '../config/database.js';
 
 const isMongo = () => !!process.env.MONGODB_URI;
 
+// Helper to parse faculty courses list robustly
+function parseFacultyCourses(coursesField) {
+    if (!coursesField) return [];
+    if (Array.isArray(coursesField)) return coursesField;
+    if (typeof coursesField === 'string') {
+        const trimmed = coursesField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
 /**
  * GET /materials
  * Returns material metadata ONLY â€” never returns the raw base64 file_url body.
@@ -29,7 +47,7 @@ export async function getMaterials(req, res) {
 
                 // Extract name safely (handles cases where name might be missing or in different format)
                 const facultyName = faculty.name;
-                const facultyCourses = Array.isArray(faculty.courses) ? faculty.courses : [];
+                const facultyCourses = parseFacultyCourses(faculty.courses);
 
                 const teacherCourses = await Course.find({
                     $or: [
@@ -102,12 +120,7 @@ export async function getMaterials(req, res) {
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
             if (!faculty) return res.json([]);
 
-            let coursesList = [];
-            try {
-                coursesList = typeof faculty.courses === 'string'
-                    ? JSON.parse(faculty.courses || '[]')
-                    : (faculty.courses || []);
-            } catch (e) { }
+            const coursesList = parseFacultyCourses(faculty.courses);
 
             const placeholders = coursesList.length > 0 ? coursesList.map(() => '?').join(',') : "''";
             const tutorCourses = await query(

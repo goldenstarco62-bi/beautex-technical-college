@@ -2,6 +2,24 @@ import { getDb, query, queryOne, run } from '../config/database.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+// Helper to parse faculty courses list robustly
+function parseFacultyCourses(coursesField) {
+    if (!coursesField) return [];
+    if (Array.isArray(coursesField)) return coursesField;
+    if (typeof coursesField === 'string') {
+        const trimmed = coursesField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
 export async function getAllAttendance(req, res) {
     try {
         const { role, email } = req.user;
@@ -26,15 +44,14 @@ export async function getAllAttendance(req, res) {
                 const fac = await Faculty.findOne({ email: { $regex: new RegExp(`^${userEmail}$`, 'i') } });
                 if (fac) {
                     const matched = await Course.find({
-                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: fac.courses || [] } }]
+                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: parseFacultyCourses(fac.courses) } }]
                     }).select('name');
                     teacherCourses = matched.map(c => c.name);
                 }
             } else {
                 const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (fac) {
-                    let list = [];
-                    try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                    const list = parseFacultyCourses(fac.courses);
                     const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
                     teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
                 }
@@ -119,15 +136,14 @@ export async function markAttendance(req, res) {
                 const fac = await Faculty.findOne({ email: { $regex: new RegExp(`^${userEmail}$`, 'i') } });
                 if (fac) {
                     const matched = await Course.find({
-                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: fac.courses || [] } }]
+                        $or: [{ instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } }, { name: { $in: parseFacultyCourses(fac.courses) } }]
                     }).select('name');
                     teacherCourses = matched.map(c => c.name);
                 }
             } else {
                 const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (fac) {
-                    let list = [];
-                    try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                    const list = parseFacultyCourses(fac.courses);
                     const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
                     teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
                 }
@@ -297,7 +313,7 @@ export async function getAttendanceSummary(req, res) {
                     const matched = await Course.find({
                         $or: [
                             { instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } },
-                            { name: { $in: fac.courses || [] } }
+                            { name: { $in: parseFacultyCourses(fac.courses) } }
                         ]
                     }).select('name');
                     teacherAllowedCourses = matched.map(c => c.name);
@@ -307,8 +323,7 @@ export async function getAttendanceSummary(req, res) {
             } else {
                 const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
                 if (fac) {
-                    let list = [];
-                    try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                    const list = parseFacultyCourses(fac.courses);
                     const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
                     teacherAllowedCourses = [...new Set([...list, ...inst.map(c => c.name)])];
                 } else {
@@ -568,8 +583,7 @@ export async function deleteAttendance(req, res) {
         if (role === 'teacher') {
             const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email.toLowerCase().trim()]);
             if (fac) {
-                let list = [];
-                try { list = typeof fac.courses === 'string' ? JSON.parse(fac.courses || '[]') : (fac.courses || []); } catch (e) { }
+                const list = parseFacultyCourses(fac.courses);
                 const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
                 const teacherCourses = [...new Set([...list, ...inst.map(c => c.name)])];
                 if (!teacherCourses.some(tc => tc.toLowerCase().trim() === record.course.toLowerCase().trim())) {

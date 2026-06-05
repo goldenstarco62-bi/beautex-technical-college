@@ -2,6 +2,24 @@ import { getDb, query, queryOne, run } from '../config/database.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+// Helper to parse faculty courses list robustly
+function parseFacultyCourses(coursesField) {
+    if (!coursesField) return [];
+    if (Array.isArray(coursesField)) return coursesField;
+    if (typeof coursesField === 'string') {
+        const trimmed = coursesField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
 export const getAllDailyReports = async (req, res) => {
     try {
         const { student_id, course, date, trainer_email, date_from, date_to } = req.query;
@@ -23,7 +41,7 @@ export const getAllDailyReports = async (req, res) => {
                     const facultyCourses = await Course.find({
                         $or: [
                             { instructor: { $regex: new RegExp(`^${faculty.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
-                            { name: { $in: faculty.courses || [] } }
+                            { name: { $in: parseFacultyCourses(faculty.courses) } }
                         ],
                         status: 'Active'
                     }).select('name');
@@ -85,10 +103,7 @@ export const getAllDailyReports = async (req, res) => {
         } else if (role === 'teacher') {
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
             if (faculty) {
-                let coursesList = [];
-                try {
-                    coursesList = typeof faculty.courses === 'string' ? JSON.parse(faculty.courses || '[]') : (faculty.courses || []);
-                } catch (e) { }
+                const coursesList = parseFacultyCourses(faculty.courses);
                 const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
                 const allTutorCourses = [...new Set([...coursesList.map(c => String(c).toLowerCase().trim()), ...instructorCourses.map(c => String(c.name).toLowerCase().trim())])];
 
