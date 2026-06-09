@@ -62,7 +62,7 @@ const paymentValidation = [
     body('student_id').notEmpty().withMessage('Student ID is required'),
     body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be a positive number'),
     body('method').notEmpty().withMessage('Payment method is required'),
-    body('transaction_ref').notEmpty().withMessage('Transaction reference is required'),
+    // transaction_ref is optional — the controller auto-generates one if not provided
     validate
 ];
 

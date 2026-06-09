@@ -52,7 +52,7 @@ export function isCourseEligible(durationStr) {
 /**
  * Finds a course from a list by name, using exact-match first, then partial/fuzzy.
  */
-function findCourseByName(coursesList, targetName) {
+export function findCourseByName(coursesList, targetName) {
     if (!targetName) return null;
     const target = targetName.toLowerCase().trim();
     // 1. Exact match (case-insensitive)
@@ -214,11 +214,9 @@ export async function autoInitializeCurrentMonth(targetYear, targetMonth) {
 
             // Check if record already exists for this student/month/year
             const existing = await queryOne(
-                'SELECT id FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?',
+                'SELECT id, amount_due, amount_paid FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?',
                 [student.id, year, month]
             );
-
-            if (existing) continue; // Already tracked
 
             // Calculate monthly amount due: total_due / duration_months
             let totalDue = parseFloat(student.total_due || 0);
@@ -241,6 +239,28 @@ export async function autoInitializeCurrentMonth(targetYear, targetMonth) {
             }
 
             const amountDue = durationMonths > 0 ? Math.round(totalDue / durationMonths) : 0;
+
+            if (existing) {
+                // Already tracked, but check if the total_due has changed and update if necessary
+                if (parseFloat(existing.amount_due || 0) !== amountDue) {
+                    const amountPaid = parseFloat(existing.amount_paid || 0);
+                    const balance = Math.max(0, amountDue - amountPaid);
+                    let status = 'Not Paid';
+                    if (balance <= 0 && amountDue > 0) {
+                        status = 'Paid';
+                    } else if (amountPaid > 0) {
+                        status = 'Partial';
+                    }
+
+                    await run(`
+                        UPDATE monthly_fee_tracking
+                        SET amount_due = ?, balance = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `, [amountDue, balance, status, existing.id]);
+                    console.log(`  🔄 Updated tracking for "${student.name}" (changed fee) | amountDue=${amountDue}`);
+                }
+                continue;
+            }
 
             // Calculate how much was paid in this specific month
             const payments = await query(
@@ -877,5 +897,88 @@ export async function exportReport(req, res) {
         if (!res.headersSent) {
             return res.status(500).json({ error: err.message });
         }
+    }
+}
+
+/**
+ * Synchronizes/recalculates all monthly tracking records for a specific student when their total fee is updated.
+ * Also creates a record for the current month if one is missing, so fee changes are immediately reflected.
+ */
+export async function syncStudentMonthlyFeeTracking(studentId, newTotalDue) {
+    try {
+        const student = await queryOne('SELECT id, course FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [studentId]);
+        if (!student) return;
+
+        const allCourses = await query('SELECT id, name, duration FROM courses');
+        const studentCourseNames = parseStudentCourses(student.course);
+        
+        let maxDurationMonths = 0;
+        for (const cName of studentCourseNames) {
+            const matchedCourse = findCourseByName(allCourses, cName);
+            if (matchedCourse && matchedCourse.duration) {
+                const durMonths = parseDurationToMonths(matchedCourse.duration);
+                if (durMonths > maxDurationMonths) {
+                    maxDurationMonths = durMonths;
+                }
+            }
+        }
+
+        if (maxDurationMonths === 0 && student.course) {
+            const fallbackMonths = parseDurationToMonths(student.course);
+            if (fallbackMonths > 0) {
+                maxDurationMonths = fallbackMonths;
+            }
+        }
+
+        // Only sync if the course is eligible for monthly tracking
+        if (maxDurationMonths < 4) return;
+
+        const durationMonths = maxDurationMonths;
+        const amountDue = durationMonths > 0 ? Math.round(newTotalDue / durationMonths) : 0;
+
+        // Ensure a record exists for the current month — create if missing
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+
+        const existing = await queryOne(
+            'SELECT id FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND year = ? AND month = ?',
+            [student.id, currentYear, currentMonth]
+        );
+
+        if (!existing) {
+            await run(
+                `INSERT INTO monthly_fee_tracking (student_id, year, month, amount_due, amount_paid, balance, status)
+                 VALUES (?, ?, ?, ?, 0, ?, 'Not Paid')`,
+                [student.id, currentYear, currentMonth, amountDue, amountDue]
+            );
+            console.log(`✅ Created missing monthly tracking record for student ${student.id} (${currentMonth}/${currentYear})`);
+        }
+
+        // Fetch all monthly tracking records for this student and update amount_due & balance
+        const trackingRecords = await query(
+            'SELECT id, amount_paid FROM monthly_fee_tracking WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+            [student.id]
+        );
+
+        for (const rec of trackingRecords) {
+            const amountPaid = parseFloat(rec.amount_paid || 0);
+            const balance = Math.max(0, amountDue - amountPaid);
+            let status = 'Not Paid';
+            if (balance <= 0 && amountDue > 0) {
+                status = 'Paid';
+            } else if (amountPaid > 0) {
+                status = 'Partial';
+            }
+
+            await run(`
+                UPDATE monthly_fee_tracking 
+                SET amount_due = ?, balance = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            `, [amountDue, balance, status, rec.id]);
+        }
+        console.log(`✅ Synchronized ${trackingRecords.length} monthly tracking records for student ${student.id} — monthly due: KSh ${amountDue}`);
+    } catch (err) {
+        console.error('❌ Error in syncStudentMonthlyFeeTracking:', err);
     }
 }

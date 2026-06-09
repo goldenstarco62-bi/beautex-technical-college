@@ -1,5 +1,6 @@
 import { query, queryOne, run, getProcessedDatabaseUrl, getCurrentDateSQL, getDateIntervalSQL, getActiveDbEngine } from '../config/database.js';
 import notificationService from '../services/notificationService.js';
+import { syncStudentMonthlyFeeTracking } from './monthlyFeeController.js';
 
 
 const isMongo = () => !!process.env.MONGODB_URI;
@@ -408,6 +409,7 @@ export async function syncAllFees(req, res) {
                 const matchedStructure = structures.find(s => String(s.course_id).toLowerCase().trim() === String(courseObj.id).toLowerCase().trim());
                 if (matchedStructure) {
                     await run('UPDATE student_fees SET total_due = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [matchedStructure.amount, f.student_id]);
+                    await syncStudentMonthlyFeeTracking(f.student_id, matchedStructure.amount);
                 }
             }
         }
@@ -553,6 +555,9 @@ export async function recordPayment(req, res) {
                     'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
                     [canonicalId, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
                 );
+            }
+            if (!isMongo()) {
+                await syncStudentMonthlyFeeTracking(canonicalId, finalTotalDue);
             }
         } else {
             // Standard synchronization
@@ -1021,6 +1026,10 @@ export async function updateStudentFee(req, res) {
                 'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
                 [canonicalId, due, paid, computedBalance, computedStatus]
             );
+        }
+
+        if (!isMongo()) {
+            await syncStudentMonthlyFeeTracking(canonicalId, due);
         }
         res.json({ message: 'Fee record synchronized successfully' });
     } catch (error) {
