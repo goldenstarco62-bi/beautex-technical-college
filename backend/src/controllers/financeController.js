@@ -497,8 +497,23 @@ export async function recordPayment(req, res) {
                     { upsert: true }
                 );
             } else {
-                // Standard mode: sync from payments source
-                await internalSyncStudentFee(canonicalId);
+                // Incremental update: add new payment amount to existing total_paid.
+                // Preserves any manual adjustments set via Adjust Totals.
+                const feeDoc = await StudentFee.findOne({ student_id: canonicalId });
+                if (feeDoc) {
+                    const existingDue = parseFloat(feeDoc.total_due || 0);
+                    const newTotalPaid = parseFloat(feeDoc.total_paid || 0) + parseFloat(amount);
+                    const newBalance = existingDue > 0 ? Math.max(0, existingDue - newTotalPaid) : 0;
+                    const newStatus = (newBalance <= 0 && existingDue > 0) ? 'Paid' : (newTotalPaid > 0 ? 'Partial' : 'Pending');
+                    await StudentFee.findOneAndUpdate(
+                        { student_id: canonicalId },
+                        { total_paid: newTotalPaid, balance: newBalance, status: newStatus, last_payment_date: payment_date || new Date() },
+                        { upsert: true }
+                    );
+                } else {
+                    // No fee row yet — fall back to full sync to initialize
+                    await internalSyncStudentFee(canonicalId);
+                }
             }
             
             // --- Notify Student ---
@@ -560,8 +575,29 @@ export async function recordPayment(req, res) {
                 await syncStudentMonthlyFeeTracking(canonicalId, finalTotalDue);
             }
         } else {
-            // Standard synchronization
-            await internalSyncStudentFee(canonicalId);
+            // Incremental update: add the new payment amount to the existing total_paid.
+            // This preserves any manual adjustments made via "Adjust Totals" without
+            // recalculating from SUM(payments), which would swallow phantom ADJ entries.
+            const feeRow = await queryOne(
+                'SELECT total_due, total_paid FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [canonicalId]
+            );
+            if (feeRow) {
+                const existingDue = parseFloat(feeRow.total_due || 0);
+                const newTotalPaid = parseFloat(feeRow.total_paid || 0) + parseFloat(amount);
+                const newBalance = existingDue > 0 ? Math.max(0, existingDue - newTotalPaid) : 0;
+                const newStatus = (newBalance <= 0 && existingDue > 0) ? 'Paid' : (newTotalPaid > 0 ? 'Partial' : 'Pending');
+                await run(
+                    'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                    [newTotalPaid, newBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
+                );
+                if (!isMongo()) {
+                    await syncStudentMonthlyFeeTracking(canonicalId, existingDue);
+                }
+            } else {
+                // No student_fees row yet — fall back to full sync to initialize it
+                await internalSyncStudentFee(canonicalId);
+            }
         }
 
         // --- Notify Student ---
@@ -962,32 +998,13 @@ export async function updateStudentFee(req, res) {
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
-            const Payment = (await import('../models/mongo/Payment.js')).default;
             
             const student = await Student.findOne({ id: { $regex: new RegExp(`^${id.trim()}$`, 'i') } });
             const canonicalId = student ? student.id : id;
 
-            // Calculate current sum from payments
-            const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${canonicalId.trim()}$`, 'i') } });
-            const currentSum = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-            const difference = paid - currentSum;
-
-            if (Math.abs(difference) > 0.01) {
-                const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
-                const adjPayment = new Payment({
-                    student_id: canonicalId,
-                    amount: difference,
-                    method: 'Other',
-                    transaction_ref: `ADJ-${Date.now()}`,
-                    recorded_by,
-                    category: 'Tuition Fee',
-                    remarks: 'Ledger Adjustment',
-                    payment_date: new Date(),
-                    status: 'Completed'
-                });
-                await adjPayment.save();
-            }
-
+            // Directly update student_fees — no phantom ADJ payment entries created.
+            // Admin's entered total_paid is stored as authoritative. Add Transaction payments
+            // will increment this value going forward.
             const updated = await StudentFee.findOneAndUpdate(
                 { student_id: canonicalId },
                 { total_due: due, total_paid: paid, balance: computedBalance, status: computedStatus },
@@ -999,22 +1016,9 @@ export async function updateStudentFee(req, res) {
         const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [id]);
         const canonicalId = student ? student.id : id;
 
-        // Calculate current sum from payments
-        const paidRow = await queryOne(
-            'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-            [canonicalId]
-        );
-        const currentSum = parseFloat(paidRow?.total_paid || 0);
-        const difference = paid - currentSum;
-
-        if (Math.abs(difference) > 0.01) {
-            const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
-            await run(
-                'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, remarks, payment_date, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [canonicalId, difference, 'Other', `ADJ-${Date.now()}`, recorded_by, 'Tuition Fee', 'Ledger Adjustment', new Date().toISOString(), 'Completed']
-            );
-        }
-
+        // Directly update student_fees without creating phantom ADJ payment entries.
+        // The admin's entered total_paid is stored as the authoritative balance.
+        // Subsequent "Add Transaction" payments will add to this value incrementally.
         const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
         if (existing) {
             await run(
