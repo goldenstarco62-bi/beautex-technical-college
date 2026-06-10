@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Clock, Zap, FileText, ClipboardCheck, Bell, Users, TrendingUp, Calendar, ChevronRight } from 'lucide-react';
-import { coursesAPI, announcementsAPI, facultyAPI, sessionsAPI } from '../services/api';
+import { coursesAPI, announcementsAPI, profileAPI, sessionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,15 +23,16 @@ export default function TeacherDashboard() {
 
     const fetchData = async () => {
         try {
-            const [coursesRes, announcementsRes, facultyRes, sessionsRes] = await Promise.all([
+            const [coursesRes, announcementsRes, profileRes, sessionsRes] = await Promise.all([
                 coursesAPI.getAll(),
-                announcementsAPI.getAll(),
-                facultyAPI.getAll(),
+                announcementsAPI.getAll({ limit: 4 }),
+                profileAPI.get(),
                 sessionsAPI.getAll()
             ]);
 
-            const teacherProfile = (facultyRes.data || []).find(f => f.email?.toLowerCase() === user.email?.toLowerCase());
-            const name = teacherProfile ? teacherProfile.name : (user.name || user.email);
+            // profileAPI returns the current user's profile which may include faculty details
+            const teacherProfile = profileRes?.data || null;
+            const name = teacherProfile?.name || user.name || user.email;
             setTeacherName(name);
 
             let myCoursesList = coursesRes.data || [];
@@ -60,9 +61,9 @@ export default function TeacherDashboard() {
             }
 
             setMyCourses(myCoursesList);
-            const filteredSessions = (sessionsRes.data || []).filter(s => s.teacher_email?.toLowerCase() === user.email?.toLowerCase());
-            setMySessions(filteredSessions);
-            setRecentAnnouncements((announcementsRes.data || []).slice(0, 4));
+            // Sessions are already filtered server-side by teacher_email
+            setMySessions(sessionsRes.data || []);
+            setRecentAnnouncements(announcementsRes.data || []);
         } catch (error) {
             console.error('Error fetching teacher dashboard data:', error);
         } finally {

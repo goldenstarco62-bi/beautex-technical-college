@@ -28,7 +28,6 @@ import {
     announcementsAPI,
     attendanceAPI,
     studentsAPI,
-    materialsAPI,
     studentDailyReportsAPI,
     financeAPI
 } from '../services/api';
@@ -36,6 +35,12 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { calculateRemainingTime } from '../utils/dateUtils';
+
+
+const stripHtml = (html) => {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+};
 
 
 export default function StudentDashboard() {
@@ -71,15 +76,14 @@ export default function StudentDashboard() {
         try {
             // Use the student_id from JWT, or fall back to matching by email in the students list
             const effectiveStudentId = user.student_id || user.id;
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, payRes, materialsRes, dailyReportsRes, monthlyTrackingRes] = await Promise.all([
+            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, payRes, dailyReportsRes, monthlyTrackingRes] = await Promise.all([
                 studentsAPI.getAll(),
                 coursesAPI.getAll(),
-                announcementsAPI.getAll(),
+                announcementsAPI.getAll({ limit: 3 }),
                 gradesAPI.getAll(),
                 financeAPI.getStudentFees(effectiveStudentId).catch(() => ({ data: null })),
                 financeAPI.getPayments(effectiveStudentId).catch(() => ({ data: [] })),
-                materialsAPI.getAll().catch(() => ({ data: [] })),
-                studentDailyReportsAPI.getAll({ student_id: effectiveStudentId }).catch(() => ({ data: [] })),
+                studentDailyReportsAPI.getAll({ student_id: effectiveStudentId, limit: 5 }).catch(() => ({ data: [] })),
                 financeAPI.getStudentMonthlyTracking(effectiveStudentId).catch(() => ({ data: [] }))
             ]);
 
@@ -94,7 +98,7 @@ export default function StudentDashboard() {
             setStudentProfile(profile);
             setStudentFee(feeRes.data);
             setRecentPayments(Array.isArray(payRes.data) ? payRes.data.slice(0, 5) : []);
-            setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.slice(0, 5) : []);
+            setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data : []);
             setMonthlyFees(Array.isArray(monthlyTrackingRes.data) ? monthlyTrackingRes.data : (Array.isArray(monthlyTrackingRes) ? monthlyTrackingRes : []));
 
             const myGrades = (gradesRes.data || []).filter(g => {
@@ -123,17 +127,28 @@ export default function StudentDashboard() {
                 : '0%';
 
             if (profile) {
-                const enrolledCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
-                setCourseDetails(enrolledCourses[0] || null);
+                const allCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
+                // Find the student's actual enrolled course by matching their course name
+                const studentCourseNames = Array.isArray(profile.course)
+                    ? profile.course
+                    : (typeof profile.course === 'string' && profile.course.startsWith('['))
+                        ? (() => { try { return JSON.parse(profile.course); } catch { return [profile.course]; } })()
+                        : [profile.course].filter(Boolean);
+                const enrolledCourse = allCourses.find(c =>
+                    studentCourseNames.some(cn =>
+                        cn && c.name && cn.toLowerCase().trim() === c.name.toLowerCase().trim()
+                    )
+                ) || allCourses[0] || null;
+                setCourseDetails(enrolledCourse);
                 setStats({
-                    enrolledCourses: enrolledCourses.length,
+                    enrolledCourses: studentCourseNames.length,
                     avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
                     attendanceRate,
                     sessionsCount: Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.length : 0
                 });
             }
 
-            setRecentAnnouncements((announcementsRes.data || []).slice(0, 3));
+            setRecentAnnouncements(announcementsRes.data || []);
         } catch (error) {
             console.error('Error fetching student dashboard data:', error);
         } finally {
@@ -556,12 +571,12 @@ export default function StudentDashboard() {
                                             <div className="space-y-2">
                                                 <div className="bg-white dark:bg-[#111] p-3 rounded-lg border border-gray-100 dark:border-white/5">
                                                     <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Coverage</p>
-                                                    <p className="text-[11px] text-gray-600 dark:text-gray-300 font-medium leading-relaxed">{report.topics_covered}</p>
+                                                    <div className="text-[11px] text-gray-600 dark:text-gray-300 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: report.topics_covered }} />
                                                 </div>
                                                 {report.trainer_remarks && (
                                                     <div className="flex gap-2 items-start">
-                                                        <MessageSquare className="w-3 h-3 text-maroon dark:text-gold mt-0.5" />
-                                                        <p className="text-[10px] text-gray-400 font-bold italic">"{report.trainer_remarks}"</p>
+                                                        <MessageSquare className="w-3 h-3 text-maroon dark:text-gold mt-0.5 shrink-0" />
+                                                        <div className="text-[10px] text-gray-400 font-bold italic" dangerouslySetInnerHTML={{ __html: `&ldquo;${report.trainer_remarks}&rdquo;` }} />
                                                     </div>
                                                 )}
                                                 {report.student_comment && (
@@ -692,7 +707,7 @@ export default function StudentDashboard() {
                             {/* Session context */}
                             <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                                 <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Topics Covered (by trainer)</p>
-                                <p className="text-xs text-gray-600 font-medium italic leading-relaxed line-clamp-3">"{commentDialog.topics_covered}"</p>
+                                <p className="text-xs text-gray-600 font-medium italic leading-relaxed line-clamp-3">"{stripHtml(commentDialog.topics_covered)}"</p>
                             </div>
 
                             {/* Lesson Taught Selector */}

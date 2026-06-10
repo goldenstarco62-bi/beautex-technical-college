@@ -40,7 +40,7 @@ export const profileAPI = {
 
 // Students
 export const studentsAPI = {
-    getAll: () => api.get('students'),
+    getAll: (params) => api.get('students', { params }),
     getById: (id) => api.get(`students/${encodeURIComponent(id)}`),
     create: (data) => api.post('students', data),
     update: (id, data) => api.put(`students/${encodeURIComponent(id)}`, data),
@@ -52,7 +52,7 @@ export const studentsAPI = {
 
 // Courses
 export const coursesAPI = {
-    getAll: () => api.get('courses'),
+    getAll: (params) => api.get('courses', { params }),
     getById: (id) => api.get(`courses/${encodeURIComponent(id)}`),
     create: (data) => api.post('courses', data),
     update: (id, data) => api.put(`courses/${encodeURIComponent(id)}`, data),
@@ -60,7 +60,7 @@ export const coursesAPI = {
 
 // Faculty
 export const facultyAPI = {
-    getAll: () => api.get('faculty'),
+    getAll: (params) => api.get('faculty', { params }),
     getById: (id) => api.get(`faculty/${encodeURIComponent(id)}`),
     create: (data) => api.post('faculty', data),
     update: (id, data) => api.put(`faculty/${encodeURIComponent(id)}`, data),
@@ -89,7 +89,12 @@ export const gradesAPI = {
 
 // Announcements
 export const announcementsAPI = {
-    getAll: (category, priority) => api.get('announcements', { params: { category, priority } }),
+    getAll: (paramsOrCategory, priority) => {
+        if (typeof paramsOrCategory === 'object' && paramsOrCategory !== null) {
+            return api.get('announcements', { params: paramsOrCategory });
+        }
+        return api.get('announcements', { params: { category: paramsOrCategory, priority } });
+    },
     create: (data) => api.post('announcements', data),
     update: (id, data) => api.put(`announcements/${encodeURIComponent(id)}`, data),
     delete: (id) => api.delete(`announcements/${encodeURIComponent(id)}`),
@@ -110,7 +115,7 @@ export const dashboardAPI = {
 // Sessions (Schedule)
 
 export const sessionsAPI = {
-    getAll: () => api.get('sessions'),
+    getAll: (params) => api.get('sessions', { params }),
     create: (data) => api.post('sessions', data),
     delete: (id) => api.delete(`sessions/${encodeURIComponent(id)}`),
 };
@@ -185,7 +190,12 @@ export const financeAPI = {
     getStudentFees: (studentId) => api.get(`finance/student-fees/${encodeURIComponent(studentId)}`),
     getAllStudentFees: () => api.get('finance/student-fees'),
     updateStudentFee: (id, data) => api.put(`finance/student-fees/${encodeURIComponent(id)}`, data),
-    getPayments: (studentId) => api.get('finance/payments', { params: studentId ? { studentId } : {} }),
+    getPayments: (paramsOrStudentId) => {
+        if (typeof paramsOrStudentId === 'object' && paramsOrStudentId !== null) {
+            return api.get('finance/payments', { params: paramsOrStudentId });
+        }
+        return api.get('finance/payments', { params: paramsOrStudentId ? { studentId: paramsOrStudentId } : {} });
+    },
     recordPayment: (data) => api.post('finance/payments', data),
     updatePayment: (id, data) => api.put(`finance/payments/${encodeURIComponent(id)}`, data),
     deletePayment: (id) => api.delete(`finance/payments/${encodeURIComponent(id)}`),

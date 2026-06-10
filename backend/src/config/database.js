@@ -783,6 +783,23 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ monthly_fee_notifications migration warning (PostgreSQL):', e.message);
     }
+
+    // Performance indexes (PostgreSQL)
+    try {
+        await database.query('CREATE INDEX IF NOT EXISTS idx_payments_student_id ON payments(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_student_daily_reports_student_id ON student_daily_reports(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_student_daily_reports_trainer_email ON student_daily_reports(trainer_email)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_sessions_teacher_email ON sessions(teacher_email)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_students_email ON students(email)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_faculty_email ON faculty(email)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_grades_student_id ON grades(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_academic_reports_student_id ON academic_reports(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_academic_reports_trainer_email ON academic_reports(trainer_email)');
+        console.log('✅ Performance indexes ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ Performance indexes migration warning (PostgreSQL):', e.message);
+    }
 }
 
 async function runSqliteMigrations(database) {
@@ -1173,6 +1190,23 @@ async function runSqliteMigrations(database) {
         console.log('✅ monthly_fee_notifications table ensured (SQLite)');
     } catch (e) {
         console.warn('⚠️ monthly_fee_notifications migration warning (SQLite):', e.message);
+    }
+
+    // Performance indexes (SQLite)
+    try {
+        await database.run('CREATE INDEX IF NOT EXISTS idx_payments_student_id ON payments(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_student_daily_reports_student_id ON student_daily_reports(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_student_daily_reports_trainer_email ON student_daily_reports(trainer_email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_sessions_teacher_email ON sessions(teacher_email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_students_email ON students(email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_faculty_email ON faculty(email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_grades_student_id ON grades(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_academic_reports_student_id ON academic_reports(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_academic_reports_trainer_email ON academic_reports(trainer_email)');
+        console.log('✅ Performance indexes ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ Performance indexes migration warning (SQLite):', e.message);
     }
 }
 

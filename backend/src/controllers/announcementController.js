@@ -59,13 +59,22 @@ async function getAllUserEmails() {
 
 export async function getAllAnnouncements(req, res) {
     try {
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
         if (await isMongo()) {
             const Announcement = (await import('../models/mongo/Announcement.js')).default;
-            const announcements = await Announcement.find().sort({ date: -1, _id: -1 });
+            let q = Announcement.find().sort({ date: -1, _id: -1 });
+            if (limit) q = q.limit(limit);
+            const announcements = await q;
             return res.json(announcements);
         }
 
-        const announcements = await query('SELECT * FROM announcements ORDER BY date DESC, id DESC');
+        let sql = 'SELECT * FROM announcements ORDER BY date DESC, id DESC';
+        const params = [];
+        if (limit) {
+            sql += ' LIMIT ?';
+            params.push(limit);
+        }
+        const announcements = await query(sql, params);
         res.json(announcements);
     } catch (error) {
         console.error('Get announcements error:', error);

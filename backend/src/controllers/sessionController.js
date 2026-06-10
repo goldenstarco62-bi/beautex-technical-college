@@ -6,15 +6,24 @@ export async function getAllSessions(req, res) {
     try {
         const { role, email } = req.user;
         const mongo = await isMongo();
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
         // Admin and Superadmin see everything
         if (role === 'admin' || role === 'superadmin') {
             if (mongo) {
                 const Session = (await import('../models/mongo/Session.js')).default;
-                const sessions = await Session.find().sort({ day: 1, time: 1 });
+                let q = Session.find().sort({ day: 1, time: 1 });
+                if (limit) q = q.limit(limit);
+                const sessions = await q;
                 return res.json(sessions);
             }
-            const sessions = await query('SELECT * FROM sessions ORDER BY day, time');
+            let sql = 'SELECT * FROM sessions ORDER BY day, time';
+            const params = [];
+            if (limit) {
+                sql += ' LIMIT ?';
+                params.push(limit);
+            }
+            const sessions = await query(sql, params);
             return res.json(sessions);
         }
 
@@ -23,10 +32,18 @@ export async function getAllSessions(req, res) {
             const userEmail = String(email || '').toLowerCase().trim();
             if (mongo) {
                 const Session = (await import('../models/mongo/Session.js')).default;
-                const sessions = await Session.find({ teacher_email: userEmail }).sort({ day: 1, time: 1 });
+                let q = Session.find({ teacher_email: userEmail }).sort({ day: 1, time: 1 });
+                if (limit) q = q.limit(limit);
+                const sessions = await q;
                 return res.json(sessions);
             }
-            const sessions = await query('SELECT * FROM sessions WHERE LOWER(teacher_email) = LOWER(?) ORDER BY day, time', [userEmail]);
+            let sql = 'SELECT * FROM sessions WHERE LOWER(teacher_email) = LOWER(?) ORDER BY day, time';
+            const params = [userEmail];
+            if (limit) {
+                sql += ' LIMIT ?';
+                params.push(limit);
+            }
+            const sessions = await query(sql, params);
             return res.json(sessions);
         }
 
@@ -40,7 +57,9 @@ export async function getAllSessions(req, res) {
                 if (!sp) return res.json([]);
 
                 const studentCourses = Array.isArray(sp.course) ? sp.course : [sp.course].filter(Boolean);
-                const sessions = await Session.find({ course: { $in: studentCourses } }).sort({ day: 1, time: 1 });
+                let q = Session.find({ course: { $in: studentCourses } }).sort({ day: 1, time: 1 });
+                if (limit) q = q.limit(limit);
+                const sessions = await q;
                 return res.json(sessions);
             }
             const sp = await queryOne('SELECT course FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
@@ -60,11 +79,17 @@ export async function getAllSessions(req, res) {
             if (studentCourses.length === 0) return res.json([]);
 
             const placeholders = studentCourses.map(() => '?').join(',');
-            const sessions = await query(`
+            let sql = `
                 SELECT * FROM sessions 
                 WHERE course IN (${placeholders}) 
                 ORDER BY day, time
-            `, studentCourses);
+            `;
+            const params = [...studentCourses];
+            if (limit) {
+                sql += ' LIMIT ?';
+                params.push(limit);
+            }
+            const sessions = await query(sql, params);
             return res.json(sessions);
         }
 

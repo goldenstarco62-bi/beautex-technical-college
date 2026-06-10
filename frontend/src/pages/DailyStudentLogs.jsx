@@ -56,6 +56,12 @@ const getLessonBadge = (log) => {
     return { label: 'Partially Taught', short: 'Partial', color: 'bg-amber-50 text-amber-600 border-amber-200', printColor: '#d97706', Icon: Minus };
 };
 
+const stripHtml = (html) => {
+    if (!html) return '';
+    return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
+
 export default function DailyStudentLogs() {
     const { user } = useAuth();
     const [logs, setLogs] = useState([]);
@@ -503,13 +509,13 @@ export default function DailyStudentLogs() {
                                 <div className="space-y-4">
                                     <div className="p-6 bg-gray-50 rounded-[2rem] border border-gray-100">
                                         <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-3">Today's Topics & Coverage</p>
-                                        <p className="text-sm text-gray-700 font-medium leading-relaxed italic">"{viewingLog.topics_covered}"</p>
+                                        <div className="text-sm text-gray-700 font-medium leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: `&ldquo;${viewingLog.topics_covered}&rdquo;` }} />
                                     </div>
 
                                     {viewingLog.trainer_remarks && (
                                         <div className="p-6 bg-gold/5 rounded-[2rem] border border-gold/10">
                                             <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-3">Trainer's Insight & Observations</p>
-                                            <p className="text-sm text-gray-600 font-medium leading-relaxed italic">"{viewingLog.trainer_remarks}"</p>
+                                            <div className="text-sm text-gray-600 font-medium leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: `&ldquo;${viewingLog.trainer_remarks}&rdquo;` }} />
                                         </div>
                                     )}
                                 </div>
@@ -638,9 +644,7 @@ export default function DailyStudentLogs() {
                                             <History className="w-5 h-5 text-maroon" />
                                             <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Daily Academic Coverage</h3>
                                         </div>
-                                        <p className="text-sm text-gray-800 leading-relaxed font-serif whitespace-pre-wrap min-h-[100px]">
-                                            {printingLog.topics_covered}
-                                        </p>
+                                        <div className="text-sm text-gray-800 leading-relaxed font-serif min-h-[100px] rich-text-content" dangerouslySetInnerHTML={{ __html: printingLog.topics_covered }} />
                                     </div>
 
                                     {/* Trainer remarks */}
@@ -650,9 +654,7 @@ export default function DailyStudentLogs() {
                                                 <Shield className="w-5 h-5 text-maroon" />
                                                 <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Professional Remarks & Assessment</h3>
                                             </div>
-                                            <p className="text-sm text-gray-700 italic leading-relaxed font-serif whitespace-pre-wrap">
-                                                {printingLog.trainer_remarks}
-                                            </p>
+                                            <div className="text-sm text-gray-700 italic leading-relaxed font-serif rich-text-content" dangerouslySetInnerHTML={{ __html: printingLog.trainer_remarks }} />
                                         </div>
                                     )}
 
@@ -824,11 +826,11 @@ const LogTable = ({ logs, isStudent, isAdmin, isTeacher, onPdf, onPrint, onDelet
                             </td>
                             <td className="px-8 py-6 max-w-xs">
                                 <div className="space-y-2">
-                                    <p className="text-xs text-gray-600 font-medium leading-relaxed line-clamp-2 italic">"{log.topics_covered}"</p>
+                                    <p className="text-xs text-gray-600 font-medium leading-relaxed line-clamp-2 italic">"{stripHtml(log.topics_covered)}"</p>
                                     {log.trainer_remarks && (
                                         <div className="flex items-start gap-2 bg-white p-2 rounded-lg border border-gray-100 shadow-sm shadow-black/[0.02]">
                                             <MessageSquare className="w-3 h-3 text-maroon mt-0.5 scale-75 opacity-40 shrink-0" />
-                                            <p className="text-[9px] text-gray-400 font-bold line-clamp-1">{log.trainer_remarks}</p>
+                                            <p className="text-[9px] text-gray-400 font-bold line-clamp-1">{stripHtml(log.trainer_remarks)}</p>
                                         </div>
                                     )}
                                 </div>

@@ -39,15 +39,24 @@ export async function getAllStudents(req, res) {
     try {
         const { role, email } = req.user;
         const mongo = await isMongo();
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
         // Admin and Superadmin see everything
         if (role === 'admin' || role === 'superadmin') {
             if (mongo) {
                 const Student = (await import('../models/mongo/Student.js')).default;
-                const students = await Student.find().sort({ created_at: -1 }).lean();
+                let q = Student.find().sort({ created_at: -1 });
+                if (limit) q = q.limit(limit);
+                const students = await q.lean();
                 return res.json(students);
             }
-            const students = await query('SELECT * FROM students ORDER BY created_at DESC');
+            let sql = 'SELECT * FROM students ORDER BY created_at DESC';
+            const params = [];
+            if (limit) {
+                sql += ' LIMIT ?';
+                params.push(limit);
+            }
+            const students = await query(sql, params);
             return res.json(students.map(s => {
                 let course = s.course;
                 if (typeof course === 'string' && course.startsWith('{') && course.endsWith('}')) {
@@ -85,7 +94,9 @@ export async function getAllStudents(req, res) {
                 // MongoDB $in on an array field is case-sensitive by default;
                 // use regex per course name to handle casing mismatches.
                 const courseRegexes = courseNames.map(n => new RegExp(`^${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'));
-                const students = await Student.find({ course: { $in: courseRegexes } }).sort({ created_at: -1 }).lean();
+                let q = Student.find({ course: { $in: courseRegexes } }).sort({ created_at: -1 });
+                if (limit) q = q.limit(limit);
+                const students = await q.lean();
                 return res.json(students.map(s => ({
                     ...s,
                     course: Array.isArray(s.course) ? s.course : [s.course].filter(Boolean)
@@ -122,7 +133,7 @@ export async function getAllStudents(req, res) {
                 return [String(raw).trim().toLowerCase()].filter(Boolean);
             };
 
-            const filteredStudents = students.filter(s => {
+            let filteredStudents = students.filter(s => {
                 const sCourses = parseCourse(s.course);
                 return sCourses.some(sc => allTutorCourses.includes(sc));
             }).map(s => {
@@ -142,6 +153,10 @@ export async function getAllStudents(req, res) {
                 }
                 return { ...s, course: courseArr };
             });
+
+            if (limit) {
+                filteredStudents = filteredStudents.slice(0, limit);
+            }
             return res.json(filteredStudents);
         }
 

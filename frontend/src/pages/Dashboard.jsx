@@ -92,7 +92,6 @@ function AdminDashboard() {
             if (!silent) setRefreshing(true);
             const [
                 studentsRes, 
-                coursesRes, 
                 facultyRes, 
                 reportsRes, 
                 statsRes, 
@@ -103,21 +102,19 @@ function AdminDashboard() {
                 announcementsRes,
                 sessionsRes
             ] = await Promise.all([
-                studentsAPI.getAll().catch(() => ({ data: [] })),
-                coursesAPI.getAll().catch(() => ({ data: [] })),
-                facultyAPI.getAll().catch(() => ({ data: [] })),
+                studentsAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
+                facultyAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
                 reportsAPI.getAll({ limit: 10 }).catch(() => ({ data: [] })),
                 api.get('/stats/dashboard').catch(() => ({ data: { summary: { students: 34, courses: 12, faculty: 5, attendance: 59.8, revenue: 343300, total_due: 476125 } } })),
                 activityReportsAPI.getDailyReports({ limit: 10 }).catch(() => ({ data: { data: [] } })),
                 activityReportsAPI.getAcademicSummary({ startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0] }).catch(() => ({ data: { data: null } })),
                 financeAPI.getMonthlyAlerts().catch(() => ({ data: { defaulterCount: 10, totalPending: 44125 } })),
-                financeAPI.getPayments().catch(() => ({ data: [] })),
-                announcementsAPI.getAll().catch(() => ({ data: [] })),
-                sessionsAPI.getAll().catch(() => ({ data: [] }))
+                financeAPI.getPayments({ limit: 5 }).catch(() => ({ data: [] })),
+                announcementsAPI.getAll({ limit: 2 }).catch(() => ({ data: [] })),
+                sessionsAPI.getAll({ limit: 4 }).catch(() => ({ data: [] }))
             ]);
 
             const studentsData = Array.isArray(studentsRes?.data) ? studentsRes.data : [];
-            const coursesData = Array.isArray(coursesRes?.data) ? coursesRes.data : [];
             const reportsData = Array.isArray(reportsRes?.data) ? reportsRes.data : [];
             const activityData = activityRes?.data?.data || [];
             const statsData = statsRes?.data?.summary ? statsRes.data : null;
@@ -128,7 +125,6 @@ function AdminDashboard() {
             const facultyData = Array.isArray(facultyRes?.data) ? facultyRes.data : (Array.isArray(facultyRes) ? facultyRes : []);
 
             setStudents(studentsData);
-            setCourses(coursesData);
             setRecentReports(reportsData);
             setActivityReports(activityData);
             setAcademicSummary(summaryData);

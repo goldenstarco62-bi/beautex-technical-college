@@ -24,6 +24,7 @@ export const getAllDailyReports = async (req, res) => {
     try {
         const { student_id, course, date, trainer_email, date_from, date_to } = req.query;
         const { role, email } = req.user;
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
         if (await isMongo()) {
             const StudentDailyReport = (await import('../models/mongo/StudentDailyReport.js')).default;
@@ -81,7 +82,9 @@ export const getAllDailyReports = async (req, res) => {
             }
             if (trainer_email) mongoFilter.trainer_email = { $regex: new RegExp(`^${trainer_email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') };
 
-            const reports = await StudentDailyReport.find(mongoFilter).sort({ report_date: -1 });
+            let q = StudentDailyReport.find(mongoFilter).sort({ report_date: -1 });
+            if (limit) q = q.limit(limit);
+            const reports = await q;
             return res.json(reports);
         }
 
@@ -154,6 +157,11 @@ export const getAllDailyReports = async (req, res) => {
         }
 
         sql += ' ORDER BY r.report_date DESC';
+
+        if (limit) {
+            sql += ' LIMIT ?';
+            params.push(limit);
+        }
 
         const reports = await query(sql, params);
 

@@ -633,6 +633,7 @@ export async function recordPayment(req, res) {
 export async function getPayments(req, res) {
     try {
         const { studentId } = req.query;
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
         // IDOR Protection: Students can only view their own payments
         let effectiveId = studentId;
@@ -652,7 +653,9 @@ export async function getPayments(req, res) {
                 paymentQuery.student_id = { $regex: new RegExp(`^${effectiveId.trim()}$`, 'i') };
             }
 
-            const payments = await Payment.find(paymentQuery).sort({ payment_date: -1 });
+            let q = Payment.find(paymentQuery).sort({ payment_date: -1 });
+            if (limit) q = q.limit(limit);
+            const payments = await q;
 
             const enriched = await Promise.all(payments.map(async (p) => {
                 const obj = p.toObject();
@@ -668,14 +671,26 @@ export async function getPayments(req, res) {
 
         let payments;
         if (effectiveId) {
-            payments = await query('SELECT * FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) ORDER BY payment_date DESC', [effectiveId]);
+            let sql = 'SELECT * FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) ORDER BY payment_date DESC';
+            const params = [effectiveId];
+            if (limit) {
+                sql += ' LIMIT ?';
+                params.push(limit);
+            }
+            payments = await query(sql, params);
         } else {
-            payments = await query(`
+            let sql = `
                 SELECT p.*, s.name as student_name 
                 FROM payments p 
                 JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id)) 
                 ORDER BY payment_date DESC
-            `);
+            `;
+            const params = [];
+            if (limit) {
+                sql += ' LIMIT ?';
+                params.push(limit);
+            }
+            payments = await query(sql, params);
         }
         res.json(payments);
     } catch (error) {

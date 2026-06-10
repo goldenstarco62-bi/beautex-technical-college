@@ -19,9 +19,12 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 export async function getAllFaculty(req, res) {
     try {
         const { role } = req.user;
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
         if (await isMongo()) {
             const Faculty = (await import('../models/mongo/Faculty.js')).default;
-            let faculty = await Faculty.find().sort({ name: 1 }).lean();
+            let q = Faculty.find().sort({ name: 1 });
+            if (limit) q = q.limit(limit);
+            let faculty = await q.lean();
             if (role === 'student') {
                 faculty = faculty.map(f => ({
                     id: f.id,
@@ -35,7 +38,13 @@ export async function getAllFaculty(req, res) {
             return res.json(faculty);
         }
 
-        const faculty = await query('SELECT * FROM faculty ORDER BY name');
+        let sql = 'SELECT * FROM faculty ORDER BY name';
+        const params = [];
+        if (limit) {
+            sql += ' LIMIT ?';
+            params.push(limit);
+        }
+        const faculty = await query(sql, params);
         if (role === 'student') {
             return res.json(faculty.map(f => ({
                 id: f.id,

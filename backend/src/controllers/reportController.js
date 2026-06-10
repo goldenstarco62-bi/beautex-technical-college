@@ -8,6 +8,7 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 export const getAllReports = async (req, res) => {
     try {
         const { course, trainer_email } = req.query;
+        const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
         if (await isMongo()) {
             const AcademicReport = (await import('../models/mongo/AcademicReport.js')).default;
@@ -26,7 +27,9 @@ export const getAllReports = async (req, res) => {
                 mongoFilter.trainer_email = String(req.user.email || '').toLowerCase().trim();
             }
 
-            const reports = await AcademicReport.find(mongoFilter).sort({ created_at: -1 });
+            let q = AcademicReport.find(mongoFilter).sort({ created_at: -1 });
+            if (limit) q = q.limit(limit);
+            const reports = await q;
             return res.json(reports);
         }
 
@@ -60,6 +63,11 @@ export const getAllReports = async (req, res) => {
         }
 
         sql += ' ORDER BY r.created_at DESC';
+
+        if (limit) {
+            sql += ' LIMIT ?';
+            params.push(limit);
+        }
 
         const reports = await query(sql, params);
 
