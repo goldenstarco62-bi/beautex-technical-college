@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { gradesAPI, coursesAPI, studentsAPI, reportsAPI } from '../services/api';
+import { gradesAPI, coursesAPI, studentsAPI, reportsAPI, settingsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Award, Search, TrendingUp, Plus, X, Edit, Trash2, Calendar, BookOpen, User, History, Users, CheckCircle, Printer, FileDown, MessageSquare, Eye } from 'lucide-react';
 import jsPDF from 'jspdf';
@@ -11,6 +11,7 @@ export default function Grades() {
     const { user } = useAuth();
     const isStudent = (user?.role ? String(user.role).toLowerCase() : '') === 'student';
     const canManage = ['admin', 'superadmin', 'teacher'].includes(user?.role?.toLowerCase());
+    const [settings, setSettings] = useState({ grading_distinction_min: 70, grading_credit_min: 60, grading_pass_min: 50, grading_fail_min: 0 });
 
     const [courses, setCourses] = useState([]);
     const [students, setStudents] = useState([]);
@@ -115,6 +116,10 @@ export default function Grades() {
         const load = async () => {
             setLoading(true);
             try {
+                const settingsRes = await settingsAPI.get().catch(() => ({ data: {} }));
+                if (settingsRes && settingsRes.data) {
+                    setSettings(prev => ({ ...prev, ...settingsRes.data }));
+                }
                 await fetchInitialData();
                 await fetchGrades();
             } finally {
@@ -439,8 +444,10 @@ export default function Grades() {
     const scoreChip = (grade) => {
         if (!grade) return <span className="text-[11px] font-black text-black/10">—</span>;
         const pct = Math.round((grade.score / (grade.max_score || 100)) * 100);
-        const color = pct >= 70 ? 'bg-green-50 text-green-700 border-green-200'
-            : pct >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200'
+        const distMin = parseInt(settings?.grading_distinction_min || 70);
+        const passMin = parseInt(settings?.grading_pass_min || 50);
+        const color = pct >= distMin ? 'bg-green-50 text-green-700 border-green-200'
+            : pct >= passMin ? 'bg-amber-50 text-amber-700 border-amber-200'
                 : 'bg-red-50 text-red-600 border-red-200';
         return (
             <div className={`inline-flex flex-col items-center px-3 py-1.5 rounded-xl border font-black text-xs ${color}`}>
@@ -697,9 +704,9 @@ export default function Grades() {
                                     <div className="overflow-x-auto">
                                         {/* Legend */}
                                         <div className="flex gap-4 px-6 py-3 bg-black/[0.01] border-b border-black/5 text-[9px] font-black uppercase tracking-widest">
-                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block" /> ≥70% Distinction</span>
-                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-200 inline-block" /> 50–69% Pass</span>
-                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200 inline-block" /> &lt;50% Refer</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block" /> ≥{settings?.grading_distinction_min || 70}% Distinction</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-200 inline-block" /> {settings?.grading_pass_min || 50}–{settings?.grading_distinction_min ? parseInt(settings.grading_distinction_min) - 1 : 69}% Pass</span>
+                                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200 inline-block" /> &lt;{settings?.grading_pass_min || 50}% Refer</span>
                                         </div>
                                         <table className="w-full">
                                             <thead>
@@ -723,9 +730,11 @@ export default function Grades() {
                                             <tbody className="divide-y divide-black/5">
                                                 {(isStudent ? matrixRowsStudentArr : matrixRows).map((row, i) => {
                                                     const avg = rowAvg(row.grades);
+                                                    const distMin = parseInt(settings?.grading_distinction_min || 70);
+                                                    const passMin = parseInt(settings?.grading_pass_min || 50);
                                                     const avgColor = avg === null ? 'text-black/20'
-                                                        : avg >= 70 ? 'text-green-700 bg-green-50'
-                                                            : avg >= 50 ? 'text-amber-700 bg-amber-50'
+                                                        : avg >= distMin ? 'text-green-700 bg-green-50'
+                                                            : avg >= passMin ? 'text-amber-700 bg-amber-50'
                                                                 : 'text-red-600 bg-red-50';
                                                     return (
                                                         <tr key={i} className="hover:bg-maroon/[0.015] transition-colors group">
@@ -1228,13 +1237,17 @@ export default function Grades() {
                                         return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                                     });
 
+                                    const distMin = parseInt(settings?.grading_distinction_min || 70);
+                                    const creditMin = parseInt(settings?.grading_credit_min || 60);
+                                    const passMin = parseInt(settings?.grading_pass_min || 50);
+
                                     const bandColor = (pct) =>
-                                        pct >= 70 ? 'bg-green-50 text-green-700 border-green-200'
-                                            : pct >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                        pct >= distMin ? 'bg-green-50 text-green-700 border-green-200'
+                                            : pct >= passMin ? 'bg-amber-50 text-amber-700 border-amber-200'
                                                 : 'bg-red-50 text-red-600 border-red-200';
 
                                     const bandLabel = (pct) =>
-                                        pct >= 70 ? 'Distinction' : pct >= 60 ? 'Credit' : pct >= 50 ? 'Pass' : 'Refer';
+                                        pct >= distMin ? 'Distinction' : pct >= creditMin ? 'Credit' : pct >= passMin ? 'Pass' : 'Refer';
 
                                     return (
                                         <div className="space-y-8">
@@ -1256,7 +1269,10 @@ export default function Grades() {
                                                             {(() => {
                                                                 const avg = viewingReport.grades.length > 0
                                                                     ? (viewingReport.grades.reduce((acc, g) => acc + (g.score / (g.max_score || 100)), 0) / viewingReport.grades.length) * 100 : 0;
-                                                                return avg >= 70 ? 'Distinction' : avg >= 60 ? 'Credit' : avg >= 50 ? 'Pass' : viewingReport.grades.length > 0 ? 'Refer' : 'N/A';
+                                                                const distMin = parseInt(settings?.grading_distinction_min || 70);
+                                                                const creditMin = parseInt(settings?.grading_credit_min || 60);
+                                                                const passMin = parseInt(settings?.grading_pass_min || 50);
+                                                                return avg >= distMin ? 'Distinction' : avg >= creditMin ? 'Credit' : avg >= passMin ? 'Pass' : viewingReport.grades.length > 0 ? 'Refer' : 'N/A';
                                                             })()}
                                                         </p>
                                                         <p className="text-[10px] font-black uppercase opacity-50 mt-1">{viewingReport.grades.length} Assessment{viewingReport.grades.length !== 1 ? 's' : ''} Recorded</p>

@@ -220,6 +220,8 @@ export async function initializeDatabase() {
                     console.warn('⚠️ Inventory schema warning (PostgreSQL):', e.message);
                 }
             }
+
+            await seedNewSettings(database);
             return;
         }
 
@@ -243,6 +245,7 @@ export async function initializeDatabase() {
 
         // Run migrations for SQLite
         await runSqliteMigrations(database);
+        await seedNewSettings(database);
 
     } catch (err) {
         console.error('❌ Critical Init Error:', err.message);
@@ -1316,4 +1319,106 @@ export async function run(sql, params = []) {
     return database.run(sql, sanitizedParams);
 }
 
-export default { getDb, query, queryOne, run };
+/**
+ * Seed all default system setting keys if they are not already set.
+ */
+export async function seedNewSettings(database) {
+    const settings = {
+        college_name: 'Beautex Technical Training College',
+        college_motto: 'Empowering Minds. Shaping Futures.',
+        college_address: 'Main Campus, Nairobi, Kenya',
+        college_phone: '+254 700 000000',
+        college_email: 'info@beautex.edu',
+        college_website: 'www.beautex.edu',
+        college_socials: '{}',
+        college_reg_number: 'TVETA/001/2026',
+        college_kra_pin: 'P051234567A',
+        college_principal: 'Dr. Jane Doe',
+        college_stamp: '',
+        college_signature: '',
+        intake_jan_status: 'open',
+        intake_jan_capacity: '100',
+        intake_may_status: 'open',
+        intake_may_capacity: '100',
+        intake_sept_status: 'open',
+        intake_sept_capacity: '100',
+        intake_rolling_status: 'open',
+        intake_rolling_capacity: '100',
+        intake_online_app_enabled: 'true',
+        admission_number_format: 'BTC/2026/001',
+        student_categories: 'Full-Time, Part-Time, Weekend, Online, Short Course',
+        student_statuses: 'Active, Completed, Graduated, Deferred, Suspended, Expelled',
+        student_portal_results: 'true',
+        student_portal_fees: 'true',
+        student_portal_timetables: 'true',
+        student_portal_materials: 'true',
+        student_portal_certificates: 'true',
+        student_portal_attendance: 'true',
+        assessment_types: 'CAT, Practical Assessment, Mid-Term Exam, End-Term Exam, Final Examination',
+        grading_distinction_min: '70',
+        grading_credit_min: '60',
+        grading_pass_min: '50',
+        grading_fail_min: '0',
+        attendance_mode: 'daily',
+        attendance_status_types: 'Present, Absent, Late, Sick, Excused',
+        fee_categories: 'Registration Fee, Tuition Fee, Practical Fee, Examination Fee, Graduation Fee, Accommodation Fee',
+        payment_methods: 'M-Pesa, Bank Deposit, Bank Transfer, Cash, Card Payments',
+        finance_penalty_rate: '0',
+        finance_discount_rate: '0',
+        finance_scholarship_types: 'Need-based, Merit-based, Sport',
+        finance_installments_allowed: 'true',
+        sms_admission_confirm: 'true',
+        sms_fee_reminder: 'true',
+        sms_cat_notify: 'true',
+        sms_exam_notify: 'true',
+        sms_grad_notify: 'true',
+        whatsapp_integration: 'false',
+        staff_categories: 'Lecturers, Trainers, ICT Administrators, Finance Officers, Registrars, Support Staff',
+        staff_roles: 'Super Admin, Admin, Registrar, Accountant, Lecturer, Trainer',
+        certificate_short_course_template: 'standard',
+        certificate_award_template: 'standard',
+        certificate_diploma_template: 'standard',
+        certificate_no_format: 'CERT/2026/{ID}',
+        graduation_no_format: 'GRAD/2026/{ID}',
+        qr_verification_enabled: 'true',
+        digital_signatures_enabled: 'true',
+        lms_assignments_enabled: 'true',
+        lms_materials_enabled: 'true',
+        lms_online_exams_enabled: 'true',
+        lms_online_classes_enabled: 'true',
+        lms_discussions_enabled: 'true',
+        password_policy_min_len: '8',
+        password_policy_require_special: 'true',
+        two_factor_auth: 'false',
+        session_timeout: '30',
+        failed_login_attempts: '5',
+        activity_monitoring_enabled: 'true',
+        backup_interval: 'daily',
+        backup_types: 'database,files,full',
+        login_banner_url: '',
+        portal_theme_colors: '#800000',
+        sidebar_colors: '#7a0000'
+    };
+
+    try {
+        const isPostgres = getActiveDbEngine() === 'postgres';
+        for (const [key, val] of Object.entries(settings)) {
+            if (isPostgres) {
+                const check = await database.query('SELECT key FROM system_settings WHERE key = $1', [key]);
+                if (check.rows.length === 0) {
+                    await database.query('INSERT INTO system_settings (key, value) VALUES ($1, $2)', [key, val]);
+                }
+            } else {
+                const check = await database.get('SELECT key FROM system_settings WHERE key = ?', [key]);
+                if (!check) {
+                    await database.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', [key, val]);
+                }
+            }
+        }
+        console.log('🌱 Settings parameters check/sync complete.');
+    } catch (e) {
+        console.error('⚠️ seedNewSettings error:', e.message);
+    }
+}
+
+export default { getDb, query, queryOne, run, seedNewSettings };

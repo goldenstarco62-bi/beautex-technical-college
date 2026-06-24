@@ -72,7 +72,7 @@ const navSections = [
         label: 'SYSTEM',
         items: [
             { name: 'Users', path: '/users', icon: Shield, roles: ['superadmin'] },
-            { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['superadmin'] },
+            { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['superadmin', 'admin'] },
             { name: 'Audit Logs', path: '/audit-logs', icon: History, roles: ['superadmin'] },
         ]
     },

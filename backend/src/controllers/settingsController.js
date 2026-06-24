@@ -1,6 +1,7 @@
 import { getDb, query } from '../config/database.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +23,7 @@ export async function getSettings(req, res) {
 
         res.json(settingsObj);
     } catch (error) {
-        console.error('Error fetching settings:', error);
+        logger.error('Error fetching settings:', error);
         res.status(500).json({ error: 'Failed to fetch settings' });
     }
 }
@@ -32,6 +33,25 @@ export async function updateSettings(req, res) {
         const db = await getDb();
         const settings = req.body;
         const isPostgres = !!process.env.DATABASE_URL;
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+
+        // Sensitive keys that only Super Admin is allowed to modify
+        const sensitiveKeys = [
+            'mpesa_consumer_key', 'mpesa_consumer_secret', 'mpesa_passkey', 'mpesa_shortcode', 'mpesa_callback_url', 'mpesa_status',
+            'sms_api_key', 'sms_username', 'sms_sender_id',
+            'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_secure',
+            'google_calendar_api_key', 'zoom_api_key', 'google_meet_api_key',
+            'backup_interval', 'backup_types',
+            'password_policy_min_len', 'password_policy_require_special', 'two_factor_auth', 'session_timeout', 'failed_login_attempts',
+            'activity_monitoring_enabled'
+        ];
+
+        if (userRole === 'admin') {
+            logger.warn(`Admin user ${req.user.email} attempted to update settings. Filtering out sensitive keys.`);
+            for (const key of sensitiveKeys) {
+                delete settings[key];
+            }
+        }
 
         if (isPostgres) {
             // PostgreSQL: use ON CONFLICT upsert
@@ -63,8 +83,47 @@ export async function updateSettings(req, res) {
 
         res.json({ message: 'Settings updated successfully' });
     } catch (error) {
-        console.error('Error updating settings:', error);
+        logger.error('Error updating settings:', error);
         res.status(500).json({ error: 'Failed to update settings' });
+    }
+}
+
+export async function uploadFileSetting(req, res) {
+    try {
+        const { key } = req.body;
+        if (!key) {
+            return res.status(400).json({ error: 'Setting key is required.' });
+        }
+        if (!req.file) {
+            return res.status(400).json({ error: 'File is required.' });
+        }
+
+        const mime_type = req.file.mimetype;
+        const b64 = req.file.buffer.toString('base64');
+        const file_url = `data:${mime_type};base64,${b64}`;
+
+        const db = await getDb();
+        const isPostgres = !!process.env.DATABASE_URL;
+
+        if (isPostgres) {
+            await db.query(
+                `INSERT INTO system_settings (key, value, updated_at) 
+                 VALUES ($1, $2, CURRENT_TIMESTAMP)
+                 ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+                [key, file_url]
+            );
+        } else {
+            await db.run(`
+                INSERT OR REPLACE INTO system_settings (key, value, updated_at) 
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            `, [key, file_url]);
+        }
+
+        logger.info(`File uploaded successfully for setting key: ${key}`);
+        res.json({ message: 'File uploaded successfully', key, value: file_url });
+    } catch (error) {
+        logger.error('Error uploading setting file:', error);
+        res.status(500).json({ error: 'Failed to upload setting file' });
     }
 }
 
@@ -72,7 +131,7 @@ export async function downloadBackup(req, res) {
     try {
         res.download(dbPath, 'college_cms_backup_' + new Date().toISOString().split('T')[0] + '.sqlite');
     } catch (error) {
-        console.error('Error downloading backup:', error);
+        logger.error('Error downloading backup:', error);
         res.status(500).json({ error: 'Failed to download backup' });
     }
 }

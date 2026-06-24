@@ -5,6 +5,7 @@ import express from 'express';
 import * as userController from '../controllers/userController.js';
 import * as settingsController from '../controllers/settingsController.js';
 import { authenticateToken, authorizeRoles, authorizeStudentEdit } from '../middleware/auth.js';
+import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -36,9 +37,10 @@ router.get('/audit-logs', authenticateToken, authorizeRoles('superadmin'), userC
 router.put('/users/:id/finance-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateFinancePermission);
 router.put('/users/:id/student-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateStudentPermission);
 
-// Settings Routes (Superadmin only)
-router.get('/settings', authenticateToken, authorizeRoles('superadmin'), settingsController.getSettings);
-router.put('/settings', authenticateToken, authorizeRoles('superadmin'), settingsController.updateSettings);
+// Settings Routes (Superadmin & Admin roles allowed, with file upload capability)
+router.get('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getSettings);
+router.put('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.updateSettings);
+router.post('/settings/upload', authenticateToken, authorizeRoles('superadmin', 'admin'), upload.single('file'), settingsController.uploadFileSetting);
 router.get('/settings/backup', authenticateToken, authorizeRoles('superadmin'), settingsController.downloadBackup);
 
 export default router;
