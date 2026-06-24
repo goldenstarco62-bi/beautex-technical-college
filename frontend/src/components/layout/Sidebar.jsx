@@ -117,8 +117,9 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 />
             )}
 
-            <div className={`fixed left-0 top-0 h-screen w-64 bg-[#7a0000] flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-2xl
-                ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+            <div className={`fixed left-0 top-0 h-screen w-64 flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-2xl
+                ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+                style={{ backgroundColor: 'var(--sidebar-bg, #7a0000)' }}>
 
                 {/* Logo */}
                 <div className="px-5 py-5 flex items-center justify-between border-b border-white/10">
@@ -186,7 +187,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
 
                 {/* Current Term Card */}
                 {['admin', 'superadmin'].includes(userRole) && (
-                    <div className="mx-3 mb-4 p-4 bg-[#5a0000] rounded-2xl border border-white/10">
+                    <div className="mx-3 mb-4 p-4 bg-black/20 rounded-2xl border border-white/10">
                         <div className="flex items-center gap-2 mb-1">
                             <GraduationCap className="w-4 h-4 text-yellow-400 shrink-0" />
                             <p className="text-[9px] font-black text-white/50 uppercase tracking-widest">Current Term</p>

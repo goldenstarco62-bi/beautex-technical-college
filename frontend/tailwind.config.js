@@ -9,9 +9,9 @@ export default {
         extend: {
             colors: {
                 maroon: {
-                    DEFAULT: '#800000',
-                    dark: '#600000',
-                    900: '#800000',
+                    DEFAULT: 'var(--primary, #800000)',
+                    dark: 'var(--primary-dark, #600000)',
+                    900: 'var(--primary, #800000)',
                 },
                 gold: {
                     DEFAULT: '#FFD700',

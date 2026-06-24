@@ -1397,7 +1397,30 @@ export async function seedNewSettings(database) {
         backup_types: 'database,files,full',
         login_banner_url: '',
         portal_theme_colors: '#800000',
-        sidebar_colors: '#7a0000'
+        sidebar_colors: '#7a0000',
+        academic_term_name: 'Term 2 2026',
+        academic_term_start: '2026-05-04',
+        academic_term_end: '2026-07-31',
+        academic_exam_start: '2026-07-20',
+        academic_exam_end: '2026-07-30',
+        academic_holiday_start: '2026-08-01',
+        academic_holiday_end: '2026-08-31',
+        template_admission_sms: 'Dear {name}, welcome to BTTC. Your Admission No is {admission_no}. Classes start on {start_date}.',
+        template_fee_reminder_sms: 'Dear Parent/Guardian, a fee balance of KES {balance} remains for {name}. Please clear before {due_date}.',
+        template_results_sms: 'Dear Student, Term results have been published. GPA: {gpa}. Check the student portal for details.',
+        template_absentee_sms: 'Dear Parent/Guardian, {name} was marked absent today {date} without permission.',
+        inventory_low_stock_threshold: '10',
+        inventory_auto_alert_enabled: 'true',
+        inventory_depreciation_method: 'straight_line',
+        inventory_default_store: 'Main Store',
+        report_header_text: 'BEAUTEX TECHNICAL TRAINING COLLEGE\nOfficial Academic Transcript',
+        report_footer_text: 'This is a computer generated document. For verification, scan the QR code.',
+        report_show_grading_scale: 'true',
+        report_signature_title: 'Registrar of Academic Affairs',
+        portal_maintenance_mode: 'false',
+        portal_announcement_banner: 'Welcome to the new portal! Semester registration deadline extended to June 30th.',
+        portal_support_email: 'support@beautex.edu',
+        portal_support_phone: '+254 711 000000'
     };
 
     try {

@@ -103,7 +103,8 @@ body,
     }
 
     .table-container {
-        @apply overflow-x-auto shadow-xl border border-maroon/5 rounded-2xl bg-white;
+        @apply overflow-x-auto shadow-xl rounded-2xl bg-white;
+        border: 1px solid rgba(128, 0, 0, 0.05);
         scrollbar-width: thin;
         scrollbar-color: rgba(128, 0, 0, 0.2) transparent;
     }

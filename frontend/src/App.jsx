@@ -1,6 +1,7 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { settingsAPI } from './services/api';
 import { ThemeProvider } from './context/ThemeContext';
 import Layout from './components/layout/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -60,6 +61,18 @@ function SemiProtectedRoute({ children }) {
 }
 
 function App() {
+    useEffect(() => {
+        settingsAPI.get().then(res => {
+            if (res.data) {
+                const primary = res.data.portal_theme_colors || '#800000';
+                const sidebar = res.data.sidebar_colors || '#7a0000';
+                document.documentElement.style.setProperty('--primary', primary);
+                document.documentElement.style.setProperty('--sidebar-bg', sidebar);
+                document.documentElement.style.setProperty('--primary-dark', primary);
+            }
+        }).catch(() => {});
+    }, []);
+
     return (
         <ThemeProvider>
             <AuthProvider>
