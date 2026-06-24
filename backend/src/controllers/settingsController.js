@@ -53,31 +53,32 @@ export async function updateSettings(req, res) {
             }
         }
 
+        const entries = Object.entries(settings);
+        const pairs = entries.map(([key, value]) => [
+            key,
+            typeof value === 'boolean' ? value.toString() : (value ?? '')
+        ]);
+
         if (isPostgres) {
-            // PostgreSQL: use ON CONFLICT upsert
-            for (const [key, value] of Object.entries(settings)) {
-                let stringValue = value;
-                if (typeof value === 'boolean') stringValue = value.toString();
-
-                await db.query(
-                    `INSERT INTO system_settings (key, value, updated_at) 
-                     VALUES ($1, $2, CURRENT_TIMESTAMP)
-                     ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
-                    [key, stringValue]
-                );
-            }
+            // PostgreSQL: single bulk upsert via unnest()
+            const keys   = pairs.map(p => p[0]);
+            const values = pairs.map(p => p[1]);
+            await db.query(
+                `INSERT INTO system_settings (key, value, updated_at)
+                 SELECT unnest($1::text[]), unnest($2::text[]), CURRENT_TIMESTAMP
+                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP`,
+                [keys, values]
+            );
         } else {
-            // SQLite: use INSERT OR REPLACE with transactions
+            // SQLite: single INSERT OR REPLACE with all rows in one statement
+            if (pairs.length === 0) { res.json({ message: 'Settings updated successfully' }); return; }
+            const placeholders = pairs.map(() => '(?, ?, CURRENT_TIMESTAMP)').join(', ');
+            const flatValues   = pairs.flatMap(p => p);
             await db.run('BEGIN TRANSACTION');
-            for (const [key, value] of Object.entries(settings)) {
-                let stringValue = value;
-                if (typeof value === 'boolean') stringValue = value.toString();
-
-                await db.run(`
-                    INSERT OR REPLACE INTO system_settings (key, value, updated_at) 
-                    VALUES (?, ?, CURRENT_TIMESTAMP)
-                `, [key, stringValue]);
-            }
+            await db.run(
+                `INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ${placeholders}`,
+                flatValues
+            );
             await db.run('COMMIT');
         }
 

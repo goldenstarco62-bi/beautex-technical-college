@@ -291,10 +291,13 @@ export default function Settings() {
 
     const handleSave = async () => {
         setSaving(true);
-        try { 
-            await settingsAPI.update(settings); 
+        try {
+            // Strip large base64 image fields — they are already persisted via
+            // the dedicated upload endpoint and can be hundreds of KB each.
+            const { college_logo, college_stamp, college_signature, ...settingsPayload } = settings;
+            await settingsAPI.update(settingsPayload);
             showToast('Configuration saved successfully!');
-            
+
             // Instantly apply theme colors to the document variables
             const primary = settings.portal_theme_colors || '#800000';
             const sidebar = settings.sidebar_colors || '#7a0000';
