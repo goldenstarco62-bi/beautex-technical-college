@@ -61,23 +61,24 @@ export default function TeacherDashboard() {
 
     const statsDisplay = [
         { title: 'My Courses', value: myCourses.length, icon: BookOpen, bg: 'bg-maroon/5', iconColor: 'text-maroon', borderColor: 'border-maroon/10' },
-        { title: 'Scheduled Sessions', value: mySessions.length, icon: Clock, bg: 'bg-blue-50', iconColor: 'text-blue-600', borderColor: 'border-blue-100' },
-        { title: 'Announcements', value: recentAnnouncements.length, icon: Bell, bg: 'bg-amber-50', iconColor: 'text-amber-600', borderColor: 'border-amber-100' },
-        { title: 'Department', value: 'Tech', icon: Zap, bg: 'bg-green-50', iconColor: 'text-green-600', borderColor: 'border-green-100' },
+        { title: 'Scheduled Sessions', value: mySessions.length, icon: Clock, bg: 'bg-maroon/5', iconColor: 'text-maroon', borderColor: 'border-maroon/10' },
+        { title: 'Announcements', value: recentAnnouncements.length, icon: Bell, bg: 'bg-gold/10', iconColor: 'text-yellow-600', borderColor: 'border-yellow-100' },
+        { title: 'Total Students', value: myCourses.reduce((sum, c) => sum + (Number(c.enrolled) || 0), 0), icon: Users, bg: 'bg-emerald-50', iconColor: 'text-emerald-600', borderColor: 'border-emerald-100' },
     ];
 
     const quickActions = [
-        { label: 'Mark Attendance', sub: 'Daily sign-in', icon: ClipboardCheck, color: 'bg-maroon text-gold', path: '/attendance' },
-        { label: 'Daily Report', sub: 'Student logs', icon: FileText, color: 'bg-white text-maroon border-2 border-maroon', path: '/student-daily-reports' },
-        { label: 'Post Grades', sub: 'Academic scores', icon: TrendingUp, color: 'bg-gold text-maroon', path: '/grades' },
-        { label: 'My Schedule', sub: 'View timetable', icon: Calendar, color: 'bg-blue-600 text-white', path: '/schedule' },
+        { label: 'Mark Attendance', sub: 'Daily sign-in', icon: ClipboardCheck, color: 'bg-maroon text-yellow-300 hover:bg-maroon/90', path: '/attendance' },
+        { label: 'Daily Report', sub: 'Student logs', icon: FileText, color: 'bg-white text-maroon border-2 border-maroon dark:bg-transparent dark:text-gold dark:border-gold', path: '/student-daily-reports' },
+        { label: 'Post Grades', sub: 'Academic scores', icon: TrendingUp, color: 'bg-yellow-400 text-maroon hover:bg-yellow-500', path: '/grades' },
+        { label: 'My Schedule', sub: 'View timetable', icon: Calendar, color: 'bg-maroon/10 text-maroon dark:text-gold hover:bg-maroon/20', path: '/schedule' },
     ];
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
             {/* Welcome Banner */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-maroon to-maroon/90 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl shadow-maroon/20">
+            <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl"
+                style={{ background: 'linear-gradient(135deg, var(--portal-theme, #800000) 0%, color-mix(in srgb, var(--portal-theme, #800000) 50%, #000) 100%)' }}>
                 <div className="absolute top-0 right-0 w-72 h-72 bg-gold/10 rounded-full translate-x-1/3 -translate-y-1/3 blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-1/2 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                 <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -208,35 +209,39 @@ export default function TeacherDashboard() {
                     </div>
 
                     {/* Upcoming Sessions */}
-                    <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                    <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
                         <div className="flex items-center gap-2 mb-8">
-                            <div className="w-6 h-6 bg-blue-100 rounded flex items-center justify-center">
-                                <Clock className="w-4 h-4 text-blue-600" />
+                            <div className="w-6 h-6 bg-maroon/10 rounded flex items-center justify-center">
+                                <Clock className="w-4 h-4 text-maroon dark:text-gold" />
                             </div>
-                            <h2 className="text-xs font-black text-gray-800 uppercase tracking-widest">Upcoming Schedule</h2>
+                            <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Upcoming Schedule</h2>
                         </div>
                         {mySessions.length > 0 ? (
                             <div className="space-y-4">
                                 {mySessions.map((session, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-blue-50/30 transition-all">
+                                    <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5 hover:border-maroon/20 transition-all">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                                                <Calendar className="w-4 h-4 text-blue-600" />
+                                            <div className="w-10 h-10 bg-maroon/10 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0">
+                                                <Calendar className="w-4 h-4 text-maroon dark:text-gold" />
                                             </div>
                                             <div>
-                                                <h3 className="font-bold text-gray-800">{session.course}</h3>
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{session.day} @ {session.time}</p>
+                                                <h3 className="font-bold text-gray-800 dark:text-white">{session.course_name || session.course || session.name || 'Session'}</h3>
+                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                                    {session.day || session.day_of_week || ''}
+                                                    {(session.day || session.day_of_week) ? ' @ ' : ''}
+                                                    {session.start_time || session.time || ''}
+                                                </p>
                                             </div>
                                         </div>
-                                        <div className="px-3 py-1 bg-white rounded-lg border border-gray-200 text-[10px] font-bold text-gray-600">
-                                            {session.room}
+                                        <div className="px-3 py-1 bg-white dark:bg-[#1a1a1a] rounded-lg border border-gray-200 dark:border-white/10 text-[10px] font-bold text-gray-600 dark:text-gray-300">
+                                            {session.room || session.location || 'TBD'}
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         ) : (
                             <div className="py-12 text-center">
-                                <Calendar className="w-12 h-12 text-gray-200 mx-auto mb-3" />
+                                <Calendar className="w-12 h-12 text-gray-200 dark:text-white/10 mx-auto mb-3" />
                                 <p className="text-sm text-gray-400 italic">No upcoming sessions scheduled.</p>
                             </div>
                         )}
@@ -244,24 +249,24 @@ export default function TeacherDashboard() {
                 </div>
 
                 {/* Announcements Sidebar */}
-                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm">
+                <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
                     <div className="flex items-center justify-between mb-8">
-                        <h2 className="text-sm font-black text-gray-800 uppercase tracking-widest">Faculty Notices</h2>
-                        <button onClick={() => navigate('/announcements')} className="text-[9px] font-black uppercase tracking-widest text-maroon hover:text-gold transition-colors flex items-center gap-1">
+                        <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Faculty Notices</h2>
+                        <button onClick={() => navigate('/announcements')} className="text-[9px] font-black uppercase tracking-widest text-maroon dark:text-gold hover:underline flex items-center gap-1">
                             View All <ChevronRight className="w-3 h-3" />
                         </button>
                     </div>
                     <div className="space-y-6">
                         {recentAnnouncements.length > 0 ? recentAnnouncements.map(ann => (
-                            <div key={ann.id} className="relative pl-6 border-l-2 border-gold pb-6 last:pb-0">
-                                <div className="absolute -left-[5px] top-0 w-2 h-2 bg-gold rounded-full" />
-                                <p className="text-[9px] font-black text-gold uppercase tracking-widest mb-1">{ann.date}</p>
-                                <h4 className="text-xs font-bold text-gray-800 mb-1">{ann.title}</h4>
+                            <div key={ann.id} className="relative pl-6 border-l-2 border-yellow-400 pb-6 last:pb-0">
+                                <div className="absolute -left-[5px] top-0 w-2 h-2 bg-yellow-400 rounded-full" />
+                                <p className="text-[9px] font-black text-yellow-600 dark:text-yellow-400 uppercase tracking-widest mb-1">{ann.date}</p>
+                                <h4 className="text-xs font-bold text-gray-800 dark:text-white mb-1">{ann.title}</h4>
                                 <p className="text-[10px] text-gray-400 font-medium line-clamp-2">{ann.content}</p>
                             </div>
                         )) : (
                             <div className="py-8 text-center">
-                                <Bell className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                                <Bell className="w-10 h-10 text-gray-200 dark:text-white/10 mx-auto mb-3" />
                                 <p className="text-xs text-gray-400 italic">No announcements yet.</p>
                             </div>
                         )}

@@ -14,13 +14,10 @@ import {
     ArrowUpRight, 
     RefreshCw, 
     ClipboardList, 
-    Sparkles, 
-    BarChart2, 
     AlertCircle,
     Calendar,
     Clock,
     Star,
-    ChevronRight,
     ArrowDownRight,
     Megaphone
 } from 'lucide-react';
@@ -28,12 +25,12 @@ import {
     studentsAPI, 
     coursesAPI, 
     facultyAPI, 
-    reportsAPI, 
     activityReportsAPI, 
     financeAPI, 
     announcementsAPI, 
     sessionsAPI,
-    academicAPI
+    academicAPI,
+    settingsAPI
 } from '../services/api';
 import api from '../services/api';
 import { 
@@ -61,17 +58,17 @@ function AdminDashboard() {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [stats, setStats] = useState({ 
-        students: 34, 
-        courses: 12, 
-        faculty: 5, 
-        attendance: 59.8, 
-        revenue: 343300, 
-        total_due: 476125 
+        students: 0, 
+        courses: 0, 
+        faculty: 0, 
+        attendance: 0, 
+        revenue: 0, 
+        total_due: 0,
+        distribution: []
     });
 
     const [students, setStudents] = useState([]);
     const [courses, setCourses] = useState([]);
-    const [recentReports, setRecentReports] = useState([]);
     const [activityReports, setActivityReports] = useState([]);
     const [payments, setPayments] = useState([]);
     const [announcements, setAnnouncements] = useState([]);
@@ -80,8 +77,11 @@ function AdminDashboard() {
     const [lastUpdated, setLastUpdated] = useState(null);
     const [refreshing, setRefreshing] = useState(false);
     const [academicSummary, setAcademicSummary] = useState(null);
-    const [feeAlerts, setFeeAlerts] = useState({ defaulterCount: 10, totalPending: 44125 });
+    const [feeAlerts, setFeeAlerts] = useState({ defaulterCount: 0, totalPending: 0 });
     const [activePeriod, setActivePeriod] = useState(null);
+    const [collegeName, setCollegeName] = useState('Beautex Technical College');
+    const [enrollmentTrend, setEnrollmentTrend] = useState([]);
+    const [revenueTrend, setRevenueTrend] = useState([]);
 
     const now = new Date();
     const hour = now.getHours();
@@ -95,7 +95,6 @@ function AdminDashboard() {
             const [
                 studentsRes, 
                 facultyRes, 
-                reportsRes, 
                 statsRes, 
                 activityRes, 
                 summaryRes, 
@@ -103,23 +102,23 @@ function AdminDashboard() {
                 paymentsRes,
                 announcementsRes,
                 sessionsRes,
-                periodsRes
+                periodsRes,
+                settingsRes
             ] = await Promise.all([
                 studentsAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
                 facultyAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
-                reportsAPI.getAll({ limit: 10 }).catch(() => ({ data: [] })),
-                api.get('/stats/dashboard').catch(() => ({ data: { summary: { students: 34, courses: 12, faculty: 5, attendance: 59.8, revenue: 343300, total_due: 476125 } } })),
+                api.get('/stats/dashboard').catch(() => ({ data: { summary: { students: 0, courses: 0, faculty: 0, attendance: 0, revenue: 0, total_due: 0 }, courseDistribution: [], enrollmentTrend: [], revenueTrend: [] } })),
                 activityReportsAPI.getDailyReports({ limit: 10 }).catch(() => ({ data: { data: [] } })),
                 activityReportsAPI.getAcademicSummary({ startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0] }).catch(() => ({ data: { data: null } })),
-                financeAPI.getMonthlyAlerts().catch(() => ({ data: { defaulterCount: 10, totalPending: 44125 } })),
+                financeAPI.getMonthlyAlerts().catch(() => ({ data: { defaulterCount: 0, totalPending: 0 } })),
                 financeAPI.getPayments({ limit: 5 }).catch(() => ({ data: [] })),
                 announcementsAPI.getAll({ limit: 2 }).catch(() => ({ data: [] })),
                 sessionsAPI.getAll({ limit: 4 }).catch(() => ({ data: [] })),
-                academicAPI.getPeriods().catch(() => ({ data: [] }))
+                academicAPI.getPeriods().catch(() => ({ data: [] })),
+                settingsAPI.get().catch(() => ({ data: {} }))
             ]);
 
             const studentsData = Array.isArray(studentsRes?.data) ? studentsRes.data : [];
-            const reportsData = Array.isArray(reportsRes?.data) ? reportsRes.data : [];
             const activityData = activityRes?.data?.data || [];
             const statsData = statsRes?.data?.summary ? statsRes.data : null;
             const summaryData = summaryRes?.data?.data || null;
@@ -129,7 +128,6 @@ function AdminDashboard() {
             const facultyData = Array.isArray(facultyRes?.data) ? facultyRes.data : (Array.isArray(facultyRes) ? facultyRes : []);
 
             setStudents(studentsData);
-            setRecentReports(reportsData);
             setActivityReports(activityData);
             setAcademicSummary(summaryData);
             setPayments(paymentsData);
@@ -138,7 +136,10 @@ function AdminDashboard() {
             setFaculty(facultyData);
             
             if (alertsRes?.data) {
-                setFeeAlerts(alertsRes.data);
+                setFeeAlerts({
+                    defaulterCount: alertsRes.data.defaulterCount || 0,
+                    totalPending: alertsRes.data.totalPending || 0
+                });
             }
 
             if (periodsRes?.data) {
@@ -149,14 +150,20 @@ function AdminDashboard() {
 
             if (statsData) {
                 setStats({
-                    students: statsData.summary.students || 34,
-                    courses: statsData.summary.courses || 12,
-                    faculty: statsData.summary.faculty || 5,
-                    attendance: statsData.summary.attendance || 59.8,
-                    revenue: statsData.summary.revenue || 343300,
-                    total_due: statsData.summary.total_due || 476125,
-                    distribution: statsData.courseDistribution || []
+                    students: statsRes.data.summary.students || 0,
+                    courses: statsRes.data.summary.courses || 0,
+                    faculty: statsRes.data.summary.faculty || 0,
+                    attendance: statsRes.data.summary.attendance || 0,
+                    revenue: statsRes.data.summary.revenue || 0,
+                    total_due: statsRes.data.summary.total_due || 0,
+                    distribution: statsRes.data.courseDistribution || []
                 });
+                setEnrollmentTrend(statsRes.data.enrollmentTrend || []);
+                setRevenueTrend(statsRes.data.revenueTrend || []);
+            }
+
+            if (settingsRes?.data?.college_name) {
+                setCollegeName(settingsRes.data.college_name);
             }
 
             setLastUpdated(new Date());
@@ -167,57 +174,37 @@ function AdminDashboard() {
         }
     };
 
-    // Formatted lists based on screenshot fallbacks if dynamic lists are empty
-    const displayPayments = payments.length > 0 ? payments.slice(0, 5).map(p => ({
+    // Formatted lists — live data only, no mock fallbacks
+    const displayPayments = payments.slice(0, 5).map(p => ({
         id: p.id,
         name: p.student_name || p.Student?.name || p.student?.name || 'Student',
         amount: p.amount || 0,
         date: p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent',
         status: p.status || 'Paid'
-    })) : [
-        { id: 1, name: 'John Doe', amount: 25000, date: 'Jun 2, 2026', status: 'Paid' },
-        { id: 2, name: 'Mary Wanjiku', amount: 18000, date: 'Jun 2, 2026', status: 'Paid' },
-        { id: 3, name: 'Peter Mwangi', amount: 22000, date: 'May 31, 2026', status: 'Paid' },
-        { id: 4, name: 'Grace Akinyi', amount: 20000, date: 'May 31, 2026', status: 'Paid' },
-        { id: 5, name: 'David Ochieng', amount: 15000, date: 'May 30, 2026', status: 'Paid' }
-    ];
+    }));
 
-    const displayRegistrations = students.length > 0 ? students.slice(0, 5).map(s => ({
+    const displayRegistrations = students.slice(0, 5).map(s => ({
         id: s.id,
         name: s.name || `${s.first_name || ''} ${s.last_name || ''}`.trim() || 'Student',
         course: s.course || s.course_name || s.Course?.name || s.course?.name || 'General',
         date: s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recent',
         status: s.status || 'Active'
-    })) : [
-        { id: 1, name: 'Sarah Nyambura', course: 'Beauty Therapy', date: 'Jun 2, 2026', status: 'Active' },
-        { id: 2, name: 'James Mwangi', course: 'Hair Dressing', date: 'Jun 1, 2026', status: 'Active' },
-        { id: 3, name: 'Faith Wairimu', course: 'Computer Packages', date: 'May 31, 2026', status: 'Active' },
-        { id: 4, name: 'Brian Omondi', course: 'Nail Technology', date: 'May 30, 2026', status: 'Active' },
-        { id: 5, name: 'Lilian Achieng', course: 'Beauty Therapy', date: 'May 30, 2026', status: 'Active' }
-    ];
+    }));
 
-    const displaySchedule = sessions.length > 0 ? sessions.slice(0, 4).map(s => ({
+    const displaySchedule = sessions.slice(0, 4).map(s => ({
         time: s.start_time ? `${s.start_time} - ${s.end_time || ''}` : s.time || 'Schedule',
         name: s.course_name || s.course?.name || s.name || 'Lecture',
         loc: s.room || s.location || 'Room 101'
-    })) : [
-        { time: '08:00 AM', name: 'Beauty Therapy', loc: 'Room 101' },
-        { time: '10:00 AM', name: 'Hair Dressing', loc: 'Room 102' },
-        { time: '01:00 PM', name: 'Computer Packages', loc: 'Lab 1' },
-        { time: '03:00 PM', name: 'Nail Technology', loc: 'Room 103' }
-    ];
+    }));
 
-    const displayAnnouncements = announcements.length > 0 ? announcements.slice(0, 2).map(a => ({
+    const displayAnnouncements = announcements.slice(0, 2).map(a => ({
         content: a.content || a.message || a.title
-    })) : [
-        { content: 'End of term exams start on 15th June 2026.' }
-    ];
+    }));
 
-    // Timeline generator from actual events
-    const generateActivities = () => {
+    // Timeline generator from actual events — no mock fallback
+    const displayActivities = (() => {
         const list = [];
-        
-        // Student registrations
+
         students.slice(0, 3).forEach(s => {
             list.push({
                 msg: `${s.name || 'Student'} registered`,
@@ -227,7 +214,6 @@ function AdminDashboard() {
             });
         });
 
-        // Fee payments
         payments.slice(0, 3).forEach(p => {
             list.push({
                 msg: `Fee received from ${p.student_name || p.Student?.name || p.student?.name || 'Student'}`,
@@ -237,10 +223,9 @@ function AdminDashboard() {
             });
         });
 
-        // Attendance submissions
         activityReports.slice(0, 2).forEach(r => {
             list.push({
-                msg: `Attendance reports submitted`,
+                msg: `Attendance report submitted`,
                 time: r.report_date ? new Date(r.report_date).toLocaleDateString() : 'Yesterday',
                 timestamp: new Date(r.report_date || Date.now()),
                 dot: 'bg-amber-500'
@@ -248,17 +233,8 @@ function AdminDashboard() {
         });
 
         list.sort((a, b) => b.timestamp - a.timestamp);
-
-        return list.length > 0 ? list.slice(0, 5) : [
-            { msg: 'Mary Wanjiku registered', time: '10:15 AM', dot: 'bg-green-500' },
-            { msg: 'Fee received from John Doe', time: '09:45 AM', dot: 'bg-blue-500' },
-            { msg: 'Attendance submitted', time: '09:30 AM', dot: 'bg-amber-500' },
-            { msg: 'New faculty added', time: 'Yesterday', dot: 'bg-purple-500' },
-            { msg: 'Course created', time: 'Yesterday', dot: 'bg-indigo-500' }
-        ];
-    };
-
-    const displayActivities = generateActivities();
+        return list.slice(0, 5);
+    })();
 
     const statsDisplay = [
         { 
@@ -318,24 +294,9 @@ function AdminDashboard() {
         },
     ];
 
-    // Chart mock trend structures matching screenshot ratios perfectly
-    const enrollmentTrendData = [
-        { name: 'Jan', enrolled: 18 },
-        { name: 'Feb', enrolled: 22 },
-        { name: 'Mar', enrolled: 25 },
-        { name: 'Apr', enrolled: 28 },
-        { name: 'May', enrolled: 32 },
-        { name: 'Jun', enrolled: 34 }
-    ];
-
-    const revenueTrendData = [
-        { name: 'Jan', revenue: 260000 },
-        { name: 'Feb', revenue: 290000 },
-        { name: 'Mar', revenue: 320000 },
-        { name: 'Apr', revenue: 380000 },
-        { name: 'May', revenue: 421300 },
-        { name: 'Jun', revenue: 405000 }
-    ];
+    // Live trend data from backend API (6-month rolling window)
+    const enrollmentTrendData = enrollmentTrend.length > 0 ? enrollmentTrend : [];
+    const revenueTrendData = revenueTrend.length > 0 ? revenueTrend : [];
 
     // Today Date & Time Strings
     const todayDayStr = now.toLocaleDateString('en-US', { weekday: 'long' });
@@ -364,7 +325,7 @@ function AdminDashboard() {
             <div className="xl:col-span-3 space-y-6">
                 
                 {/* Curved Premium Maroon Banner with glass cards inside */}
-                <div className="relative overflow-hidden bg-gradient-to-br from-[#7a0000] to-[#500000] rounded-3xl p-6 md:p-8 text-white shadow-2xl">
+                <div className="relative overflow-hidden rounded-3xl p-6 md:p-8 text-white shadow-2xl" style={{ background: 'linear-gradient(135deg, var(--portal-theme, #800000) 0%, color-mix(in srgb, var(--portal-theme, #800000) 50%, #000) 100%)' }}>
                     <div className="absolute top-0 right-0 w-96 h-96 bg-[#ffd700]/5 rounded-full translate-x-1/3 -translate-y-1/3 blur-3xl pointer-events-none" />
                     <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                     
@@ -377,7 +338,7 @@ function AdminDashboard() {
                                 {user?.name || 'Administrator'} <span className="animate-bounce">👋</span>
                             </h1>
                             <p className="text-[11px] text-white/70 font-medium mt-2 leading-relaxed">
-                                Here's what's happening at Beautex Technical Training College today.
+                                Here's what's happening at {collegeName} today.
                             </p>
                             
                             <div className="mt-4 flex items-center gap-2.5">
@@ -556,7 +517,7 @@ function AdminDashboard() {
                                     <defs>
                                         <linearGradient id="enrollLineGrad" x1="0" y1="0" x2="1" y2="0">
                                             <stop offset="0%" stopColor="#f43f5e" />
-                                            <stop offset="100%" stopColor="#7a0000" />
+                                            <stop offset="100%" stopColor="var(--primary, #800000)" />
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" className="dark:stroke-neutral-800" />
@@ -568,7 +529,7 @@ function AdminDashboard() {
                                         dataKey="enrolled" 
                                         stroke="url(#enrollLineGrad)" 
                                         strokeWidth={3} 
-                                        dot={{ fill: '#7a0000', stroke: '#fff', strokeWidth: 1.5, r: 4 }}
+                                        dot={{ fill: 'var(--primary, #800000)', stroke: '#fff', strokeWidth: 1.5, r: 4 }}
                                         activeDot={{ r: 6 }} 
                                     />
                                 </LineChart>
@@ -577,7 +538,7 @@ function AdminDashboard() {
 
                         <div className="flex justify-between items-center text-[10px] text-gray-500 pt-2 border-t border-gray-50 dark:border-white/5">
                             <span>Highest Month: <b>May (32)</b></span>
-                            <span className="font-bold text-[#7a0000] dark:text-yellow-400">Total Enrolled: {stats.students}</span>
+                            <span className="font-bold text-maroon dark:text-yellow-400">Total Enrolled: {stats.students}</span>
                         </div>
                     </div>
 
@@ -604,14 +565,14 @@ function AdminDashboard() {
                                         formatter={(value) => [`KSh ${value.toLocaleString()}`, 'Revenue']}
                                         contentStyle={{ fontSize: '9px', fontWeight: 'bold', borderRadius: '10px', background: '#1e293b', border: 'none', color: '#fff' }} 
                                     />
-                                    <Bar dataKey="revenue" fill="#7a0000" radius={[4, 4, 0, 0]} barSize={24} />
+                                    <Bar dataKey="revenue" fill="var(--primary, #800000)" radius={[4, 4, 0, 0]} barSize={24} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
 
                         <div className="flex justify-between items-center text-[10px] text-gray-500 pt-2 border-t border-gray-50 dark:border-white/5">
                             <span>Peak Month: <b>May</b></span>
-                            <span className="font-bold text-[#7a0000] dark:text-yellow-400">Avg: KSh 343,300</span>
+                            <span className="font-bold text-maroon dark:text-yellow-400">Avg: KSh 343,300</span>
                         </div>
                     </div>
 
@@ -684,7 +645,7 @@ function AdminDashboard() {
                                 <h2 className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest">Course Status</h2>
                                 <p className="text-[9px] text-gray-400 font-medium">Capacity fill rate per unit</p>
                             </div>
-                            <span className="text-[9px] font-black uppercase text-[#7a0000] dark:text-yellow-400 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md">
+                            <span className="text-[9px] font-black uppercase text-maroon dark:text-yellow-400 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-md">
                                 {stats.courses} Active Courses
                             </span>
                         </div>
@@ -713,68 +674,12 @@ function AdminDashboard() {
                                     );
                                 })
                             ) : (
-                                <>
-                                    {/* Course 1: Beauty Therapy */}
-                                    <div>
-                                        <div className="flex justify-between items-center text-[10px] mb-1.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2 h-2 rounded-full bg-rose-500" />
-                                                <span className="font-black text-gray-700 dark:text-gray-300">Beauty Therapy</span>
-                                            </div>
-                                            <span className="font-bold text-gray-400">28 Students</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-50 dark:bg-neutral-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-green-500 rounded-full" style={{ width: '85%' }} />
-                                        </div>
-                                    </div>
-
-                                    {/* Course 2: Hair Dressing */}
-                                    <div>
-                                        <div className="flex justify-between items-center text-[10px] mb-1.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2 h-2 rounded-full bg-blue-500" />
-                                                <span className="font-black text-gray-700 dark:text-gray-300">Hair Dressing</span>
-                                            </div>
-                                            <span className="font-bold text-gray-400">24 Students</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-50 dark:bg-neutral-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-green-500 rounded-full" style={{ width: '75%' }} />
-                                        </div>
-                                    </div>
-
-                                    {/* Course 3: Computer Packages */}
-                                    <div>
-                                        <div className="flex justify-between items-center text-[10px] mb-1.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                                                <span className="font-black text-gray-700 dark:text-gray-300">Computer Packages</span>
-                                            </div>
-                                            <span className="font-bold text-gray-400">18 Students</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-50 dark:bg-neutral-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-yellow-400 rounded-full" style={{ width: '60%' }} />
-                                        </div>
-                                    </div>
-
-                                    {/* Course 4: Nail Technology */}
-                                    <div>
-                                        <div className="flex justify-between items-center text-[10px] mb-1.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2 h-2 rounded-full bg-purple-500" />
-                                                <span className="font-black text-gray-700 dark:text-gray-300">Nail Technology</span>
-                                            </div>
-                                            <span className="font-bold text-gray-400">12 Students</span>
-                                        </div>
-                                        <div className="h-2 bg-gray-50 dark:bg-neutral-800 rounded-full overflow-hidden">
-                                            <div className="h-full bg-orange-400 rounded-full" style={{ width: '45%' }} />
-                                        </div>
-                                    </div>
-                                </>
+                                <p className="text-center text-[10px] font-semibold text-gray-400 py-8">No course distribution data found.</p>
                             )}
                         </div>
 
                         <div className="text-center pt-1.5">
-                            <button onClick={() => navigate('/courses')} className="text-[9px] font-black text-[#7a0000] dark:text-yellow-400 uppercase tracking-widest hover:underline">
+                            <button onClick={() => navigate('/courses')} className="text-[9px] font-black text-maroon dark:text-yellow-400 uppercase tracking-widest hover:underline">
                                 Manage Course Enrollment →
                             </button>
                         </div>
@@ -787,7 +692,7 @@ function AdminDashboard() {
                                 <h2 className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest">Faculty Performance</h2>
                                 <p className="text-[9px] text-gray-400 font-medium">Evaluation and rating matrix</p>
                             </div>
-                            <button onClick={() => navigate('/faculty')} className="text-[9px] font-black text-[#7a0000] dark:text-yellow-400 uppercase tracking-widest hover:underline">
+                            <button onClick={() => navigate('/faculty')} className="text-[9px] font-black text-maroon dark:text-yellow-400 uppercase tracking-widest hover:underline">
                                 View All
                             </button>
                         </div>
@@ -850,87 +755,11 @@ function AdminDashboard() {
                                             );
                                         })
                                     ) : (
-                                        <>
-                                            {/* Row 1 */}
-                                            <tr className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
-                                                <td className="py-2.5 font-bold text-gray-800 dark:text-white">Jane Wanjiku</td>
-                                                <td className="py-2.5 text-center">3</td>
-                                                <td className="py-2.5 text-center text-green-600 dark:text-green-400">96%</td>
-                                                <td className="py-2.5 text-right">
-                                                    <div className="flex gap-0.5 justify-end">
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                    </div>
-                                                </td>
-                                            </tr>
-
-                                            {/* Row 2 */}
-                                            <tr className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
-                                                <td className="py-2.5 font-bold text-gray-800 dark:text-white">Peter Kamau</td>
-                                                <td className="py-2.5 text-center">2</td>
-                                                <td className="py-2.5 text-center text-green-600 dark:text-green-400">92%</td>
-                                                <td className="py-2.5 text-right">
-                                                    <div className="flex gap-0.5 justify-end">
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 text-gray-300 dark:text-gray-600" />
-                                                    </div>
-                                                </td>
-                                            </tr>
-
-                                            {/* Row 3 */}
-                                            <tr className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
-                                                <td className="py-2.5 font-bold text-gray-800 dark:text-white">Grace Akinyi</td>
-                                                <td className="py-2.5 text-center">2</td>
-                                                <td className="py-2.5 text-center text-amber-600 dark:text-amber-400">88%</td>
-                                                <td className="py-2.5 text-right">
-                                                    <div className="flex gap-0.5 justify-end">
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 text-gray-300 dark:text-gray-600" />
-                                                    </div>
-                                                </td>
-                                            </tr>
-
-                                            {/* Row 4 */}
-                                            <tr className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
-                                                <td className="py-2.5 font-bold text-gray-800 dark:text-white">David Ochieng</td>
-                                                <td className="py-2.5 text-center">1</td>
-                                                <td className="py-2.5 text-center text-amber-600 dark:text-amber-400">75%</td>
-                                                <td className="py-2.5 text-right">
-                                                    <div className="flex gap-0.5 justify-end">
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 text-gray-300 dark:text-gray-600" />
-                                                        <Star className="w-2.5 h-2.5 text-gray-300 dark:text-gray-600" />
-                                                    </div>
-                                                </td>
-                                            </tr>
-
-                                            {/* Row 5 */}
-                                            <tr className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
-                                                <td className="py-2.5 font-bold text-gray-800 dark:text-white">Mary Atieno</td>
-                                                <td className="py-2.5 text-center">2</td>
-                                                <td className="py-2.5 text-center text-rose-600 dark:text-rose-400">70%</td>
-                                                <td className="py-2.5 text-right">
-                                                    <div className="flex gap-0.5 justify-end">
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
-                                                        <Star className="w-2.5 h-2.5 text-gray-300 dark:text-gray-600" />
-                                                        <Star className="w-2.5 h-2.5 text-gray-300 dark:text-gray-600" />
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        </>
+                                        <tr>
+                                            <td colSpan={4} className="py-8 text-center text-[10px] font-semibold text-gray-400">
+                                                No faculty members found.
+                                            </td>
+                                        </tr>
                                     )}
                                 </tbody>
                             </table>
@@ -948,7 +777,7 @@ function AdminDashboard() {
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                         {[
-                            { label: 'Register Student', icon: UserPlus, color: 'bg-[#7a0000] text-yellow-300 hover:bg-[#600000]', path: '/students' },
+                            { label: 'Register Student', icon: UserPlus, color: 'bg-maroon text-yellow-300 hover:bg-maroon-dark', path: '/students' },
                             { label: 'Add Course', icon: BookOpen, color: 'bg-yellow-500 text-white hover:bg-yellow-600', path: '/courses' },
                             { label: 'Record Fee', icon: DollarSign, color: 'bg-blue-600 text-white hover:bg-blue-700', path: '/finance' },
                             { label: 'Take Attendance', icon: ClipboardList, color: 'bg-green-600 text-white hover:bg-green-700', path: '/attendance' },
@@ -977,7 +806,7 @@ function AdminDashboard() {
                     <div className="bg-white dark:bg-[#151515] p-5 border border-gray-100 dark:border-white/5 rounded-3xl shadow-sm">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest">Recent Payments</h2>
-                            <button onClick={() => navigate('/finance')} className="text-[9px] font-black text-[#7a0000] dark:text-yellow-400 uppercase tracking-widest hover:underline">
+                            <button onClick={() => navigate('/finance')} className="text-[9px] font-black text-maroon dark:text-yellow-400 uppercase tracking-widest hover:underline">
                                 View All
                             </button>
                         </div>
@@ -993,7 +822,7 @@ function AdminDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50/50 dark:divide-white/5 font-semibold text-gray-600 dark:text-gray-300">
-                                    {displayPayments.map((p, i) => (
+                                    {displayPayments.length > 0 ? displayPayments.map((p, i) => (
                                         <tr key={p.id || i} className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
                                             <td className="py-2.5 font-bold text-gray-400">{i+1}</td>
                                             <td className="py-2.5 font-bold text-gray-800 dark:text-white">{p.name}</td>
@@ -1005,7 +834,13 @@ function AdminDashboard() {
                                                 </span>
                                             </td>
                                         </tr>
-                                    ))}
+                                    )) : (
+                                        <tr>
+                                            <td colSpan={5} className="py-8 text-center text-[10px] font-semibold text-gray-400">
+                                                No recent payments found.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -1015,7 +850,7 @@ function AdminDashboard() {
                     <div className="bg-white dark:bg-[#151515] p-5 border border-gray-100 dark:border-white/5 rounded-3xl shadow-sm">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest">Recent Student Registrations</h2>
-                            <button onClick={() => navigate('/students')} className="text-[9px] font-black text-[#7a0000] dark:text-yellow-400 uppercase tracking-widest hover:underline">
+                            <button onClick={() => navigate('/students')} className="text-[9px] font-black text-maroon dark:text-yellow-400 uppercase tracking-widest hover:underline">
                                 View All
                             </button>
                         </div>
@@ -1031,11 +866,11 @@ function AdminDashboard() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50/50 dark:divide-white/5 font-semibold text-gray-600 dark:text-gray-300">
-                                    {displayRegistrations.map((r, i) => (
+                                    {displayRegistrations.length > 0 ? displayRegistrations.map((r, i) => (
                                         <tr key={r.id || i} className="hover:bg-gray-50/30 dark:hover:bg-white/5 transition-colors">
                                             <td className="py-2.5 font-bold text-gray-400">{i+1}</td>
                                             <td className="py-2.5 font-bold text-gray-800 dark:text-white">{r.name}</td>
-                                            <td className="py-2.5 font-bold text-[#7a0000] dark:text-yellow-400">{r.course}</td>
+                                            <td className="py-2.5 font-bold text-maroon dark:text-yellow-400">{r.course}</td>
                                             <td className="py-2.5 text-gray-400">{r.date}</td>
                                             <td className="py-2.5 text-right">
                                                 <span className="px-2 py-0.5 bg-green-100 dark:bg-green-950/20 text-green-700 dark:text-green-400 text-[8px] font-black uppercase rounded-md tracking-wider">
@@ -1043,7 +878,13 @@ function AdminDashboard() {
                                                 </span>
                                             </td>
                                         </tr>
-                                    ))}
+                                    )) : (
+                                        <tr>
+                                            <td colSpan={5} className="py-8 text-center text-[10px] font-semibold text-gray-400">
+                                                No recent registrations found.
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -1059,12 +900,12 @@ function AdminDashboard() {
                 {/* Today's Schedule Card */}
                 <div className="bg-white dark:bg-[#151515] p-5 border border-gray-100 dark:border-white/5 rounded-3xl shadow-sm">
                     <div className="flex items-center gap-2 mb-4 border-b border-gray-50 dark:border-white/5 pb-3">
-                        <Calendar className="w-4 h-4 text-[#7a0000] dark:text-yellow-400" />
+                        <Calendar className="w-4 h-4 text-maroon dark:text-yellow-400" />
                         <h2 className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest">Today's Schedule</h2>
                     </div>
 
                     <div className="space-y-3.5">
-                        {displaySchedule.map((item, idx) => (
+                        {displaySchedule.length > 0 ? displaySchedule.map((item, idx) => (
                             <div key={idx} className="flex gap-4 items-start">
                                 <span className="text-[10px] font-black text-gray-400 shrink-0 w-16">{item.time}</span>
                                 <div className="flex-1 min-w-0 bg-gray-50 dark:bg-neutral-800/40 border border-gray-100/50 dark:border-white/5 rounded-xl p-2.5 hover:border-gray-200 transition-colors">
@@ -1072,7 +913,9 @@ function AdminDashboard() {
                                     <span className="text-[9px] font-medium text-gray-400">{item.loc}</span>
                                 </div>
                             </div>
-                        ))}
+                        )) : (
+                            <p className="text-center text-[10px] font-semibold text-gray-400 py-4">No sessions scheduled for today.</p>
+                        )}
                     </div>
 
                     <button 
@@ -1086,12 +929,12 @@ function AdminDashboard() {
                 {/* Recent Activities timeline */}
                 <div className="bg-white dark:bg-[#151515] p-5 border border-gray-100 dark:border-white/5 rounded-3xl shadow-sm">
                     <div className="flex items-center gap-2 mb-4 border-b border-gray-50 dark:border-white/5 pb-3">
-                        <Activity className="w-4 h-4 text-[#7a0000] dark:text-yellow-400" />
+                        <Activity className="w-4 h-4 text-maroon dark:text-yellow-400" />
                         <h2 className="text-xs font-black text-gray-700 dark:text-gray-200 uppercase tracking-widest">Recent Activities</h2>
                     </div>
 
                     <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-gray-100 dark:before:bg-neutral-800">
-                        {displayActivities.map((act, idx) => (
+                        {displayActivities.length > 0 ? displayActivities.map((act, idx) => (
                             <div key={idx} className="flex gap-4 items-center pl-1 relative z-10">
                                 <div className={`w-4 h-4 rounded-full ${act.dot} border-4 border-white dark:border-[#151515] shrink-0`} />
                                 <div className="flex-1 min-w-0 flex justify-between items-center gap-2">
@@ -1099,7 +942,9 @@ function AdminDashboard() {
                                     <span className="text-[8px] font-black text-gray-400 shrink-0 uppercase tracking-tighter">{act.time}</span>
                                 </div>
                             </div>
-                        ))}
+                        )) : (
+                            <p className="text-center text-[10px] font-semibold text-gray-400 py-4">No recent activity yet.</p>
+                        )}
                     </div>
 
                     <button 
@@ -1118,11 +963,13 @@ function AdminDashboard() {
                     </div>
 
                     <div className="bg-white dark:bg-neutral-800/20 border border-yellow-200/30 dark:border-yellow-950/10 rounded-2xl p-4">
-                        {displayAnnouncements.map((ann, idx) => (
+                        {displayAnnouncements.length > 0 ? displayAnnouncements.map((ann, idx) => (
                             <p key={idx} className="text-[11px] font-semibold text-yellow-800 dark:text-yellow-200/90 leading-relaxed italic mb-2 last:mb-0">
                                 "{ann.content}"
                             </p>
-                        ))}
+                        )) : (
+                            <p className="text-[11px] font-semibold text-gray-400 text-center py-2">No announcements at this time.</p>
+                        )}
                     </div>
 
                     <div className="mt-4 text-center">

@@ -97,26 +97,21 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
     const userInitial = (user?.name?.[0] || user?.email?.[0] || 'U').toUpperCase();
 
     return (
-        <div className={`h-16 px-4 md:px-6 flex items-center justify-between sticky top-0 left-0 w-full z-40 transition-all duration-300
-            ${darkMode
-                ? 'bg-[#1a1a1a] border-b border-white/10 shadow-lg'
-                : 'bg-white border-b border-gray-200 shadow-sm'
-            }`}>
+        <div className="h-16 px-4 md:px-6 flex items-center justify-between sticky top-0 left-0 w-full z-40 transition-all duration-300"
+            style={{ backgroundColor: 'var(--portal-theme, #800000)', borderBottom: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}>
 
             {/* Left: Hamburger + Mobile Logo */}
             <div className="flex items-center gap-3">
                 <button
                     onClick={onMenuClick}
-                    className={`p-2 rounded-xl lg:hidden transition-all active:scale-95
-                        ${darkMode ? 'text-white/60 hover:bg-white/10' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className="p-2 rounded-xl lg:hidden transition-all active:scale-95 text-white/70 hover:bg-white/15 hover:text-white"
                 >
                     <Menu className="w-5 h-5" />
                 </button>
                 {/* Hamburger for desktop too for collapse */}
                 <button
                     onClick={onMenuClick}
-                    className={`p-2 rounded-xl hidden lg:flex transition-all active:scale-95
-                        ${darkMode ? 'text-white/60 hover:bg-white/10' : 'text-gray-500 hover:bg-gray-100'}`}
+                    className="p-2 rounded-xl hidden lg:flex transition-all active:scale-95 text-white/70 hover:bg-white/15 hover:text-white"
                 >
                     <Menu className="w-5 h-5" />
                 </button>
@@ -126,20 +121,15 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
             <div className="flex-1 max-w-sm mx-4 hidden sm:block">
                 <button
                     onClick={onSearchClick}
-                    className={`w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all group
-                        ${darkMode
-                            ? 'bg-white/5 hover:bg-white/10 border border-white/10'
-                            : 'bg-gray-100 hover:bg-gray-200 border border-gray-200'
-                        }`}
+                    className="w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all group bg-white/10 hover:bg-white/20 border border-white/15"
                 >
                     <div className="flex items-center gap-2.5">
-                        <Search className={`w-4 h-4 ${darkMode ? 'text-white/40' : 'text-gray-400'}`} />
-                        <span className={`text-[11px] font-medium ${darkMode ? 'text-white/30' : 'text-gray-400'}`}>
+                        <Search className="w-4 h-4 text-white/50" />
+                        <span className="text-[11px] font-medium text-white/40">
                             Search anything...
                         </span>
                     </div>
-                    <div className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md
-                        ${darkMode ? 'bg-white/10 text-white/30' : 'bg-gray-200 text-gray-400'}`}>
+                    <div className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-white/10 text-white/30">
                         <Command className="w-2.5 h-2.5" />K
                     </div>
                 </button>
@@ -153,13 +143,12 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                     <button
                         ref={bellRef}
                         onClick={() => setShowNotifications(!showNotifications)}
-                        className={`relative p-2 rounded-xl transition-all
-                            ${darkMode ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+                        className="relative p-2 rounded-xl transition-all text-white/70 hover:bg-white/15 hover:text-white"
                         aria-label={`Notifications (${unreadCount} unread)`}
                     >
                         <Bell className={`w-5 h-5 ${hasUnread ? 'animate-[wiggle_2s_ease-in-out_infinite]' : ''}`} />
                         {hasUnread && (
-                            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[8px] font-black rounded-full flex items-center justify-center px-1 border-2 border-white">
+                            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-yellow-400 text-maroon text-[8px] font-black rounded-full flex items-center justify-center px-1 border-2 border-white/20">
                                 {unreadCount > 9 ? '9+' : unreadCount}
                             </span>
                         )}
@@ -241,8 +230,7 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                 {/* Messages */}
                 <Link
                     to="/announcements"
-                    className={`relative p-2 rounded-xl transition-all
-                        ${darkMode ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+                    className="relative p-2 rounded-xl transition-all text-white/70 hover:bg-white/15 hover:text-white"
                 >
                     <Mail className="w-5 h-5" />
                 </Link>
@@ -250,30 +238,28 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                 {/* Dark Mode Toggle */}
                 <button
                     onClick={toggleDarkMode}
-                    className={`p-2 rounded-xl transition-all
-                        ${darkMode ? 'text-white/60 hover:bg-white/10 hover:text-yellow-400' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+                    className="p-2 rounded-xl transition-all text-white/70 hover:bg-white/15 hover:text-yellow-300"
                 >
                     {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
 
                 {/* Divider */}
-                <div className={`hidden sm:block w-px h-6 mx-1 ${darkMode ? 'bg-white/10' : 'bg-gray-200'}`} />
+                <div className="hidden sm:block w-px h-6 mx-1 bg-white/15" />
 
                 {/* User Info */}
                 <Link
                     to="/profile"
-                    className={`hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all group
-                        ${darkMode ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
+                    className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all group hover:bg-white/15"
                 >
-                    <div className={`text-right ${darkMode ? '' : ''}`}>
-                        <p className={`text-[11px] font-black uppercase leading-tight ${darkMode ? 'text-white group-hover:text-yellow-400' : 'text-gray-700 group-hover:text-[#800000]'}`}>
+                    <div>
+                        <p className="text-[11px] font-black uppercase leading-tight text-white/90 group-hover:text-yellow-300">
                             {(user?.name || user?.email?.split('@')[0] || 'User').toUpperCase().substring(0, 16)}
                         </p>
-                        <p className={`text-[9px] font-semibold capitalize ${darkMode ? 'text-white/40' : 'text-gray-400'}`}>
+                        <p className="text-[9px] font-semibold capitalize text-white/40">
                             {user?.role || 'Admin'}
                         </p>
                     </div>
-                    <div className="w-8 h-8 bg-[#800000] text-yellow-400 font-black rounded-full flex items-center justify-center text-xs shadow-md group-hover:scale-105 transition-transform overflow-hidden border-2 border-yellow-400/30">
+                    <div className="w-8 h-8 bg-yellow-400 text-maroon font-black rounded-full flex items-center justify-center text-xs shadow-md group-hover:scale-105 transition-transform overflow-hidden border-2 border-white/20">
                         {user?.photo ? (
                             <img src={user?.photo} alt="Avatar" className="w-full h-full object-cover" />
                         ) : userInitial}
@@ -284,8 +270,7 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                 <button
                     onClick={handleLogout}
                     title="Logout"
-                    className={`p-2 rounded-xl transition-all
-                        ${darkMode ? 'text-white/20 hover:text-red-400 hover:bg-red-500/10' : 'text-gray-300 hover:text-red-500 hover:bg-red-50'}`}
+                    className="p-2 rounded-xl transition-all text-white/30 hover:text-red-300 hover:bg-red-500/20"
                 >
                     <LogOut className="w-4 h-4" />
                 </button>

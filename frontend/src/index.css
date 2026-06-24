@@ -26,6 +26,7 @@
     /* Pure White */
     --text-main: #1A1A1A;
     --card-bg: #ffffff;
+    --portal-theme: #800000;
 }
 
 .dark {
@@ -36,6 +37,7 @@
     --bg-parchment: #0A0A0A;
     --text-main: #F5F5F5;
     --card-bg: #141414;
+    --portal-theme: #800000;
 }
 
 html,

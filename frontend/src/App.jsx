@@ -67,6 +67,7 @@ function App() {
                 const primary = res.data.portal_theme_colors || '#800000';
                 const sidebar = res.data.sidebar_colors || '#7a0000';
                 document.documentElement.style.setProperty('--primary', primary);
+                document.documentElement.style.setProperty('--portal-theme', primary);
                 document.documentElement.style.setProperty('--sidebar-bg', sidebar);
                 document.documentElement.style.setProperty('--primary-dark', primary);
             }

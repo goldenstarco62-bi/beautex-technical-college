@@ -6,6 +6,21 @@ export async function getDashboardStats(req, res) {
     try {
         const mongo = await isMongo();
 
+        // 6-month range configuration for trend data
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const last6Months = [];
+        const today = new Date();
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            last6Months.push({
+                name: monthNames[d.getMonth()],
+                year: d.getFullYear(),
+                monthNum: d.getMonth(),
+                enrolled: 0,
+                revenue: 0
+            });
+        }
+
         if (mongo) {
             const Student = (await import('../models/mongo/Student.js')).default;
             const Course = (await import('../models/mongo/Course.js')).default;
@@ -19,7 +34,9 @@ export async function getDashboardStats(req, res) {
                 allCourses,
                 allStudents,
                 attendanceData,
-                paymentData
+                paymentData,
+                allStudentsForTrend,
+                allPaymentsForTrend
             ] = await Promise.all([
                 Student.countDocuments(),
                 Course.countDocuments(),
@@ -27,12 +44,13 @@ export async function getDashboardStats(req, res) {
                 Course.find().lean(),
                 Student.find().select('course').lean(),
                 Attendance.find().select('status').lean(),
-                (await import('../models/mongo/StudentFee.js')).default.find().select('total_paid total_due').lean()
+                (await import('../models/mongo/StudentFee.js')).default.find().select('total_paid total_due').lean(),
+                Student.find().select('created_at').lean(),
+                (await import('../models/mongo/Payment.js')).default.find({ status: 'Completed' }).select('amount payment_date').lean()
             ]);
 
             const totalRevenue = paymentData.reduce((sum, p) => sum + (p.total_paid || 0), 0);
             const totalDue = paymentData.reduce((sum, p) => sum + (p.total_due || 0), 0);
-
 
             // Calculate attendance percentage
             const presentCount = attendanceData.filter(a => a.status === 'Present').length;
@@ -51,6 +69,37 @@ export async function getDashboardStats(req, res) {
                 };
             });
 
+            // Populate trend metrics
+            allStudentsForTrend.forEach(s => {
+                const dateVal = s.created_at;
+                if (!dateVal) return;
+                const date = new Date(dateVal);
+                const m = date.getMonth();
+                const y = date.getFullYear();
+                const match = last6Months.find(item => item.monthNum === m && item.year === y);
+                if (match) match.enrolled += 1;
+            });
+
+            allPaymentsForTrend.forEach(p => {
+                const dateVal = p.payment_date;
+                if (!dateVal) return;
+                const date = new Date(dateVal);
+                const m = date.getMonth();
+                const y = date.getFullYear();
+                const match = last6Months.find(item => item.monthNum === m && item.year === y);
+                if (match) match.revenue += Number(p.amount || 0);
+            });
+
+            const enrollmentTrend = last6Months.map(item => ({
+                name: item.name,
+                enrolled: item.enrolled
+            }));
+
+            const revenueTrend = last6Months.map(item => ({
+                name: item.name,
+                revenue: item.revenue
+            }));
+
             return res.json({
                 summary: {
                     students: studentCount,
@@ -60,8 +109,9 @@ export async function getDashboardStats(req, res) {
                     revenue: totalRevenue,
                     total_due: totalDue
                 },
-
-                courseDistribution: distribution
+                courseDistribution: distribution,
+                enrollmentTrend,
+                revenueTrend
             });
         }
 
@@ -71,25 +121,57 @@ export async function getDashboardStats(req, res) {
             courseCount,
             facultyCount,
             attendanceAvg,
-            revenueData
+            revenueData,
+            distribution,
+            allStudentsForTrend,
+            allPaymentsForTrend
         ] = await Promise.all([
             queryOne('SELECT COUNT(*) as count FROM students'),
             queryOne('SELECT COUNT(*) as count FROM courses'),
             queryOne('SELECT COUNT(*) as count FROM faculty'),
             queryOne("SELECT AVG(CASE WHEN status = 'Present' THEN 1.0 ELSE 0.0 END) * 100 as avg FROM attendance"),
-            queryOne('SELECT SUM(total_paid) as total, SUM(total_due) as due FROM student_fees')
+            queryOne('SELECT SUM(total_paid) as total, SUM(total_due) as due FROM student_fees'),
+            query(`
+                SELECT 
+                    c.name, 
+                    c.capacity,
+                    (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled
+                FROM courses c
+            `),
+            query('SELECT created_at FROM students'),
+            query("SELECT amount, payment_date FROM payments WHERE status = 'Completed'")
         ]);
 
+        // Populate trend metrics
+        allStudentsForTrend.forEach(s => {
+            const dateVal = s.created_at;
+            if (!dateVal) return;
+            const date = new Date(dateVal);
+            const m = date.getMonth();
+            const y = date.getFullYear();
+            const match = last6Months.find(item => item.monthNum === m && item.year === y);
+            if (match) match.enrolled += 1;
+        });
 
-        // Improved SQL distribution: Get student count for EVERY registered course
-        // Use a subquery or join to ensure courses with 0 students are included
-        const distribution = await query(`
-            SELECT 
-                c.name, 
-                c.capacity,
-                (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled
-            FROM courses c
-        `);
+        allPaymentsForTrend.forEach(p => {
+            const dateVal = p.payment_date;
+            if (!dateVal) return;
+            const date = new Date(dateVal);
+            const m = date.getMonth();
+            const y = date.getFullYear();
+            const match = last6Months.find(item => item.monthNum === m && item.year === y);
+            if (match) match.revenue += Number(p.amount || 0);
+        });
+
+        const enrollmentTrend = last6Months.map(item => ({
+            name: item.name,
+            enrolled: item.enrolled
+        }));
+
+        const revenueTrend = last6Months.map(item => ({
+            name: item.name,
+            revenue: item.revenue
+        }));
 
         res.json({
             summary: {
@@ -100,8 +182,9 @@ export async function getDashboardStats(req, res) {
                 revenue: parseFloat(revenueData?.total || 0),
                 total_due: parseFloat(revenueData?.due || 0)
             },
-
-            courseDistribution: distribution
+            courseDistribution: distribution,
+            enrollmentTrend,
+            revenueTrend
         });
     } catch (error) {
         console.error('Get stats error:', error);

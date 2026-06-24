@@ -7,20 +7,15 @@ import {
     Zap,
     FileText,
     UserCheck,
-    GraduationCap,
     CreditCard,
     History,
     MessageSquare,
-    CheckCircle2,
-    XCircle,
     AlertCircle,
     Send,
     X,
     ThumbsUp,
     ThumbsDown,
-    Minus,
-    Bell,
-    ChevronRight
+    Minus
 } from 'lucide-react';
 import {
     coursesAPI,
@@ -239,7 +234,8 @@ export default function StudentDashboard() {
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
             {/* Welcome Banner */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-maroon to-maroon/90 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl shadow-maroon/20">
+            <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl"
+                style={{ background: 'linear-gradient(135deg, var(--portal-theme, #800000) 0%, color-mix(in srgb, var(--portal-theme, #800000) 50%, #000) 100%)' }}>
                 <div className="absolute top-0 right-0 w-72 h-72 bg-gold/10 rounded-full translate-x-1/3 -translate-y-1/3 blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                 <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -324,10 +320,10 @@ export default function StudentDashboard() {
                                     <p className="text-2xl md:text-3xl font-black text-gray-800 dark:text-white">{stat.value}</p>
                                 </div>
                                 <div className={`w-10 h-10 md:w-12 md:h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative`}>
-                                    {stat.isAttendance ? (
+                                    {stat.title === 'Attendance' ? (
                                         <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                                             <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-100 dark:text-white/10" />
-                                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${stats.attendanceRate}, 100`} className="text-maroon dark:text-gold" />
+                                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${parseInt(stats.attendanceRate) || 0}, 100`} className="text-maroon dark:text-gold" />
                                         </svg>
                                     ) : (
                                         <Icon className="w-5 h-5 md:w-6 md:h-6 text-maroon dark:text-gold" />
@@ -613,29 +609,29 @@ export default function StudentDashboard() {
 
                     {/* Quick Actions */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Link to="/grades" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-blue-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                                <FileText className="w-6 h-6 text-blue-600 group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Grades</span>
-                        </Link>
-                        <Link to="/attendance" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-green-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-green-600 transition-colors">
-                                <Clock className="w-6 h-6 text-green-600 group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Attendance</span>
-                        </Link>
-                        <Link to="/daily-student-logs" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
-                            <div className="w-12 h-12 bg-purple-50 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-purple-600 transition-colors">
-                                <History className="w-6 h-6 text-purple-600 group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Daily Ledger</span>
-                        </Link>
-                        <Link to="/materials" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group text-center">
+                        <Link to="/grades" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
                             <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
-                                <GraduationCap className="w-6 h-6 text-maroon group-hover:text-white" />
+                                <FileText className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
                             </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 tracking-widest">Library</span>
+                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Grades</span>
+                        </Link>
+                        <Link to="/attendance" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
+                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
+                                <Clock className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
+                            </div>
+                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Attendance</span>
+                        </Link>
+                        <Link to="/daily-student-logs" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
+                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
+                                <History className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
+                            </div>
+                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Daily Ledger</span>
+                        </Link>
+                        <Link to="/materials" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
+                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
+                                <GraduationCap className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
+                            </div>
+                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Library</span>
                         </Link>
                     </div>
                 </div>
@@ -645,26 +641,26 @@ export default function StudentDashboard() {
                     <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
                         <div className="flex items-center justify-between mb-8">
                             <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
-                                    <BookOpen className="w-4 h-4 text-gold" />
+                                <div className="w-6 h-6 bg-yellow-100 dark:bg-yellow-900/20 rounded flex items-center justify-center">
+                                    <Bell className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
                                 </div>
-                                <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">My Curriculum</h2>
+                                <h2 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest">Notice Board</h2>
                             </div>
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Academic Year 2024</span>
+                            <ChevronRight className="w-4 h-4 text-gray-300" />
                         </div>
                         <div className="space-y-6">
                             {recentAnnouncements.length > 0 ? (
                                 recentAnnouncements.map(ann => (
-                                    <div key={ann.id} className="relative pl-6 border-l-2 border-maroon pb-6 last:pb-0">
-                                        <div className="absolute -left-[5px] top-0 w-2 h-2 bg-maroon rounded-full" />
-                                        <p className="text-[9px] font-black text-maroon uppercase tracking-widest mb-1">{ann.date}</p>
-                                        <h4 className="text-xs font-bold text-gray-800 mb-1">{ann.title}</h4>
+                                    <div key={ann.id} className="relative pl-6 border-l-2 border-yellow-400 pb-6 last:pb-0">
+                                        <div className="absolute -left-[5px] top-0 w-2 h-2 bg-yellow-400 rounded-full" />
+                                        <p className="text-[9px] font-black text-yellow-600 dark:text-yellow-400 uppercase tracking-widest mb-1">{ann.date}</p>
+                                        <h4 className="text-xs font-bold text-gray-800 dark:text-white mb-1">{ann.title}</h4>
                                         <p className="text-[10px] text-gray-400 font-medium line-clamp-2">{ann.content}</p>
                                     </div>
                                 ))
                             ) : (
                                 <div className="py-8 text-center">
-                                    <Bell className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                                    <Bell className="w-10 h-10 text-gray-200 dark:text-white/10 mx-auto mb-3" />
                                     <p className="text-xs text-gray-400 italic">No recent notices</p>
                                 </div>
                             )}

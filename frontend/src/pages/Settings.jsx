@@ -194,6 +194,7 @@ export default function Settings() {
     };
 
     const [settings, setSettings]   = useState(defaultSettings);
+    const [initialSettings, setInitialSettings] = useState({});
     const [loading, setLoading]      = useState(true);
     const [saving, setSaving]        = useState(false);
     const [toast, setToast]          = useState(null);
@@ -251,7 +252,13 @@ export default function Settings() {
     };
 
     const fetchSettings = async () => {
-        try { setLoading(true); const { data } = await settingsAPI.get(); setSettings(p => ({ ...p, ...data })); }
+        try { 
+            setLoading(true); 
+            const { data } = await settingsAPI.get(); 
+            const merged = { ...defaultSettings, ...data };
+            setSettings(merged); 
+            setInitialSettings(merged);
+        }
         catch { showToast('Using default settings.', 'error'); }
         finally { setLoading(false); }
     };
@@ -294,14 +301,31 @@ export default function Settings() {
         try {
             // Strip large base64 image fields — they are already persisted via
             // the dedicated upload endpoint and can be hundreds of KB each.
-            const { college_logo, college_stamp, college_signature, ...settingsPayload } = settings;
-            await settingsAPI.update(settingsPayload);
+            const changedSettings = {};
+            let hasChanges = false;
+            for (const key of Object.keys(settings)) {
+                if (['college_logo', 'college_stamp', 'college_signature'].includes(key)) continue;
+                if (settings[key] !== initialSettings[key]) {
+                    changedSettings[key] = settings[key];
+                    hasChanges = true;
+                }
+            }
+
+            if (!hasChanges) {
+                showToast('No changes detected.');
+                setSaving(false);
+                return;
+            }
+
+            await settingsAPI.update(changedSettings);
             showToast('Configuration saved successfully!');
+            setInitialSettings({ ...settings });
 
             // Instantly apply theme colors to the document variables
             const primary = settings.portal_theme_colors || '#800000';
             const sidebar = settings.sidebar_colors || '#7a0000';
             document.documentElement.style.setProperty('--primary', primary);
+            document.documentElement.style.setProperty('--portal-theme', primary);
             document.documentElement.style.setProperty('--sidebar-bg', sidebar);
             document.documentElement.style.setProperty('--primary-dark', primary);
         }
@@ -313,7 +337,9 @@ export default function Settings() {
         if (!file) return; setU(true);
         try {
             const fd = new FormData(); fd.append('file', file); fd.append('key', key);
-            const { data } = await settingsAPI.uploadSettingFile(fd); set(key, data.value);
+            const { data } = await settingsAPI.uploadSettingFile(fd); 
+            set(key, data.value);
+            setInitialSettings(p => ({ ...p, [key]: data.value }));
             showToast('File uploaded successfully!');
         } catch { showToast('Upload failed.', 'error'); }
         finally { setU(false); }

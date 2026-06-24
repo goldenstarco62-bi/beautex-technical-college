@@ -5,7 +5,6 @@ const ALLOWED_PROFILE_FIELDS = ['name', 'phone', 'address', 'photo', 'bio'];
 export async function getProfile(req, res) {
     try {
         const { email, role } = req.user;
-        const db = await getDb();
         const isMongo = !!process.env.MONGODB_URI;
 
         let profileData = {};
