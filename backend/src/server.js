@@ -6,9 +6,11 @@ import path from 'path';
 import fs from 'fs';
 import { rateLimit } from 'express-rate-limit';
 import { fileURLToPath } from 'url';
+import pinoHttp from 'pino-http';
 import { initializeDatabase, getDb, query, queryOne, run, getProcessedDatabaseUrl } from './config/database.js';
 import { authenticateToken, authorizeRoles } from './middleware/auth.js';
 import { sanitizeMiddleware } from './utils/sanitize.js';
+import logger from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,7 +116,7 @@ app.use(cors({
         if (isAllowed) {
             callback(null, true);
         } else {
-            console.warn(`Blocked by CORS: ${origin}`);
+            logger.warn(`Blocked by CORS: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -151,11 +153,17 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/forgot-password', authLimiter);
 app.use('/api/auth/reset-password', authLimiter);
 
-// Request logger
-app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    next();
-});
+// Structured HTTP request logger (pino-http)
+app.use(pinoHttp({
+    logger,
+    // Skip health-check spam from logs
+    autoLogging: { ignore: (req) => req.url === '/api/health' || req.url === '/api/auth/ping' },
+    customLogLevel: (_req, res) => {
+        if (res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+        return 'info';
+    },
+}));
 
 // Health check route (No DB required)
 app.get('/api/health', (req, res) => {
@@ -164,7 +172,11 @@ app.get('/api/health', (req, res) => {
 
 // Utility to catch errors during request handling
 process.on('uncaughtException', (err) => {
-    console.error('🔥 CRITICAL UNCAUGHT EXCEPTION:', err);
+    logger.fatal({ err }, '🔥 CRITICAL UNCAUGHT EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason) => {
+    logger.error({ reason }, '🔥 UNHANDLED PROMISE REJECTION');
 });
 
 // Initialize database (deferred to first request or async background)
@@ -174,7 +186,7 @@ let loadedApiRoutes = null;
 const ensureServices = async (req, res, next) => {
     try {
         if (!dbInitialized) {
-            console.log('🏗️ First request received. Initializing services...');
+            logger.info('🏗️  First request received. Initializing services...');
             await initializeDatabase();
             dbInitialized = true;
 
@@ -182,21 +194,21 @@ const ensureServices = async (req, res, next) => {
             try {
                 const { autoInitializeCurrentMonth } = await import('./controllers/monthlyFeeController.js');
                 await autoInitializeCurrentMonth();
-                console.log('✅ Monthly fee tracker initialized successfully');
+                logger.info('✅ Monthly fee tracker initialized successfully');
             } catch (monthlyFeeErr) {
-                console.error('⚠️ Monthly fee tracker auto-initialization warning:', monthlyFeeErr.message);
+                logger.warn({ err: monthlyFeeErr }, '⚠️  Monthly fee tracker auto-initialization warning');
             }
         }
 
         if (!loadedApiRoutes) {
-            console.log('💉 Lazy loading API routes...');
+            logger.info('💉 Lazy loading API routes...');
             const { default: routes } = await import('./routes/api.js');
             loadedApiRoutes = routes;
         }
 
         next();
     } catch (error) {
-        console.error('❌ Service initialization failed:', error);
+        logger.error({ err: error }, '❌ Service initialization failed');
         res.status(500).json({
             error: 'Service initialization failed. Website is partially offline.',
             details: error.message
@@ -254,7 +266,7 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-    console.error('Server error:', err);
+    logger.error({ err }, 'Unhandled server error');
     res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -262,9 +274,8 @@ app.use((err, req, res, next) => {
 // (On Vercel, the exported `app` is used directly — no TCP listener needed)
 if (process.env.VERCEL !== '1') {
     app.listen(PORT, () => {
-        console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-        console.log(`📚 API Documentation: http://localhost:${PORT}/api`);
-        console.log(`🔒 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+        logger.info(`🚀 Server running on http://localhost:${PORT}`);
+        logger.info(`🔒 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
 }
 

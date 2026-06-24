@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import logger from '../utils/logger.js';
 
 // In-memory cache to debounce last_seen updates (5-minute interval)
 const lastSeenCache = new Map();
@@ -117,7 +118,7 @@ export async function authorizeFinanceEdit(req, res, next) {
             error: 'Access denied. Finance editing requires explicit permission from the Super Administrator.'
         });
     } catch (err) {
-        console.error('AuthorizeFinanceEdit DB check failed:', err);
+        logger.error({ err }, 'AuthorizeFinanceEdit DB check failed');
         // Fallback to token if DB check fails
         if (req.user.can_edit_finance) return next();
         res.status(500).json({ error: 'Internal server error verifying permissions' });
@@ -162,7 +163,7 @@ export async function authorizeStudentEdit(req, res, next) {
             error: 'Access denied. Student registry editing requires explicit permission from the Super Administrator.'
         });
     } catch (err) {
-        console.error('AuthorizeStudentEdit DB check failed:', err);
+        logger.error({ err }, 'AuthorizeStudentEdit DB check failed');
         // Fallback to token if DB check fails
         if (req.user.can_edit_students) return next();
         res.status(500).json({ error: 'Internal server error verifying permissions' });

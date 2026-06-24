@@ -85,14 +85,12 @@ export default function Sidebar({ isOpen, setIsOpen }) {
     const [activePeriod, setActivePeriod] = useState(null);
 
     useEffect(() => {
-        if (['admin', 'superadmin'].includes(userRole)) {
-            academicAPI.getPeriods().then(res => {
-                const periods = Array.isArray(res.data) ? res.data : [];
-                const active = periods.find(p => p.is_active) || periods[0] || null;
-                setActivePeriod(active);
-            }).catch(() => {});
-        }
-    }, [userRole]);
+        academicAPI.getPeriods().then(res => {
+            const periods = Array.isArray(res.data) ? res.data : [];
+            const active = periods.find(p => p.is_active) || periods[0] || null;
+            setActivePeriod(active);
+        }).catch(() => {});
+    }, []);
 
     // Calculate term progress
     let termProgress = 65;

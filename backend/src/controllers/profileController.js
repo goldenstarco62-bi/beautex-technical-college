@@ -1,4 +1,4 @@
-import { getDb, query, queryOne, run } from '../config/database.js';
+import { query, queryOne, run } from '../config/database.js';
 
 const ALLOWED_PROFILE_FIELDS = ['name', 'phone', 'address', 'photo', 'bio'];
 

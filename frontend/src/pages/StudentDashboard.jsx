@@ -27,11 +27,10 @@ import {
     gradesAPI,
     announcementsAPI,
     attendanceAPI,
-    studentsAPI,
+    profileAPI,
     studentDailyReportsAPI,
     financeAPI
 } from '../services/api';
-import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { calculateRemainingTime } from '../utils/dateUtils';
@@ -74,26 +73,33 @@ export default function StudentDashboard() {
 
     const fetchData = async () => {
         try {
-            // Use the student_id from JWT, or fall back to matching by email in the students list
             const effectiveStudentId = user.student_id || user.id;
-            const [studentsRes, coursesRes, announcementsRes, gradesRes, feeRes, payRes, dailyReportsRes, monthlyTrackingRes] = await Promise.all([
-                studentsAPI.getAll(),
-                coursesAPI.getAll(),
-                announcementsAPI.getAll({ limit: 3 }),
-                gradesAPI.getAll(),
+
+            // Fire all requests in a single parallel batch — no waterfalls
+            const [
+                profileRes,
+                coursesRes,
+                announcementsRes,
+                gradesRes,
+                attendanceRes,
+                feeRes,
+                payRes,
+                dailyReportsRes,
+                monthlyTrackingRes
+            ] = await Promise.all([
+                profileAPI.get().catch(() => ({ data: null })),
+                coursesAPI.getAll().catch(() => ({ data: [] })),
+                announcementsAPI.getAll({ limit: 3 }).catch(() => ({ data: [] })),
+                gradesAPI.getAll().catch(() => ({ data: [] })),
+                attendanceAPI.getAll(null, null, effectiveStudentId).catch(() => ({ data: [] })),
                 financeAPI.getStudentFees(effectiveStudentId).catch(() => ({ data: null })),
                 financeAPI.getPayments(effectiveStudentId).catch(() => ({ data: [] })),
                 studentDailyReportsAPI.getAll({ student_id: effectiveStudentId, limit: 5 }).catch(() => ({ data: [] })),
                 financeAPI.getStudentMonthlyTracking(effectiveStudentId).catch(() => ({ data: [] }))
             ]);
 
-            const userEmail = String(user?.email || '').toLowerCase().trim();
-            const userSid = String(user?.student_id || user?.id || '').toLowerCase().trim();
-
-            const profile = studentsRes.data.find(s =>
-                String(s.email || '').toLowerCase().trim() === userEmail ||
-                String(s.id || '').toLowerCase().trim() === userSid
-            ) || studentsRes.data[0];
+            // Profile comes from the dedicated /profile endpoint — returns only this student's record
+            const profile = profileRes?.data || null;
 
             setStudentProfile(profile);
             setStudentFee(feeRes.data);
@@ -101,11 +107,8 @@ export default function StudentDashboard() {
             setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data : []);
             setMonthlyFees(Array.isArray(monthlyTrackingRes.data) ? monthlyTrackingRes.data : (Array.isArray(monthlyTrackingRes) ? monthlyTrackingRes : []));
 
-            const myGrades = (gradesRes.data || []).filter(g => {
-                const gSid = String(g.student_id || '').trim().toLowerCase();
-                const gEmail = String(g.email || '').trim().toLowerCase();
-                return gSid === userSid || gEmail === userEmail;
-            }).map(g => ({
+            // Grades are already filtered server-side by student ID
+            const myGrades = (gradesRes.data || []).map(g => ({
                 ...g,
                 type: 'CAT',
                 displayDate: g.month,
@@ -119,7 +122,7 @@ export default function StudentDashboard() {
                 ? Math.round((myGrades.reduce((acc, g) => acc + (g.score / g.max_score), 0) / myGrades.length) * 100)
                 : 0;
 
-            const attendanceRes = await attendanceAPI.getAll(null, null, user.student_id || user.id).catch(() => ({ data: [] }));
+            // Attendance already fetched in the same Promise.all
             const myAttendance = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
             const presentCount = myAttendance.filter(a => a.status === 'Present' || a.status === 'Late').length;
             const attendanceRate = myAttendance.length > 0
@@ -128,7 +131,6 @@ export default function StudentDashboard() {
 
             if (profile) {
                 const allCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
-                // Find the student's actual enrolled course by matching their course name
                 const studentCourseNames = Array.isArray(profile.course)
                     ? profile.course
                     : (typeof profile.course === 'string' && profile.course.startsWith('['))

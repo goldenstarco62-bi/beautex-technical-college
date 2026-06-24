@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BookOpen, Clock, Zap, FileText, ClipboardCheck, Bell, Users, TrendingUp, Calendar, ChevronRight } from 'lucide-react';
-import { coursesAPI, announcementsAPI, profileAPI, sessionsAPI } from '../services/api';
+import { coursesAPI, announcementsAPI, sessionsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,7 +11,7 @@ export default function TeacherDashboard() {
     const [mySessions, setMySessions] = useState([]);
     const [recentAnnouncements, setRecentAnnouncements] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [teacherName, setTeacherName] = useState('');
+    const [teacherName] = useState(user?.name || user?.email || 'Faculty');
 
     const now = new Date();
     const hour = now.getHours();
@@ -23,45 +23,24 @@ export default function TeacherDashboard() {
 
     const fetchData = async () => {
         try {
-            const [coursesRes, announcementsRes, profileRes, sessionsRes] = await Promise.all([
+            // user.name is already available from AuthContext — no extra profile fetch needed
+            const name = user?.name || user?.email || '';
+
+            const [coursesRes, announcementsRes, sessionsRes] = await Promise.all([
                 coursesAPI.getAll(),
                 announcementsAPI.getAll({ limit: 4 }),
-                profileAPI.get(),
                 sessionsAPI.getAll()
             ]);
 
-            // profileAPI returns the current user's profile which may include faculty details
-            const teacherProfile = profileRes?.data || null;
-            const name = teacherProfile?.name || user.name || user.email;
-            setTeacherName(name);
-
             let myCoursesList = coursesRes.data || [];
-            if (myCoursesList.length > 0 && teacherProfile) {
-                let assignedCourseNames = [];
-                try {
-                    if (typeof teacherProfile.courses === 'string') {
-                        if (teacherProfile.courses.startsWith('[')) {
-                            assignedCourseNames = JSON.parse(teacherProfile.courses);
-                        } else {
-                            assignedCourseNames = teacherProfile.courses.split(',').map(s => s.trim());
-                        }
-                    } else if (Array.isArray(teacherProfile.courses)) {
-                        assignedCourseNames = teacherProfile.courses;
-                    }
-                } catch (e) {
-                    console.error('Error parsing faculty courses:', e);
-                }
-
+            if (myCoursesList.length > 0 && name) {
                 const filtered = myCoursesList.filter(c => {
-                    const isInstructor = c.instructor && name && c.instructor.toLowerCase() === name.toLowerCase();
-                    const isAssigned = assignedCourseNames.some(an => an.toLowerCase() === c.name.toLowerCase());
-                    return isInstructor || isAssigned;
+                    return c.instructor && c.instructor.toLowerCase() === name.toLowerCase();
                 });
                 if (filtered.length > 0) myCoursesList = filtered;
             }
 
             setMyCourses(myCoursesList);
-            // Sessions are already filtered server-side by teacher_email
             setMySessions(sessionsRes.data || []);
             setRecentAnnouncements(announcementsRes.data || []);
         } catch (error) {

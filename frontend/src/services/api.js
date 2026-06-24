@@ -29,7 +29,7 @@ export const authAPI = {
     changePassword: (data) => api.post('auth/change-password', data),
     getMe: () => api.get('auth/me'),
     // Lightweight heartbeat — just triggers the auth middleware which updates last_seen_at
-    ping: () => api.get('auth/me'),
+    ping: () => api.get('auth/ping'),
 };
 
 // Profile

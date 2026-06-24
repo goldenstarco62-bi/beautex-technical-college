@@ -3,7 +3,7 @@ import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, faculty
 import { useAuth } from '../context/AuthContext';
 import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen, Fingerprint, Clock, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import moment from 'moment';
+import dayjs from '../utils/date';
 import { calculateRemainingTime } from '../utils/dateUtils';
 export default function Attendance() {
     const { user } = useAuth();
@@ -426,7 +426,7 @@ export default function Attendance() {
                                         {report.name.split('_')[2]} Report
                                     </h3>
                                     <p className="text-[9px] text-gray-400 font-bold uppercase mt-1">
-                                        {moment(report.createdAt).fromNow()} • {(report.size / 1024).toFixed(1)} KB
+                                        {dayjs(report.createdAt).fromNow()} • {(report.size / 1024).toFixed(1)} KB
                                     </p>
                                 </div>
                             </div>

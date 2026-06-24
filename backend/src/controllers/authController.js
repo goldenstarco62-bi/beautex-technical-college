@@ -51,7 +51,7 @@ async function findUserById(id) {
         return await User.findById(id).select('-password');
     }
 
-    return await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio, can_edit_finance FROM users WHERE id = ?', [id]);
+    return await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio, can_edit_finance, can_edit_students FROM users WHERE id = ?', [id]);
 }
 
 async function createUser(email, hashedPassword, role) {
@@ -206,7 +206,8 @@ export async function login(req, res) {
                 status: user.status,
                 name: user.name,
                 student_id,
-                can_edit_finance: !!user.can_edit_finance
+                can_edit_finance: !!user.can_edit_finance,
+                can_edit_students: !!user.can_edit_students,
             },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }

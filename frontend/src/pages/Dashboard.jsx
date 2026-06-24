@@ -32,7 +32,8 @@ import {
     activityReportsAPI, 
     financeAPI, 
     announcementsAPI, 
-    sessionsAPI 
+    sessionsAPI,
+    academicAPI
 } from '../services/api';
 import api from '../services/api';
 import { 
@@ -80,6 +81,7 @@ function AdminDashboard() {
     const [refreshing, setRefreshing] = useState(false);
     const [academicSummary, setAcademicSummary] = useState(null);
     const [feeAlerts, setFeeAlerts] = useState({ defaulterCount: 10, totalPending: 44125 });
+    const [activePeriod, setActivePeriod] = useState(null);
 
     const now = new Date();
     const hour = now.getHours();
@@ -100,7 +102,8 @@ function AdminDashboard() {
                 alertsRes,
                 paymentsRes,
                 announcementsRes,
-                sessionsRes
+                sessionsRes,
+                periodsRes
             ] = await Promise.all([
                 studentsAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
                 facultyAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
@@ -111,7 +114,8 @@ function AdminDashboard() {
                 financeAPI.getMonthlyAlerts().catch(() => ({ data: { defaulterCount: 10, totalPending: 44125 } })),
                 financeAPI.getPayments({ limit: 5 }).catch(() => ({ data: [] })),
                 announcementsAPI.getAll({ limit: 2 }).catch(() => ({ data: [] })),
-                sessionsAPI.getAll({ limit: 4 }).catch(() => ({ data: [] }))
+                sessionsAPI.getAll({ limit: 4 }).catch(() => ({ data: [] })),
+                academicAPI.getPeriods().catch(() => ({ data: [] }))
             ]);
 
             const studentsData = Array.isArray(studentsRes?.data) ? studentsRes.data : [];
@@ -135,6 +139,12 @@ function AdminDashboard() {
             
             if (alertsRes?.data) {
                 setFeeAlerts(alertsRes.data);
+            }
+
+            if (periodsRes?.data) {
+                const periods = Array.isArray(periodsRes.data) ? periodsRes.data : [];
+                const active = periods.find(p => p.is_active) || periods[0] || null;
+                setActivePeriod(active);
             }
 
             if (statsData) {
@@ -333,8 +343,19 @@ function AdminDashboard() {
     const todayTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     // Active Term calculations
-    const termLabel = 'Apr - Aug 2026';
-    const termProgress = 65;
+    let termProgress = 65;
+    let termLabel = 'Apr - Aug 2026';
+    if (activePeriod) {
+        termLabel = activePeriod.name || termLabel;
+        if (activePeriod.start_date && activePeriod.end_date) {
+            const start = new Date(activePeriod.start_date);
+            const end = new Date(activePeriod.end_date);
+            const now = new Date();
+            const total = end - start;
+            const elapsed = now - start;
+            termProgress = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+        }
+    }
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 text-gray-800 dark:text-gray-100">
