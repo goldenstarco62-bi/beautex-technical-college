@@ -15,7 +15,12 @@ import {
     X,
     ThumbsUp,
     ThumbsDown,
-    Minus
+    Minus,
+    GraduationCap,
+    Bell,
+    ChevronRight,
+    CheckCircle2,
+    XCircle
 } from 'lucide-react';
 import {
     coursesAPI,
