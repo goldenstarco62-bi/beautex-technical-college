@@ -102,6 +102,33 @@ CREATE TABLE IF NOT EXISTS grades (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Course Units table (competency-based modules per course)
+CREATE TABLE IF NOT EXISTS course_units (
+  id SERIAL PRIMARY KEY,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Student Unit Marks table
+CREATE TABLE IF NOT EXISTS student_unit_marks (
+  id SERIAL PRIMARY KEY,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  unit_id INTEGER NOT NULL REFERENCES course_units(id) ON DELETE CASCADE,
+  unit_name TEXT NOT NULL,
+  marks DECIMAL NOT NULL,
+  grade TEXT NOT NULL CHECK(grade IN ('Distinction', 'Credit', 'Pass', 'Fail')),
+  lecturer TEXT,
+  recorded_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, course_id, unit_id)
+);
+
+
 -- Announcements table
 CREATE TABLE IF NOT EXISTS announcements (
   id SERIAL PRIMARY KEY,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
     BookOpen,
@@ -20,17 +20,15 @@ import {
     Bell,
     ChevronRight,
     CheckCircle2,
-    XCircle
+    XCircle,
+    RefreshCw,
+    TrendingUp,
+    TrendingDown,
+    Activity
 } from 'lucide-react';
-import {
-    coursesAPI,
-    gradesAPI,
-    announcementsAPI,
-    attendanceAPI,
-    profileAPI,
-    studentDailyReportsAPI,
-    financeAPI
-} from '../services/api';
+import { studentDashboardAPI } from '../services/api';
+import { studentDailyReportsAPI } from '../services/api';
+import { cacheGet, cacheSet, cacheInvalidate, studentDashboardKey } from '../utils/dashboardCache';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import { calculateRemainingTime } from '../utils/dateUtils';
@@ -67,96 +65,115 @@ export default function StudentDashboard() {
     const [submittingComment, setSubmittingComment] = useState(false);
 
 
-    useEffect(() => {
-        if (user) fetchData();
-    }, [user]);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async (forceRefresh = false) => {
         try {
             const effectiveStudentId = user.student_id || user.id;
+            const cacheKey = studentDashboardKey(effectiveStudentId);
 
-            // Fire all requests in a single parallel batch — no waterfalls
-            const [
-                profileRes,
-                coursesRes,
-                announcementsRes,
-                gradesRes,
-                attendanceRes,
-                feeRes,
-                payRes,
-                dailyReportsRes,
-                monthlyTrackingRes
-            ] = await Promise.all([
-                profileAPI.get().catch(() => ({ data: null })),
-                coursesAPI.getAll().catch(() => ({ data: [] })),
-                announcementsAPI.getAll({ limit: 3 }).catch(() => ({ data: [] })),
-                gradesAPI.getAll().catch(() => ({ data: [] })),
-                attendanceAPI.getAll(null, null, effectiveStudentId).catch(() => ({ data: [] })),
-                financeAPI.getStudentFees(effectiveStudentId).catch(() => ({ data: null })),
-                financeAPI.getPayments(effectiveStudentId).catch(() => ({ data: [] })),
-                studentDailyReportsAPI.getAll({ student_id: effectiveStudentId, limit: 5 }).catch(() => ({ data: [] })),
-                financeAPI.getStudentMonthlyTracking(effectiveStudentId).catch(() => ({ data: [] }))
-            ]);
-
-            // Profile comes from the dedicated /profile endpoint — returns only this student's record
-            const profile = profileRes?.data || null;
-
-            setStudentProfile(profile);
-            setStudentFee(feeRes.data);
-            setRecentPayments(Array.isArray(payRes.data) ? payRes.data.slice(0, 5) : []);
-            setDailyReports(Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data : []);
-            setMonthlyFees(Array.isArray(monthlyTrackingRes.data) ? monthlyTrackingRes.data : (Array.isArray(monthlyTrackingRes) ? monthlyTrackingRes : []));
-
-            // Grades are already filtered server-side by student ID
-            const myGrades = (gradesRes.data || []).map(g => ({
-                ...g,
-                type: 'CAT',
-                displayDate: g.month,
-                performance: g.remarks,
-                rawDate: g.created_at
-            }));
-
-            setRecentGrades([...myGrades].sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 5));
-
-            const avgGrade = myGrades.length > 0
-                ? Math.round((myGrades.reduce((acc, g) => acc + (g.score / g.max_score), 0) / myGrades.length) * 100)
-                : 0;
-
-            // Attendance already fetched in the same Promise.all
-            const myAttendance = Array.isArray(attendanceRes.data) ? attendanceRes.data : [];
-            const presentCount = myAttendance.filter(a => a.status === 'Present' || a.status === 'Late').length;
-            const attendanceRate = myAttendance.length > 0
-                ? `${Math.round((presentCount / myAttendance.length) * 100)}%`
-                : '0%';
-
-            if (profile) {
-                const allCourses = Array.isArray(coursesRes.data) ? coursesRes.data : [];
-                const studentCourseNames = Array.isArray(profile.course)
-                    ? profile.course
-                    : (typeof profile.course === 'string' && profile.course.startsWith('['))
-                        ? (() => { try { return JSON.parse(profile.course); } catch { return [profile.course]; } })()
-                        : [profile.course].filter(Boolean);
-                const enrolledCourse = allCourses.find(c =>
-                    studentCourseNames.some(cn =>
-                        cn && c.name && cn.toLowerCase().trim() === c.name.toLowerCase().trim()
-                    )
-                ) || allCourses[0] || null;
-                setCourseDetails(enrolledCourse);
-                setStats({
-                    enrolledCourses: studentCourseNames.length,
-                    avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
-                    attendanceRate,
-                    sessionsCount: Array.isArray(dailyReportsRes.data) ? dailyReportsRes.data.length : 0
-                });
+            // Serve from cache unless a forced refresh was requested
+            if (!forceRefresh) {
+                const cached = cacheGet(cacheKey);
+                if (cached) {
+                    applyData(cached);
+                    setLoading(false);
+                    return;
+                }
+            } else {
+                cacheInvalidate(cacheKey);
             }
 
-            setRecentAnnouncements(announcementsRes.data || []);
+            // Single consolidated request — replaces 9 individual API calls
+            const { data } = await studentDashboardAPI.getAll();
+
+            // Populate cache for the next navigation within this session
+            cacheSet(cacheKey, data);
+            applyData(data);
         } catch (error) {
             console.error('Error fetching student dashboard data:', error);
         } finally {
             setLoading(false);
         }
+    }, [user]);
+
+    const applyData = (data) => {
+        const {
+            profile,
+            courses,
+            announcements,
+            grades,
+            attendance,
+            studentFee,
+            recentPayments,
+            dailyReports,
+            monthlyFees,
+        } = data;
+
+        setStudentProfile(profile || null);
+        setStudentFee(studentFee || null);
+        setRecentPayments(Array.isArray(recentPayments) ? recentPayments.slice(0, 5) : []);
+        setDailyReports(Array.isArray(dailyReports) ? dailyReports : []);
+        setMonthlyFees(Array.isArray(monthlyFees) ? monthlyFees : []);
+
+        // Process grades
+        const myGrades = (grades || []).map(g => {
+            let displayDate = g.month;
+            if (g.month && !isNaN(Date.parse(g.month)) && String(g.month).includes('-')) {
+                try {
+                    displayDate = new Date(g.month).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                } catch (e) {
+                    displayDate = g.month;
+                }
+            }
+            return {
+                ...g,
+                type: 'CAT',
+                displayDate,
+                performance: g.remarks,
+                rawDate: g.created_at
+            };
+        });
+        setRecentGrades([...myGrades].sort((a, b) => new Date(b.rawDate) - new Date(a.rawDate)).slice(0, 5));
+
+        const avgGrade = myGrades.length > 0
+            ? Math.round((myGrades.reduce((acc, g) => acc + (g.score / g.max_score), 0) / myGrades.length) * 100)
+            : 0;
+
+        // Process attendance
+        const myAttendance = Array.isArray(attendance) ? attendance : [];
+        const presentCount = myAttendance.filter(a => a.status === 'Present' || a.status === 'Late').length;
+        const attendanceRate = myAttendance.length > 0
+            ? `${Math.round((presentCount / myAttendance.length) * 100)}%`
+            : '0%';
+
+        // Match enrolled course
+        if (profile) {
+            const allCourses = Array.isArray(courses) ? courses : [];
+            const studentCourseNames = Array.isArray(profile.course)
+                ? profile.course
+                : (typeof profile.course === 'string' && profile.course.startsWith('['))
+                    ? (() => { try { return JSON.parse(profile.course); } catch { return [profile.course]; } })()
+                    : [profile.course].filter(Boolean);
+            const enrolledCourse = allCourses.find(c =>
+                studentCourseNames.some(cn =>
+                    cn && c.name && cn.toLowerCase().trim() === c.name.toLowerCase().trim()
+                )
+            ) || allCourses[0] || null;
+            setCourseDetails(enrolledCourse);
+            setStats({
+                enrolledCourses: studentCourseNames.length,
+                avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
+                attendanceRate,
+                sessionsCount: Array.isArray(dailyReports) ? dailyReports.length : 0
+            });
+        }
+
+        setRecentAnnouncements(announcements || []);
     };
+
+    useEffect(() => {
+        if (user) fetchData();
+    }, [user, fetchData]);
 
     // ─── Comment dialog helpers ───────────────────────────────────────────────
     const openCommentDialog = (report) => {
@@ -212,27 +229,83 @@ export default function StudentDashboard() {
     };
     // ─────────────────────────────────────────────────────────────────────────
 
-    if (loading) return <div className="p-8 text-center font-black uppercase tracking-widest text-maroon">Loading Student Portal...</div>;
+    if (loading) return (
+        <div className="space-y-8 animate-pulse">
+            {/* Skeleton Banner */}
+            <div className="h-40 bg-maroon/10 rounded-[2.5rem]" />
+            {/* Skeleton Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="h-28 bg-gray-100 dark:bg-white/5 rounded-[2rem]" />
+                ))}
+            </div>
+            {/* Skeleton Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="h-48 bg-gray-100 dark:bg-white/5 rounded-[2.5rem]" />
+                    <div className="h-64 bg-gray-100 dark:bg-white/5 rounded-[2rem]" />
+                </div>
+                <div className="h-80 bg-gray-100 dark:bg-white/5 rounded-[2rem]" />
+            </div>
+        </div>
+    );
 
     const remainingTime = calculateRemainingTime(studentProfile?.completion_date);
 
+    const now = new Date();
+    const hour = now.getHours();
+    const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
+
+    const attendancePct = parseInt(stats.attendanceRate) || 0;
+    const feeBalance = studentFee ? Number(studentFee.balance ?? 0) : null;
+
     const statsDisplay = [
-        { title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen },
         {
-            title: 'Fee Balance Remaining',
-            value: studentFee
-                ? `KSh ${Number(studentFee.balance ?? 0).toLocaleString()}`
-                : 'Not Set',
-            icon: CreditCard
+            title: 'My Courses', value: stats.enrolledCourses, icon: BookOpen,
+            bg: 'bg-maroon/5', iconBg: 'bg-maroon/5', iconColor: 'text-maroon',
+            border: 'border-gray-100 dark:border-white/5', textColor: 'text-gray-800 dark:text-white',
+            sub: 'Enrolled programmes'
+        },
+        {
+            title: 'Fee Balance',
+            value: feeBalance !== null ? `KSh ${feeBalance.toLocaleString()}` : 'Not Set',
+            icon: feeBalance > 0 ? TrendingDown : CheckCircle2,
+            bg: feeBalance > 0 ? 'bg-red-50' : 'bg-emerald-50',
+            iconBg: feeBalance > 0 ? 'bg-red-50' : 'bg-emerald-50',
+            iconColor: feeBalance > 0 ? 'text-red-500' : 'text-emerald-500',
+            border: feeBalance > 0 ? 'border-red-100' : 'border-emerald-100',
+            textColor: feeBalance > 0 ? 'text-red-600' : 'text-emerald-600',
+            sub: feeBalance > 0 ? 'Balance outstanding' : 'Fees cleared'
         },
         {
             title: 'Time Remaining',
             value: remainingTime.formatted,
             icon: Clock,
-            isCountdown: true
+            bg: remainingTime.isExpired ? 'bg-red-50' : (remainingTime.totalDays != null && remainingTime.totalDays <= 30 ? 'bg-amber-50' : 'bg-sky-50'),
+            iconBg: remainingTime.isExpired ? 'bg-red-50' : 'bg-sky-50',
+            iconColor: remainingTime.isExpired ? 'text-red-500' : 'text-sky-500',
+            border: remainingTime.isExpired ? 'border-red-100' : 'border-sky-100',
+            textColor: remainingTime.isExpired ? 'text-red-600 text-base' : 'text-gray-800 dark:text-white',
+            sub: remainingTime.isExpired ? 'Programme ended' : 'Until completion'
         },
-        { title: 'Attendance', value: stats.attendanceRate, icon: UserCheck },
-        { title: 'Academic Logs', value: stats.sessionsCount, icon: History },
+        {
+            title: 'Attendance',
+            value: stats.attendanceRate,
+            icon: attendancePct >= 75 ? UserCheck : AlertCircle,
+            bg: attendancePct >= 75 ? 'bg-emerald-50' : attendancePct >= 50 ? 'bg-amber-50' : 'bg-red-50',
+            iconBg: attendancePct >= 75 ? 'bg-emerald-50' : 'bg-amber-50',
+            iconColor: attendancePct >= 75 ? 'text-emerald-500' : attendancePct >= 50 ? 'text-amber-500' : 'text-red-500',
+            border: attendancePct >= 75 ? 'border-emerald-100' : attendancePct >= 50 ? 'border-amber-100' : 'border-red-100',
+            textColor: attendancePct >= 75 ? 'text-emerald-600' : attendancePct >= 50 ? 'text-amber-600' : 'text-red-600',
+            sub: attendancePct >= 75 ? 'Excellent record' : 'Needs improvement',
+            isAttendance: true
+        },
+        {
+            title: 'Academic Logs', value: stats.sessionsCount, icon: History,
+            bg: 'bg-indigo-50', iconBg: 'bg-indigo-50', iconColor: 'text-indigo-500',
+            border: 'border-indigo-100', textColor: 'text-gray-800 dark:text-white',
+            sub: 'Daily session records'
+        },
     ];
 
     return (
@@ -240,12 +313,15 @@ export default function StudentDashboard() {
 
             {/* Welcome Banner */}
             <div className="relative overflow-hidden rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl"
-                style={{ background: 'linear-gradient(135deg, var(--portal-theme, #800000) 0%, color-mix(in srgb, var(--portal-theme, #800000) 50%, #000) 100%)' }}>
+                style={{ background: 'linear-gradient(135deg, #800000 0%, #4a0000 100%)' }}>
                 <div className="absolute top-0 right-0 w-72 h-72 bg-gold/10 rounded-full translate-x-1/3 -translate-y-1/3 blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+                {/* Decorative grid */}
+                <div className="absolute inset-0 opacity-[0.04]"
+                    style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 40px)' }} />
                 <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div>
-                        <p className="text-[10px] font-black text-gold/60 uppercase tracking-[0.3em] mb-1">Student Portal</p>
+                        <p className="text-[10px] font-black text-gold/60 uppercase tracking-[0.3em] mb-1">{greeting}, Student</p>
                         <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter leading-tight">
                             {studentProfile ? studentProfile.name : (user?.name || user?.email?.split('@')[0])} <span className="text-gold">↗</span>
                         </h1>
@@ -258,9 +334,19 @@ export default function StudentDashboard() {
                         <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">
                             {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </p>
-                        <Link to="/grades" className="flex items-center gap-2 px-5 py-2.5 bg-gold text-maroon rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 shadow-xl">
-                            <Award className="w-3.5 h-3.5" /> View My Grades
-                        </Link>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => { setLoading(true); fetchData(true); }}
+                                title="Refresh dashboard"
+                                className="flex items-center gap-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-white/70 hover:text-white transition-all"
+                            >
+                                <RefreshCw className="w-3 h-3" />
+                                Refresh
+                            </button>
+                            <Link to="/grades" className="flex items-center gap-2 px-5 py-2.5 bg-gold text-maroon rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 shadow-xl">
+                                <Award className="w-3.5 h-3.5" /> View My Units
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -314,27 +400,24 @@ export default function StudentDashboard() {
             ) : null}
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 {statsDisplay.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={index} className="bg-white dark:bg-[#111] p-5 md:p-6 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.title}</p>
-                                    <p className="text-2xl md:text-3xl font-black text-gray-800 dark:text-white">{stat.value}</p>
-                                </div>
-                                <div className={`w-10 h-10 md:w-12 md:h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 relative`}>
-                                    {stat.title === 'Attendance' ? (
-                                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-100 dark:text-white/10" />
-                                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${parseInt(stats.attendanceRate) || 0}, 100`} className="text-maroon dark:text-gold" />
-                                        </svg>
-                                    ) : (
-                                        <Icon className="w-5 h-5 md:w-6 md:h-6 text-maroon dark:text-gold" />
-                                    )}
-                                </div>
+                        <div key={index} className={`bg-white dark:bg-[#111] p-5 rounded-[2rem] border ${stat.border} shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 group`}>
+                            <div className={`w-10 h-10 ${stat.iconBg} dark:bg-white/5 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                                {stat.isAttendance ? (
+                                    <svg className="w-full h-full p-2 -rotate-90" viewBox="0 0 36 36">
+                                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-100 dark:text-white/10" />
+                                        <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray={`${parseInt(stats.attendanceRate) || 0}, 100`} className={stat.iconColor} />
+                                    </svg>
+                                ) : (
+                                    <Icon className={`w-5 h-5 ${stat.iconColor}`} />
+                                )}
                             </div>
+                            <p className={`text-xl font-black ${stat.textColor} leading-tight`}>{stat.value}</p>
+                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{stat.title}</p>
+                            <p className="text-[8px] text-gray-300 dark:text-white/20 font-bold mt-0.5 uppercase tracking-wider">{stat.sub}</p>
                         </div>
                     );
                 })}
@@ -347,23 +430,50 @@ export default function StudentDashboard() {
                     {/* Ongoing Curriculum */}
                     <div className="bg-white dark:bg-[#111] p-6 sm:p-8 rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-lg">
                         <div className="flex items-center gap-3 mb-6">
-                            <div className="w-6 h-6 bg-gold/20 rounded flex items-center justify-center">
+                            <div className="w-8 h-8 bg-gold/20 rounded-xl flex items-center justify-center">
                                 <Zap className="w-4 h-4 text-gold" />
                             </div>
-                            <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Digital Student Center</h2>
+                            <div>
+                                <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">My Academic Programme</h2>
+                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Current enrollment details</p>
+                            </div>
                         </div>
                         {courseDetails ? (
                             <>
                                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                                     <div>
-                                        <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-2">{courseDetails.name}</h3>
+                                        <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-1">{courseDetails.name}</h3>
                                         <p className="text-sm text-gray-400 font-medium">Instructor: {courseDetails.instructor} • {courseDetails.room}</p>
                                     </div>
-                                    <Link to="/grades" className="bg-maroon text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center">
+                                    <Link to="/grades" className="bg-maroon text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center shrink-0">
                                         View All Results
                                     </Link>
                                 </div>
-                                <div className="mt-8 pt-8 border-t border-gray-100 dark:border-white/5 grid grid-cols-2 md:grid-cols-5 gap-4">
+
+                                {/* Progress bar for time remaining */}
+                                {studentProfile?.enrolled_date && studentProfile?.completion_date && (
+                                    <div className="mt-6 p-4 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Programme Progress</p>
+                                            <p className={`text-[9px] font-black uppercase ${remainingTime.isExpired ? 'text-red-500' : 'text-maroon'}`}>
+                                                {remainingTime.isExpired ? 'Completed' : `${remainingTime.formatted} left`}
+                                            </p>
+                                        </div>
+                                        {(() => {
+                                            const start = new Date(studentProfile.enrolled_date).getTime();
+                                            const end = new Date(studentProfile.completion_date).getTime();
+                                            const pct = Math.min(Math.max(Math.round(((Date.now() - start) / (end - start)) * 100), 0), 100);
+                                            const barColor = pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-maroon';
+                                            return (
+                                                <div className="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
+                                                    <div className={`h-full ${barColor} rounded-full transition-all duration-1000`} style={{ width: `${pct}%` }} />
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+
+                                <div className="mt-6 pt-6 border-t border-gray-100 dark:border-white/5 grid grid-cols-2 md:grid-cols-5 gap-4">
                                     <div>
                                         <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
                                         <p className="text-xs font-bold text-green-500 uppercase">Active</p>
@@ -381,7 +491,7 @@ export default function StudentDashboard() {
                                         <p className="text-xs font-bold text-gray-800 dark:text-white uppercase">{studentProfile?.completion_date ? new Date(studentProfile.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Time to Completion</p>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Time Left</p>
                                         <p className={`text-xs font-bold uppercase ${remainingTime.isExpired ? 'text-red-500' : 'text-gray-800 dark:text-white'}`}>
                                             {remainingTime.formatted}
                                         </p>
@@ -401,7 +511,7 @@ export default function StudentDashboard() {
                                 <h2 className="text-sm font-black text-gray-800 dark:text-white uppercase tracking-widest">Recent Performance</h2>
                             </div>
                             <Link to="/grades" className="text-[10px] font-black text-maroon dark:text-gold hover:underline uppercase tracking-widest bg-maroon/5 dark:bg-white/5 px-4 py-2 rounded-xl transition-all">
-                                View Full Grade
+                                View Units Covered
                             </Link>
                         </div>
                         {recentGrades.length > 0 ? (
@@ -614,55 +724,67 @@ export default function StudentDashboard() {
 
                     {/* Quick Actions */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Link to="/grades" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
-                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
-                                <FileText className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Grades</span>
-                        </Link>
-                        <Link to="/attendance" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
-                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
-                                <Clock className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Attendance</span>
-                        </Link>
-                        <Link to="/daily-student-logs" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
-                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
-                                <History className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Daily Ledger</span>
-                        </Link>
-                        <Link to="/materials" className="flex flex-col items-center gap-3 bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-maroon/20 transition-all group text-center">
-                            <div className="w-12 h-12 bg-maroon/5 dark:bg-white/5 rounded-2xl flex items-center justify-center group-hover:bg-maroon transition-colors">
-                                <GraduationCap className="w-6 h-6 text-maroon dark:text-gold group-hover:text-white" />
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-gray-500 dark:text-gray-400 tracking-widest">Library</span>
-                        </Link>
+                        {[
+                            { to: '/grades', icon: FileText, label: 'Units Covered', sub: 'View academic record', bg: 'bg-maroon/5 hover:bg-maroon group', iconClass: 'text-maroon group-hover:text-white' },
+                            { to: '/attendance', icon: Clock, label: 'Attendance', sub: 'Track your sign-ins', bg: 'bg-indigo-50 hover:bg-indigo-500 group', iconClass: 'text-indigo-500 group-hover:text-white' },
+                            { to: '/daily-student-logs', icon: History, label: 'Daily Ledger', sub: 'Session history', bg: 'bg-amber-50 hover:bg-amber-500 group', iconClass: 'text-amber-500 group-hover:text-white' },
+                            { to: '/materials', icon: GraduationCap, label: 'Library', sub: 'Study materials', bg: 'bg-emerald-50 hover:bg-emerald-500 group', iconClass: 'text-emerald-500 group-hover:text-white' },
+                        ].map(({ to, icon: Icon, label, sub, bg, iconClass }) => (
+                            <Link key={to} to={to} className={`flex flex-col items-center gap-3 ${bg} bg-white dark:bg-[#111] p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all text-center`}>
+                                <div className={`w-12 h-12 bg-current/10 rounded-2xl flex items-center justify-center transition-colors`}>
+                                    <Icon className={`w-6 h-6 ${iconClass} transition-colors`} />
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-black uppercase text-gray-700 dark:text-gray-300 tracking-widest block">{label}</span>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-wider block mt-0.5">{sub}</span>
+                                </div>
+                            </Link>
+                        ))}
                     </div>
                 </div>
 
                 {/* Sidebar: Notice Board */}
                 <div className="space-y-8">
-                    <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm">
-                        <div className="flex items-center justify-between mb-8">
-                            <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 bg-yellow-100 dark:bg-yellow-900/20 rounded flex items-center justify-center">
-                                    <Bell className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                    <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm sticky top-6">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-amber-50 dark:bg-amber-900/20 rounded-xl flex items-center justify-center">
+                                    <Bell className="w-4 h-4 text-amber-500" />
                                 </div>
-                                <h2 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest">Notice Board</h2>
+                                <div>
+                                    <h2 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest">Notice Board</h2>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{recentAnnouncements.length} active</p>
+                                </div>
                             </div>
-                            <ChevronRight className="w-4 h-4 text-gray-300" />
+                            <Link to="/announcements" className="text-[9px] font-black uppercase tracking-widest text-maroon dark:text-gold hover:underline flex items-center gap-1">
+                                All <ChevronRight className="w-3 h-3" />
+                            </Link>
                         </div>
-                        <div className="space-y-6">
+                        <div className="space-y-5">
                             {recentAnnouncements.length > 0 ? (
-                                recentAnnouncements.map(ann => (
-                                    <div key={ann.id} className="relative pl-6 border-l-2 border-yellow-400 pb-6 last:pb-0">
-                                        <div className="absolute -left-[5px] top-0 w-2 h-2 bg-yellow-400 rounded-full" />
-                                        <p className="text-[9px] font-black text-yellow-600 dark:text-yellow-400 uppercase tracking-widest mb-1">{ann.date}</p>
-                                        <h4 className="text-xs font-bold text-gray-800 dark:text-white mb-1">{ann.title}</h4>
-                                        <p className="text-[10px] text-gray-400 font-medium line-clamp-2">{ann.content}</p>
-                                    </div>
-                                ))
+                                recentAnnouncements.map((ann, idx) => {
+                                    const chipStyles = [
+                                        'bg-red-50 text-red-600',
+                                        'bg-amber-50 text-amber-600',
+                                        'bg-blue-50 text-blue-600',
+                                        'bg-emerald-50 text-emerald-600',
+                                    ];
+                                    const lineColors = ['border-red-300', 'border-amber-400', 'border-blue-300', 'border-emerald-300'];
+                                    const dotColors = ['bg-red-400', 'bg-amber-400', 'bg-blue-400', 'bg-emerald-400'];
+                                    const labels = ['Urgent', 'Notice', 'Info', 'Update'];
+                                    const si = idx % 4;
+                                    return (
+                                        <div key={ann.id} className={`relative pl-5 border-l-2 ${lineColors[si]} pb-5 last:pb-0`}>
+                                            <div className={`absolute -left-[5px] top-0.5 w-2.5 h-2.5 ${dotColors[si]} rounded-full`} />
+                                            <div className="flex items-center justify-between gap-2 mb-1">
+                                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{ann.date}</p>
+                                                <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${chipStyles[si]}`}>{labels[si]}</span>
+                                            </div>
+                                            <h4 className="text-xs font-bold text-gray-800 dark:text-white mb-1">{ann.title}</h4>
+                                            <p className="text-[10px] text-gray-400 font-medium line-clamp-2">{ann.content}</p>
+                                        </div>
+                                    );
+                                })
                             ) : (
                                 <div className="py-8 text-center">
                                     <Bell className="w-10 h-10 text-gray-200 dark:text-white/10 mx-auto mb-3" />
@@ -670,6 +792,29 @@ export default function StudentDashboard() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Attendance mini gauge */}
+                        {attendancePct > 0 && (
+                            <div className="mt-6 pt-5 border-t border-gray-100 dark:border-white/5">
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Attendance Rate</p>
+                                <div className="flex items-end gap-3">
+                                    <span className={`text-3xl font-black ${attendancePct >= 75 ? 'text-emerald-600' : attendancePct >= 50 ? 'text-amber-500' : 'text-red-500'}`}>
+                                        {stats.attendanceRate}
+                                    </span>
+                                    <div className="flex-1 mb-1.5">
+                                        <div className="h-2 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full transition-all duration-1000 ${attendancePct >= 75 ? 'bg-emerald-400' : attendancePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                                style={{ width: `${attendancePct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <p className={`text-[8px] font-black uppercase tracking-widest mt-1 ${attendancePct >= 75 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                    {attendancePct >= 75 ? '✓ Good standing' : attendancePct >= 50 ? '⚠ Needs improvement' : '✗ Critical — contact admin'}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

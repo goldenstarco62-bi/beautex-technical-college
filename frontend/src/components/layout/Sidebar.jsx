@@ -43,7 +43,7 @@ const navSections = [
             { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
             { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-            { name: 'Grades', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Timetable', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Daily Ledger', path: '/daily-student-logs', icon: History, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Journal Entry', path: '/student-daily-reports', icon: FileText, roles: ['admin', 'superadmin', 'teacher'] },

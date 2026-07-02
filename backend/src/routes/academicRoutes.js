@@ -15,6 +15,8 @@ import * as trainerReportController from '../controllers/trainerReportController
 import * as studentDailyReportController from '../controllers/studentDailyReportController.js';
 import * as statsController from '../controllers/statsController.js';
 import * as interactionController from '../controllers/interactionController.js';
+import * as courseUnitController from '../controllers/courseUnitController.js';
+import * as studentUnitMarksController from '../controllers/studentUnitMarksController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -38,6 +40,19 @@ router.post('/grades/batch', authenticateToken, authorizeRoles('teacher', 'admin
 router.post('/grades', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.createGrade);
 router.put('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.updateGrade);
 router.delete('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.deleteGrade);
+
+// ── Course Units (competency-based grading) ───────────────────────────────────
+router.get('/courses/:courseId/units', authenticateToken, courseUnitController.getCourseUnits);
+router.post('/courses/:courseId/units/reorder', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), courseUnitController.reorderCourseUnits);
+router.post('/courses/:courseId/units', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), courseUnitController.createCourseUnit);
+router.put('/courses/:courseId/units/:unitId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), courseUnitController.updateCourseUnit);
+router.delete('/courses/:courseId/units/:unitId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), courseUnitController.deleteCourseUnit);
+
+// ── Student Unit Marks (competency-based grading) ─────────────────────────────
+router.get('/student-unit-marks', authenticateToken, studentUnitMarksController.getStudentUnitMarks);
+router.post('/student-unit-marks/batch', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentUnitMarksController.batchSaveUnitMarks);
+router.post('/student-unit-marks', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentUnitMarksController.saveStudentUnitMark);
+router.delete('/student-unit-marks/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), studentUnitMarksController.deleteStudentUnitMark);
 
 // ── Announcements ─────────────────────────────────────────────────────────────
 router.get('/announcements', authenticateToken, announcementController.getAllAnnouncements);

@@ -56,6 +56,7 @@ export const coursesAPI = {
     getById: (id) => api.get(`courses/${encodeURIComponent(id)}`),
     create: (data) => api.post('courses', data),
     update: (id, data) => api.put(`courses/${encodeURIComponent(id)}`, data),
+    delete: (id) => api.delete(`courses/${encodeURIComponent(id)}`),
 };
 
 // Faculty
@@ -111,6 +112,12 @@ export const dashboardAPI = {
     getStats: () => api.get('stats/dashboard'),
     search: (q) => api.get(`stats/search?q=${encodeURIComponent(q)}`),
 };
+
+// Student Dashboard (consolidated — replaces 9 individual round-trips)
+export const studentDashboardAPI = {
+    getAll: () => api.get('student-dashboard'),
+};
+
 
 // Sessions (Schedule)
 
@@ -356,6 +363,23 @@ export const inventoryAPI = {
     createDamageLog: (data) => api.post('inventory/damage-logs', data),
     // Reports
     getReport: (type) => api.get(`inventory/reports/${type}`),
+};
+
+// ── Course Units API ──────────────────────────────────────────────────────────
+export const courseUnitsAPI = {
+    getUnits: (courseId) => api.get(`courses/${courseId}/units`),
+    createUnit: (courseId, data) => api.post(`courses/${courseId}/units`, data),
+    updateUnit: (courseId, unitId, data) => api.put(`courses/${courseId}/units/${unitId}`, data),
+    deleteUnit: (courseId, unitId) => api.delete(`courses/${courseId}/units/${unitId}`),
+    reorderUnits: (courseId, order) => api.post(`courses/${courseId}/units/reorder`, { order }),
+};
+
+// ── Student Unit Marks API ────────────────────────────────────────────────────
+export const studentUnitMarksAPI = {
+    getMarks: (params) => api.get('student-unit-marks', { params }),
+    saveMark: (data) => api.post('student-unit-marks', data),
+    batchSave: (data) => api.post('student-unit-marks/batch', data),
+    deleteMark: (id) => api.delete(`student-unit-marks/${id}`),
 };
 
 export default api;

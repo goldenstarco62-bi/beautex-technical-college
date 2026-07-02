@@ -19,7 +19,7 @@ const Courses = lazy(() => import('./pages/Courses'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Users = lazy(() => import('./pages/Users'));
 const Attendance = lazy(() => import('./pages/Attendance'));
-const Grades = lazy(() => import('./pages/Grades'));
+const UnitsCovered = lazy(() => import('./pages/UnitsCovered'));
 const Schedule = lazy(() => import('./pages/Schedule'));
 const Announcements = lazy(() => import('./pages/Announcements'));
 const AcademicReports = lazy(() => import('./pages/AcademicReports'));
@@ -62,14 +62,32 @@ function SemiProtectedRoute({ children }) {
 
 function App() {
     useEffect(() => {
+        // Apply cached colors immediately on load for optimal rendering speed
+        const cachedPrimary = localStorage.getItem('portal_theme_primary');
+        const cachedSidebar = localStorage.getItem('portal_theme_sidebar');
+
+        if (cachedPrimary) {
+            document.documentElement.style.setProperty('--primary', cachedPrimary);
+            document.documentElement.style.setProperty('--portal-theme', cachedPrimary);
+            document.documentElement.style.setProperty('--primary-dark', cachedPrimary);
+        }
+        if (cachedSidebar) {
+            document.documentElement.style.setProperty('--sidebar-bg', cachedSidebar);
+        }
+
+        // Fetch latest settings in background and update cache
         settingsAPI.get().then(res => {
             if (res.data) {
                 const primary = res.data.portal_theme_colors || '#800000';
                 const sidebar = res.data.sidebar_colors || '#7a0000';
+                
                 document.documentElement.style.setProperty('--primary', primary);
                 document.documentElement.style.setProperty('--portal-theme', primary);
                 document.documentElement.style.setProperty('--sidebar-bg', sidebar);
                 document.documentElement.style.setProperty('--primary-dark', primary);
+
+                localStorage.setItem('portal_theme_primary', primary);
+                localStorage.setItem('portal_theme_sidebar', sidebar);
             }
         }).catch(() => {});
     }, []);
@@ -91,7 +109,7 @@ function App() {
                                 <Route path="/faculty" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Faculty /></Layout></ProtectedRoute>} />
                                 <Route path="/courses" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Courses /></Layout></ProtectedRoute>} />
                                 <Route path="/attendance" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Attendance /></Layout></ProtectedRoute>} />
-                                <Route path="/grades" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Grades /></Layout></ProtectedRoute>} />
+                                <Route path="/grades" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitsCovered /></Layout></ProtectedRoute>} />
                                 <Route path="/schedule" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Schedule /></Layout></ProtectedRoute>} />
                                 <Route path="/announcements" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Announcements /></Layout></ProtectedRoute>} />
 

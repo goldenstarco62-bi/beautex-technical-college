@@ -2,6 +2,27 @@ import { queryOne, query } from '../config/database.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+// Helper to parse student course field robustly
+function parseStudentCourses(courseField) {
+    if (!courseField) return [];
+    if (Array.isArray(courseField)) return courseField;
+    if (typeof courseField === 'string') {
+        const trimmed = courseField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            return trimmed.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
 export async function getDashboardStats(req, res) {
     try {
         const mongo = await isMongo();
@@ -122,7 +143,7 @@ export async function getDashboardStats(req, res) {
             facultyCount,
             attendanceAvg,
             revenueData,
-            distribution,
+            coursesList,
             allStudentsForTrend,
             allPaymentsForTrend
         ] = await Promise.all([
@@ -131,16 +152,26 @@ export async function getDashboardStats(req, res) {
             queryOne('SELECT COUNT(*) as count FROM faculty'),
             queryOne("SELECT AVG(CASE WHEN status = 'Present' THEN 1.0 ELSE 0.0 END) * 100 as avg FROM attendance"),
             queryOne('SELECT SUM(total_paid) as total, SUM(total_due) as due FROM student_fees'),
-            query(`
-                SELECT 
-                    c.name, 
-                    c.capacity,
-                    (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled
-                FROM courses c
-            `),
-            query('SELECT created_at FROM students'),
+            query('SELECT name, capacity FROM courses'),
+            query('SELECT created_at, course FROM students'),
             query("SELECT amount, payment_date FROM payments WHERE status = 'Completed'")
         ]);
+
+        // Calculate course distribution (count students per course) in memory
+        const courseCounts = {};
+        allStudentsForTrend.forEach(s => {
+            const list = parseStudentCourses(s.course);
+            list.forEach(c => {
+                const key = String(c).toLowerCase().trim();
+                courseCounts[key] = (courseCounts[key] || 0) + 1;
+            });
+        });
+
+        const distribution = coursesList.map(c => ({
+            name: c.name,
+            enrolled: courseCounts[String(c.name).toLowerCase().trim()] || 0,
+            capacity: c.capacity || 30
+        }));
 
         // Populate trend metrics
         allStudentsForTrend.forEach(s => {

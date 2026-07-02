@@ -5,10 +5,14 @@ import express from 'express';
 import * as studentController from '../controllers/studentController.js';
 import * as courseController from '../controllers/courseController.js';
 import * as facultyController from '../controllers/facultyController.js';
+import * as studentDashboardController from '../controllers/studentDashboardController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
+
+// ── Student Dashboard (consolidated — replaces 9 individual calls) ───────────
+router.get('/student-dashboard', authenticateToken, authorizeRoles('student'), studentDashboardController.getStudentDashboard);
 
 // ── Students ──────────────────────────────────────────────────────────────────
 router.get('/students', authenticateToken, studentController.getAllStudents);

@@ -2,18 +2,53 @@ import { getDb, query, queryOne, run } from '../config/database.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+// Helper to parse student course field robustly
+function parseStudentCourses(courseField) {
+    if (!courseField) return [];
+    if (Array.isArray(courseField)) return courseField;
+    if (typeof courseField === 'string') {
+        const trimmed = courseField.trim();
+        if (trimmed.startsWith('[')) {
+            try {
+                return JSON.parse(trimmed);
+            } catch (e) {
+                // fall through
+            }
+        }
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            return trimmed.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
+        }
+        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
+    }
+    return [];
+}
+
+// Helper to enrich SQLite/PostgreSQL courses with in-memory aggregated student enrollment counts
+async function enrichCoursesWithEnrollment(courses) {
+    if (!courses || courses.length === 0) return [];
+    
+    // Fetch courses from all students
+    const studentCoursesList = await query("SELECT course FROM students");
+    const courseCounts = {};
+    for (const s of studentCoursesList) {
+        const list = parseStudentCourses(s.course);
+        for (const c of list) {
+            const key = String(c).toLowerCase().trim();
+            courseCounts[key] = (courseCounts[key] || 0) + 1;
+        }
+    }
+    
+    return courses.map(course => ({
+        ...course,
+        enrolled: courseCounts[String(course.name).toLowerCase().trim()] || 0
+    }));
+}
+
 export async function getAllCourses(req, res) {
     try {
         const currentRole = String(req.user.role || '').toLowerCase().trim();
         const { email } = req.user;
         const mongo = await isMongo();
-
-        // SQL Query parts
-        // Using LIKE to capture students enrolled in multiple courses (stored as JSON arrays or comma-strings)
-        const sqlSelect = `
-            c.*, 
-            (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled
-        `;
 
         // Admin and Superadmin see everything
         if (currentRole === 'admin' || currentRole === 'superadmin') {
@@ -31,8 +66,9 @@ export async function getAllCourses(req, res) {
                 }
                 return res.json(courses);
             }
-            const courses = await query(`SELECT ${sqlSelect} FROM courses c ORDER BY c.name`);
-            return res.json(courses);
+            const courses = await query(`SELECT * FROM courses ORDER BY name`);
+            const enriched = await enrichCoursesWithEnrollment(courses);
+            return res.json(enriched);
         }
 
         // Teachers see courses they instruct
@@ -81,12 +117,13 @@ export async function getAllCourses(req, res) {
 
             const placeholders = facultyCourses.length > 0 ? facultyCourses.map(() => '?').join(',') : "''";
             const courses = await query(`
-                SELECT ${sqlSelect} FROM courses c
-                WHERE (c.instructor = ? OR c.name IN (${placeholders}))
-                AND c.status = 'Active' 
-                ORDER BY c.name
+                SELECT * FROM courses
+                WHERE (instructor = ? OR name IN (${placeholders}))
+                AND status = 'Active' 
+                ORDER BY name
             `, [faculty.name, ...facultyCourses]);
-            return res.json(courses);
+            const enriched = await enrichCoursesWithEnrollment(courses);
+            return res.json(enriched);
         }
 
         // Students see their enrolled courses
@@ -143,10 +180,11 @@ export async function getAllCourses(req, res) {
 
             const placeholders = studentCourses.map(() => '?').join(',');
             const courses = await query(`
-                SELECT ${sqlSelect} FROM courses c 
-                WHERE c.name IN (${placeholders}) AND c.status = 'Active'
+                SELECT * FROM courses 
+                WHERE name IN (${placeholders}) AND status = 'Active'
             `, studentCourses);
-            return res.json(courses);
+            const enriched = await enrichCoursesWithEnrollment(courses);
+            return res.json(enriched);
         }
 
         res.json([]);
@@ -171,13 +209,10 @@ export async function getCourse(req, res) {
             return res.json(course);
         }
 
-        const sql = `
-            SELECT c.*, (SELECT COUNT(*) FROM students s WHERE LOWER(s.course) LIKE '%' || LOWER(c.name) || '%') as enrolled 
-            FROM courses c WHERE c.id = ?
-        `;
-        const course = await queryOne(sql, [req.params.id]);
+        const course = await queryOne('SELECT * FROM courses WHERE id = ?', [req.params.id]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
-        res.json(course);
+        const [enriched] = await enrichCoursesWithEnrollment([course]);
+        res.json(enriched);
     } catch (error) {
         console.error('Get course error:', error);
         res.status(500).json({ error: 'Failed to fetch course' });

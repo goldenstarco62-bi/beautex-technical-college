@@ -73,28 +73,33 @@ export async function getAllGrades(req, res) {
 
             const grades = await Grade.find(mongoQuery).sort({ created_at: -1 }).lean();
 
-            // Populate student names
-            const gradesWithNames = await Promise.all(grades.map(async (grade) => {
-                const searchId = String(grade.student_id).trim();
-                const student = await Student.findOne({ id: searchId });
+            // Batch-load student names in a single query instead of N individual findOne calls
+            const uniqueStudentIds = [...new Set(grades.map(g => String(g.student_id).trim()))];
+            const students = uniqueStudentIds.length > 0
+                ? await Student.find({ id: { $in: uniqueStudentIds } }).select('id name photo').lean()
+                : [];
+            const studentMap = Object.fromEntries(students.map(s => [String(s.id), s]));
 
+            const gradesWithNames = grades.map(grade => {
+                const student = studentMap[String(grade.student_id).trim()];
                 return {
                     ...grade,
                     _id: grade._id.toString(),
                     id: grade._id.toString(),
                     student_name: student ? student.name : 'Unknown Student',
-                    student_photo: student ? student.photo : null
+                    student_photo: student ? student.photo : null,
                 };
-            }));
+            });
 
             return res.json(gradesWithNames);
+
         }
 
         // SQL VERSION
         let sql = `
         SELECT g.*, s.name as student_name, s.photo as student_photo
         FROM grades g
-        LEFT JOIN students s ON LOWER(TRIM(g.student_id)) = LOWER(TRIM(s.id))
+        LEFT JOIN students s ON g.student_id = s.id
     `;
         let params = [];
         let conditions = [];
@@ -107,12 +112,12 @@ export async function getAllGrades(req, res) {
 
         if (userRole === 'student') {
             if (!studentId || studentId === 'null') {
-                console.warn(`âš ï¸ Student ${req.user.email} attempted to fetch grades without a student_id`);
+                console.warn(`âš ï¸  Student ${req.user.email} attempted to fetch grades without a student_id`);
                 return res.json([]);
             }
-            conditions.push('LOWER(TRIM(g.student_id)) = LOWER(TRIM(?))');
+            conditions.push('g.student_id = ?');
             params.push(String(studentId).trim());
-            console.log(`ðŸ” Applied student filter: ${studentId}`);
+            console.log(`ðŸ”  Applied student filter: ${studentId}`);
         } else if (userRole === 'teacher') {
             const userEmail = String(req.user.email || '').toLowerCase().trim();
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
@@ -430,7 +435,7 @@ export async function updateGrade(req, res) {
         const updatedGrade = await queryOne(`
             SELECT g.*, s.name as student_name, s.photo as student_photo
             FROM grades g
-            LEFT JOIN students s ON LOWER(TRIM(g.student_id)) = LOWER(TRIM(s.id))
+            LEFT JOIN students s ON g.student_id = s.id
             WHERE g.id = ?
         `, [req.params.id]);
 

@@ -107,6 +107,36 @@ CREATE TABLE IF NOT EXISTS grades (
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
+-- Course Units table (competency-based modules per course)
+CREATE TABLE IF NOT EXISTS course_units (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+);
+
+-- Student Unit Marks table
+CREATE TABLE IF NOT EXISTS student_unit_marks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id TEXT NOT NULL,
+  course_id TEXT NOT NULL,
+  unit_id INTEGER NOT NULL,
+  unit_name TEXT NOT NULL,
+  marks REAL NOT NULL,
+  grade TEXT NOT NULL CHECK(grade IN ('Distinction', 'Credit', 'Pass', 'Fail')),
+  lecturer TEXT,
+  recorded_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+  FOREIGN KEY (unit_id) REFERENCES course_units(id) ON DELETE CASCADE,
+  UNIQUE(student_id, course_id, unit_id)
+);
+
 -- Announcements table
 CREATE TABLE IF NOT EXISTS announcements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

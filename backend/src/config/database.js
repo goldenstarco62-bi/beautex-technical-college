@@ -803,7 +803,48 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ Performance indexes migration warning (PostgreSQL):', e.message);
     }
+
+    // Migration: Course Units table (competency-based grading)
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS course_units (
+                id SERIAL PRIMARY KEY,
+                course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ course_units table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ course_units migration warning (PostgreSQL):', e.message);
+    }
+
+    // Migration: Student Unit Marks table (competency-based grading)
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS student_unit_marks (
+                id SERIAL PRIMARY KEY,
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                unit_id INTEGER NOT NULL REFERENCES course_units(id) ON DELETE CASCADE,
+                unit_name TEXT NOT NULL,
+                marks DECIMAL NOT NULL,
+                grade TEXT NOT NULL CHECK(grade IN ('Distinction', 'Credit', 'Pass', 'Fail')),
+                lecturer TEXT,
+                recorded_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, course_id, unit_id)
+            )
+        `);
+        console.log('✅ student_unit_marks table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ student_unit_marks migration warning (PostgreSQL):', e.message);
+    }
 }
+
 
 async function runSqliteMigrations(database) {
     try {
@@ -1211,7 +1252,52 @@ async function runSqliteMigrations(database) {
     } catch (e) {
         console.warn('⚠️ Performance indexes migration warning (SQLite):', e.message);
     }
+
+    // Migration: Course Units (competency-based grading)
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS course_units (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            )
+        `);
+        console.log('✅ course_units table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ course_units migration warning (SQLite):', e.message);
+    }
+
+    // Migration: Student Unit Marks (competency-based grading)
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS student_unit_marks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                unit_name TEXT NOT NULL,
+                marks REAL NOT NULL,
+                grade TEXT NOT NULL CHECK(grade IN ('Distinction', 'Credit', 'Pass', 'Fail')),
+                lecturer TEXT,
+                recorded_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+                FOREIGN KEY (unit_id) REFERENCES course_units(id) ON DELETE CASCADE,
+                UNIQUE(student_id, course_id, unit_id)
+            )
+        `);
+        console.log('✅ student_unit_marks table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ student_unit_marks migration warning (SQLite):', e.message);
+    }
 }
+
 
 /**
  * Translate SQLite-specific functions to PostgreSQL equivalents
