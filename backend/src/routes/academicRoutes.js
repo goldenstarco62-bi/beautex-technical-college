@@ -27,6 +27,7 @@ router.get('/stats/dashboard', authenticateToken, authorizeRoles('teacher', 'adm
 router.get('/stats/search', authenticateToken, statsController.globalSearch);
 
 // ── Attendance ────────────────────────────────────────────────────────────────
+router.get('/attendance/monthly-summary', authenticateToken, attendanceController.getMonthlyAttendanceSummary);
 router.get('/attendance/summary', authenticateToken, authorizeRoles('admin', 'superadmin', 'teacher'), attendanceController.getAttendanceSummary);
 router.get('/attendance', authenticateToken, attendanceController.getAllAttendance);
 router.post('/attendance', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.markAttendance);

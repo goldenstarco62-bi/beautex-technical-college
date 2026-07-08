@@ -197,13 +197,7 @@ export async function initializeDatabase() {
                     console.error('❌ Critical: supabase_schema.sql not found for PostgreSQL initialization');
                 }
             } else {
-                console.log('ℹ️ Base tables present. Running safe schema patch...');
-                const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');
-                if (fs.existsSync(supabaseSchemaPath)) {
-                    const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
-                    await database.query(supabaseSchema);
-                    console.log('✅ PostgreSQL schema check/update complete.');
-                }
+                console.log('ℹ️ Base tables present. Skipping base schema execution (speed optimization).');
             }
 
             await runPostgresMigrations(database);
@@ -799,6 +793,10 @@ async function runPostgresMigrations(database) {
         await database.query('CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id)');
         await database.query('CREATE INDEX IF NOT EXISTS idx_academic_reports_student_id ON academic_reports(student_id)');
         await database.query('CREATE INDEX IF NOT EXISTS idx_academic_reports_trainer_email ON academic_reports(trainer_email)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_student_unit_marks_student_id ON student_unit_marks(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_student_fees_student_id ON student_fees(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_monthly_fee_tracking_student_id ON monthly_fee_tracking(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_course_units_course_id ON course_units(course_id)');
         console.log('✅ Performance indexes ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ Performance indexes migration warning (PostgreSQL):', e.message);
@@ -1248,6 +1246,10 @@ async function runSqliteMigrations(database) {
         await database.run('CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id)');
         await database.run('CREATE INDEX IF NOT EXISTS idx_academic_reports_student_id ON academic_reports(student_id)');
         await database.run('CREATE INDEX IF NOT EXISTS idx_academic_reports_trainer_email ON academic_reports(trainer_email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_student_unit_marks_student_id ON student_unit_marks(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_student_fees_student_id ON student_fees(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_monthly_fee_tracking_student_id ON monthly_fee_tracking(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_course_units_course_id ON course_units(course_id)');
         console.log('✅ Performance indexes ensured (SQLite)');
     } catch (e) {
         console.warn('⚠️ Performance indexes migration warning (SQLite):', e.message);
@@ -1511,16 +1513,42 @@ export async function seedNewSettings(database) {
 
     try {
         const isPostgres = getActiveDbEngine() === 'postgres';
-        for (const [key, val] of Object.entries(settings)) {
+        let existingKeys = [];
+        if (isPostgres) {
+            const res = await database.query('SELECT key FROM system_settings');
+            existingKeys = res.rows.map(r => r.key || r.KEY);
+        } else {
+            const res = await database.all('SELECT key FROM system_settings');
+            existingKeys = res.map(r => r.key || r.KEY);
+        }
+        const existingSet = new Set(existingKeys.map(k => String(k).trim()));
+
+        // Filter keys that are missing
+        const missingSettings = Object.entries(settings).filter(([key]) => !existingSet.has(key));
+
+        if (missingSettings.length > 0) {
+            console.log(`🌱 Seeding ${missingSettings.length} missing system settings...`);
             if (isPostgres) {
-                const check = await database.query('SELECT key FROM system_settings WHERE key = $1', [key]);
-                if (check.rows.length === 0) {
-                    await database.query('INSERT INTO system_settings (key, value) VALUES ($1, $2)', [key, val]);
+                await database.query('BEGIN');
+                try {
+                    for (const [key, val] of missingSettings) {
+                        await database.query('INSERT INTO system_settings (key, value) VALUES ($1, $2)', [key, val]);
+                    }
+                    await database.query('COMMIT');
+                } catch (err) {
+                    await database.query('ROLLBACK');
+                    throw err;
                 }
             } else {
-                const check = await database.get('SELECT key FROM system_settings WHERE key = ?', [key]);
-                if (!check) {
-                    await database.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', [key, val]);
+                await database.run('BEGIN');
+                try {
+                    for (const [key, val] of missingSettings) {
+                        await database.run('INSERT INTO system_settings (key, value) VALUES (?, ?)', [key, val]);
+                    }
+                    await database.run('COMMIT');
+                } catch (err) {
+                    await database.run('ROLLBACK');
+                    throw err;
                 }
             }
         }

@@ -212,9 +212,9 @@ export default function UnitsCovered() {
             // Teachers only see their assigned courses
             const allCourses = coursesRes?.data || [];
             const visibleCourses = isTeacher
-                ? allCourses.filter(c => c.instructor && c.instructor.toLowerCase() === (user?.name || '').toLowerCase())
+                ? allCourses.filter(c => c.instructor && c.instructor.toLowerCase().trim() === (user?.name || '').toLowerCase().trim())
                 : allCourses;
-            setCourses(visibleCourses.length > 0 ? visibleCourses : allCourses);
+            setCourses(isTeacher ? visibleCourses : allCourses);
             // For students, studentsRes.data is a single object; for others it's an array
             if (isStudent) {
                 const sData = studentsRes?.data;

@@ -25,7 +25,6 @@ function parseFacultyCourses(coursesField) {
 export async function getAllGrades(req, res) {
     try {
         const mongo = await isMongo();
-        console.log(`ðŸ“¡ Database Mode: ${mongo ? 'MongoDB' : 'SQL'}`);
 
         if (mongo) {
             const Grade = (await import('../models/mongo/Grade.js')).default;
@@ -41,10 +40,9 @@ export async function getAllGrades(req, res) {
             if (userRole === 'student') {
                 studentIdFilter = String(studentId);
                 if (!studentIdFilter || studentIdFilter === 'null') {
-                    console.warn(`âš ï¸ Student ${req.user.email} attempted to fetch grades without a student_id or user id (Mongo)`);
+                    console.warn(`[grades] Student ${req.user.email} attempted to fetch grades without a student_id or user id (Mongo)`);
                     return res.json([]);
                 }
-                console.log(`ðŸ” Filtering grades for student ID: ${studentIdFilter} (Mongo)`);
             } else if (userRole === 'teacher') {
                 const Faculty = (await import('../models/mongo/Faculty.js')).default;
                 const Course = (await import('../models/mongo/Course.js')).default;
@@ -108,16 +106,13 @@ export async function getAllGrades(req, res) {
         const studentId = req.user?.student_id || req.user?.id;
         const isAdmin = ['admin', 'superadmin'].includes(userRole);
 
-        console.log(`ðŸ“Š Fetching grades registry - User: ${req.user?.email}, Role: "${userRole}", isAdmin: ${isAdmin}, StudentID: "${studentId}"`);
-
         if (userRole === 'student') {
             if (!studentId || studentId === 'null') {
-                console.warn(`âš ï¸  Student ${req.user.email} attempted to fetch grades without a student_id`);
+                console.warn(`[grades] Student ${req.user.email} attempted to fetch grades without a student_id`);
                 return res.json([]);
             }
             conditions.push('g.student_id = ?');
             params.push(String(studentId).trim());
-            console.log(`ðŸ”  Applied student filter: ${studentId}`);
         } else if (userRole === 'teacher') {
             const userEmail = String(req.user.email || '').toLowerCase().trim();
             const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
@@ -131,21 +126,18 @@ export async function getAllGrades(req, res) {
                     const placeholders = allTutorCourses.map(() => '?').join(',');
                     conditions.push(`g.course IN (${placeholders})`);
                     params.push(...allTutorCourses);
-                    console.log(`ðŸ” Applied teacher course filter: ${JSON.stringify(allTutorCourses)}`);
                 } else {
-                    console.log('â„¹ï¸ Teacher has no courses assigned. Returning empty registry.');
+                    console.log('[grades] Teacher has no courses assigned. Returning empty registry.');
                     return res.json([]);
                 }
             } else {
-                console.warn(`âš ï¸ Faculty profile not found for teacher: ${userEmail}. Role: ${userRole}`);
+                console.warn(`[grades] Faculty profile not found for teacher: ${userEmail}. Role: ${userRole}`);
                 return res.json([]);
             }
         } else if (isAdmin) {
-            console.log('ðŸ‘‘ Admin/Superadmin detected. Accessing global registry.');
             if (req.query.course) {
                 conditions.push('g.course = ?');
                 params.push(req.query.course);
-                console.log(`ðŸ” Applied admin course filter: ${req.query.course}`);
             }
         } else if (req.query.course) {
             conditions.push('g.course = ?');
@@ -157,9 +149,9 @@ export async function getAllGrades(req, res) {
         }
 
         sql += ' ORDER BY g.id DESC';
-        console.log('ðŸ“¡ Final SQL Query:', sql, params);
-
         const grades = await query(sql, params);
+
+
 
         // FIX: Normalize course names for Supabase/PostgreSQL (remove {"..."})
         const cleanedGrades = grades.map(g => ({
@@ -190,7 +182,7 @@ export async function getBatchStudents(req, res) {
             return res.json(students);
         }
 
-        // Fetch all active students then filter â€” handles plain string, JSON array, and Postgres {} format
+        // Fetch all active students then filter - handles plain string, JSON array, and Postgres {} format
         const allStudents = await query('SELECT id, name, course FROM students WHERE status = ?', ['Active']);
         const normalise = (raw) => {
             if (!raw) return [];
@@ -238,22 +230,32 @@ export async function createBatchGrades(req, res) {
                 results.push(newGrade);
             }
         } else {
-            for (const g of grades) {
-                await run(
-                    'INSERT INTO grades (student_id, course, assignment, month, score, max_score, remarks) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                    [g.student_id, g.course, g.assignment, g.month, g.score, g.max_score || 100, g.remarks || '']
-                );
+            await run('BEGIN');
+            try {
+                for (const g of grades) {
+                    await run(
+                        'INSERT INTO grades (student_id, course, assignment, month, score, max_score, remarks) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        [g.student_id, g.course, g.assignment, g.month, g.score, g.max_score || 100, g.remarks || '']
+                    );
+                }
+                await run('COMMIT');
+            } catch (err) {
+                await run('ROLLBACK');
+                throw err;
             }
         }
 
-        // Notify students asynchronously
-        for (const g of grades) {
-            notificationService.notifyStudent(
-                g.student_id,
-                'New Grade Posted',
-                `Your grade for ${g.assignment} (${g.course}) has been posted.`,
-                'success'
-            );
+        // Notify students in bulk (optimizes database round-trips and connections)
+        try {
+            const notifications = grades.map(g => ({
+                studentId: g.student_id,
+                title: 'New Grade Posted',
+                content: `Your grade for ${g.assignment} (${g.course}) has been posted.`,
+                type: 'success'
+            }));
+            notificationService.notifyStudentsBulk(notifications);
+        } catch (notifErr) {
+            console.error('⚠️ Async bulk notify warning:', notifErr.message);
         }
 
         res.status(201).json({ message: `Successfully recorded ${grades.length} marks`, count: grades.length });

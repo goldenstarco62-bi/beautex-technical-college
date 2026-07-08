@@ -271,6 +271,43 @@ export default function AttendanceSummary() {
         }, 800);
     };
 
+    const handleDownloadCSV = () => {
+        let csvContent = "\ufeffStudent Name,Student ID,Course Program,";
+        
+        if (activeTab === 'overall') {
+            csvContent += "Classes,Present,Late,Absent,Attendance Rate,Status\n";
+            filteredData.forEach(s => {
+                const rate = s.overall?.rate || 0;
+                const status = rate >= 95 ? 'Excellent' : rate >= 85 ? 'Good' : rate >= 75 ? 'Fair' : 'Needs Improvement';
+                csvContent += `"${s.student_name}","${s.student_id}","${s.course}",${s.overall?.total || 0},${s.overall?.present || 0},${s.overall?.late || 0},${s.overall?.absent || 0},${rate}%,${status}\n`;
+            });
+        } else if (activeTab === 'weekly') {
+            csvContent += "Week,Classes,Present,Late,Absent,Weekly Rate\n";
+            filteredData.forEach(s => {
+                (s.weekly || []).forEach(w => {
+                    csvContent += `"${s.student_name}","${s.student_id}","${s.course}","${w.week}",${w.total},${w.present},${w.late},${w.absent},${w.rate}%\n`;
+                });
+            });
+        } else {
+            csvContent += "Month,Classes,Present,Late,Absent,Monthly Rate\n";
+            filteredData.forEach(s => {
+                (s.monthly || []).forEach(m => {
+                    csvContent += `"${s.student_name}","${s.student_id}","${s.course}","${m.month}",${m.total},${m.present},${m.late},${m.absent},${m.rate}%\n`;
+                });
+            });
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Attendance_Summary_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success("Excel CSV Report Downloaded Successfully");
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500 print:space-y-4 print:p-0">
             {/* Print Only Header */}
@@ -317,6 +354,14 @@ export default function AttendanceSummary() {
                     >
                         <FileDown className="w-3.5 h-3.5" />
                         Download PDF
+                    </button>
+                    <button
+                        onClick={handleDownloadCSV}
+                        disabled={loading}
+                        className="bg-emerald-600 text-white hover:bg-emerald-700 px-6 py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] transition-all"
+                    >
+                        <FileDown className="w-3.5 h-3.5" />
+                        Export Excel (CSV)
                     </button>
                     <button
                         onClick={handlePrint}
@@ -510,9 +555,31 @@ export default function AttendanceSummary() {
                                                                 <span className="text-rose-500">{student.overall?.absent || 0}A</span>
                                                             </td>
                                                             <td className="px-6 py-4.5 text-center">
-                                                                <span className={`inline-flex items-center gap-1 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${getRateColor(student.overall?.rate || 0)}`}>
-                                                                    {student.overall?.rate || 0}%
-                                                                </span>
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span className={`inline-flex items-center gap-1 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${getRateColor(student.overall?.rate || 0)}`}>
+                                                                        {student.overall?.rate || 0}%
+                                                                    </span>
+                                                                    {(() => {
+                                                                        const r = student.overall?.rate || 0;
+                                                                        let badgeStyle = 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
+                                                                        let label = 'Needs Imp.';
+                                                                        if (r >= 95) {
+                                                                            badgeStyle = 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
+                                                                            label = 'Excellent';
+                                                                        } else if (r >= 85) {
+                                                                            badgeStyle = 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
+                                                                            label = 'Good';
+                                                                        } else if (r >= 75) {
+                                                                            badgeStyle = 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
+                                                                            label = 'Fair';
+                                                                        }
+                                                                        return (
+                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeStyle}`}>
+                                                                                {label}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4.5 text-xs text-gray-500">
                                                                 <div className="flex flex-col gap-0.5">
@@ -529,9 +596,31 @@ export default function AttendanceSummary() {
                                                                 {(student.weekly || []).length} wks
                                                             </td>
                                                             <td className="px-6 py-4.5 text-center">
-                                                                <span className={`inline-flex items-center gap-1 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${getRateColor(student.overall?.rate || 0)}`}>
-                                                                    {student.overall?.rate || 0}%
-                                                                </span>
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span className={`inline-flex items-center gap-1 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${getRateColor(student.overall?.rate || 0)}`}>
+                                                                        {student.overall?.rate || 0}%
+                                                                    </span>
+                                                                    {(() => {
+                                                                        const r = student.overall?.rate || 0;
+                                                                        let badgeStyle = 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
+                                                                        let label = 'Needs Imp.';
+                                                                        if (r >= 95) {
+                                                                            badgeStyle = 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
+                                                                            label = 'Excellent';
+                                                                        } else if (r >= 85) {
+                                                                            badgeStyle = 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
+                                                                            label = 'Good';
+                                                                        } else if (r >= 75) {
+                                                                            badgeStyle = 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
+                                                                            label = 'Fair';
+                                                                        }
+                                                                        return (
+                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeStyle}`}>
+                                                                                {label}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4.5 text-xs text-gray-500">
                                                                 <div className="flex flex-col gap-0.5">
@@ -548,9 +637,31 @@ export default function AttendanceSummary() {
                                                                 {(student.monthly || []).length} mos
                                                             </td>
                                                             <td className="px-6 py-4.5 text-center">
-                                                                <span className={`inline-flex items-center gap-1 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${getRateColor(student.overall?.rate || 0)}`}>
-                                                                    {student.overall?.rate || 0}%
-                                                                </span>
+                                                                <div className="flex flex-col items-center gap-1">
+                                                                    <span className={`inline-flex items-center gap-1 text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wider border ${getRateColor(student.overall?.rate || 0)}`}>
+                                                                        {student.overall?.rate || 0}%
+                                                                    </span>
+                                                                    {(() => {
+                                                                        const r = student.overall?.rate || 0;
+                                                                        let badgeStyle = 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
+                                                                        let label = 'Needs Imp.';
+                                                                        if (r >= 95) {
+                                                                            badgeStyle = 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
+                                                                            label = 'Excellent';
+                                                                        } else if (r >= 85) {
+                                                                            badgeStyle = 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
+                                                                            label = 'Good';
+                                                                        } else if (r >= 75) {
+                                                                            badgeStyle = 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
+                                                                            label = 'Fair';
+                                                                        }
+                                                                        return (
+                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeStyle}`}>
+                                                                                {label}
+                                                                            </span>
+                                                                        );
+                                                                    })()}
+                                                                </div>
                                                             </td>
                                                             <td className="px-6 py-4.5 text-xs text-gray-500">
                                                                 <div className="flex flex-col gap-0.5">

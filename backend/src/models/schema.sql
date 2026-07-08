@@ -360,7 +360,10 @@ INSERT OR IGNORE INTO system_settings (key, value) VALUES
 ('teacher_portal_enabled', 'true'),
 ('parent_portal_enabled', 'true'),
 ('allow_registration', 'true'),
-('grading_system', 'standard');
+('grading_system', 'standard'),
+('att_excellent', '95'),
+('att_good', '85'),
+('att_fair', '75');
 
 -- Audit Logs table
 CREATE TABLE IF NOT EXISTS audit_logs (

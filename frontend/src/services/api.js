@@ -76,7 +76,9 @@ export const attendanceAPI = {
     update: (id, data) => api.put(`attendance/${encodeURIComponent(id)}`, data),
     delete: (id) => api.delete(`attendance/${encodeURIComponent(id)}`),
     getSummary: (params) => api.get('attendance/summary', { params }),
+    getMonthlySummary: (params) => api.get('attendance/monthly-summary', { params }),
 };
+
 
 // Grades
 export const gradesAPI = {

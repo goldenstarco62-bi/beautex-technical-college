@@ -35,7 +35,7 @@ async function getAllUserEmails() {
             } catch (e) { console.warn('Student email fetch skipped:', e.message); }
 
         } else {
-            // SQL path â€” pull from all three tables
+            // SQL path - pull from all three tables
             const [userRows, facultyRows, studentRows] = await Promise.all([
                 query('SELECT email FROM users').catch(() => []),
                 query('SELECT email FROM faculty').catch(() => []),
@@ -48,10 +48,10 @@ async function getAllUserEmails() {
         }
 
         const emails = [...emailSet].filter(e => e && e.includes('@'));
-        console.log(`ðŸ“‹ Registry Dispatch: ${emails.length} unique recipient(s) identified.`);
+        console.log(`[announcement] Registry Dispatch: ${emails.length} unique recipient(s) identified.`);
         return emails;
     } catch (err) {
-        console.error('âŒ Registry Query Failure:', err.message);
+        console.error('[announcement] Registry Query Failure:', err.message);
         return [];
     }
 }
@@ -110,20 +110,20 @@ export async function createAnnouncement(req, res) {
         );
 
 
-        console.log('ðŸ“¡ Initiating background broadcast sequence...');
+        console.log('[announcement] Initiating background broadcast sequence...');
         
         getAllUserEmails()
             .then(emails => {
                 if (!emails || emails.length === 0) {
-                    console.warn('âš ï¸ Broadcast Aborted: No active recipients found in registry.');
+                    console.warn('[announcement] Broadcast Aborted: No active recipients found in registry.');
                     return;
                 }
                 
-                console.log(`ðŸ“¢ Dispatching to ${emails.length} members. (Author: ${author || 'Admin'})`);
+                console.log(`[announcement] Dispatching to ${emails.length} members. (Author: ${author || 'Admin'})`);
                 return sendAnnouncementEmail(savedAnnouncement, emails);
             })
             .catch(err => {
-                console.error('âŒ Critical failure in background announcement broadcast path:', err.message);
+                console.error('[announcement] Critical failure in background broadcast path:', err.message);
             });
 
     } catch (error) {

@@ -22,7 +22,7 @@ function parseFacultyCourses(coursesField) {
 
 /**
  * GET /materials
- * Returns material metadata ONLY â€” never returns the raw base64 file_url body.
+ * Returns material metadata ONLY - never returns the raw base64 file_url body.
  * The actual file bytes are served by the separate GET /materials/:id/download endpoint.
  * This keeps the list response small even when materials are large.
  */
@@ -95,7 +95,7 @@ export async function getMaterials(req, res) {
                     const course = await Course.findById(obj.course_id).select('name').catch(() => null);
                     obj.course_name = course?.name || '';
                 }
-                // FIX: Strip raw base64 data from list response â€” replaced by download URL
+                // FIX: Strip raw base64 data from list response - replaced by download URL
                 if (obj.file_url && obj.file_url.startsWith('data:')) {
                     obj.file_url = null; // Client should use /materials/:id/download
                 }
@@ -106,7 +106,7 @@ export async function getMaterials(req, res) {
             return res.json(enriched);
         }
 
-        // FIX: Build two query variants â€” full (with optional columns) and minimal (guaranteed columns).
+        // FIX: Build two query variants - full (with optional columns) and minimal (guaranteed columns).
         // If the production DB doesn't have file_name/file_size/mime_type yet, the minimal query is used.
         const fullSelectCols = `m.id, m.course_id, m.title, m.description, m.uploaded_by, m.file_name, m.file_size, m.mime_type, m.created_at, c.name as course_name`;
         const minimalSelectCols = `m.id, m.course_id, m.title, m.description, m.uploaded_by, m.created_at, c.name as course_name`;
@@ -187,7 +187,7 @@ export async function getMaterials(req, res) {
                 queryErr.message.includes('no such column')
             );
             if (missingCol) {
-                console.warn('âš ï¸ getMaterials: schema drift â€” falling back to minimal SELECT. Run the migration to add file_name/file_size/mime_type columns.');
+                console.warn('[materials] getMaterials: schema drift - falling back to minimal SELECT. Run the migration to add file_name/file_size/mime_type columns.');
                 const fallbackSql = sql.replace(fullSelectCols, minimalSelectCols);
                 materials = await query(fallbackSql, params);
             } else {
@@ -251,7 +251,7 @@ export async function downloadMaterial(req, res) {
             return res.send(buffer);
         }
 
-        // External URL â€” redirect
+        // External URL - redirect
         return res.redirect(302, fileUrl);
     } catch (error) {
         console.error('downloadMaterial error:', error);
@@ -339,7 +339,7 @@ export async function uploadMaterial(req, res) {
                 insertErr.message.includes('no such column')
             );
             if (missingColumn) {
-                console.warn('âš ï¸ course_materials schema drift detected â€” falling back to minimal INSERT. Run the migration SQL to add file_name/file_size/mime_type columns.');
+                console.warn('[materials] course_materials schema drift detected - falling back to minimal INSERT. Run the migration SQL to add file_name/file_size/mime_type columns.');
                 result = await run(
                     `INSERT INTO course_materials (course_id, title, description, file_url, uploaded_by) 
                      VALUES (?, ?, ?, ?, ?)`,

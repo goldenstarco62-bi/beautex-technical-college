@@ -79,6 +79,99 @@ export const notificationService = {
         } catch (error) {
             console.error('❌ notifyStudent error:', error);
         }
+    },
+
+    /**
+     * Notify multiple students in bulk by student_id list
+     */
+    notifyStudentsBulk: async (notificationsList) => {
+        if (!Array.isArray(notificationsList) || notificationsList.length === 0) return;
+        try {
+            const studentIds = [...new Set(notificationsList.map(n => String(n.studentId).trim()))];
+            if (studentIds.length === 0) return;
+
+            let users = [];
+            if (isMongo()) {
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const User = (await import('../models/mongo/User.js')).default;
+                const studentDocs = await Student.find({ id: { $in: studentIds } }).select('id email').lean();
+                const studentEmails = studentDocs.map(s => String(s.email).toLowerCase());
+                const userDocs = await User.find({ email: { $in: studentEmails } }).select('id email').lean();
+                const emailToUserId = new Map(userDocs.map(u => [String(u.email).toLowerCase(), u._id]));
+                users = studentDocs.map(s => ({
+                    student_id: s.id,
+                    user_id: emailToUserId.get(String(s.email).toLowerCase())
+                })).filter(u => u.user_id);
+            } else {
+                const placeholders = studentIds.map(() => '?').join(',');
+                users = await query(
+                    `SELECT s.id AS student_id, u.id AS user_id 
+                     FROM students s 
+                     JOIN users u ON LOWER(s.email) = LOWER(u.email) 
+                     WHERE s.id IN (${placeholders})`,
+                    studentIds
+                );
+            }
+
+            const userMap = new Map(users.map(u => [String(u.student_id).trim(), String(u.user_id)]));
+
+            if (isMongo()) {
+                const Notification = (await import('../models/mongo/Notification.js')).default;
+                const docs = notificationsList.map(n => {
+                    const userId = userMap.get(String(n.studentId).trim());
+                    if (!userId) return null;
+                    return {
+                        user_id: userId,
+                        title: n.title,
+                        content: n.content,
+                        type: n.type || 'info',
+                        priority: 'medium'
+                    };
+                }).filter(Boolean);
+                if (docs.length > 0) {
+                    await Notification.insertMany(docs);
+                }
+            } else {
+                const isPostgres = getActiveDbEngine() === 'postgres';
+                const sql = isPostgres 
+                    ? 'INSERT INTO notifications (user_id, title, content, type) VALUES ($1, $2, $3, $4)'
+                    : 'INSERT INTO notifications (user_id, title, content, type) VALUES (?, ?, ?, ?)';
+
+                const database = await getDb();
+                if (isPostgres) {
+                    await database.query('BEGIN');
+                    try {
+                        for (const n of notificationsList) {
+                            const userId = userMap.get(String(n.studentId).trim());
+                            if (userId) {
+                                await database.query(sql, [userId, n.title, n.content, n.type || 'info']);
+                            }
+                        }
+                        await database.query('COMMIT');
+                    } catch (err) {
+                        await database.query('ROLLBACK');
+                        throw err;
+                    }
+                } else {
+                    await database.run('BEGIN');
+                    try {
+                        for (const n of notificationsList) {
+                            const userId = userMap.get(String(n.studentId).trim());
+                            if (userId) {
+                                await database.run(sql, [userId, n.title, n.content, n.type || 'info']);
+                            }
+                        }
+                        await database.run('COMMIT');
+                    } catch (err) {
+                        await database.run('ROLLBACK');
+                        throw err;
+                    }
+                }
+            }
+            console.log(`🔔 Bulk notifications created for ${notificationsList.length} students`);
+        } catch (error) {
+            console.error('❌ notifyStudentsBulk error:', error);
+        }
     }
 };
 

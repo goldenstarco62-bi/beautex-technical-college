@@ -24,10 +24,12 @@ import {
     RefreshCw,
     TrendingUp,
     TrendingDown,
-    Activity
+    Activity,
+    Calendar
 } from 'lucide-react';
 import { studentDashboardAPI } from '../services/api';
 import { studentDailyReportsAPI } from '../services/api';
+import { attendanceAPI } from '../services/api';
 import { cacheGet, cacheSet, cacheInvalidate, studentDashboardKey } from '../utils/dashboardCache';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-hot-toast';
@@ -56,6 +58,7 @@ export default function StudentDashboard() {
     const [recentPayments, setRecentPayments] = useState([]);
     const [dailyReports, setDailyReports] = useState([]);
     const [monthlyFees, setMonthlyFees] = useState([]);
+    const [monthlyAttendance, setMonthlyAttendance] = useState(null);
     const [loading, setLoading] = useState(true);
 
     // Comment Dialog State
@@ -89,6 +92,15 @@ export default function StudentDashboard() {
             // Populate cache for the next navigation within this session
             cacheSet(cacheKey, data);
             applyData(data);
+
+            // Fetch monthly attendance separately (role-aware endpoint)
+            try {
+                const now = new Date();
+                const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                const attRes = await attendanceAPI.getMonthlySummary({ month });
+                const attData = (attRes.data || [])[0] || null;
+                setMonthlyAttendance(attData);
+            } catch (_) { /* non-critical */ }
         } catch (error) {
             console.error('Error fetching student dashboard data:', error);
         } finally {
@@ -230,22 +242,125 @@ export default function StudentDashboard() {
     // ─────────────────────────────────────────────────────────────────────────
 
     if (loading) return (
-        <div className="space-y-8 animate-pulse">
-            {/* Skeleton Banner */}
-            <div className="h-40 bg-maroon/10 rounded-[2.5rem]" />
-            {/* Skeleton Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-                {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-28 bg-gray-100 dark:bg-white/5 rounded-[2rem]" />
+        <div className="space-y-6">
+            {/* ── Branded spinner overlay ── */}
+            <style>{`
+                @keyframes sd-shimmer {
+                    0%   { background-position: -600px 0; }
+                    100% { background-position:  600px 0; }
+                }
+                .sd-shimmer {
+                    background: linear-gradient(90deg,
+                        #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+                    background-size: 600px 100%;
+                    animation: sd-shimmer 1.4s ease-in-out infinite;
+                }
+                .dark .sd-shimmer {
+                    background: linear-gradient(90deg,
+                        rgba(255,255,255,0.04) 25%,
+                        rgba(255,255,255,0.09) 50%,
+                        rgba(255,255,255,0.04) 75%);
+                    background-size: 600px 100%;
+                    animation: sd-shimmer 1.4s ease-in-out infinite;
+                }
+                @keyframes sd-spin {
+                    to { transform: rotate(360deg); }
+                }
+                .sd-spin { animation: sd-spin 0.9s linear infinite; }
+                @keyframes sd-pulse-dot {
+                    0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+                    40%           { opacity: 1;   transform: scale(1);   }
+                }
+                .sd-dot { animation: sd-pulse-dot 1.4s ease-in-out infinite; }
+                .sd-dot:nth-child(2) { animation-delay: 0.2s; }
+                .sd-dot:nth-child(3) { animation-delay: 0.4s; }
+            `}</style>
+
+            {/* Centered spinner + label */}
+            <div className="flex flex-col items-center justify-center gap-4 py-6">
+                {/* Ring spinner */}
+                <div className="relative w-16 h-16">
+                    {/* Outer track */}
+                    <div className="absolute inset-0 rounded-full border-4 border-maroon/10" />
+                    {/* Spinning arc */}
+                    <div className="sd-spin absolute inset-0 rounded-full border-4 border-transparent border-t-maroon" />
+                    {/* Centre dot */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-4 h-4 rounded-full bg-maroon/20" />
+                    </div>
+                </div>
+
+                <div className="flex flex-col items-center gap-1">
+                    <p className="text-sm font-semibold text-maroon tracking-wide uppercase">
+                        Loading your dashboard
+                    </p>
+                    {/* Bouncing dots */}
+                    <div className="flex gap-1.5 mt-1">
+                        <span className="sd-dot w-1.5 h-1.5 rounded-full bg-maroon/60 inline-block" />
+                        <span className="sd-dot w-1.5 h-1.5 rounded-full bg-maroon/60 inline-block" />
+                        <span className="sd-dot w-1.5 h-1.5 rounded-full bg-maroon/60 inline-block" />
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Skeleton Banner ── */}
+            <div className="sd-shimmer rounded-[2.5rem] overflow-hidden" style={{ height: 156 }}>
+                <div className="h-full flex items-center gap-6 px-8 opacity-0">placeholder</div>
+            </div>
+
+            {/* ── Skeleton Stats row (5 cards) ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 md:gap-5">
+                {[...Array(5)].map((_, i) => (
+                    <div key={i} className="sd-shimmer rounded-[2rem] p-5 flex flex-col gap-3" style={{ height: 112 }}>
+                        <div className="sd-shimmer w-10 h-10 rounded-2xl" style={{ flex: 'none' }} />
+                        <div className="sd-shimmer h-3 rounded-full w-3/4" />
+                        <div className="sd-shimmer h-5 rounded-full w-1/2" />
+                    </div>
                 ))}
             </div>
-            {/* Skeleton Content */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                    <div className="h-48 bg-gray-100 dark:bg-white/5 rounded-[2.5rem]" />
-                    <div className="h-64 bg-gray-100 dark:bg-white/5 rounded-[2rem]" />
+
+            {/* ── Skeleton Content grid ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left 2-col span */}
+                <div className="lg:col-span-2 space-y-5">
+                    {/* Announcements card */}
+                    <div className="sd-shimmer rounded-[2.5rem]" style={{ height: 200 }} />
+
+                    {/* Grades table card */}
+                    <div className="rounded-[2rem] overflow-hidden border border-gray-100 dark:border-white/5 space-y-0">
+                        {/* Header */}
+                        <div className="sd-shimmer h-14 w-full" />
+                        {/* Rows */}
+                        {[...Array(4)].map((_, i) => (
+                            <div key={i} className="flex items-center gap-4 px-6 py-3 border-t border-gray-50 dark:border-white/5">
+                                <div className="sd-shimmer w-8 h-8 rounded-full" />
+                                <div className="sd-shimmer h-3 rounded-full flex-1" />
+                                <div className="sd-shimmer h-6 w-16 rounded-full" />
+                                <div className="sd-shimmer h-6 w-12 rounded-full" />
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Fee card */}
+                    <div className="sd-shimmer rounded-[2rem]" style={{ height: 130 }} />
                 </div>
-                <div className="h-80 bg-gray-100 dark:bg-white/5 rounded-[2rem]" />
+
+                {/* Right sidebar */}
+                <div className="space-y-5">
+                    {/* Attendance ring card */}
+                    <div className="sd-shimmer rounded-[2rem]" style={{ height: 200 }} />
+                    {/* Daily reports list */}
+                    <div className="rounded-[2rem] border border-gray-100 dark:border-white/5 overflow-hidden">
+                        <div className="sd-shimmer h-14 w-full" />
+                        {[...Array(3)].map((_, i) => (
+                            <div key={i} className="flex items-center gap-3 px-5 py-3 border-t border-gray-50 dark:border-white/5">
+                                <div className="sd-shimmer w-2 h-2 rounded-full" />
+                                <div className="sd-shimmer h-3 rounded-full flex-1" />
+                                <div className="sd-shimmer h-5 w-14 rounded-full" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -422,6 +537,85 @@ export default function StudentDashboard() {
                     );
                 })}
             </div>
+
+            {/* Monthly Attendance Widget */}
+            {(() => {
+                const now2 = new Date();
+                const monthLabel = now2.toLocaleString('default', { month: 'long', year: 'numeric' });
+                const ma = monthlyAttendance;
+                const pct = ma ? ma.percentage : parseInt(stats.attendanceRate) || 0;
+                const total   = ma ? ma.total   : 0;
+                const present = ma ? ma.present : 0;
+                const absent  = ma ? ma.absent  : 0;
+                const late    = ma ? ma.late    : 0;
+                const status  = ma ? ma.status  : (pct >= 95 ? 'Excellent' : pct >= 85 ? 'Good' : pct >= 75 ? 'Fair' : 'Needs Improvement');
+
+                const statusStyles = {
+                    'Excellent':         { ring: 'ring-emerald-200', bar: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '✔' },
+                    'Good':              { ring: 'ring-blue-200',    bar: 'bg-blue-500',    badge: 'bg-blue-50 text-blue-700 border-blue-200',       icon: '👍' },
+                    'Fair':              { ring: 'ring-amber-200',   bar: 'bg-amber-400',   badge: 'bg-amber-50 text-amber-700 border-amber-200',     icon: '⚠' },
+                    'Needs Improvement': { ring: 'ring-red-200',     bar: 'bg-red-500',     badge: 'bg-red-50 text-red-700 border-red-200',           icon: '⚡' },
+                };
+                const ss = statusStyles[status] || statusStyles['Needs Improvement'];
+
+                return (
+                    <div className={`bg-white dark:bg-[#111] rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-xl overflow-hidden ring-2 ${ss.ring}`}>
+                        {/* Gradient top strip */}
+                        <div className="h-1.5" style={{ background: 'linear-gradient(90deg,#800000,#c0392b)' }} />
+                        <div className="p-6 sm:p-8">
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 bg-maroon/10 rounded-xl flex items-center justify-center">
+                                        <Calendar className="w-4.5 h-4.5 text-maroon dark:text-gold" style={{width:'18px',height:'18px'}} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-xs font-black text-gray-800 dark:text-white uppercase tracking-widest">Monthly Attendance</h2>
+                                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{monthLabel}</p>
+                                    </div>
+                                </div>
+                                <Link to="/monthly-attendance"
+                                    className="text-[9px] font-black text-maroon dark:text-gold hover:underline uppercase tracking-widest bg-maroon/5 dark:bg-white/5 px-4 py-2 rounded-xl transition-all">
+                                    Full History
+                                </Link>
+                            </div>
+
+                            {/* Big percentage + bar */}
+                            <div className="flex items-end gap-6 mb-6">
+                                <div className="text-left">
+                                    <p className={`text-5xl font-black leading-none ${
+                                        pct >= 95 ? 'text-emerald-600' : pct >= 85 ? 'text-blue-600' : pct >= 75 ? 'text-amber-500' : 'text-red-500'
+                                    }`}>{pct}%</p>
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">Attendance Rate</p>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="h-3 bg-gray-100 dark:bg-white/10 rounded-full overflow-hidden">
+                                        <div className={`h-full ${ss.bar} rounded-full transition-all duration-1000`}
+                                            style={{ width: `${Math.min(pct, 100)}%` }} />
+                                    </div>
+                                    <div className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest ${ss.badge}`}>
+                                        {ss.icon} {status}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Stats row */}
+                            <div className="grid grid-cols-4 gap-3">
+                                {[
+                                    { label: 'Total',   value: total,   color: 'text-gray-700',   bg: 'bg-gray-50'   },
+                                    { label: 'Present', value: present, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                                    { label: 'Absent',  value: absent,  color: 'text-red-500',     bg: 'bg-red-50'    },
+                                    { label: 'Late',    value: late,    color: 'text-amber-500',   bg: 'bg-amber-50'  },
+                                ].map((st2, i) => (
+                                    <div key={i} className={`${st2.bg} dark:bg-white/5 rounded-2xl p-3 text-center`}>
+                                        <p className={`text-xl font-black ${st2.color}`}>{st2.value}</p>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-0.5">{st2.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

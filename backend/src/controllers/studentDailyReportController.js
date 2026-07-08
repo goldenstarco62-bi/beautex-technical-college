@@ -199,6 +199,34 @@ export const createDailyReport = async (req, res) => {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Authorization check for teachers
+    if (req.user.role === 'teacher') {
+        const userEmail = String(req.user.email || '').toLowerCase().trim();
+        const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+        if (!faculty) {
+            return res.status(403).json({ error: 'Access denied. Faculty record not found.' });
+        }
+
+        const coursesList = parseFacultyCourses(faculty.courses);
+        const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
+        const allTutorCourses = [...new Set([...coursesList.map(c => String(c).toLowerCase().trim()), ...instructorCourses.map(c => String(c.name).toLowerCase().trim())])];
+
+        // Ensure the course being reported is taught by this teacher
+        if (!allTutorCourses.includes(course.toLowerCase().trim())) {
+            return res.status(403).json({ error: `Security Protocol: You are not authorized to submit reports for course "${course}"` });
+        }
+
+        // Ensure student is enrolled in this course
+        const student = await queryOne('SELECT course FROM students WHERE id = ?', [student_id]);
+        if (!student) {
+            return res.status(404).json({ error: 'Student not found' });
+        }
+        const sCourses = parseFacultyCourses(student.course).map(c => c.toLowerCase().trim());
+        if (!sCourses.includes(course.toLowerCase().trim())) {
+            return res.status(400).json({ error: 'Student is not enrolled in this course' });
+        }
+    }
+
     try {
         if (await isMongo()) {
             const StudentDailyReport = (await import('../models/mongo/StudentDailyReport.js')).default;

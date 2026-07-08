@@ -315,7 +315,7 @@ export async function syncAllFees(req, res) {
             const allStructures = await FeeStructure.find();
             const allCourses = await Course.find();
 
-            console.log(`ðŸ”„ Syncing ledger for ${allStudents.length} students...`);
+            console.log(`[finance] Syncing ledger for ${allStudents.length} students...`);
 
             for (const student of allStudents) {
                 const sid = String(student.id || '').trim().toLowerCase();
@@ -374,7 +374,7 @@ export async function syncAllFees(req, res) {
         }
 
         // --- SQL Path (SQLite / PostgreSQL) ---
-        console.log('🔄 Syncing SQL Ledger...');
+        console.log('[finance] Syncing SQL Ledger...');
 
         // 1. Ensure all students have a row in student_fees
         await run(`
@@ -385,12 +385,12 @@ export async function syncAllFees(req, res) {
         `);
 
         // 2. Fetch data for auto-assignment
-        console.log('ðŸ”„ Fetching course and fee structure data...');
+        console.log('[finance] Fetching course and fee structure data...');
         const [structures, allCourses] = await Promise.all([
             query('SELECT * FROM fee_structures WHERE category = ?', ['Tuition Fee']),
             query('SELECT * FROM courses')
         ]);
-        console.log(`â„¹ï¸  Found ${structures.length} fee structures and ${allCourses.length} courses.`);
+        console.log(`[finance] Found ${structures.length} fee structures and ${allCourses.length} courses.`);
 
         // 3. Find students with 0 total_due and attempt auto-assignment
         const missingFees = await query(`
@@ -447,7 +447,7 @@ export async function syncAllFees(req, res) {
 
         res.json({ message: 'Ledger synchronized successfully' });
     } catch (error) {
-        console.error('âŒ Sync Failed:', error);
+        console.error('[finance] Sync Failed:', error);
         res.status(500).json({ error: error.message });
     }
 }
@@ -460,7 +460,7 @@ export async function recordPayment(req, res) {
             payment_date
         } = req.body;
 
-        console.log(`💰 Recording payment for ${student_id}: KSh ${amount} via ${method}`);
+        console.log(`[finance] Recording payment for ${student_id}: KSh ${amount} via ${method}`);
 
         const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
 
@@ -846,15 +846,15 @@ export async function mpesaCallback(req, res) {
         const authHeader = req.headers['x-mpesa-verification'];
         // For now, we allow it to proceed but log an audit trail if the header is missing
         if (!authHeader && process.env.NODE_ENV === 'production') {
-            console.warn('âš ï¸ Untrusted M-Pesa Callback received (missing verification header)');
+            console.warn('[mpesa] Untrusted M-Pesa Callback received (missing verification header)');
             // return res.status(401).end(); // Uncomment this when headers are configured in Safaricom Portal
         }
 
         const body = req.body.Body.stkCallback;
-        console.log('ðŸ“± M-Pesa Callback Received:', JSON.stringify(body, null, 2));
+        console.log('[mpesa] M-Pesa Callback Received:', JSON.stringify(body, null, 2));
 
         if (body.ResultCode === 0) {
-            console.log('âœ… M-Pesa Transaction Successful!');
+            console.log('[mpesa] M-Pesa Transaction Successful!');
             const metadata = body.CallbackMetadata.Item;
             const amount = metadata.find(i => i.Name === 'Amount')?.Value;
             const receipt = metadata.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
@@ -865,7 +865,7 @@ export async function mpesaCallback(req, res) {
             // For now, we attempt to find the student by phone number if ID is missing.
 
             const CheckoutRequestID = body.CheckoutRequestID;
-            console.log(`ðŸ’µ Received KSh ${amount} from ${phone}. Receipt: ${receipt}, ID: ${CheckoutRequestID}`);
+            console.log(`[mpesa] Received KSh ${amount} from ${phone}. Receipt: ${receipt}, ID: ${CheckoutRequestID}`);
 
             // FIX: PERSIST TO DATABASE
             // 1. Find student by phone (Fallback) or specific metadata if you passed it
@@ -898,9 +898,9 @@ export async function mpesaCallback(req, res) {
                         [student_id, 0, amount, 0, 'Partial']
                     );
                 }
-                console.log(`âœ… Ledger updated for ${student.name} (${student_id})`);
+                console.log(`[mpesa] Ledger updated for ${student.name} (${student_id})`);
             } else {
-                console.warn(`âš ï¸ Payment received but student with phone ${phone} not found in database.`);
+                console.warn(`[mpesa] Payment received but student with phone ${phone} not found in database.`);
                 // We should still record the payment with an 'Unassigned' status for manual matching
                 await run(
                     'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, status, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -908,12 +908,12 @@ export async function mpesaCallback(req, res) {
                 );
             }
         } else {
-            console.warn(`âŒ M-Pesa Transaction Failed/Cancelled: ${body.ResultDesc}`);
+            console.warn(`[mpesa] M-Pesa Transaction Failed/Cancelled: ${body.ResultDesc}`);
         }
 
         res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
     } catch (error) {
-        console.error('âŒ M-Pesa Callback Processing Error:', error.message);
+        console.error('[mpesa] M-Pesa Callback Processing Error:', error.message);
         res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
     }
 }

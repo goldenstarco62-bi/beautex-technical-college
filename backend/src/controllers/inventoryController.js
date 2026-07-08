@@ -107,7 +107,7 @@ export const getDashboardStats = async (req, res) => {
             });
         }
     } catch (err) {
-        console.error('âŒ Inventory Dashboard Critical Error:', {
+        console.error('[inventory] Inventory Dashboard Critical Error:', {
             message: err.message,
             stack: err.stack,
             code: err.code

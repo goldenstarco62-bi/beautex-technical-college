@@ -63,6 +63,7 @@ const navSections = [
             { name: 'Academic Reports', path: '/reports', icon: FileText, roles: ['teacher', 'admin', 'superadmin'] },
             { name: 'Daily Reports', path: '/activity-reports', icon: BarChart3, roles: ['admin', 'superadmin'] },
             { name: 'Attendance Summary', path: '/attendance-summary', icon: TrendingUp, roles: ['admin', 'superadmin', 'teacher'] },
+            { name: 'Monthly Attendance', path: '/monthly-attendance', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Trainer Reports', path: '/trainer-reports', icon: BookMarked, roles: ['admin', 'teacher', 'superadmin'] },
             { name: 'Study Materials', path: '/materials', icon: FileStack, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Announcements', path: '/announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student', 'superadmin'] },

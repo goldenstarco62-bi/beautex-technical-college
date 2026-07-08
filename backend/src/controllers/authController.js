@@ -106,10 +106,10 @@ export async function register(req, res) {
             });
         } catch (auditErr) {
             // Audit failure must never break the main flow
-            console.warn('âš ï¸ Audit log failed for REGISTER_USER:', auditErr.message);
+            console.warn('[auth] Audit log failed for REGISTER_USER:', auditErr.message);
         }
 
-        console.log(`âœ… [authController] User registered: ${normalizedEmail} (${role})`);
+        console.log(`[auth] User registered: ${normalizedEmail} (${role})`);
 
         res.status(201).json({
             success: true,
@@ -215,7 +215,7 @@ export async function login(req, res) {
 
         // Check if password change is required (AFTER status checks, token is now safe to issue)
         if (user.must_change_password) {
-            console.log('âš ï¸ Password change required. Providing temporary token.');
+            console.log('[auth] Password change required. Providing temporary token.');
             return res.json({
                 requirePasswordChange: true,
                 token,
@@ -241,8 +241,8 @@ export async function login(req, res) {
                 ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress
             });
         } catch (logErr) {
-            // Non-fatal â€” log but continue
-            console.error('âš ï¸ Login side-effect error (non-fatal):', logErr.message);
+            // Non-fatal - log but continue
+            console.error('[auth] Login side-effect error (non-fatal):', logErr.message);
         }
 
         res.json({
@@ -362,7 +362,7 @@ export async function forgotPassword(req, res) {
 
         const user = await findUserByEmail(email);
         if (!user) {
-            console.log(`ðŸ›¡ï¸ Password reset requested for non-existent user: ${email}`);
+            console.log(`[auth] Password reset requested for non-existent user: ${email}`);
             return res.json(genericResponse);
         }
 
@@ -391,10 +391,10 @@ export async function forgotPassword(req, res) {
 
         try {
             await sendAdminResetPasswordEmail(email, `Your password reset link:\n${resetLink}\n\nThis link expires in 1 hour.`);
-            console.log(`ðŸ“§ Password reset email sent to ${email}`);
+            console.log(`[auth] Password reset email sent to ${email}`);
         } catch (emailErr) {
-            console.error('âŒ Failed to send reset email:', emailErr.message);
-            // Fall through â€” still return generic response for security
+            console.error('[auth] Failed to send reset email:', emailErr.message);
+            // Fall through — still return generic response for security
         }
 
         res.json(genericResponse);

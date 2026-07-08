@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Clock, Zap, FileText, ClipboardCheck, Bell, Users, TrendingUp, Calendar, ChevronRight, Layers, Award, BarChart2, Edit3 } from 'lucide-react';
-import { coursesAPI, announcementsAPI, sessionsAPI } from '../services/api';
+import { BookOpen, Clock, Zap, FileText, ClipboardCheck, Bell, Users, TrendingUp, Calendar, ChevronRight, Layers, Award, BarChart2, Edit3, ArrowUpRight, Search, ChevronDown } from 'lucide-react';
+import { coursesAPI, announcementsAPI, sessionsAPI, attendanceAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -10,6 +10,10 @@ export default function TeacherDashboard() {
     const [myCourses, setMyCourses] = useState([]);
     const [mySessions, setMySessions] = useState([]);
     const [recentAnnouncements, setRecentAnnouncements] = useState([]);
+    const [monthlyAttendance, setMonthlyAttendance] = useState([]);
+    const [selectedCourseFilter, setSelectedCourseFilter] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortOption, setSortOption] = useState('highest_attendance');
     const [loading, setLoading] = useState(true);
     const [teacherName] = useState(user?.name || user?.email || 'Faculty');
     const [liveTime, setLiveTime] = useState(new Date());
@@ -31,10 +35,14 @@ export default function TeacherDashboard() {
     const fetchData = async () => {
         try {
             const name = user?.name || user?.email || '';
-            const [coursesRes, announcementsRes, sessionsRes] = await Promise.all([
+            const now = new Date();
+            const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            
+            const [coursesRes, announcementsRes, sessionsRes, attendanceRes] = await Promise.all([
                 coursesAPI.getAll(),
                 announcementsAPI.getAll({ limit: 5 }),
-                sessionsAPI.getAll()
+                sessionsAPI.getAll(),
+                attendanceAPI.getMonthlySummary({ month: monthStr }).catch(() => ({ data: [] }))
             ]);
 
             let myCoursesList = coursesRes.data || [];
@@ -48,6 +56,7 @@ export default function TeacherDashboard() {
             setMyCourses(myCoursesList);
             setMySessions(sessionsRes.data || []);
             setRecentAnnouncements(announcementsRes.data || []);
+            setMonthlyAttendance(attendanceRes.data || []);
         } catch (error) {
             console.error('Error fetching teacher dashboard data:', error);
         } finally {
@@ -327,6 +336,137 @@ export default function TeacherDashboard() {
                                 <p className="text-[10px] text-gray-300 mt-1 font-bold uppercase tracking-widest">Contact admin to get assigned</p>
                             </div>
                         )}
+                    </div>
+
+                    {/* ── Student Monthly Attendance Summary Panel ── */}
+                    <div className="bg-white dark:bg-[#111] p-8 rounded-[2rem] border border-gray-100 dark:border-white/5 shadow-sm space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl flex items-center justify-center">
+                                    <BarChart2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xs font-black text-gray-800 dark:text-gold uppercase tracking-widest">Monthly Attendance Overview</h2>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                        Current Month: {new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => navigate('/monthly-attendance')}
+                                className="text-[9px] font-black uppercase tracking-widest text-maroon dark:text-gold hover:underline flex items-center gap-1 self-start sm:self-auto bg-maroon/5 dark:bg-white/5 px-3 py-1.5 rounded-xl transition-all"
+                            >
+                                Detailed Summary <ArrowUpRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+
+                        {/* Filters & Sorting */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search student..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-white/5 border-none rounded-xl text-xs font-medium focus:ring-2 focus:ring-maroon/20 transition-all placeholder:text-gray-400"
+                                />
+                            </div>
+
+                            <div className="relative">
+                                <select
+                                    value={selectedCourseFilter}
+                                    onChange={(e) => setSelectedCourseFilter(e.target.value)}
+                                    className="w-full bg-gray-50 dark:bg-white/5 border-none rounded-xl text-xs font-bold py-2 pl-3 pr-8 focus:ring-2 focus:ring-maroon/20 transition-all appearance-none"
+                                >
+                                    <option value="">All My Courses</option>
+                                    {myCourses.map((c) => (
+                                        <option key={c.id} value={c.name}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                            </div>
+
+                            <div className="relative">
+                                <select
+                                    value={sortOption}
+                                    onChange={(e) => setSortOption(e.target.value)}
+                                    className="w-full bg-gray-50 dark:bg-white/5 border-none rounded-xl text-xs font-bold py-2 pl-3 pr-8 focus:ring-2 focus:ring-maroon/20 transition-all appearance-none"
+                                >
+                                    <option value="highest_attendance">Highest Attendance</option>
+                                    <option value="lowest_attendance">Lowest Attendance</option>
+                                    <option value="most_absent">Most Absent</option>
+                                    <option value="most_late">Most Late</option>
+                                    <option value="student_name">Student Name</option>
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                            </div>
+                        </div>
+
+                        {/* List/Table */}
+                        {(() => {
+                            const filtered = monthlyAttendance.filter((item) => {
+                                const matchesCourse = selectedCourseFilter ? item.course.toLowerCase().trim() === selectedCourseFilter.toLowerCase().trim() : true;
+                                const matchesSearch = searchQuery ? (
+                                    (item.student_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                    (item.student_id || '').toLowerCase().includes(searchQuery.toLowerCase())
+                                ) : true;
+                                return matchesCourse && matchesSearch;
+                            });
+
+                            const sorted = [...filtered].sort((a, b) => {
+                                if (sortOption === 'highest_attendance') return b.percentage - a.percentage;
+                                if (sortOption === 'lowest_attendance') return a.percentage - b.percentage;
+                                if (sortOption === 'most_absent') return b.absent - a.absent;
+                                if (sortOption === 'most_late') return b.late - a.late;
+                                return (a.student_name || '').localeCompare(b.student_name || '');
+                            });
+
+                            if (sorted.length === 0) {
+                                return (
+                                    <div className="py-8 text-center bg-gray-50 dark:bg-white/5 rounded-2xl border border-dashed border-gray-200 dark:border-white/10">
+                                        <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">No student summaries found</p>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="max-h-[350px] overflow-y-auto custom-scrollbar-dark border border-gray-100 dark:border-white/5 rounded-2xl divide-y divide-gray-50 dark:divide-white/5">
+                                    {sorted.map((item, idx) => {
+                                        let badgeColor = 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-400 border-rose-100 dark:border-rose-900/50';
+                                        if (item.status === 'Excellent') badgeColor = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/50';
+                                        else if (item.status === 'Good') badgeColor = 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 border-blue-100 dark:border-blue-900/50';
+                                        else if (item.status === 'Fair') badgeColor = 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-100 dark:border-amber-900/50';
+
+                                        return (
+                                            <div key={`${item.student_id}-${idx}`} className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
+                                                <div className="flex-1 min-w-0 pr-4">
+                                                    <h4 className="text-xs font-bold text-gray-800 dark:text-white truncate">{item.student_name}</h4>
+                                                    <p className="text-[9px] text-gray-400 font-mono mt-0.5">{item.student_id}</p>
+                                                    <p className="text-[9px] text-gray-400 truncate mt-0.5">{item.course}</p>
+                                                </div>
+                                                <div className="flex items-center gap-4 shrink-0">
+                                                    <div className="text-right">
+                                                        <span className="text-[10px] text-emerald-600 font-bold">{item.present}P</span>
+                                                        <span className="text-gray-300 dark:text-white/10 mx-1">/</span>
+                                                        <span className="text-amber-500 font-bold">{item.late}L</span>
+                                                        <span className="text-gray-300 dark:text-white/10 mx-1">/</span>
+                                                        <span className="text-rose-500 font-bold">{item.absent}A</span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-sm font-black text-maroon dark:text-gold">{item.percentage}%</p>
+                                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeColor}`}>
+                                                            {item.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {/* ── Upcoming Sessions ── */}

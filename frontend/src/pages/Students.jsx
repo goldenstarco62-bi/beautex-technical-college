@@ -872,6 +872,31 @@ export default function Students() {
                                 ))}
                             </div>
 
+                            {/* Attendance Summary */}
+                            <div className="bg-maroon/3 rounded-2xl p-5 border border-maroon/8 mb-5">
+                                <div className="flex justify-between items-center mb-3">
+                                    <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest">Monthly Attendance Ledger</p>
+                                    <button
+                                        onClick={() => {
+                                            setShowProfileModal(null);
+                                            navigate(`/monthly-attendance?student_id=${showProfileModal.id}`);
+                                        }}
+                                        className="text-[9px] font-black text-maroon hover:underline uppercase tracking-widest"
+                                    >
+                                        View Full Ledger
+                                    </button>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100">
+                                    <div>
+                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Real-time Tracker</p>
+                                        <p className="text-xs font-bold text-gray-700 mt-0.5">Track student present, absent, & late arrivals</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[8px] font-black uppercase text-gold bg-maroon px-2 py-1 rounded-lg">Connected</span>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Guardian Info */}
                             {(showProfileModal.guardian_name || showProfileModal.guardian_contact) && (
                                 <div className="bg-maroon/3 rounded-2xl p-5 border border-maroon/8 mb-5">

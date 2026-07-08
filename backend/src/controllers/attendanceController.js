@@ -600,3 +600,218 @@ export async function deleteAttendance(req, res) {
         res.status(500).json({ error: 'Failed to delete attendance' });
     }
 }
+
+/**
+ * GET /attendance/monthly-summary
+ * Returns per-student monthly attendance summaries with status labels.
+ * Query params: ?month=2026-07&course=&student_id=&sort=highest_attendance
+ * Role-based: students see own data, teachers see their courses, admins see all.
+ */
+export async function getMonthlyAttendanceSummary(req, res) {
+    try {
+        const { month, course, student_id, sort = 'student_name' } = req.query;
+        const { role, email } = req.user;
+        const mongo = await isMongo();
+
+        // Determine the target month (default: current month)
+        const targetMonth = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        const [year, mon] = targetMonth.split('-').map(Number);
+
+        // Build month date range
+        const monthStart = `${targetMonth}-01`;
+        const lastDay = new Date(year, mon, 0).getDate();
+        const monthEnd = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
+
+        // Read configurable thresholds from system_settings
+        let threshExcellent = 95, threshGood = 85, threshFair = 75;
+        if (!mongo) {
+            const { query: dbQuery } = await import('../config/database.js');
+            try {
+                const threshRows = await dbQuery(
+                    "SELECT key, value FROM system_settings WHERE key IN ('att_excellent','att_good','att_fair')"
+                );
+                threshRows.forEach(r => {
+                    if (r.key === 'att_excellent') threshExcellent = parseFloat(r.value) || 95;
+                    if (r.key === 'att_good') threshGood = parseFloat(r.value) || 85;
+                    if (r.key === 'att_fair') threshFair = parseFloat(r.value) || 75;
+                });
+            } catch (_) { /* use defaults */ }
+        }
+
+        const getStatus = (pct) => {
+            if (pct >= threshExcellent) return 'Excellent';
+            if (pct >= threshGood) return 'Good';
+            if (pct >= threshFair) return 'Fair';
+            return 'Needs Improvement';
+        };
+
+        // ── Resolve teacher courses ─────────────────────────────────────────
+        let teacherAllowedCourses = null;
+        if (role === 'teacher') {
+            const userEmail = String(email || '').toLowerCase().trim();
+            if (mongo) {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const fac = await Faculty.findOne({ email: { $regex: new RegExp(`^${userEmail}$`, 'i') } });
+                if (fac) {
+                    const matched = await Course.find({
+                        $or: [
+                            { instructor: { $regex: new RegExp(`^${fac.name}$`, 'i') } },
+                            { name: { $in: parseFacultyCourses(fac.courses) } }
+                        ]
+                    }).select('name');
+                    teacherAllowedCourses = matched.map(c => c.name);
+                } else {
+                    teacherAllowedCourses = [];
+                }
+            } else {
+                const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+                if (fac) {
+                    const list = parseFacultyCourses(fac.courses);
+                    const inst = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
+                    teacherAllowedCourses = [...new Set([...list, ...inst.map(c => c.name)])];
+                } else {
+                    teacherAllowedCourses = [];
+                }
+            }
+            if (teacherAllowedCourses.length === 0) return res.json([]);
+        }
+
+        // ── Student role: restrict to own data ──────────────────────────────
+        const effectiveStudentId = role === 'student'
+            ? String(req.user.student_id || req.user.id || student_id || '').trim()
+            : student_id;
+
+        // ── Fetch records ───────────────────────────────────────────────────
+        let records = [];
+        let allStudents = [];
+
+        if (mongo) {
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const Attendance = (await import('../models/mongo/Attendance.js')).default;
+
+            let studentQ = {};
+            if (effectiveStudentId) studentQ.id = effectiveStudentId;
+            else if (course) studentQ.course = { $regex: new RegExp(course.trim(), 'i') };
+            else if (teacherAllowedCourses) studentQ.course = { $in: teacherAllowedCourses.map(c => new RegExp(c, 'i')) };
+            allStudents = await Student.find(studentQ).lean();
+
+            const attQ = { date: { $gte: new Date(monthStart), $lte: new Date(monthEnd) } };
+            if (effectiveStudentId) attQ.student_id = effectiveStudentId;
+            if (course) attQ.course = { $regex: new RegExp(course.trim(), 'i') };
+            else if (teacherAllowedCourses) attQ.course = { $in: teacherAllowedCourses };
+            records = await Attendance.find(attQ).lean();
+        } else {
+            // SQL path
+            let studentConds = [], studentParams = [];
+            if (effectiveStudentId) {
+                studentConds.push('LOWER(TRIM(id)) = LOWER(TRIM(?))');
+                studentParams.push(effectiveStudentId);
+            } else if (course) {
+                studentConds.push('LOWER(course) LIKE LOWER(?)');
+                studentParams.push(`%${course.trim()}%`);
+            } else if (teacherAllowedCourses) {
+                const ph = teacherAllowedCourses.map(() => 'LOWER(course) LIKE LOWER(?)').join(' OR ');
+                studentConds.push(`(${ph})`);
+                teacherAllowedCourses.forEach(tc => studentParams.push(`%${tc}%`));
+            }
+            allStudents = await query(
+                `SELECT id, name, course FROM students${studentConds.length ? ' WHERE ' + studentConds.join(' AND ') : ''}`,
+                studentParams
+            );
+
+            let attConds = [`a.date >= ? AND a.date <= ?`];
+            let attParams = [monthStart, monthEnd];
+            if (effectiveStudentId) { attConds.push('LOWER(TRIM(a.student_id)) = LOWER(TRIM(?))'); attParams.push(effectiveStudentId); }
+            if (course) { attConds.push('LOWER(a.course) LIKE LOWER(?)'); attParams.push(`%${course.trim()}%`); }
+            else if (teacherAllowedCourses) {
+                const ph = teacherAllowedCourses.map(() => '?').join(',');
+                attConds.push(`a.course IN (${ph})`);
+                attParams.push(...teacherAllowedCourses);
+            }
+
+            records = await query(
+                `SELECT a.student_id, a.course, a.date, a.status, s.name as student_name
+                 FROM attendance a
+                 LEFT JOIN students s ON LOWER(TRIM(a.student_id)) = LOWER(TRIM(s.id))
+                 WHERE ${attConds.join(' AND ')}`,
+                attParams
+            );
+        }
+
+        // ── Aggregate per student + course ──────────────────────────────────
+        const buckets = {};
+
+        for (const student of allStudents) {
+            const sid = String(student.id || '').trim();
+            if (!sid) continue;
+            let courses_list = [];
+            if (student.course) {
+                const raw = typeof student.course === 'string' ? student.course : JSON.stringify(student.course);
+                if (raw.startsWith('[')) {
+                    try { courses_list = JSON.parse(raw); } catch { courses_list = [raw]; }
+                } else {
+                    courses_list = raw.split(',').map(c => c.trim()).filter(Boolean);
+                }
+            }
+            if (courses_list.length === 0) courses_list = ['Unassigned'];
+            for (let cn of courses_list) {
+                cn = cn.trim();
+                if (course && !cn.toLowerCase().includes(course.toLowerCase().trim())) continue;
+                const key = `${sid}||${cn}`;
+                buckets[key] = {
+                    student_id: sid, student_name: student.name || sid,
+                    course: cn, month: targetMonth,
+                    present: 0, absent: 0, late: 0, total: 0
+                };
+            }
+        }
+
+        for (const rec of records) {
+            const sid = String(rec.student_id || '').trim();
+            const cn = String(rec.course || '').trim();
+            const status = String(rec.status || '').toLowerCase();
+            if (!sid || !cn) continue;
+            const key = `${sid}||${cn}`;
+            if (!buckets[key]) {
+                buckets[key] = {
+                    student_id: sid, student_name: rec.student_name || sid,
+                    course: cn, month: targetMonth,
+                    present: 0, absent: 0, late: 0, total: 0
+                };
+            }
+            buckets[key].total++;
+            if (status === 'present') buckets[key].present++;
+            else if (status === 'absent') buckets[key].absent++;
+            else if (status === 'late') buckets[key].late++;
+        }
+
+        // ── Build result with percentage + status ───────────────────────────
+        let result = Object.values(buckets).map(b => {
+            const pct = b.total > 0
+                ? Math.round(((b.present + b.late) / b.total) * 100 * 100) / 100
+                : 0;
+            return {
+                ...b,
+                percentage: pct,
+                status: getStatus(pct),
+                thresholds: { excellent: threshExcellent, good: threshGood, fair: threshFair }
+            };
+        });
+
+        // ── Sort ─────────────────────────────────────────────────────────────
+        const sortFns = {
+            highest_attendance: (a, b) => b.percentage - a.percentage,
+            lowest_attendance:  (a, b) => a.percentage - b.percentage,
+            most_absent:        (a, b) => b.absent - a.absent,
+            most_late:          (a, b) => b.late - a.late,
+            student_name:       (a, b) => (a.student_name || '').localeCompare(b.student_name || ''),
+        };
+        result.sort(sortFns[sort] || sortFns.student_name);
+
+        res.json(result);
+    } catch (error) {
+        console.error('Monthly attendance summary error:', error);
+        res.status(500).json({ error: 'Failed to generate monthly attendance summary' });
+    }
+}

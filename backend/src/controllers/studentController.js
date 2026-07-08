@@ -187,7 +187,7 @@ export async function getAllStudents(req, res) {
 export async function getStudent(req, res) {
     try {
         if (await isMongo()) {
-            // FIX: Import Student model â€” was missing causing ReferenceError crash
+            // FIX: Import Student model - was missing causing ReferenceError crash
             const Student = (await import('../models/mongo/Student.js')).default;
             const student = await Student.findOne({ id: req.params.id }).lean();
             if (!student) return res.status(404).json({ error: 'Student not found' });
@@ -195,6 +195,29 @@ export async function getStudent(req, res) {
             // IDOR Protection: Check if user is authorized to view this profile
             if (req.user.role === 'student' && String(req.user.student_id) !== String(student.id)) {
                 return res.status(403).json({ error: 'Access denied. You can only view your own profile.' });
+            }
+
+            if (req.user.role === 'teacher') {
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+                const Course = (await import('../models/mongo/Course.js')).default;
+                const emailRegex = new RegExp(`^${req.user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+                const faculty = await Faculty.findOne({ email: { $regex: emailRegex } });
+                if (!faculty) return res.status(403).json({ error: 'Access denied. Faculty record not found.' });
+
+                const facultyCourses = await Course.find({
+                    $or: [
+                        { instructor: { $regex: new RegExp(`^${faculty.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+                        { name: { $in: parseFacultyCourses(faculty.courses) } }
+                    ],
+                    status: 'Active'
+                }).select('name');
+                const courseNames = facultyCourses.map(c => c.name.toLowerCase().trim());
+                
+                const sCourses = (Array.isArray(student.course) ? student.course : [student.course]).map(c => String(c).toLowerCase().trim());
+                const isAuthorized = sCourses.some(sc => courseNames.includes(sc));
+                if (!isAuthorized) {
+                    return res.status(403).json({ error: 'Access denied. You are not authorized to view this student.' });
+                }
             }
 
             return res.json({
@@ -209,6 +232,36 @@ export async function getStudent(req, res) {
         // IDOR Protection: Check if user is authorized to view this profile
         if (req.user.role === 'student' && String(req.user.student_id) !== String(student.id)) {
             return res.status(403).json({ error: 'Access denied. You can only view your own profile.' });
+        }
+
+        if (req.user.role === 'teacher') {
+            const userEmail = String(req.user.email || '').toLowerCase().trim();
+            const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+            if (!faculty) return res.status(403).json({ error: 'Access denied. Faculty record not found.' });
+
+            const coursesList = parseFacultyCourses(faculty.courses);
+            const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
+            const allTutorCourses = [...new Set([...coursesList.map(c => c.toLowerCase().trim()), ...instructorCourses.map(c => c.name.toLowerCase().trim())])];
+
+            const parseCourse = (raw) => {
+                if (!raw) return [];
+                if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
+                    return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim().toLowerCase()).filter(Boolean);
+                }
+                if (typeof raw === 'string' && raw.startsWith('[')) {
+                    try {
+                        const p = JSON.parse(raw);
+                        return (Array.isArray(p) ? p : [p]).map(s => String(s).trim().toLowerCase()).filter(Boolean);
+                    } catch (e) {}
+                }
+                return [String(raw).trim().toLowerCase()].filter(Boolean);
+            };
+
+            const sCourses = parseCourse(student.course);
+            const isAuthorized = sCourses.some(sc => allTutorCourses.includes(sc));
+            if (!isAuthorized) {
+                return res.status(403).json({ error: 'Access denied. You are not authorized to view this student.' });
+            }
         }
 
         res.json({
@@ -301,19 +354,19 @@ export async function createStudent(req, res) {
 
         // Send email notification
         try {
-            console.log(`ðŸ“¡ Attempting to send welcome email to: ${email}`);
+            console.log(`[student] Attempting to send welcome email to: ${email}`);
             await sendWelcomeEmail(email, 'student', temporaryPassword);
         } catch (emailError) {
-            console.error('âŒ Failed to send welcome email:', emailError);
+            console.error('[student] Failed to send welcome email:', emailError);
         }
 
         // Send SMS notification if contact is provided
         if (contact) {
             try {
-                console.log(`ðŸ“¡ Attempting to send SMS to: ${contact}`);
+                console.log(`[student] Attempting to send SMS to: ${contact}`);
                 await sendLoginCredentials(contact, email, temporaryPassword, 'student');
             } catch (smsError) {
-                console.error('âŒ Failed to send SMS:', smsError);
+                console.error('[student] Failed to send SMS:', smsError);
             }
         }
 

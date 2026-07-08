@@ -36,6 +36,7 @@ const Inventory = lazy(() => import('./pages/Inventory'));
 const AcademicSummaryReport = lazy(() => import('./pages/AcademicSummaryReport'));
 const MonthlyFeeTracker = lazy(() => import('./pages/MonthlyFeeTracker'));
 const AttendanceSummary = lazy(() => import('./pages/AttendanceSummary'));
+const MonthlyAttendanceSummary = lazy(() => import('./pages/MonthlyAttendanceSummary'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -130,6 +131,7 @@ function App() {
                                 <Route path="/student-daily-reports" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><StudentDailyReportEntry /></Layout></ProtectedRoute>} />
                                 <Route path="/academic-summary" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><AcademicSummaryReport /></Layout></ProtectedRoute>} />
                                 <Route path="/attendance-summary" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><AttendanceSummary /></Layout></ProtectedRoute>} />
+                                <Route path="/monthly-attendance" element={<ProtectedRoute><Layout><MonthlyAttendanceSummary /></Layout></ProtectedRoute>} />
 
                                 <Route path="/" element={<Navigate to="/login" />} />
                                 <Route path="*" element={<NotFound />} />
