@@ -317,7 +317,8 @@ export async function createStudent(req, res) {
         } else {
             // Create student record
             const courseVal = Array.isArray(course) ? JSON.stringify(course) : course;
-            
+            const courseArr = Array.isArray(course) ? course : [course].filter(Boolean);
+
             // Format dates to YYYY-MM-DD for database compatibility (PostgreSQL DATE type)
             const formatDate = (dateStr) => {
                 if (!dateStr) return null;
@@ -332,45 +333,45 @@ export async function createStudent(req, res) {
             const enrolledDate = formatDate(req.body.enrolled_date) || new Date().toISOString().split('T')[0];
             const completionDate = formatDate(req.body.completion_date);
             const dobDate = formatDate(dob);
-            
-            await run(
-                `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, completion_date, dob, address, guardian_name, guardian_contact, blood_group)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dobDate, address, guardian_name, guardian_contact, blood_group]
-            );
 
-            // Create user account for login
-            await run(
-                `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [name, email, hashedPassword, 'student', 'Active', photo, true]
-            );
+            // Run both inserts in parallel — students and users tables are independent
+            await Promise.all([
+                run(
+                    `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, completion_date, dob, address, guardian_name, guardian_contact, blood_group)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dobDate, address, guardian_name, guardian_contact, blood_group]
+                ),
+                run(
+                    `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [name, email, hashedPassword, 'student', 'Active', photo, true]
+                )
+            ]);
 
-            savedStudent = await queryOne('SELECT * FROM students WHERE id = ?', [id]);
-            if (savedStudent) {
-                savedStudent.course = typeof savedStudent.course === 'string' && savedStudent.course.startsWith('[') ? JSON.parse(savedStudent.course) : [savedStudent.course].filter(Boolean);
-            }
+            // Build response from known data — avoids an extra SELECT round-trip
+            savedStudent = {
+                id, name, email, course: courseArr, intake,
+                gpa: 0.0, status: 'Active', contact, photo,
+                enrolled_date: enrolledDate, completion_date: completionDate,
+                dob: dobDate, address, guardian_name, guardian_contact, blood_group,
+                created_at: new Date().toISOString()
+            };
         }
 
-        // Send email notification
-        try {
-            console.log(`[student] Attempting to send welcome email to: ${email}`);
-            await sendWelcomeEmail(email, 'student', temporaryPassword);
-        } catch (emailError) {
-            console.error('[student] Failed to send welcome email:', emailError);
-        }
-
-        // Send SMS notification if contact is provided
-        if (contact) {
-            try {
-                console.log(`[student] Attempting to send SMS to: ${contact}`);
-                await sendLoginCredentials(contact, email, temporaryPassword, 'student');
-            } catch (smsError) {
-                console.error('[student] Failed to send SMS:', smsError);
-            }
-        }
-
+        // Respond immediately — notifications are fire-and-forget (non-blocking)
         res.status(201).json(savedStudent);
+
+        // Send email notification asynchronously (does not block the response)
+        sendWelcomeEmail(email, 'student', temporaryPassword)
+            .then(() => console.log(`[student] Welcome email dispatched to: ${email}`))
+            .catch(err => console.error('[student] Failed to send welcome email:', err.message));
+
+        // Send SMS notification asynchronously if contact is provided
+        if (contact) {
+            sendLoginCredentials(contact, email, temporaryPassword, 'student')
+                .then(() => console.log(`[student] SMS dispatched to: ${contact}`))
+                .catch(err => console.error('[student] Failed to send SMS:', err.message));
+        }
     } catch (error) {
         console.error('Create student error:', error);
         
@@ -415,21 +416,31 @@ export async function updateStudent(req, res) {
         if (fields.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
 
         const setClause = fields.map(f => `${f} = ?`).join(', ');
+        const updatedAt = new Date().toISOString();
         const values = fields.map(f => {
             if (f === 'course' && Array.isArray(req.body[f])) {
                 return JSON.stringify(req.body[f]);
             }
             return req.body[f];
         });
-        values.push(new Date().toISOString()); // updated_at
+        values.push(updatedAt); // updated_at
         values.push(req.params.id);
 
-        await run(`UPDATE students SET ${setClause}, updated_at = ? WHERE id = ?`, values);
-        const student = await queryOne('SELECT * FROM students WHERE id = ?', [req.params.id]);
-        if (!student) return res.status(404).json({ error: 'Student not found' });
+        const result = await run(`UPDATE students SET ${setClause}, updated_at = ? WHERE id = ?`, values);
+        if (result.changes === 0) return res.status(404).json({ error: 'Student not found' });
 
-        student.course = typeof student.course === 'string' && student.course.startsWith('[') ? JSON.parse(student.course) : [student.course].filter(Boolean);
-        res.json(student);
+        // Build response from the known update payload — avoids an extra SELECT round-trip
+        const courseRaw = req.body.course;
+        const courseArr = Array.isArray(courseRaw)
+            ? courseRaw
+            : (typeof courseRaw === 'string' && courseRaw.startsWith('[') ? JSON.parse(courseRaw) : [courseRaw].filter(Boolean));
+
+        const updatedFields = {};
+        fields.forEach(f => {
+            updatedFields[f] = f === 'course' ? courseArr : req.body[f];
+        });
+
+        res.json({ id: req.params.id, ...updatedFields, updated_at: updatedAt });
     } catch (error) {
         console.error('Update student error:', error);
         res.status(500).json({ error: 'Failed to update student profile.' });

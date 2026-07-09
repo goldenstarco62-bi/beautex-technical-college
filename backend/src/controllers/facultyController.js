@@ -118,41 +118,42 @@ export async function createFaculty(req, res) {
         } else {
             const coursesStr = typeof courses === 'string' ? courses : JSON.stringify(courses || []);
 
-            // Create faculty record
-            await run(
-                'INSERT INTO faculty (id, name, email, department, position, specialization, courses, contact, id_number, photo, status, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [id, name, email, department, position, specialization, coursesStr, contact, idNumber, photo, status || 'Active', category || 'Trainer']
-            );
+            // Run both inserts in parallel — faculty and users tables are independent
+            await Promise.all([
+                run(
+                    'INSERT INTO faculty (id, name, email, department, position, specialization, courses, contact, id_number, photo, status, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [id, name, email, department, position, specialization, coursesStr, contact, idNumber, photo, status || 'Active', category || 'Trainer']
+                ),
+                run(
+                    `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    [name, email, hashedPassword, 'teacher', 'Active', photo, true]
+                )
+            ]);
 
-            // Create user account for login
-            await run(
-                `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [name, email, hashedPassword, 'teacher', 'Active', photo, true]
-            );
-
-            savedFaculty = await queryOne('SELECT * FROM faculty WHERE id = ?', [id]);
+            // Build response from known data — avoids an extra SELECT round-trip
+            savedFaculty = {
+                id, name, email, department, position, specialization,
+                courses: courses || [], contact, id_number: idNumber, photo,
+                status: status || 'Active', category: category || 'Trainer',
+                created_at: new Date().toISOString()
+            };
         }
 
-        // Send email notification
-        try {
-            console.log(`[faculty] Attempting to send welcome email to: ${email}`);
-            await sendWelcomeEmail(email, 'teacher', temporaryPassword);
-        } catch (emailError) {
-            console.error('[faculty] Failed to send welcome email:', emailError);
-        }
-
-        // Send SMS notification if contact is provided
-        if (contact) {
-            try {
-                console.log(`[faculty] Attempting to send SMS to: ${contact}`);
-                await sendLoginCredentials(contact, email, temporaryPassword, 'teacher');
-            } catch (smsError) {
-                console.error('[faculty] Failed to send SMS:', smsError);
-            }
-        }
-
+        // Respond immediately — notifications are fire-and-forget (non-blocking)
         res.status(201).json(savedFaculty);
+
+        // Send email notification asynchronously (does not block the response)
+        sendWelcomeEmail(email, 'teacher', temporaryPassword)
+            .then(() => console.log(`[faculty] Welcome email dispatched to: ${email}`))
+            .catch(err => console.error('[faculty] Failed to send welcome email:', err.message));
+
+        // Send SMS notification asynchronously if contact is provided
+        if (contact) {
+            sendLoginCredentials(contact, email, temporaryPassword, 'teacher')
+                .then(() => console.log(`[faculty] SMS dispatched to: ${contact}`))
+                .catch(err => console.error('[faculty] Failed to send SMS:', err.message));
+        }
     } catch (error) {
         console.error('Create faculty error:', error);
         if (error.code === 'SQLITE_CONSTRAINT' || error.code === 23505 || error.code === 11000) {
@@ -193,10 +194,13 @@ export async function updateFaculty(req, res) {
         const setClause = fields.map(f => `${f} = ?`).join(', ');
         values.push(req.params.id);
 
-        await run(`UPDATE faculty SET ${setClause} WHERE id = ?`, values);
-        const faculty = await queryOne('SELECT * FROM faculty WHERE id = ?', [req.params.id]);
-        if (!faculty) return res.status(404).json({ error: 'Faculty not found' });
-        res.json(faculty);
+        const result = await run(`UPDATE faculty SET ${setClause} WHERE id = ?`, values);
+        if (result.changes === 0) return res.status(404).json({ error: 'Faculty not found' });
+
+        // Build response from the known update payload — avoids an extra SELECT round-trip
+        const updatedFields = {};
+        fields.forEach(f => { updatedFields[f] = req.body[f]; });
+        res.json({ id: req.params.id, ...updatedFields });
     } catch (error) {
         console.error('Update faculty error:', error);
         res.status(500).json({ error: 'Failed to update faculty' });

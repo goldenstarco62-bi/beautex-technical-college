@@ -104,7 +104,7 @@ export async function resetUserPassword(req, res) {
     try {
         const userId = req.params.id;
         const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
-        const hashedPassword = await bcrypt.hash(tempPassword, 12);
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
@@ -120,8 +120,10 @@ export async function resetUserPassword(req, res) {
             user.must_change_password = true;
             await user.save();
 
-            await sendAdminResetPasswordEmail(user.email, tempPassword);
-            return res.json({ message: 'Password reset - temporary credentials emailed' });
+            res.json({ message: 'Password reset - temporary credentials emailed' });
+            sendAdminResetPasswordEmail(user.email, tempPassword)
+                .catch(err => console.error('[user] Failed to send reset email:', err.message));
+            return;
         }
 
         const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [userId]);
@@ -134,12 +136,10 @@ export async function resetUserPassword(req, res) {
 
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, userId]);
 
-        const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
-        if (!emailSent) {
-            console.warn('[user] Email delivery failed for password reset.');
-        }
-
+        // Respond immediately — email is fire-and-forget (non-blocking)
         res.json({ message: 'Password reset - temporary credentials emailed' });
+        sendAdminResetPasswordEmail(user.email, tempPassword)
+            .catch(err => console.warn('[user] Email delivery failed for password reset:', err.message));
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
@@ -214,7 +214,7 @@ export async function resetPasswordByEmail(req, res) {
         if (!email) return res.status(400).json({ error: 'Email is required' });
 
         const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
-        const hashedPassword = await bcrypt.hash(tempPassword, 12);
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
@@ -230,8 +230,10 @@ export async function resetPasswordByEmail(req, res) {
             user.must_change_password = true;
             await user.save();
 
-            await sendAdminResetPasswordEmail(user.email, tempPassword);
-            return res.json({ message: 'Password reset - temporary credentials emailed' });
+            res.json({ message: 'Password reset - temporary credentials emailed' });
+            sendAdminResetPasswordEmail(user.email, tempPassword)
+                .catch(err => console.error('[user] Failed to send reset email:', err.message));
+            return;
         }
 
         const user = await queryOne('SELECT id, email, role FROM users WHERE email = ?', [email]);
@@ -244,12 +246,10 @@ export async function resetPasswordByEmail(req, res) {
 
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, user.id]);
 
-        const emailSent = await sendAdminResetPasswordEmail(user.email, tempPassword);
-        if (!emailSent) {
-            console.warn('[user] Email delivery failed for password reset by email.');
-        }
-
+        // Respond immediately — email is fire-and-forget (non-blocking)
         res.json({ message: 'Password reset - temporary credentials emailed' });
+        sendAdminResetPasswordEmail(user.email, tempPassword)
+            .catch(err => console.warn('[user] Email delivery failed for password reset by email:', err.message));
     } catch (error) {
         console.error('Reset password by email error:', error);
         res.status(500).json({ error: 'Failed to reset password' });

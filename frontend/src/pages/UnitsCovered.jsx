@@ -29,9 +29,9 @@ const GRADE_COLORS = {
 function GradeChip({ marks, grade }) {
     const color = GRADE_COLORS[grade] || 'bg-gray-50 text-gray-400 border-gray-200';
     return (
-        <div className={`inline-flex flex-col items-center px-3 py-1.5 rounded-xl border font-black text-xs ${color}`}>
-            <span>{marks}%</span>
-            <span className="text-[8px] font-bold opacity-70 mt-0.5">{grade}</span>
+        <div className={`inline-flex flex-col items-center px-3 py-1.5 rounded-2xl border font-black text-xs shadow-sm ${color}`}>
+            <span className="text-[11px]">{marks}%</span>
+            <span className="text-[8px] font-bold opacity-60 mt-0.5 tracking-widest uppercase">{grade}</span>
         </div>
     );
 }
@@ -54,6 +54,7 @@ export default function UnitsCovered() {
     const [selectedCourse, setSelectedCourse] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [logoDataUrl, setLogoDataUrl]       = useState('');
+
 
     // Toast notification state
     const [toast, setToast] = useState(null);
@@ -338,7 +339,7 @@ export default function UnitsCovered() {
         setViewTarget({ student, marks: studentMarks, courseId });
     };
 
-    const handleDownloadTranscript = async (studentId, courseId) => {
+    const handleDownloadTranscript = async (studentId, courseId, customStyle = null) => {
         if (!courseId) return showToast('Course ID is required.', 'error');
         const student = students.find(s => String(s.id) === String(studentId));
         if (!student) return showToast('Student not found.', 'error');
@@ -393,7 +394,8 @@ export default function UnitsCovered() {
         setPrintTarget({
             student: { ...student, photoB64 },
             marks: studentMarks,
-            logoB64
+            logoB64,
+            style: customStyle || viewStyle
         });
 
         setTimeout(async () => {
@@ -540,27 +542,32 @@ export default function UnitsCovered() {
         <div className="max-w-7xl mx-auto space-y-10 py-8 animate-in fade-in slide-in-from-bottom-4 duration-1000 pb-20">
 
             {/* ── Header ─────────────────────────────────────────────────────── */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-                <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-white border border-black/5 shadow-xl rounded-2xl text-maroon">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 border-b border-black/8 pb-8">
+                <div className="space-y-3">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3.5 bg-gradient-to-br from-maroon to-maroon/80 shadow-2xl shadow-maroon/30 rounded-2xl text-gold">
                             <Layers className="w-6 h-6" />
                         </div>
-                        <h1 className="text-2xl sm:text-4xl font-black text-black tracking-tight uppercase">
-                            {isStudent ? 'My Units Covered' : 'Units Covered Registry'}
-                        </h1>
+                        <div>
+                            <h1 className="text-3xl sm:text-4xl font-black text-black tracking-tight uppercase leading-none">
+                                {isStudent ? 'My Units Covered' : 'Units Covered Registry'}
+                            </h1>
+                            <div className="flex items-center gap-2 mt-1.5">
+                                <div className="h-0.5 w-8 bg-gradient-to-r from-maroon to-gold rounded-full" />
+                                <p className="text-[10px] text-black/40 font-black tracking-[0.3em] uppercase">
+                                    Competency-Based Assessment Tracker
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <p className="text-xs text-black/40 font-bold tracking-[0.3em] uppercase sm:pl-14">
-                        Competency-Based Assessment Tracker
-                    </p>
                 </div>
-                <div className="flex flex-wrap gap-2 sm:gap-4 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                     <button
                         onClick={loadAll}
-                        className="bg-white text-maroon p-3 sm:p-4 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-xl border border-maroon/10 group"
-                        title="Refresh"
+                        className="bg-white text-maroon p-3.5 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-lg border border-maroon/10 group"
+                        title="Refresh data"
                     >
-                        <History className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+                        <History className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
                     </button>
                     {isStudent && (
                         <button
@@ -577,7 +584,7 @@ export default function UnitsCovered() {
                                     }, index * 1600);
                                 });
                             }}
-                            className="flex-1 sm:flex-none bg-maroon text-gold px-4 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-elite-maroon transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-black/5"
+                            className="flex-grow sm:flex-grow-0 bg-gradient-to-r from-maroon to-maroon/90 text-gold px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:shadow-maroon/30 hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest shadow-lg border border-gold/20"
                         >
                             <FileDown className="w-5 h-5" /> Download Transcript(s)
                         </button>
@@ -592,13 +599,13 @@ export default function UnitsCovered() {
                                     setBatchMarks({});
                                     setShowBatchModal(true);
                                 }}
-                                className="flex-1 sm:flex-none bg-white text-maroon px-4 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon hover:text-white transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-maroon/10"
+                                className="flex-grow sm:flex-grow-0 bg-white text-maroon px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon hover:text-white transition-all shadow-lg hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest border border-maroon/15"
                             >
                                 <Users className="w-5 h-5" /> Batch Entry
                             </button>
                             <button
                                 onClick={() => { setEditingMark(null); setSingleForm({ student_id: '', course_id: selectedCourse, unit_id: '', marks: '' }); setShowModal(true); }}
-                                className="flex-1 sm:flex-none bg-maroon text-gold px-4 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-elite-maroon transition-all shadow-2xl hover:scale-105 active:scale-95 font-black text-xs uppercase tracking-widest border border-black/5"
+                                className="flex-grow sm:flex-grow-0 bg-gradient-to-r from-maroon to-maroon/90 text-gold px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:shadow-maroon/30 hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest shadow-lg border border-gold/20"
                             >
                                 <Plus className="w-5 h-5" /> Record Mark
                             </button>
@@ -646,13 +653,13 @@ export default function UnitsCovered() {
             )}
 
             {/* ── Main Registry Card ──────────────────────────────────────────── */}
-            <div className="card-light overflow-hidden shadow-2xl border border-maroon/5 min-h-[500px]">
+            <div className="card-light overflow-hidden shadow-2xl border border-maroon/5 min-h-[500px] transition-all duration-300 rounded-[2.5rem]">
                 {/* Toolbar */}
-                <div className="bg-maroon/[0.02] px-4 sm:px-10 py-5 sm:py-8 border-b border-black/5 flex flex-col gap-4">
+                <div className="px-4 sm:px-10 py-5 sm:py-8 border-b flex flex-col gap-4 bg-maroon/[0.02] border-black/5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                            <h3 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">Units Covered Matrix</h3>
-                            <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">
+                            <h3 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-black">Units Covered Matrix</h3>
+                            <p className="text-xs font-bold mt-1 uppercase tracking-widest text-black/30">
                                 {filteredMarks.length} marks recorded across {Object.keys(isStudent ? ownByCourse : studentCourseMap).length} {isStudent ? 'courses' : 'students'}
                             </p>
                         </div>
@@ -661,7 +668,7 @@ export default function UnitsCovered() {
                             <select
                                 value={selectedCourse}
                                 onChange={e => setSelectedCourse(e.target.value)}
-                                className="bg-white border border-black/10 rounded-2xl px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black outline-none shadow-sm"
+                                className="px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none shadow-sm bg-white border border-black/10 text-black rounded-2xl"
                             >
                                 <option value="">All Courses</option>
                                 {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -669,20 +676,20 @@ export default function UnitsCovered() {
                             {canManage && selectedCourse && (
                                 <button
                                     onClick={() => setShowManageUnitsModal(true)}
-                                    className="bg-white border border-maroon/20 hover:bg-maroon hover:text-white px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest text-maroon transition-all shadow-sm flex items-center gap-1.5"
+                                    className="px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-1.5 bg-white border border-maroon/20 hover:bg-maroon hover:text-white text-maroon rounded-2xl"
                                 >
                                     <BookOpen className="w-3.5 h-3.5" /> Manage Units
                                 </button>
                             )}
                             {/* Search */}
-                            <div className="flex-1 flex items-center gap-3 bg-white border border-black/5 p-2 px-4 rounded-2xl shadow-sm min-w-[200px]">
+                            <div className="flex-1 flex items-center gap-3 p-2 px-4 shadow-sm min-w-[200px] bg-white border border-black/5 rounded-2xl">
                                 <Search className={`w-4 h-4 ${searchTerm ? 'text-maroon' : 'text-gray-300'}`} />
                                 <input
                                     type="text"
                                     placeholder={isStudent ? 'Search units…' : 'Search students or units…'}
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
-                                    className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/10 uppercase tracking-widest w-full"
+                                    className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/20 uppercase tracking-widest w-full font-sans"
                                 />
                                 {searchTerm && (
                                     <button onClick={() => setSearchTerm('')} className="p-1 text-gray-400 hover:text-red-500 rounded-full">
@@ -692,7 +699,7 @@ export default function UnitsCovered() {
                             </div>
                             <button
                                 onClick={() => window.print()}
-                                className="bg-white border border-black/5 p-3 rounded-2xl text-maroon hover:bg-maroon hover:text-white transition-all shadow-sm"
+                                className="p-3 transition-all shadow-sm bg-white border border-black/5 rounded-2xl text-maroon hover:bg-maroon hover:text-white"
                                 title="Print"
                             >
                                 <Printer className="w-5 h-5" />
@@ -701,36 +708,14 @@ export default function UnitsCovered() {
                     </div>
                 </div>
 
-                {/* Admin stats bar */}
-                {canManage && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 border-b border-black/5 divide-x divide-black/5 bg-white/50">
-                        <div className="p-6 text-center">
-                            <p className="text-[9px] font-black text-black/30 uppercase tracking-[0.2em] mb-1">Average Mark</p>
-                            <p className="text-xl font-black text-maroon">{avgMarks}%</p>
-                        </div>
-                        <div className="p-6 text-center">
-                            <p className="text-[9px] font-black text-black/30 uppercase tracking-[0.2em] mb-1">Total Marks</p>
-                            <p className="text-xl font-black text-black">{marks.length}</p>
-                        </div>
-                        <div className="p-6 text-center">
-                            <p className="text-[9px] font-black text-black/30 uppercase tracking-[0.2em] mb-1">Filtered</p>
-                            <p className="text-xl font-black text-black">{filteredMarks.length}</p>
-                        </div>
-                        <div className="p-6 text-center bg-maroon/[0.01]">
-                            <p className="text-[9px] font-black text-black/30 uppercase tracking-[0.2em] mb-1">Academic Cycle</p>
-                            <p className="text-xl font-black text-maroon uppercase">{new Date().getFullYear()}/{new Date().getFullYear() + 1}</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Table content */}
+                {/* Admin                {/* Table content */}
                 <div className="table-container custom-scrollbar">
                     {/* Grade legend */}
-                    <div className="flex flex-wrap gap-4 px-6 py-3 bg-black/[0.01] border-b border-black/5 text-[9px] font-black uppercase tracking-widest">
-                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block" />≥{thresholds.distinction}% Distinction</span>
-                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-200 inline-block" />≥{thresholds.credit}% Credit</span>
-                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-200 inline-block" />≥{thresholds.pass}% Pass</span>
-                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200 inline-block" />&lt;{thresholds.pass}% Fail</span>
+                    <div className="flex flex-wrap gap-4 px-6 py-3 border-b text-[9px] font-black uppercase tracking-widest bg-black/[0.01] border-b border-black/5 text-gray-400">
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-200 inline-block border border-green-300" />≥{thresholds.distinction}% Distinction</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-200 inline-block border border-blue-300" />≥{thresholds.credit}% Credit</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-200 inline-block border border-amber-300" />≥{thresholds.pass}% Pass</span>
+                        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-200 inline-block border border-red-300" />&lt;{thresholds.pass}% Fail</span>
                     </div>
 
                     {/* ── STUDENT VIEW ── */}
@@ -740,70 +725,77 @@ export default function UnitsCovered() {
                                 <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No unit marks recorded yet for your courses.</p>
                             </div>
                         ) : (
-                            <div className="divide-y divide-black/5">
+                            <div className="divide-y divide-black/5 animate-in fade-in duration-300">
                                 {Object.entries(ownByCourse).map(([cid, { courseName, units: courseUnits }]) => {
                                     const avg = Math.round(courseUnits.reduce((a, u) => a + parseFloat(u.marks || 0), 0) / courseUnits.length);
                                     return (
-                                        <div key={cid}>
-                                            <div className="flex items-center justify-between bg-maroon/[0.03] px-6 py-4 border-b border-black/5">
+                                        <div key={cid} className="p-4 sm:p-6">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-maroon/[0.02] border border-black/5 rounded-3xl px-6 py-5 gap-4">
                                                 <div className="flex items-center gap-3">
-                                                    <BookOpen className="w-4 h-4 text-maroon" />
-                                                    <p className="text-sm font-black text-black uppercase tracking-tight">{courseName}</p>
+                                                    <div className="p-2.5 bg-maroon/5 rounded-2xl text-maroon shadow-sm">
+                                                        <BookOpen className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-black text-black uppercase tracking-tight leading-none">{courseName}</p>
+                                                        <p className="text-[9px] font-bold text-black/30 uppercase tracking-widest mt-1">Course Code: {cid}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-3 self-end sm:self-auto">
                                                     <button
                                                         onClick={() => handleViewTranscript(user.student_id || user.id, cid)}
-                                                        className="p-2 bg-white hover:bg-maroon hover:text-white rounded-xl transition-all border border-black/5 text-maroon shadow-sm"
+                                                        className="p-2.5 bg-white hover:bg-maroon hover:text-white border border-black/5 text-maroon rounded-2xl transition-all shadow-sm"
                                                         title="View Transcript"
                                                     >
-                                                        <BookOpen className="w-3.5 h-3.5" />
+                                                        <BookOpen className="w-4 h-4" />
                                                     </button>
                                                     <button
                                                         onClick={() => handleDownloadTranscript(user.student_id || user.id, cid)}
-                                                        className="p-2 bg-maroon hover:bg-elite-maroon rounded-xl transition-all text-gold shadow-md"
+                                                        className="p-2.5 bg-maroon hover:bg-elite-maroon text-gold rounded-2xl transition-all shadow-md"
                                                         title="Download Transcript PDF"
                                                     >
-                                                        <FileDown className="w-3.5 h-3.5" />
+                                                        <FileDown className="w-4 h-4" />
                                                     </button>
                                                     <GradeChip marks={avg} grade={calcGradeLabel(avg, thresholds)} />
                                                 </div>
                                             </div>
-                                            <table className="w-full">
-                                                <thead>
-                                                    <tr className="bg-black/[0.015] border-b border-black/5">
-                                                        <th className="px-6 py-3 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Module / Unit</th>
-                                                        <th className="px-6 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Marks (%)</th>
-                                                        <th className="px-6 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
-                                                        <th className="px-6 py-3 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Lecturer</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-black/5">
-                                                    {courseUnits.map((u, i) => (
-                                                        <tr key={i} className="hover:bg-maroon/[0.012] transition-colors">
-                                                            <td className="px-6 py-4">
-                                                                <p className="text-xs font-black text-black uppercase tracking-tight">{u.unit_name}</p>
-                                                            </td>
-                                                            <td className="px-6 py-4 text-center">
-                                                                <span className="text-sm font-black text-black">{parseFloat(u.marks).toFixed(1)}%</span>
-                                                            </td>
-                                                            <td className="px-6 py-4 text-center">
-                                                                <GradeChip marks={parseFloat(u.marks).toFixed(0)} grade={u.grade} />
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <p className="text-[11px] font-bold text-black/50 uppercase">{u.lecturer || '—'}</p>
-                                                            </td>
+                                            <div className="mt-4 overflow-hidden border border-black/5 rounded-3xl shadow-sm">
+                                                <table className="w-full">
+                                                    <thead>
+                                                        <tr className="bg-black/[0.015] border-b border-black/5">
+                                                            <th className="px-6 py-3.5 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Module / Unit</th>
+                                                            <th className="px-6 py-3.5 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Marks (%)</th>
+                                                            <th className="px-6 py-3.5 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
+                                                            <th className="px-6 py-3.5 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Lecturer</th>
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                                <tfoot>
-                                                    <tr className="bg-black/[0.02] border-t-2 border-maroon/20">
-                                                        <td className="px-6 py-3 text-[10px] font-black text-black/40 uppercase tracking-widest">Course Average</td>
-                                                        <td className="px-6 py-3 text-center"><span className="text-xs font-black text-maroon">{avg}%</span></td>
-                                                        <td className="px-6 py-3 text-center"><GradeChip marks={avg} grade={calcGradeLabel(avg, thresholds)} /></td>
-                                                        <td />
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-black/5 bg-white">
+                                                        {courseUnits.map((u, i) => (
+                                                            <tr key={i} className="hover:bg-maroon/[0.01] transition-colors">
+                                                                <td className="px-6 py-4">
+                                                                    <p className="text-xs font-black text-black uppercase tracking-tight">{u.unit_name}</p>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    <span className="text-sm font-black text-black">{parseFloat(u.marks).toFixed(1)}%</span>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-center">
+                                                                    <GradeChip marks={parseFloat(u.marks).toFixed(0)} grade={u.grade} />
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <p className="text-[11px] font-bold text-black/50 uppercase">{u.lecturer || '—'}</p>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                    <tfoot>
+                                                        <tr className="bg-black/[0.02] border-t-2 border-maroon/20 font-sans">
+                                                            <td className="px-6 py-3.5 text-[10px] font-black text-black/40 uppercase tracking-widest">Course Average</td>
+                                                            <td className="px-6 py-3.5 text-center"><span className="text-xs font-black text-maroon">{avg}%</span></td>
+                                                            <td className="px-6 py-3.5 text-center"><GradeChip marks={avg} grade={calcGradeLabel(avg, thresholds)} /></td>
+                                                            <td />
+                                                        </tr>
+                                                    </tfoot>
+                                                </table>
+                                            </div>
                                         </div>
                                     );
                                 })}
@@ -830,7 +822,7 @@ export default function UnitsCovered() {
                                             <th className="px-6 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-black/5">
+                                    <tbody className="divide-y divide-black/5 bg-white">
                                         {studentRows.map(row => (
                                             Object.values(row.courses).map(course => {
                                                 const avg = course.units.length > 0
@@ -853,16 +845,16 @@ export default function UnitsCovered() {
                                                                 const visibleUnits = isExpanded ? course.units : course.units.slice(0, 4);
                                                                 const hasMore = course.units.length > 4;
                                                                 return (
-                                                                    <div className="flex flex-wrap gap-1 items-center">
+                                                                    <div className="flex flex-wrap gap-1.5 items-center">
                                                                         {visibleUnits.map((u, i) => (
-                                                                            <span key={i} className="text-[9px] font-bold text-black/40 bg-black/[0.03] px-2 py-1 rounded-full uppercase truncate max-w-[120px]" title={u.unit_name}>
+                                                                            <span key={i} className="text-[9px] font-bold text-black/50 bg-black/[0.04] px-2.5 py-1.5 rounded-full uppercase truncate max-w-[120px] shadow-sm border border-black/5" title={u.unit_name}>
                                                                                 {u.unit_name}
                                                                             </span>
                                                                         ))}
                                                                         {hasMore && (
                                                                             <button
                                                                                 onClick={() => toggleRow(rowKey)}
-                                                                                className="text-[9px] font-black text-maroon bg-maroon/5 hover:bg-maroon/10 px-2.5 py-1 rounded-full transition-colors flex items-center gap-0.5"
+                                                                                className="text-[9px] font-black text-maroon bg-maroon/5 hover:bg-maroon/10 px-3 py-1.5 rounded-full transition-colors flex items-center gap-0.5"
                                                                             >
                                                                                 {isExpanded
                                                                                     ? <><ChevronUp className="w-2.5 h-2.5" /> Less</>
@@ -890,6 +882,7 @@ export default function UnitsCovered() {
                                                                 </button>
                                                                 <button
                                                                     onClick={() => handleDownloadTranscript(row.studentId, course.courseId)}
+
                                                                     className="p-2 hover:bg-gold hover:text-maroon rounded-xl transition-all border border-maroon/5 text-maroon"
                                                                     title="Download Transcript PDF"
                                                                 >
@@ -1117,16 +1110,19 @@ export default function UnitsCovered() {
             {/* ── View Transcript Modal ───────────────────────────────────────── */}
             {viewTarget && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-[110]">
-                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-6 sm:p-10 max-w-4xl w-full shadow-2xl relative max-h-[95vh] flex flex-col overflow-hidden">
+                    <div className="w-full max-w-4xl shadow-2xl relative max-h-[95vh] flex flex-col overflow-hidden transition-all duration-300 bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-6 sm:p-10">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
                         <div className="flex justify-between items-center mb-8 shrink-0">
                             <div>
-                                <h2 className="text-2xl font-black text-black uppercase tracking-tight">Student Transcript</h2>
+                                <h2 className="text-2xl font-black uppercase tracking-tight text-black">Student Transcript</h2>
                                 <div className="w-10 h-0.5 bg-gold mt-2" />
-                                <p className="text-[10px] text-black/30 font-black uppercase tracking-widest mt-1">Units Covered — Official Academic Registry</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest mt-1 text-black/30">Units Covered — Official Academic Registry</p>
                             </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleDownloadTranscript(viewTarget.student.id, viewTarget.courseId)} className="p-2 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => handleDownloadTranscript(viewTarget.student.id, viewTarget.courseId)}
+                                    className="p-2 transition-all shadow-sm bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl text-maroon"
+                                >
                                     <FileDown className="w-5 h-5" />
                                 </button>
                                 <button onClick={() => setViewTarget(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
@@ -1137,14 +1133,14 @@ export default function UnitsCovered() {
 
                         <div className="space-y-6 overflow-y-auto pr-2 custom-scrollbar pb-10">
                             {/* Student info */}
-                            <div className="flex flex-col sm:flex-row gap-6 items-start border-b border-black/5 pb-6">
-                                <div className="w-20 h-20 rounded-3xl bg-maroon text-gold flex items-center justify-center text-3xl font-black shadow-xl shrink-0">
+                            <div className="flex flex-col sm:flex-row gap-6 items-start border-b pb-6 border-black/5">
+                                <div className="w-20 h-20 flex items-center justify-center text-3xl font-black shadow-xl shrink-0 rounded-3xl bg-maroon text-gold">
                                     {viewTarget.student.name.charAt(0)}
                                 </div>
                                 <div>
-                                    <h3 className="text-2xl font-black text-black uppercase tracking-tight">{viewTarget.student.name}</h3>
-                                    <p className="text-xs font-bold text-black/40 uppercase tracking-widest mt-1">Student ID: {viewTarget.student.id}</p>
-                                    <p className="text-[10px] font-black text-maroon uppercase tracking-widest bg-maroon/5 px-3 py-1 rounded-full inline-block mt-2">
+                                    <h3 className="text-2xl font-black uppercase tracking-tight text-black">{viewTarget.student.name}</h3>
+                                    <p className="text-xs font-bold uppercase tracking-widest mt-1 text-black/40">Student ID: {viewTarget.student.id}</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest px-3 py-1 inline-block mt-2 bg-maroon/5 text-maroon rounded-full">
                                         {viewTarget.student.course || 'Independent Enrollment'}
                                     </p>
                                 </div>
@@ -1163,27 +1159,27 @@ export default function UnitsCovered() {
                                 return Object.entries(byCourse).map(([cid, { name, units: cu }]) => {
                                     const avg = Math.round(cu.reduce((a, u) => a + parseFloat(u.marks || 0), 0) / cu.length);
                                     return (
-                                        <div key={cid} className="rounded-2xl border border-black/8 overflow-hidden">
-                                            <div className="flex items-center justify-between bg-maroon/[0.04] px-6 py-4 border-b border-black/8">
+                                        <div key={cid} className="border overflow-hidden rounded-2xl border-black/8">
+                                            <div className="flex items-center justify-between px-6 py-4 border-b bg-maroon/[0.04] border-black/8">
                                                 <div className="flex items-center gap-3">
                                                     <BookOpen className="w-4 h-4 text-maroon" />
-                                                    <p className="text-sm font-black text-black uppercase tracking-tight">{name}</p>
+                                                    <p className="text-sm font-black uppercase tracking-tight text-black">{name}</p>
                                                 </div>
                                                 <GradeChip marks={avg} grade={calcGradeLabel(avg, thresholds)} />
                                             </div>
                                             <table className="w-full">
                                                 <thead>
-                                                    <tr className="bg-black/[0.015] border-b border-black/5">
-                                                        <th className="px-5 py-3 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Module / Unit</th>
-                                                        <th className="px-5 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Marks (%)</th>
-                                                        <th className="px-5 py-3 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
-                                                        <th className="px-5 py-3 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Lecturer</th>
+                                                    <tr className="border-b bg-black/[0.015] border-black/5">
+                                                        <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-black/40">Module / Unit</th>
+                                                        <th className="px-5 py-3 text-center text-[10px] font-black uppercase tracking-widest text-black/40">Marks (%)</th>
+                                                        <th className="px-5 py-3 text-center text-[10px] font-black uppercase tracking-widest text-black/40">Grade</th>
+                                                        <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-black/40">Lecturer</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-black/5">
                                                     {cu.map((u, i) => (
                                                         <tr key={i} className="hover:bg-maroon/[0.012] transition-colors">
-                                                            <td className="px-5 py-4"><p className="text-xs font-black text-black uppercase">{u.unit_name}</p></td>
+                                                            <td className="px-5 py-4"><p className="text-xs font-black uppercase text-black">{u.unit_name}</p></td>
                                                             <td className="px-5 py-4 text-center"><span className="text-xs font-black text-black">{parseFloat(u.marks).toFixed(1)}%</span></td>
                                                             <td className="px-5 py-4 text-center"><GradeChip marks={parseFloat(u.marks).toFixed(0)} grade={u.grade} /></td>
                                                             <td className="px-5 py-4"><p className="text-[11px] font-bold text-black/50 uppercase">{u.lecturer || '—'}</p></td>
@@ -1192,7 +1188,7 @@ export default function UnitsCovered() {
                                                 </tbody>
                                                 <tfoot>
                                                     <tr className="bg-black/[0.02] border-t-2 border-maroon/20">
-                                                        <td className="px-5 py-3 text-[10px] font-black text-black/40 uppercase tracking-widest">Course Average</td>
+                                                        <td className="px-5 py-3 text-[10px] font-black uppercase tracking-widest text-black/40">Course Average</td>
                                                         <td className="px-5 py-3 text-center"><span className="text-xs font-black text-maroon">{avg}%</span></td>
                                                         <td className="px-5 py-3 text-center"><GradeChip marks={avg} grade={calcGradeLabel(avg, thresholds)} /></td>
                                                         <td />
@@ -1283,20 +1279,11 @@ export default function UnitsCovered() {
                                                     >
                                                         <ChevronDown className="w-3.5 h-3.5" />
                                                     </button>
-                                                    {/* Edit */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setEditingUnitId(u.id); setEditingUnitName(u.name); }}
-                                                        className="p-1.5 hover:bg-maroon/5 rounded-lg text-maroon/60"
-                                                        title="Edit Unit"
-                                                    >
-                                                        <Edit className="w-3.5 h-3.5" />
-                                                    </button>
                                                     {/* Delete */}
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteUnit(u.id)}
-                                                        className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"
+                                                        onClick={() => openConfirm(`Delete unit "${u.name}"?`, () => handleDeleteUnit(u.id))}
+                                                        className="p-1.5 hover:bg-red-50 rounded-lg text-black/20 hover:text-red-500 flex items-center justify-center"
                                                         title="Delete Unit"
                                                     >
                                                         <Trash2 className="w-3.5 h-3.5" />
@@ -1361,10 +1348,10 @@ export default function UnitsCovered() {
                                 const gradeColors = { Distinction: '#166534', Credit: '#1e40af', Pass: '#92400e', Fail: '#991b1b' };
                                 const gradeBg    = { Distinction: '#f0fdf4', Credit: '#eff6ff', Pass: '#fffbeb', Fail: '#fef2f2' };
                                 const randSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-                                                                const transcriptNo = `BTEC-${new Date().getFullYear()}-${String(s.id).replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8)}-${randSuffix}`;
-                                
+                                const transcriptNo = `BTEC-${new Date().getFullYear()}-${String(s.id).replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8)}-${randSuffix}`;
+
                                 const formatDate = (dateStr) => {
-                                    if (!dateStr) return '—';
+                                    if (!dateStr) return '\u2014';
                                     try {
                                         const d = new Date(dateStr);
                                         if (isNaN(d.getTime())) return dateStr;
@@ -1383,14 +1370,12 @@ export default function UnitsCovered() {
                                     return "The student has not yet met the minimum requirements for programme completion.";
                                 };
 
-
-
-                                const courseName = allMarks[0]?.course_name || '—';
+                                const courseName = allMarks[0]?.course_name || '\u2014';
 
                                 return (
                                     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '1123px' }}>
 
-                                        {/* ── MAROON HEADER BAND ── */}
+                                        {/* MAROON HEADER BAND */}
                                         <div style={{ background: '#800000', padding: '22px 36px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                                             {printTarget.logoB64 ? (
                                                 <img src={printTarget.logoB64} alt="College Logo"
@@ -1406,21 +1391,19 @@ export default function UnitsCovered() {
                                             <div style={{ width: '60px', flexShrink: 0 }} />
                                         </div>
 
-                                        {/* ── GOLD ACCENT LINE ── */}
+                                        {/* GOLD ACCENT LINE */}
                                         <div style={{ height: '4px', background: 'linear-gradient(90deg,#800000 0%,#c8a84b 50%,#800000 100%)' }} />
 
-                                        {/* ── BODY ── */}
+                                        {/* BODY */}
                                         <div style={{ flex: 1, padding: '24px 36px 20px', position: 'relative' }}>
 
-                                            {/* Watermark */}
                                             {printTarget.logoB64 && (
                                                 <img src={printTarget.logoB64} alt=""
                                                     style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '340px', height: '340px', objectFit: 'contain', opacity: 0.04, pointerEvents: 'none', zIndex: 0 }} />
                                             )}
 
-                                            {/* ── STUDENT INFO CARD ── */}
+                                            {/* STUDENT INFO CARD */}
                                             <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '18px', alignItems: 'flex-start', background: '#fdf8f0', border: '1.5px solid #e8d5a3', borderRadius: '10px', padding: '16px 20px 14px', marginBottom: '18px' }}>
-                                                {/* Photo */}
                                                 <div style={{ flexShrink: 0 }}>
                                                     {s.photoB64 ? (
                                                         <img src={s.photoB64} alt="Student"
@@ -1431,16 +1414,14 @@ export default function UnitsCovered() {
                                                         </div>
                                                     )}
                                                 </div>
-
-                                                {/* Details grid */}
                                                 <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px 24px', minWidth: 0 }}>
                                                     {[
                                                         { label: 'Full Name',        value: s.name },
-                                                        { label: 'Admission No.',    value: s.admission_number || s.admissionNumber || s.student_id || '—' },
-                                                        { label: 'Registration No.', value: s.reg_number || s.registration_number || s.regNumber || '—' },
+                                                        { label: 'Admission No.',    value: s.admission_number || s.admissionNumber || s.student_id || '\u2014' },
+                                                        { label: 'Registration No.', value: s.reg_number || s.registration_number || s.regNumber || '\u2014' },
                                                         { label: 'Programme',        value: courseName },
-                                                        { label: 'Level / Module',   value: s.level || s.module || s.intake_level || '—' },
-                                                        { label: 'Intake',           value: s.intake || s.intake_name || s.cohort || '—' },
+                                                        { label: 'Level / Module',   value: s.level || s.module || s.intake_level || '\u2014' },
+                                                        { label: 'Intake',           value: s.intake || s.intake_name || s.cohort || '\u2014' },
                                                         { label: 'Completion Date',  value: formatDate(s.completion_date || s.expected_completion) },
                                                     ].map(({ label, value }) => (
                                                         <div key={label} style={{ minWidth: 0 }}>
@@ -1449,15 +1430,13 @@ export default function UnitsCovered() {
                                                         </div>
                                                     ))}
                                                 </div>
-
-                                                {/* Status badge */}
                                                 <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
                                                     <div style={{ background: '#800000', color: '#c8a84b', fontSize: '7px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', padding: '4px 10px', borderRadius: '4px', textAlign: 'center' }}>Active</div>
                                                     <div style={{ fontSize: '6.5px', color: '#800000', fontWeight: 700, textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.4 }}>Student<br />Status</div>
                                                 </div>
                                             </div>
 
-                                            {/* ── PER-COURSE ACADEMIC TABLES ── */}
+                                            {/* PER-COURSE ACADEMIC TABLES */}
                                             <div style={{ position: 'relative', zIndex: 1 }}>
                                                 {Object.entries(byCourse).map(([cid, { name, units: cu }]) => {
                                                     const courseAvg = Math.round(cu.reduce((a, u) => a + parseFloat(u.marks || 0), 0) / cu.length);
@@ -1466,7 +1445,7 @@ export default function UnitsCovered() {
                                                         <div key={cid} style={{ marginBottom: '16px' }}>
                                                             <div style={{ background: '#800000', padding: '6px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '5px 5px 0 0', gap: '10px' }}>
                                                                 <div style={{ fontSize: '9.5px', fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.1em', wordBreak: 'break-word', overflowWrap: 'break-word', flex: 1, minWidth: 0 }}>{name}</div>
-                                                                <div style={{ fontSize: '8px', fontWeight: 700, color: '#c8a84b', background: 'rgba(200,168,75,0.15)', padding: '2px 8px', borderRadius: '3px', flexShrink: 0, whiteSpace: 'nowrap' }}>Course Avg: {courseAvg}% · {courseGrade}</div>
+                                                                <div style={{ fontSize: '8px', fontWeight: 700, color: '#c8a84b', background: 'rgba(200,168,75,0.15)', padding: '2px 8px', borderRadius: '3px', flexShrink: 0, whiteSpace: 'nowrap' }}>Course Avg: {courseAvg}% &middot; {courseGrade}</div>
                                                             </div>
                                                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
                                                                 <thead>
@@ -1499,7 +1478,7 @@ export default function UnitsCovered() {
                                                 })}
                                             </div>
 
-                                            {/* ── OVERALL PERFORMANCE SUMMARY CARDS ── */}
+                                            {/* OVERALL PERFORMANCE SUMMARY */}
                                             <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', margin: '18px 0 16px' }}>
                                                 {[
                                                     { label: 'Overall Average',  value: `${overallAvg}%`, sub: 'All Units Combined' },
@@ -1519,14 +1498,14 @@ export default function UnitsCovered() {
                                                 })}
                                             </div>
 
-                                            {/* ── GRADING SCALE LEGEND ── */}
+                                            {/* GRADING SCALE */}
                                             <div style={{ position: 'relative', zIndex: 1, background: '#f9f4ec', border: '1px solid #e8d5a3', borderRadius: '6px', padding: '8px 14px', marginBottom: '16px' }}>
                                                 <div style={{ fontSize: '7.5px', fontWeight: 800, color: '#800000', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '6px' }}>Grading Scale</div>
                                                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                                                     {[
-                                                        { label: 'Distinction', range: `${thresholds.distinction || 80}–100%`, color: '#166534', bg: '#f0fdf4' },
-                                                        { label: 'Credit',      range: `${thresholds.credit || 65}–${(thresholds.distinction || 80) - 1}%`, color: '#1e40af', bg: '#eff6ff' },
-                                                        { label: 'Pass',        range: `${thresholds.pass || 50}–${(thresholds.credit || 65) - 1}%`, color: '#92400e', bg: '#fffbeb' },
+                                                        { label: 'Distinction', range: `${thresholds.distinction || 80}\u2013100%`, color: '#166534', bg: '#f0fdf4' },
+                                                        { label: 'Credit',      range: `${thresholds.credit || 65}\u2013${(thresholds.distinction || 80) - 1}%`, color: '#1e40af', bg: '#eff6ff' },
+                                                        { label: 'Pass',        range: `${thresholds.pass || 50}\u2013${(thresholds.credit || 65) - 1}%`, color: '#92400e', bg: '#fffbeb' },
                                                         { label: 'Fail',        range: `Below ${thresholds.pass || 50}%`, color: '#991b1b', bg: '#fef2f2' },
                                                     ].map(({ label, range, color, bg }) => (
                                                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -1538,17 +1517,16 @@ export default function UnitsCovered() {
                                                 </div>
                                             </div>
 
-                                            {/* ── ACADEMIC REMARKS ── */}
+                                            {/* ACADEMIC REMARKS */}
                                             <div style={{ position: 'relative', zIndex: 1, background: '#fdf8f0', border: '1.5px solid #e8d5a3', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px' }}>
                                                 <div style={{ fontSize: '7.5px', fontWeight: 800, color: '#800000', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '4px' }}>Academic Remarks</div>
                                                 <div style={{ fontSize: '9px', fontWeight: 700, color: '#1a1a1a', fontStyle: 'italic', wordBreak: 'break-word', overflowWrap: 'break-word', lineHeight: 1.4 }}>
-                                                    "{getRemarks(overallGrade)}"
+                                                    &ldquo;{getRemarks(overallGrade)}&rdquo;
                                                 </div>
                                             </div>
 
-                                            {/* ── VERIFICATION SECTION ── */}
+                                            {/* VERIFICATION */}
                                             <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '16px', alignItems: 'flex-start', border: '1.5px solid #e8d5a3', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', background: '#fff' }}>
-                                                {/* Verification details */}
                                                 <div style={{ flex: 1 }}>
                                                     <div style={{ fontSize: '9px', fontWeight: 800, color: '#800000', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px' }}>Official Verification</div>
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', marginBottom: '8px' }}>
@@ -1566,11 +1544,9 @@ export default function UnitsCovered() {
                                                     </div>
                                                     <div style={{ fontSize: '7px', color: '#6b7280', lineHeight: 1.5, fontStyle: 'italic', borderTop: '1px dashed #e8d5a3', paddingTop: '6px' }}>
                                                         This document is digitally generated and constitutes an official academic record of Beautex Technical Training College.
-                                                        Verification is available online at: <span style={{ color: '#800000', fontWeight: 700 }}>https://beautex.edu/verify/{transcriptNo}</span>
+                                                        Verification: <span style={{ color: '#800000', fontWeight: 700 }}>https://beautex.edu/verify/{transcriptNo}</span>
                                                     </div>
                                                 </div>
-
-                                                {/* College stamp ring */}
                                                 <div style={{ flexShrink: 0, width: '72px', height: '72px', borderRadius: '50%', border: '3px double #800000', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: 'rgba(200,168,75,0.04)' }}>
                                                     <div style={{ fontSize: '6px', fontWeight: 900, color: '#800000', textTransform: 'uppercase', textAlign: 'center', lineHeight: 1.2, letterSpacing: '0.04em' }}>OFFICIAL<br />SEAL</div>
                                                     <div style={{ width: '30px', height: '1px', background: '#c8a84b', margin: '3px 0' }} />
@@ -1578,7 +1554,7 @@ export default function UnitsCovered() {
                                                 </div>
                                             </div>
 
-                                            {/* ── SIGNATURE LINES ── */}
+                                            {/* SIGNATURES */}
                                             <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '16px' }}>
                                                 {[
                                                     { role: 'Prepared By',  title: 'Academic Registrar' },
@@ -1595,9 +1571,9 @@ export default function UnitsCovered() {
                                             </div>
                                         </div>
 
-                                        {/* ── SECURITY FOOTER ── */}
+                                        {/* SECURITY FOOTER */}
                                         <div style={{ background: '#1a1a1a', padding: '8px 36px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-                                            <div style={{ fontSize: '6.5px', color: '#c8a84b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em' }}>BTEC · Official Academic Record</div>
+                                            <div style={{ fontSize: '6.5px', color: '#c8a84b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em' }}>BTEC &middot; Official Academic Record</div>
                                             <div style={{ fontSize: '6px', color: '#6b7280', textAlign: 'center' }}>
                                                 Unauthorized alteration of this document is a criminal offence punishable by law.
                                             </div>

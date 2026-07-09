@@ -48,6 +48,27 @@ const createTransporter = async () => {
 
 let transporter = null;
 
+// Eagerly warm up the transporter at module load time so the first
+// enrollment/faculty request doesn't pay the SMTP connection cost.
+createTransporter()
+    .then(t => { transporter = t; console.log('📧 Email transporter pre-warmed successfully.'); })
+    .catch(err => console.warn('⚠️ Email transporter pre-warm failed (will retry on first send):', err.message));
+
+/**
+ * Call at server startup to ensure the SMTP connection is ready before
+ * the first request arrives.
+ */
+export const warmupEmailService = async () => {
+    try {
+        if (!transporter) {
+            transporter = await createTransporter();
+        }
+        console.log('📧 Email service ready.');
+    } catch (err) {
+        console.warn('⚠️ Email warmup failed:', err.message);
+    }
+};
+
 export const sendWelcomeEmail = async (email, role, tempPassword) => {
     try {
         if (!transporter) {
