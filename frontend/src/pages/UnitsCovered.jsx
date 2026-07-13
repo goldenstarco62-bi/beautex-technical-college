@@ -210,12 +210,10 @@ export default function UnitsCovered() {
                 ).catch(() => ({ data: [] })),
             ]);
             if (settingsRes?.data) setSettings(prev => ({ ...prev, ...settingsRes.data }));
-            // Teachers only see their assigned courses
+            // The backend already filters courses by teacher role,
+            // so we can use the response directly without re-filtering.
             const allCourses = coursesRes?.data || [];
-            const visibleCourses = isTeacher
-                ? allCourses.filter(c => c.instructor && c.instructor.toLowerCase().trim() === (user?.name || '').toLowerCase().trim())
-                : allCourses;
-            setCourses(isTeacher ? visibleCourses : allCourses);
+            setCourses(allCourses);
             // For students, studentsRes.data is a single object; for others it's an array
             if (isStudent) {
                 const sData = studentsRes?.data;
