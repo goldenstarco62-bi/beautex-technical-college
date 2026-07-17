@@ -40,6 +40,22 @@ async function getActivePeriodLabel() {
     }
 }
 
+function normaliseCourseField(raw) {
+    if (!raw) return [];
+    if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
+        return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
+    }
+    if (typeof raw === 'string' && raw.startsWith('[')) {
+        try {
+            const p = JSON.parse(raw);
+            return Array.isArray(p) ? p.map(s => s.trim()) : [String(p).trim()];
+        } catch (e) {
+            // fallback
+        }
+    }
+    return [String(raw).trim()].filter(Boolean);
+}
+
 /**
  * Get all students enrolled in a course (by course name match), returning id, name, intake.
  */
@@ -47,11 +63,27 @@ async function getEnrolledStudents(courseId) {
     try {
         const course = await queryOne('SELECT name FROM courses WHERE id = ?', [courseId]);
         if (!course) return [];
-        const students = await query(
-            `SELECT id, name, intake FROM students WHERE LOWER(course) = LOWER(?) AND status = 'Active' ORDER BY intake ASC, name ASC`,
-            [course.name]
+        const courseLC = course.name.toLowerCase().trim();
+        
+        const allStudents = await query(
+            `SELECT id, name, intake, course FROM students WHERE status = 'Active'`,
+            []
         );
-        return students;
+        
+        const matchedStudents = allStudents.filter(s => 
+            normaliseCourseField(s.course).some(c => c.toLowerCase().trim() === courseLC)
+        );
+        
+        return matchedStudents.map(s => ({
+            id: s.id,
+            name: s.name,
+            intake: s.intake
+        })).sort((a, b) => {
+            const intA = a.intake || '';
+            const intB = b.intake || '';
+            if (intA !== intB) return intA.localeCompare(intB);
+            return a.name.localeCompare(b.name);
+        });
     } catch (e) {
         console.warn('getEnrolledStudents error:', e.message);
         return [];
@@ -652,12 +684,14 @@ export async function getStudentProgress(req, res) {
         const studentRecord = await queryOne('SELECT * FROM students WHERE id = ?', [studentId]);
         if (!studentRecord) return res.status(404).json({ error: 'Student not found' });
 
-        const courseName = studentRecord.course;
-        if (!courseName) return res.json([]);
+        const studentCourses = normaliseCourseField(studentRecord.course);
+        if (studentCourses.length === 0) return res.json([]);
 
+        // Get all courses from courses table that match the student's courses (case-insensitive)
+        const placeholders = studentCourses.map(() => '?').join(',');
         const enrolledCourses = await query(
-            `SELECT * FROM courses WHERE LOWER(name) = LOWER(?) AND status = 'Active'`,
-            [courseName]
+            `SELECT * FROM courses WHERE LOWER(name) IN (${placeholders.map(() => 'LOWER(?)').join(',')}) AND status = 'Active'`,
+            studentCourses.map(c => c.toLowerCase().trim())
         );
 
         const progress = await Promise.all(enrolledCourses.map(async (course) => {
