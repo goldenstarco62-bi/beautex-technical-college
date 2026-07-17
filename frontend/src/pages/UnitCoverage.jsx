@@ -89,8 +89,11 @@ export default function UnitCoverage() {
     }, [enrolledStudents, batchIntakeFilter]);
 
     // ── Data Loading ──────────────────────────────────────────────────────────
+    const [progressError, setProgressError] = useState(null);
+
     const loadAllData = useCallback(async () => {
         setLoading(true);
+        setProgressError(null);
         try {
             const periodRes = await academicAPI.getPeriods().catch(() => ({ data: [] }));
             const periods = Array.isArray(periodRes.data) ? periodRes.data : [];
@@ -100,8 +103,15 @@ export default function UnitCoverage() {
             setCourses(coursesRes?.data || []);
 
             if (isStudent) {
-                const progressRes = await unitCoverageAPI.getStudentProgress().catch(() => ({ data: [] }));
-                setStudentProgress(progressRes?.data || []);
+                try {
+                    const progressRes = await unitCoverageAPI.getStudentProgress();
+                    setStudentProgress(Array.isArray(progressRes?.data) ? progressRes.data : []);
+                } catch (err) {
+                    console.error('getStudentProgress error:', err?.response?.data || err.message);
+                    setProgressError(err?.response?.data?.error || 'Failed to load your progress. Please refresh.');
+                    showToast('Could not load unit progress — please try refreshing.', 'error');
+                    setStudentProgress([]);
+                }
             } else if (isAdmin) {
                 const overviewRes = await unitCoverageAPI.getAdminOverview().catch(() => ({ data: [] }));
                 setAdminOverview(overviewRes?.data || []);
@@ -118,6 +128,7 @@ export default function UnitCoverage() {
             setLoading(false);
         }
     }, [isStudent, isAdmin, isTeacher, showToast]);
+
 
     useEffect(() => { loadAllData(); }, [loadAllData]);
 
@@ -515,7 +526,16 @@ export default function UnitCoverage() {
             {/* ══════════════════════════════════════════════════════════════════ */}
             {isStudent && (
                 <div className="space-y-8 animate-in fade-in duration-500">
-                    {studentProgress.length === 0 ? (
+                    {progressError ? (
+                        <div className="bg-red-50 p-16 rounded-[2.5rem] border border-red-200 shadow-2xl text-center">
+                            <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-4" />
+                            <p className="text-sm font-bold text-red-600 mb-2">Could not load your progress</p>
+                            <p className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em]">{progressError}</p>
+                            <button onClick={loadAllData} className="mt-6 px-6 py-2.5 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-colors">
+                                Try Again
+                            </button>
+                        </div>
+                    ) : studentProgress.length === 0 ? (
                         <div className="bg-white p-16 rounded-[2.5rem] border border-black/5 shadow-2xl text-center">
                             <BookOpen className="w-10 h-10 text-black/15 mx-auto mb-4" />
                             <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No course progress yet. Units will appear once your teacher marks them as covered for you.</p>
