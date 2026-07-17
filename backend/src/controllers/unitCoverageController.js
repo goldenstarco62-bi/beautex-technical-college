@@ -548,7 +548,11 @@ export async function submitConfirmation(req, res) {
         }
 
         const student = req.user;
-        const studentId = student.student_id || String(student.id);
+        let studentId = student.student_id;
+        if (!studentId) {
+            const profile = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [student.email]);
+            studentId = profile ? profile.id : String(student.id);
+        }
         const studentName = student.name || student.email;
 
         // Verify coverage log exists and belongs to this student
@@ -651,7 +655,11 @@ export async function getConfirmations(req, res) {
         const params = [];
 
         if (isStudent) {
-            const sid = req.user.student_id || String(req.user.id);
+            let sid = req.user.student_id;
+            if (!sid) {
+                const profile = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [req.user.email]);
+                sid = profile ? profile.id : String(req.user.id);
+            }
             sql += ' AND ucc.student_id = ?';
             params.push(sid);
         } else if (student_id) {
@@ -679,7 +687,11 @@ export async function getConfirmations(req, res) {
 export async function getStudentProgress(req, res) {
     try {
         const student = req.user;
-        const studentId = student.student_id || String(student.id);
+        let studentId = student.student_id;
+        if (!studentId) {
+            const profile = await queryOne('SELECT id FROM students WHERE LOWER(email) = LOWER(?)', [student.email]);
+            studentId = profile ? profile.id : String(student.id);
+        }
 
         const studentRecord = await queryOne('SELECT * FROM students WHERE id = ?', [studentId]);
         if (!studentRecord) return res.status(404).json({ error: 'Student not found' });
@@ -688,9 +700,9 @@ export async function getStudentProgress(req, res) {
         if (studentCourses.length === 0) return res.json([]);
 
         // Get all courses from courses table that match the student's courses (case-insensitive)
-        const placeholders = studentCourses.map(() => '?').join(',');
+        const placeholders = studentCourses.map(() => 'LOWER(?)').join(',');
         const enrolledCourses = await query(
-            `SELECT * FROM courses WHERE LOWER(name) IN (${placeholders.map(() => 'LOWER(?)').join(',')}) AND status = 'Active'`,
+            `SELECT * FROM courses WHERE LOWER(name) IN (${placeholders}) AND status = 'Active'`,
             studentCourses.map(c => c.toLowerCase().trim())
         );
 
