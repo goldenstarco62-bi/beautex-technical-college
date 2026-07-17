@@ -1,7 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { coursesAPI, studentsAPI, settingsAPI, unitCoverageAPI, academicAPI } from '../services/api';
+import { coursesAPI, unitCoverageAPI, academicAPI, courseUnitsAPI } from '../services/api';
 import {
     BookOpen, Search, Plus, X, Edit, Trash2, Users, CheckCircle,
     FileDown, History, ChevronDown, ChevronUp, AlertTriangle, Layers,
@@ -157,14 +156,7 @@ export default function UnitCoverage() {
         const order = newUnits.map((u, i) => ({ id: u.id, sort_order: i }));
         try {
             setUnits(newUnits);
-            await unitCoverageAPI.markCovered({
-                course_id: selectedCourse,
-                reorder_only: true, // Custom check or we can call existing courseUnitsAPI.reorderUnits
-            }).catch(async () => {
-                // Fallback to existing course units reorder endpoint
-                const { courseUnitsAPI } = await import('../services/api');
-                await courseUnitsAPI.reorderUnits(selectedCourse, order);
-            });
+            await courseUnitsAPI.reorderUnits(selectedCourse, order);
             showToast('Unit order updated', 'success');
         } catch (err) {
             console.error(err);
@@ -177,7 +169,6 @@ export default function UnitCoverage() {
         e.preventDefault();
         if (!newUnitForm.name.trim() || !selectedCourse) return;
         try {
-            const { courseUnitsAPI } = await import('../services/api');
             await courseUnitsAPI.createUnit(selectedCourse, {
                 name: newUnitForm.name.trim(),
                 sort_order: units.length
