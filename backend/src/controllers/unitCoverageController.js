@@ -85,7 +85,7 @@ export async function getCourseCoverage(req, res) {
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
         const units = await query(
-            `SELECT * FROM course_units WHERE course_id = ? AND (is_archived = 0 OR is_archived IS NULL) ORDER BY sort_order ASC, id ASC`,
+            `SELECT * FROM course_units WHERE course_id = ? AND (is_archived IS NOT TRUE) ORDER BY sort_order ASC, id ASC`,
             [courseId]
         );
 
@@ -157,7 +157,7 @@ export async function markUnitCovered(req, res) {
             // Check for existing units with similar name in this course
             if (!force_create) {
                 const existingUnits = await query(
-                    `SELECT * FROM course_units WHERE course_id = ? AND (is_archived = 0 OR is_archived IS NULL) ORDER BY sort_order ASC`,
+                    `SELECT * FROM course_units WHERE course_id = ? AND (is_archived IS NOT TRUE) ORDER BY sort_order ASC`,
                     [course_id]
                 );
                 const similar = existingUnits.filter(u => isSimilarName(u.name, unit_name.trim()));
@@ -371,7 +371,7 @@ export async function getAdminOverview(req, res) {
 
         const overview = await Promise.all(courses.map(async (course) => {
             const totalUnits = await queryOne(
-                `SELECT COUNT(*) as cnt FROM course_units WHERE course_id = ? AND (is_archived = 0 OR is_archived IS NULL)`,
+                `SELECT COUNT(*) as cnt FROM course_units WHERE course_id = ? AND (is_archived IS NOT TRUE)`,
                 [course.id]
             );
             const coveredUnits = await queryOne(
@@ -604,7 +604,7 @@ export async function getStudentProgress(req, res) {
                         WHERE unit_id = cu.id AND course_id = cu.course_id
                         ORDER BY created_at DESC LIMIT 1
                     )
-                 WHERE cu.course_id = ? AND (cu.is_archived = 0 OR cu.is_archived IS NULL)
+                 WHERE cu.course_id = ? AND (cu.is_archived IS NOT TRUE)
                  ORDER BY cu.sort_order ASC, cu.id ASC`,
                 [course.id]
             );
@@ -675,7 +675,7 @@ export async function updateUnit(req, res) {
                 description !== undefined ? description : unit.description,
                 expected_duration !== undefined ? expected_duration : unit.expected_duration,
                 unit_remarks !== undefined ? unit_remarks : unit.unit_remarks,
-                is_archived !== undefined ? (is_archived ? 1 : 0) : unit.is_archived,
+                is_archived !== undefined ? (is_archived ? true : false) : (unit.is_archived ? true : false),
                 unitId
             ]
         );
