@@ -898,6 +898,16 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ unit_coverage_confirmations migration warning (PostgreSQL):', e.message);
     }
+
+    // Migration: Add student_id to unit_coverage_logs for per-student tracking (PostgreSQL)
+    try {
+        await database.query('ALTER TABLE unit_coverage_logs ADD COLUMN IF NOT EXISTS student_id TEXT');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_ucl_student_id ON unit_coverage_logs(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_ucl_student_course ON unit_coverage_logs(student_id, course_id, unit_id)');
+        console.log('✅ student_id added to unit_coverage_logs (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ unit_coverage_logs student_id migration warning (PostgreSQL):', e.message);
+    }
 }
 
 
@@ -1426,6 +1436,20 @@ async function runSqliteMigrations(database) {
         await database.run('CREATE INDEX IF NOT EXISTS idx_ucc_student_id ON unit_coverage_confirmations(student_id)');
     } catch (e) {
         console.warn('⚠️ unit_coverage_confirmations migration warning (SQLite):', e.message);
+    }
+
+    // Migration: Add student_id to unit_coverage_logs for per-student tracking (SQLite)
+    try {
+        const uclCols = await database.all('PRAGMA table_info(unit_coverage_logs)');
+        const uclColNames = uclCols.map(c => c.name);
+        if (!uclColNames.includes('student_id')) {
+            await database.run('ALTER TABLE unit_coverage_logs ADD COLUMN student_id TEXT');
+            await database.run('CREATE INDEX IF NOT EXISTS idx_ucl_student_id ON unit_coverage_logs(student_id)');
+            await database.run('CREATE INDEX IF NOT EXISTS idx_ucl_student_course ON unit_coverage_logs(student_id, course_id, unit_id)');
+            console.log('✅ student_id added to unit_coverage_logs (SQLite)');
+        }
+    } catch (e) {
+        console.warn('⚠️ unit_coverage_logs student_id migration warning (SQLite):', e.message);
     }
 }
 

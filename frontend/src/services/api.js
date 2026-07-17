@@ -386,8 +386,9 @@ export const studentUnitMarksAPI = {
 
 // ── Unit Coverage Tracking API ────────────────────────────────────────────────
 export const unitCoverageAPI = {
-    getCourseCoverage: (courseId) => api.get(`unit-coverage/courses/${encodeURIComponent(courseId)}`),
+    getCourseCoverage: (courseId, params) => api.get(`unit-coverage/courses/${encodeURIComponent(courseId)}`, { params }),
     markCovered: (data) => api.post('unit-coverage/mark', data),
+    deleteLog: (logId) => api.delete(`unit-coverage/logs/${logId}`),
     getLogs: (params) => api.get('unit-coverage/logs', { params }),
     getAnalytics: (params) => api.get('unit-coverage/analytics', { params }),
     getAdminOverview: (params) => api.get('unit-coverage/admin', { params }),

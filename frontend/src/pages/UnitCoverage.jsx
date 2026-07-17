@@ -1,11 +1,12 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { coursesAPI, unitCoverageAPI, academicAPI, courseUnitsAPI } from '../services/api';
 import {
     BookOpen, Search, Plus, X, Edit, Trash2, Users, CheckCircle,
-    FileDown, History, ChevronDown, ChevronUp, AlertTriangle, Layers,
-    Check, Star, Filter, ArrowUp, ArrowDown, Archive, RefreshCw, BarChart2,
-    Calendar, Clock, MessageSquare, Info, Shield
+    FileDown, ChevronDown, ChevronUp, AlertTriangle, Layers,
+    Check, Filter, Archive, RefreshCw, BarChart2,
+    Clock, MessageSquare, Shield, UserCheck, UserX, ChevronRight,
+    CheckSquare, Square, MinusSquare, Eye, Trash
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -15,144 +16,276 @@ export default function UnitCoverage() {
     const isStudent = (user?.role || '').toLowerCase() === 'student';
     const isTeacher = (user?.role || '').toLowerCase() === 'teacher';
     const isAdmin = ['admin', 'superadmin'].includes((user?.role || '').toLowerCase());
-    const canManage = ['admin', 'superadmin', 'teacher'].includes((user?.role || '').toLowerCase());
 
-    // ── State ─────────────────────────────────────────────────────────────────
+    // ── Core State ────────────────────────────────────────────────────────────
     const [courses, setCourses] = useState([]);
-    const [units, setUnits] = useState([]); // units for the selected course
-    const [logs, setLogs] = useState([]); // coverage logs
-    const [analytics, setAnalytics] = useState([]); // analytics for teacher/admin
-    const [adminOverview, setAdminOverview] = useState([]); // admin department/course progress
-    const [studentProgress, setStudentProgress] = useState([]); // student course progress
+    const [units, setUnits] = useState([]);
+    const [enrolledStudents, setEnrolledStudents] = useState([]);
+    const [analytics, setAnalytics] = useState([]);
+    const [adminOverview, setAdminOverview] = useState([]);
+    const [studentProgress, setStudentProgress] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedCourse, setSelectedCourse] = useState('');
-    const [selectedDept, setSelectedDept] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
     const [activePeriod, setActivePeriod] = useState(null);
 
-    // Toast & Dialog States
-    const [toast, setToast] = useState(null);
+    // ── Teacher UI State ──────────────────────────────────────────────────────
+    const [activeTab, setActiveTab] = useState('students'); // 'students' | 'units' | 'analytics'
+    const [selectedStudentId, setSelectedStudentId] = useState(null); // expanded student drawer
+    const [studentUnitView, setStudentUnitView] = useState([]); // units for the selected student
+    const [studentUnitLoading, setStudentUnitLoading] = useState(false);
+    const [intakeFilter, setIntakeFilter] = useState('all');
+    const [studentSearch, setStudentSearch] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedDept, setSelectedDept] = useState('');
+
+    // ── Batch Mark State ──────────────────────────────────────────────────────
+    const [showBatchModal, setShowBatchModal] = useState(false);
+    const [batchUnit, setBatchUnit] = useState(null); // unit being batch-marked
+    const [batchSelectedStudents, setBatchSelectedStudents] = useState(new Set());
+    const [batchIntakeFilter, setBatchIntakeFilter] = useState('all');
+    const [batchForm, setBatchForm] = useState({ remarks: '', material_urls: '' });
+    const [batchLoading, setBatchLoading] = useState(false);
+
+    // ── Modals ────────────────────────────────────────────────────────────────
+    const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
+    const [showConfirmationModal, setShowConfirmationModal] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState(null);
     const [duplicateDialog, setDuplicateDialog] = useState(null);
 
-    // Modals
-    const [showCoverModal, setShowCoverModal] = useState(false);
-    const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
-    const [showConfirmationModal, setShowConfirmationModal] = useState(false);
-
-    // Form States
-    const [coverageForm, setCoverageForm] = useState({
-        unit_id: '',
-        unit_name: '',
-        remarks: '',
-        material_urls: '',
-        description: '',
-        expected_duration: '',
-        unit_remarks: ''
-    });
-
-    const [confirmationForm, setConfirmationForm] = useState({
-        coverage_log_id: '',
-        response: 'Yes',
-        comment: ''
-    });
-
-    const [newUnitForm, setNewUnitForm] = useState({
-        name: '',
-        description: '',
-        expected_duration: '',
-        unit_remarks: ''
-    });
-
+    // ── Form State ────────────────────────────────────────────────────────────
+    const [confirmationForm, setConfirmationForm] = useState({ coverage_log_id: '', response: 'Yes', comment: '' });
+    const [newUnitForm, setNewUnitForm] = useState({ name: '', description: '', expected_duration: '', unit_remarks: '' });
     const [editingUnit, setEditingUnit] = useState(null);
 
-    // Toast helper
-    const showToast = useCallback((message, type = 'success') => {
-        setToast({ message, type });
-    }, []);
-
+    // ── Toast ─────────────────────────────────────────────────────────────────
+    const [toast, setToast] = useState(null);
+    const showToast = useCallback((message, type = 'success') => setToast({ message, type }), []);
     useEffect(() => {
         if (!toast) return;
-        const timer = setTimeout(() => setToast(null), 4000);
-        return () => clearTimeout(timer);
+        const t = setTimeout(() => setToast(null), 4000);
+        return () => clearTimeout(t);
     }, [toast]);
 
-    // Dialog helper
-    const openConfirm = (message, onConfirm) => {
-        setConfirmDialog({ message, onConfirm });
-    };
+    const openConfirm = (message, onConfirm) => setConfirmDialog({ message, onConfirm });
 
-    // Load initial data based on role
+    // ── Computed helpers ──────────────────────────────────────────────────────
+    const intakeList = useMemo(() => {
+        const intakes = [...new Set(enrolledStudents.map(s => s.intake || 'Unknown'))].sort();
+        return intakes;
+    }, [enrolledStudents]);
+
+    const filteredStudents = useMemo(() => {
+        return enrolledStudents.filter(s => {
+            const matchIntake = intakeFilter === 'all' || (s.intake || 'Unknown') === intakeFilter;
+            const matchSearch = !studentSearch || s.name.toLowerCase().includes(studentSearch.toLowerCase());
+            return matchIntake && matchSearch;
+        });
+    }, [enrolledStudents, intakeFilter, studentSearch]);
+
+    const batchFilteredStudents = useMemo(() => {
+        return enrolledStudents.filter(s => {
+            return batchIntakeFilter === 'all' || (s.intake || 'Unknown') === batchIntakeFilter;
+        });
+    }, [enrolledStudents, batchIntakeFilter]);
+
+    // ── Data Loading ──────────────────────────────────────────────────────────
     const loadAllData = useCallback(async () => {
         setLoading(true);
         try {
-            // Get active academic period
             const periodRes = await academicAPI.getPeriods().catch(() => ({ data: [] }));
             const periods = Array.isArray(periodRes.data) ? periodRes.data : [];
-            const active = periods.find(p => p.is_active) || periods[0] || null;
-            setActivePeriod(active);
+            setActivePeriod(periods.find(p => p.is_active) || periods[0] || null);
 
-            // Fetch course list
             const coursesRes = await coursesAPI.getAll().catch(() => ({ data: [] }));
             setCourses(coursesRes?.data || []);
 
             if (isStudent) {
-                // Fetch student progress
                 const progressRes = await unitCoverageAPI.getStudentProgress().catch(() => ({ data: [] }));
                 setStudentProgress(progressRes?.data || []);
             } else if (isAdmin) {
-                // Fetch admin overview
                 const overviewRes = await unitCoverageAPI.getAdminOverview().catch(() => ({ data: [] }));
                 setAdminOverview(overviewRes?.data || []);
-                // Fetch analytics & logs
                 const analyticsRes = await unitCoverageAPI.getAnalytics().catch(() => ({ data: [] }));
                 setAnalytics(analyticsRes?.data || []);
             } else if (isTeacher) {
-                // Fetch teacher analytics
                 const analyticsRes = await unitCoverageAPI.getAnalytics().catch(() => ({ data: [] }));
                 setAnalytics(analyticsRes?.data || []);
             }
-        } catch (error) {
-            console.error('loadAllData error:', error);
+        } catch (e) {
+            console.error('loadAllData error:', e);
             showToast('Failed to load data', 'error');
         } finally {
             setLoading(false);
         }
     }, [isStudent, isAdmin, isTeacher, showToast]);
 
-    useEffect(() => {
-        loadAllData();
-    }, [loadAllData]);
+    useEffect(() => { loadAllData(); }, [loadAllData]);
 
-    // Fetch units and logs when course changes (for teacher/admin)
     const loadCourseCoverageData = useCallback(async (courseId) => {
         if (!courseId) return;
         try {
             const res = await unitCoverageAPI.getCourseCoverage(courseId);
             setUnits(res.data?.units || []);
-        } catch (error) {
-            console.error('loadCourseCoverageData error:', error);
+            setEnrolledStudents(res.data?.students || []);
+        } catch (e) {
+            console.error('loadCourseCoverageData error:', e);
             showToast('Failed to load units for this course', 'error');
         }
     }, [showToast]);
 
     useEffect(() => {
         if (selectedCourse) {
+            setSelectedStudentId(null);
+            setStudentUnitView([]);
+            setIntakeFilter('all');
+            setStudentSearch('');
             loadCourseCoverageData(selectedCourse);
         }
     }, [selectedCourse, loadCourseCoverageData]);
 
-    // Reorder course units
+    // ── Load specific student's unit view ─────────────────────────────────────
+    const loadStudentUnitView = useCallback(async (studentId) => {
+        if (!selectedCourse || !studentId) return;
+        setStudentUnitLoading(true);
+        try {
+            const res = await unitCoverageAPI.getCourseCoverage(selectedCourse, { student_id: studentId });
+            setStudentUnitView(res.data?.units || []);
+        } catch (e) {
+            console.error('loadStudentUnitView error:', e);
+            showToast('Failed to load student unit progress', 'error');
+        } finally {
+            setStudentUnitLoading(false);
+        }
+    }, [selectedCourse, showToast]);
+
+    // ── Mark unit covered for a single student directly from their drawer ─────
+    const handleMarkForStudent = async (unit, studentId) => {
+        const student = enrolledStudents.find(s => s.id === studentId);
+        if (!student) return;
+        try {
+            await unitCoverageAPI.markCovered({
+                course_id: selectedCourse,
+                unit_id: String(unit.id),
+                student_ids: [studentId],
+            });
+            showToast(`"${unit.name}" marked covered for ${student.name}`, 'success');
+            loadStudentUnitView(studentId);
+            loadCourseCoverageData(selectedCourse);
+        } catch (err) {
+            if (err.response?.status === 409) {
+                setDuplicateDialog({
+                    message: err.response.data.message,
+                    candidates: err.response.data.candidates || [],
+                    entered_name: err.response.data.entered_name,
+                    pendingStudentIds: [studentId],
+                });
+            } else {
+                showToast(err.response?.data?.error || 'Failed to mark unit', 'error');
+            }
+        }
+    };
+
+    // ── Unmark (delete log) for a single student ──────────────────────────────
+    const handleUnmarkForStudent = (unit, studentId) => {
+        const student = enrolledStudents.find(s => s.id === studentId);
+        openConfirm(`Unmark "${unit.name}" for ${student?.name}?`, async () => {
+            try {
+                // The student unit view has the log object with its ID
+                const unitInView = studentUnitView.find(u => u.id === unit.id);
+                if (unitInView?.coverage_log?.id) {
+                    await unitCoverageAPI.deleteLog(unitInView.coverage_log.id);
+                    showToast('Coverage unmarkd successfully', 'success');
+                    loadStudentUnitView(studentId);
+                    loadCourseCoverageData(selectedCourse);
+                }
+            } catch (e) {
+                showToast('Failed to unmark coverage', 'error');
+            }
+        });
+    };
+
+    // ── Batch Mark ────────────────────────────────────────────────────────────
+    const handleOpenBatchModal = (unit) => {
+        setBatchUnit(unit);
+        // Pre-select all students who haven't covered this unit yet
+        const uncoveredStudentIds = new Set(
+            enrolledStudents
+                .filter(s => {
+                    const covered = (enrolledStudents.find(es => es.id === s.id)?.covered_units || 0);
+                    return true; // We'll let backend handle duplicate checks
+                })
+                .map(s => s.id)
+        );
+        setBatchSelectedStudents(uncoveredStudentIds);
+        setBatchIntakeFilter('all');
+        setBatchForm({ remarks: '', material_urls: '' });
+        setShowBatchModal(true);
+    };
+
+    const toggleBatchStudent = (studentId) => {
+        setBatchSelectedStudents(prev => {
+            const next = new Set(prev);
+            if (next.has(studentId)) next.delete(studentId);
+            else next.add(studentId);
+            return next;
+        });
+    };
+
+    const toggleBatchAll = () => {
+        const visible = batchFilteredStudents.map(s => s.id);
+        const allSelected = visible.every(id => batchSelectedStudents.has(id));
+        setBatchSelectedStudents(prev => {
+            const next = new Set(prev);
+            if (allSelected) visible.forEach(id => next.delete(id));
+            else visible.forEach(id => next.add(id));
+            return next;
+        });
+    };
+
+    const handleBatchMark = async (e) => {
+        e.preventDefault();
+        if (!batchUnit || batchSelectedStudents.size === 0) return;
+        setBatchLoading(true);
+        try {
+            const res = await unitCoverageAPI.markCovered({
+                course_id: selectedCourse,
+                unit_id: String(batchUnit.id),
+                student_ids: [...batchSelectedStudents],
+                remarks: batchForm.remarks || null,
+                material_urls: batchForm.material_urls ? [batchForm.material_urls] : null,
+            });
+            const data = res.data;
+            showToast(`Marked for ${data.marked?.length || 0} student(s). ${data.skipped?.length || 0} skipped.`, 'success');
+            setShowBatchModal(false);
+            setBatchUnit(null);
+            loadCourseCoverageData(selectedCourse);
+            if (selectedStudentId) loadStudentUnitView(selectedStudentId);
+        } catch (err) {
+            if (err.response?.status === 409) {
+                setDuplicateDialog({
+                    message: err.response.data.message,
+                    candidates: err.response.data.candidates || [],
+                    entered_name: err.response.data.entered_name,
+                    pendingStudentIds: [...batchSelectedStudents],
+                });
+                setShowBatchModal(false);
+            } else {
+                showToast(err.response?.data?.error || 'Failed to batch mark', 'error');
+            }
+        } finally {
+            setBatchLoading(false);
+        }
+    };
+
+    // ── Manage Units ──────────────────────────────────────────────────────────
     const handleMoveUnit = async (index, direction) => {
         if (!selectedCourse) return;
         const newUnits = [...units];
         const swapWith = direction === 'up' ? index - 1 : index + 1;
         if (swapWith < 0 || swapWith >= newUnits.length) return;
-
         const temp = newUnits[index];
         newUnits[index] = newUnits[swapWith];
         newUnits[swapWith] = temp;
-
         const order = newUnits.map((u, i) => ({ id: u.id, sort_order: i }));
         try {
             setUnits(newUnits);
@@ -164,25 +297,19 @@ export default function UnitCoverage() {
         }
     };
 
-    // Add Unit in Manage Modal
     const handleAddUnit = async (e) => {
         e.preventDefault();
         if (!newUnitForm.name.trim() || !selectedCourse) return;
         try {
-            await courseUnitsAPI.createUnit(selectedCourse, {
-                name: newUnitForm.name.trim(),
-                sort_order: units.length
-            });
+            await courseUnitsAPI.createUnit(selectedCourse, { name: newUnitForm.name.trim(), sort_order: units.length });
             setNewUnitForm({ name: '', description: '', expected_duration: '', unit_remarks: '' });
             loadCourseCoverageData(selectedCourse);
             showToast('Unit added successfully', 'success');
         } catch (err) {
-            console.error(err);
             showToast('Failed to add unit', 'error');
         }
     };
 
-    // Edit unit
     const handleUpdateUnit = async (e) => {
         e.preventDefault();
         if (!editingUnit || !editingUnit.name.trim()) return;
@@ -192,72 +319,29 @@ export default function UnitCoverage() {
                 description: editingUnit.description,
                 expected_duration: editingUnit.expected_duration,
                 unit_remarks: editingUnit.unit_remarks,
-                is_archived: editingUnit.is_archived ? 1 : 0
+                is_archived: editingUnit.is_archived ? true : false
             });
             setEditingUnit(null);
             loadCourseCoverageData(selectedCourse);
-            showToast('Unit updated successfully', 'success');
+            showToast('Unit updated', 'success');
         } catch (err) {
-            console.error(err);
             showToast('Failed to update unit', 'error');
         }
     };
 
-    // Archive unit
-    const handleArchiveUnit = async (unitId, name, archiveState) => {
+    const handleArchiveUnit = (unitId, name, archiveState) => {
         openConfirm(`${archiveState ? 'Archive' : 'Unarchive'} "${name}"?`, async () => {
             try {
-                await unitCoverageAPI.updateUnit(unitId, { is_archived: archiveState ? 1 : 0 });
+                await unitCoverageAPI.updateUnit(unitId, { is_archived: archiveState ? true : false });
                 loadCourseCoverageData(selectedCourse);
-                showToast(`Unit ${archiveState ? 'archived' : 'unarchived'} successfully`, 'success');
+                showToast(`Unit ${archiveState ? 'archived' : 'unarchived'}`, 'success');
             } catch (err) {
-                console.error(err);
                 showToast('Failed to change archive status', 'error');
             }
         });
     };
 
-    // Submitting unit coverage (✓ Mark as Covered)
-    const handleMarkCovered = async (e, forceCreate = false) => {
-        if (e) e.preventDefault();
-        try {
-            const payload = {
-                course_id: selectedCourse,
-                unit_id: coverageForm.unit_id || null,
-                unit_name: coverageForm.unit_name?.trim() || null,
-                description: coverageForm.description || null,
-                expected_duration: coverageForm.expected_duration || null,
-                unit_remarks: coverageForm.unit_remarks || null,
-                remarks: coverageForm.remarks || null,
-                material_urls: coverageForm.material_urls ? [coverageForm.material_urls] : null,
-                force_create: forceCreate
-            };
-
-            const res = await unitCoverageAPI.markCovered(payload);
-            setShowCoverModal(false);
-            setCoverageForm({
-                unit_id: '', unit_name: '', remarks: '', material_urls: '',
-                description: '', expected_duration: '', unit_remarks: ''
-            });
-            loadCourseCoverageData(selectedCourse);
-            loadAllData();
-            showToast('Unit marked as covered successfully', 'success');
-        } catch (err) {
-            if (err.response && err.response.status === 409) {
-                // Duplicate detected
-                setDuplicateDialog({
-                    message: err.response.data.message || 'A similar unit already exists.',
-                    candidates: err.response.data.candidates || [],
-                    entered_name: err.response.data.entered_name
-                });
-            } else {
-                console.error(err);
-                showToast(err.response?.data?.error || 'Failed to mark unit as covered', 'error');
-            }
-        }
-    };
-
-    // Student Confirmation submit
+    // ── Student Confirmation ──────────────────────────────────────────────────
     const handleConfirmSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -265,19 +349,18 @@ export default function UnitCoverage() {
             setShowConfirmationModal(false);
             setConfirmationForm({ coverage_log_id: '', response: 'Yes', comment: '' });
             loadAllData();
-            showToast('Confirmation submitted successfully', 'success');
+            showToast('Confirmation submitted', 'success');
         } catch (err) {
-            console.error(err);
             showToast(err.response?.data?.error || 'Failed to submit confirmation', 'error');
         }
     };
 
-    // PDF Report Generator
+    // ── PDF / CSV Export ──────────────────────────────────────────────────────
     const handleDownloadPDF = async () => {
         const element = document.getElementById('coverage-report-view');
         if (!element) return;
         try {
-            showToast('Preparing PDF Report...', 'info');
+            showToast('Preparing PDF...', 'info');
             const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
             const imgData = canvas.toDataURL('image/png');
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -286,59 +369,41 @@ export default function UnitCoverage() {
             const ratio = canvas.height / canvas.width;
             pdf.addImage(imgData, 'PNG', 0, 0, pw, Math.min(pw * ratio, ph));
             pdf.save(`BTC_Unit_Coverage_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-            showToast('PDF exported successfully', 'success');
+            showToast('PDF exported', 'success');
         } catch (err) {
-            console.error(err);
             showToast('Failed to export PDF', 'error');
         }
     };
 
-    // CSV Report Generator
-    const handleDownloadExcel = () => {
+    const handleDownloadCSV = () => {
         try {
-            let csvContent = "data:text/csv;charset=utf-8,";
+            let csv = 'data:text/csv;charset=utf-8,';
             if (isAdmin) {
-                csvContent += "Course Name,Department,Total Units,Units Covered,Coverage %,Student Confirmations\n";
+                csv += 'Course,Department,Total Units,Enrolled Students,Students w/ Coverage,Confirmations\n';
                 adminOverview.forEach(item => {
-                    csvContent += `"${item.course_name}","${item.department}",${item.total_units},${item.covered_units},${item.coverage_pct}%,${item.total_confirmations}\n`;
+                    csv += `"${item.course_name}","${item.department}",${item.total_units},${item.enrolled_students},${item.students_with_coverage},${item.total_confirmations}\n`;
                 });
-            } else if (isTeacher) {
-                csvContent += "Unit Name,Course Name,Date Covered,Teacher,Yes,Partially,No,Total Confirmations\n";
-                analytics.forEach(item => {
-                    csvContent += `"${item.unit_name}","${item.course_name}","${item.date_covered}","${item.teacher_name}",${item.yes_count},${item.partially_count},${item.no_count},${item.total_confirmations}\n`;
+            } else if (isTeacher && selectedCourse) {
+                csv += 'Student Name,Intake,Covered Units,Total Units,Completion %\n';
+                enrolledStudents.forEach(s => {
+                    csv += `"${s.name}","${s.intake || '—'}",${s.covered_units},${s.total_units},${s.completion_pct}%\n`;
                 });
             }
-
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `BTC_Coverage_Report_${new Date().toISOString().split('T')[0]}.csv`);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodeURI(csv));
+            link.setAttribute('download', `BTC_Coverage_Report_${new Date().toISOString().split('T')[0]}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            showToast('CSV report exported successfully', 'success');
+            showToast('CSV exported', 'success');
         } catch (err) {
-            console.error(err);
-            showToast('Failed to export report', 'error');
+            showToast('Failed to export CSV', 'error');
         }
     };
 
-    // Filter overview/analytics by search and department
-    const filteredOverview = adminOverview.filter(item => {
-        const search = searchTerm.toLowerCase();
-        const matchesSearch = !search || item.course_name.toLowerCase().includes(search) || item.department.toLowerCase().includes(search);
-        const matchesDept = !selectedDept || item.department.toLowerCase() === selectedDept.toLowerCase();
-        return matchesSearch && matchesDept;
-    });
+    const departmentsList = useMemo(() => [...new Set(courses.map(c => c.department).filter(Boolean))], [courses]);
 
-    const filteredAnalytics = analytics.filter(item => {
-        const search = searchTerm.toLowerCase();
-        return !search || item.unit_name.toLowerCase().includes(search) || item.course_name.toLowerCase().includes(search);
-    });
-
-    // List departments unique values
-    const departmentsList = Array.from(new Set(courses.map(c => c.department).filter(Boolean)));
-
+    // ── Loading Spinner ───────────────────────────────────────────────────────
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
@@ -351,53 +416,93 @@ export default function UnitCoverage() {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-10 py-8 animate-in fade-in slide-in-from-bottom-4 duration-1000 pb-20 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto space-y-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 px-4 sm:px-6">
 
-            {/* ── Page Title / Header ─────────────────────────────────────────── */}
+            {/* ── Toast ──────────────────────────────────────────────────────── */}
+            {toast && (
+                <div className={`fixed bottom-6 right-6 z-[9999] px-5 py-4 rounded-2xl shadow-2xl text-white text-sm font-black uppercase tracking-wider flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300 ${
+                    toast.type === 'error' ? 'bg-red-600' : toast.type === 'info' ? 'bg-blue-600' : 'bg-green-600'
+                }`}>
+                    {toast.type === 'error' ? <AlertTriangle className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+                    {toast.message}
+                </div>
+            )}
+
+            {/* ── Confirm Dialog ─────────────────────────────────────────────── */}
+            {confirmDialog && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+                        <p className="text-sm font-bold text-black mb-6">{confirmDialog.message}</p>
+                        <div className="flex gap-3">
+                            <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} className="flex-1 bg-maroon text-white py-3 rounded-2xl font-black text-xs uppercase tracking-widest">Confirm</button>
+                            <button onClick={() => setConfirmDialog(null)} className="flex-1 border border-black/10 text-black/60 py-3 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Duplicate Dialog ───────────────────────────────────────────── */}
+            {duplicateDialog && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-4">
+                        <div className="flex items-center gap-3">
+                            <AlertTriangle className="w-6 h-6 text-amber-500" />
+                            <h3 className="text-sm font-black text-black uppercase">Similar Unit Detected</h3>
+                        </div>
+                        <p className="text-xs text-black/60">{duplicateDialog.message}</p>
+                        <div className="space-y-2">
+                            {duplicateDialog.candidates.map(c => (
+                                <button key={c.id} onClick={async () => {
+                                    try {
+                                        await unitCoverageAPI.markCovered({
+                                            course_id: selectedCourse,
+                                            unit_id: String(c.id),
+                                            student_ids: duplicateDialog.pendingStudentIds || [],
+                                        });
+                                        showToast('Unit marked as covered', 'success');
+                                        setDuplicateDialog(null);
+                                        loadCourseCoverageData(selectedCourse);
+                                        if (selectedStudentId) loadStudentUnitView(selectedStudentId);
+                                    } catch (err) {
+                                        showToast('Failed to use existing unit', 'error');
+                                    }
+                                }} className="w-full text-left px-4 py-3 bg-black/[0.02] rounded-2xl hover:bg-maroon/10 transition-colors border border-black/5">
+                                    <p className="text-xs font-black text-black">{c.name}</p>
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => setDuplicateDialog(null)} className="w-full border border-black/10 text-black/60 py-3 rounded-2xl font-black text-xs uppercase">Dismiss</button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Header ─────────────────────────────────────────────────────── */}
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 border-b border-black/8 pb-8">
-                <div className="space-y-3">
+                <div className="space-y-2">
                     <div className="flex items-center gap-4">
                         <div className="p-3.5 bg-gradient-to-br from-maroon to-maroon/80 shadow-2xl shadow-maroon/30 rounded-2xl text-gold">
                             <Layers className="w-6 h-6" />
                         </div>
                         <div>
-                            <h1 id="page-title" className="text-3xl sm:text-4xl font-black text-black tracking-tight uppercase leading-none">
-                                {isStudent ? 'Course Progress' : 'Unit Coverage Tracker'}
+                            <h1 className="text-3xl sm:text-4xl font-black text-black tracking-tight uppercase">
+                                {isStudent ? 'My Course Progress' : 'Unit Coverage Tracker'}
                             </h1>
-                            <div className="flex items-center gap-2 mt-1.5">
-                                <div className="h-0.5 w-8 bg-gradient-to-r from-maroon to-gold rounded-full" />
-                                <p className="text-[10px] text-black/40 font-black tracking-[0.3em] uppercase">
-                                    Curriculum Delivery & Confirmation Portal
-                                </p>
-                            </div>
+                            <p className="text-[10px] text-black/40 font-black tracking-[0.3em] uppercase mt-1">
+                                {isStudent ? 'Personal Curriculum Progress' : 'Per-Student Curriculum Delivery'}
+                            </p>
                         </div>
                     </div>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                    <button
-                        onClick={loadAllData}
-                        id="btn-refresh"
-                        className="bg-white text-maroon p-3.5 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-lg border border-maroon/10 group"
-                        title="Refresh data"
-                    >
+                <div className="flex flex-wrap items-center gap-3">
+                    <button onClick={loadAllData} id="btn-refresh" className="bg-white text-maroon p-3.5 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-lg border border-maroon/10 group" title="Refresh">
                         <RefreshCw className="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" />
                     </button>
-
                     {!isStudent && (
                         <>
-                            <button
-                                onClick={handleDownloadExcel}
-                                id="btn-export-excel"
-                                className="bg-white text-maroon px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:bg-maroon hover:text-white transition-all shadow-lg font-black text-xs uppercase tracking-widest border border-maroon/15"
-                            >
+                            <button onClick={handleDownloadCSV} id="btn-export-csv" className="bg-white text-maroon px-5 py-3.5 rounded-2xl flex items-center gap-2 hover:bg-maroon hover:text-white transition-all shadow-lg font-black text-xs uppercase tracking-widest border border-maroon/15">
                                 Export CSV
                             </button>
-                            <button
-                                onClick={handleDownloadPDF}
-                                id="btn-export-pdf"
-                                className="bg-gradient-to-r from-maroon to-maroon/90 text-gold px-5 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:shadow-maroon/30 hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest shadow-lg border border-gold/20"
-                            >
+                            <button onClick={handleDownloadPDF} id="btn-export-pdf" className="bg-gradient-to-r from-maroon to-maroon/90 text-gold px-5 py-3.5 rounded-2xl flex items-center gap-2 hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest shadow-lg border border-gold/20">
                                 <FileDown className="w-5 h-5" /> Export PDF
                             </button>
                         </>
@@ -405,149 +510,108 @@ export default function UnitCoverage() {
                 </div>
             </div>
 
-            {/* ── STUDENT PORTAL VIEW ────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* ── STUDENT PORTAL VIEW ─────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
             {isStudent && (
                 <div className="space-y-8 animate-in fade-in duration-500">
                     {studentProgress.length === 0 ? (
-                        <div className="bg-white p-12 rounded-[2.5rem] border border-black/5 shadow-2xl text-center">
-                            <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No course progress tracked yet.</p>
+                        <div className="bg-white p-16 rounded-[2.5rem] border border-black/5 shadow-2xl text-center">
+                            <BookOpen className="w-10 h-10 text-black/15 mx-auto mb-4" />
+                            <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No course progress yet. Units will appear once your teacher marks them as covered for you.</p>
                         </div>
                     ) : (
-                        studentProgress.map(courseProgress => (
-                            <div key={courseProgress.course_id} className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl overflow-hidden">
-                                {/* Course Header Card */}
+                        studentProgress.map(cp => (
+                            <div key={cp.course_id} className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl overflow-hidden">
                                 <div className="p-8 border-b border-black/5 bg-gradient-to-r from-maroon/[0.02] to-transparent">
                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                         <div>
-                                            <h2 className="text-xl sm:text-2xl font-black text-black uppercase tracking-tight">{courseProgress.course_name}</h2>
-                                            <p className="text-xs font-bold text-black/30 mt-1 uppercase tracking-widest">Course Code: {courseProgress.course_id}</p>
+                                            <h2 className="text-2xl font-black text-black uppercase">{cp.course_name}</h2>
+                                            <p className="text-xs text-black/30 font-bold mt-1 uppercase tracking-widest">{cp.course_id}</p>
                                         </div>
-                                        <div className="flex items-center gap-4 w-full md:w-auto">
-                                            <div className="flex-1 md:w-48">
-                                                <div className="flex justify-between items-center mb-1 text-[10px] font-bold text-black/40 uppercase">
-                                                    <span>{courseProgress.covered_units} of {courseProgress.total_units} Units Covered</span>
-                                                    <span>{courseProgress.completion_pct}%</span>
+                                        <div className="flex items-center gap-4 w-full md:w-56">
+                                            <div className="flex-1">
+                                                <div className="flex justify-between text-[10px] font-bold text-black/40 uppercase mb-1">
+                                                    <span>{cp.covered_units}/{cp.total_units} Covered</span>
+                                                    <span>{cp.completion_pct}%</span>
                                                 </div>
-                                                <div className="h-2 bg-black/5 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full bg-gradient-to-r from-maroon to-gold rounded-full transition-all duration-1000"
-                                                        style={{ width: `${courseProgress.completion_pct}%` }}
-                                                    />
+                                                <div className="h-2.5 bg-black/5 rounded-full overflow-hidden">
+                                                    <div className="h-full bg-gradient-to-r from-maroon to-gold rounded-full transition-all duration-1000" style={{ width: `${cp.completion_pct}%` }} />
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* Units List Table */}
                                 <div className="overflow-x-auto">
                                     <table className="w-full">
                                         <thead>
                                             <tr className="bg-black/[0.015] border-b border-black/5">
-                                                <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Status</th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Unit Name</th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Teacher / Covered On</th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Learning Materials</th>
-                                                <th className="px-6 py-4 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Confirmation</th>
+                                                {['Status', 'Unit', 'Teacher / Date', 'Materials', 'Confirmation'].map(h => (
+                                                    <th key={h} className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">{h}</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-black/5">
-                                            {courseProgress.units.map(u => (
+                                            {cp.units.map(u => (
                                                 <tr key={u.id} className="hover:bg-black/[0.005] transition-colors">
                                                     <td className="px-6 py-4">
                                                         {u.is_covered ? (
-                                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-[10px] font-black uppercase">
-                                                                ✅ Covered
-                                                            </span>
-                                                        ) : u.is_archived ? (
-                                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-gray-400 text-[10px] font-black uppercase">
-                                                                ⬜ Archived
-                                                            </span>
+                                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-[9px] font-black uppercase">✅ Covered</span>
                                                         ) : (
-                                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-600 text-[10px] font-black uppercase">
-                                                                🟡 In Progress
-                                                            </span>
+                                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-600 text-[9px] font-black uppercase">🟡 Pending</span>
                                                         )}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <p className="text-xs font-black text-black uppercase tracking-tight">{u.name}</p>
-                                                        {u.description && <p className="text-[10px] text-black/40 font-medium mt-0.5">{u.description}</p>}
+                                                        <p className="text-xs font-black text-black uppercase">{u.name}</p>
+                                                        {u.description && <p className="text-[10px] text-black/40 mt-0.5">{u.description}</p>}
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs font-bold text-black/60">
+                                                    <td className="px-6 py-4">
                                                         {u.is_covered ? (
                                                             <div>
-                                                                <p className="font-black text-black uppercase">{u.teacher_name}</p>
-                                                                <p className="text-[10px] text-black/30 mt-0.5">{u.date_covered} @ {u.time_covered}</p>
+                                                                <p className="text-xs font-black text-black uppercase">{u.teacher_name}</p>
+                                                                <p className="text-[10px] text-black/30 mt-0.5">{u.date_covered}</p>
                                                             </div>
                                                         ) : '—'}
                                                     </td>
-                                                    <td className="px-6 py-4 text-xs font-bold text-black/60 max-w-[200px] truncate">
+                                                    <td className="px-6 py-4 text-xs text-black/40">
                                                         {u.is_covered && u.material_urls ? (
-                                                            <div className="flex flex-col gap-1">
-                                                                {(() => {
-                                                                    try {
-                                                                        const urls = JSON.parse(u.material_urls);
-                                                                        return urls.map((url, idx) => (
-                                                                            <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="text-maroon hover:underline inline-flex items-center gap-1">
-                                                                                <BookOpen className="w-3 h-3" /> Material #{idx + 1}
-                                                                            </a>
-                                                                        ));
-                                                                    } catch {
-                                                                        return <a href={u.material_urls} target="_blank" rel="noopener noreferrer" className="text-maroon hover:underline inline-flex items-center gap-1">
-                                                                            <BookOpen className="w-3 h-3" /> View Material
-                                                                        </a>;
-                                                                    }
-                                                                })()}
-                                                            </div>
+                                                            (() => {
+                                                                try {
+                                                                    const urls = JSON.parse(u.material_urls);
+                                                                    return urls.map((url, i) => (
+                                                                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="text-maroon hover:underline flex items-center gap-1 text-[10px] font-bold">
+                                                                            <BookOpen className="w-3 h-3" /> Material #{i + 1}
+                                                                        </a>
+                                                                    ));
+                                                                } catch { return '—'; }
+                                                            })()
                                                         ) : '—'}
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <div className="flex justify-center">
-                                                            {u.is_covered ? (
-                                                                u.student_confirmation ? (
-                                                                    <div className="flex flex-col items-center">
-                                                                        <span className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase border
-                                                                            ${u.student_confirmation.response === 'Yes' ? 'bg-green-50 border-green-200 text-green-700' : ''}
-                                                                            ${u.student_confirmation.response === 'Partially' ? 'bg-amber-50 border-amber-200 text-amber-700' : ''}
-                                                                            ${u.student_confirmation.response === 'No' ? 'bg-red-50 border-red-200 text-red-700' : ''}
-                                                                        `}>
-                                                                            {u.student_confirmation.response}
-                                                                        </span>
-                                                                        {activePeriod?.is_active && (
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setConfirmationForm({
-                                                                                        coverage_log_id: u.log_id,
-                                                                                        response: u.student_confirmation.response,
-                                                                                        comment: u.student_confirmation.comment || ''
-                                                                                    });
-                                                                                    setShowConfirmationModal(true);
-                                                                                }}
-                                                                                id={`btn-edit-confirm-${u.id}`}
-                                                                                className="text-[9px] text-maroon hover:underline mt-1 font-bold uppercase tracking-wider"
-                                                                            >
-                                                                                Edit
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setConfirmationForm({
-                                                                                coverage_log_id: u.log_id,
-                                                                                response: 'Yes',
-                                                                                comment: ''
-                                                                            });
+                                                        {u.is_covered ? (
+                                                            u.student_confirmation ? (
+                                                                <div className="flex flex-col items-start gap-1">
+                                                                    <span className={`inline-flex px-3 py-1 rounded-full text-[9px] font-black uppercase border
+                                                                        ${u.student_confirmation.response === 'Yes' ? 'bg-green-50 border-green-200 text-green-700' : ''}
+                                                                        ${u.student_confirmation.response === 'Partially' ? 'bg-amber-50 border-amber-200 text-amber-700' : ''}
+                                                                        ${u.student_confirmation.response === 'No' ? 'bg-red-50 border-red-200 text-red-700' : ''}
+                                                                    `}>{u.student_confirmation.response}</span>
+                                                                    {activePeriod?.is_active && (
+                                                                        <button onClick={() => {
+                                                                            setConfirmationForm({ coverage_log_id: u.log_id, response: u.student_confirmation.response, comment: u.student_confirmation.comment || '' });
                                                                             setShowConfirmationModal(true);
-                                                                        }}
-                                                                        id={`btn-confirm-${u.id}`}
-                                                                        className="bg-maroon hover:bg-maroon/90 text-white px-3.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm transition-all"
-                                                                    >
-                                                                        Confirm taught?
-                                                                    </button>
-                                                                )
-                                                            ) : '—'}
-                                                        </div>
+                                                                        }} className="text-[9px] text-maroon hover:underline font-bold uppercase">Edit</button>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <button onClick={() => {
+                                                                    setConfirmationForm({ coverage_log_id: u.log_id, response: 'Yes', comment: '' });
+                                                                    setShowConfirmationModal(true);
+                                                                }} id={`btn-confirm-${u.id}`} className="bg-maroon text-white px-3.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm hover:bg-maroon/90 transition-all">
+                                                                    Was it taught?
+                                                                </button>
+                                                            )
+                                                        ) : '—'}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -560,338 +624,365 @@ export default function UnitCoverage() {
                 </div>
             )}
 
-            {/* ── TEACHER PORTAL VIEW ────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* ── TEACHER PORTAL VIEW ─────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
             {isTeacher && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left Panel: Course Coverage logs */}
-                    <div className="lg:col-span-2 space-y-8 animate-in fade-in duration-500">
-                        {/* Course Selector Card */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-black/5 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                            <div>
-                                <h3 className="text-lg font-black text-black uppercase tracking-tight">Active Coverage Matrix</h3>
-                                <p className="text-xs text-black/40 font-bold uppercase mt-1 tracking-wider">Select a course to view curriculum delivery</p>
-                            </div>
-                            <div className="flex gap-2">
-                                <select
-                                    value={selectedCourse}
-                                    onChange={e => setSelectedCourse(e.target.value)}
-                                    id="select-course"
-                                    className="px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none shadow-sm bg-white border border-black/10 text-black rounded-2xl w-full sm:w-64"
-                                >
-                                    <option value="">Choose Course...</option>
-                                    {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
-
-                                {selectedCourse && (
-                                    <button
-                                        onClick={() => setShowManageUnitsModal(true)}
-                                        id="btn-manage-units"
-                                        className="bg-white hover:bg-maroon hover:text-white border border-maroon/20 text-maroon p-3 rounded-2xl transition-all shadow-md"
-                                        title="Manage Units"
-                                    >
-                                        <BookOpen className="w-5 h-5" />
-                                    </button>
-                                )}
-                            </div>
+                <div className="space-y-8">
+                    {/* Course Selector */}
+                    <div className="bg-white p-6 rounded-[2rem] border border-black/5 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h3 className="text-base font-black text-black uppercase tracking-tight">Select Course</h3>
+                            <p className="text-[10px] text-black/40 font-bold uppercase mt-0.5">Choose a course to manage per-student coverage</p>
                         </div>
-
-                        {selectedCourse ? (
-                            <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl overflow-hidden">
-                                <div className="p-8 border-b border-black/5 bg-gradient-to-r from-maroon/[0.01] to-transparent flex justify-between items-center">
-                                    <h3 className="text-base font-black text-black uppercase tracking-tight">Curriculum Units</h3>
-                                    <button
-                                        onClick={() => {
-                                            setCoverageForm(prev => ({ ...prev, unit_id: '' }));
-                                            setShowCoverModal(true);
-                                        }}
-                                        id="btn-quick-cover"
-                                        className="bg-maroon hover:bg-maroon/90 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all flex items-center gap-1"
-                                    >
-                                        <Plus className="w-4 h-4" /> Quick Cover
-                                    </button>
-                                </div>
-
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="bg-black/[0.015] border-b border-black/5">
-                                                <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Unit / Topic</th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Duration</th>
-                                                <th className="px-6 py-4 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Status</th>
-                                                <th className="px-6 py-4 text-center text-[10px] font-black text-black/40 uppercase tracking-widest">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-black/5">
-                                            {units.map((u, index) => (
-                                                <tr key={u.id} className="hover:bg-black/[0.005] transition-colors">
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex flex-col">
-                                                                <button
-                                                                    onClick={() => handleMoveUnit(index, 'up')}
-                                                                    disabled={index === 0}
-                                                                    className="text-gray-400 hover:text-maroon disabled:opacity-20 disabled:hover:text-gray-400"
-                                                                >
-                                                                    <ChevronUp className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleMoveUnit(index, 'down')}
-                                                                    disabled={index === units.length - 1}
-                                                                    className="text-gray-400 hover:text-maroon disabled:opacity-20 disabled:hover:text-gray-400"
-                                                                >
-                                                                    <ChevronDown className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs font-black text-black uppercase tracking-tight">{u.name}</p>
-                                                                {u.description && <p className="text-[9px] text-black/40 mt-0.5">{u.description}</p>}
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-4 text-xs font-bold text-black/60">
-                                                        {u.expected_duration || '—'}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        {u.coverage_log ? (
-                                                            <span className="inline-flex px-3 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-[10px] font-black uppercase">
-                                                                ✅ Covered
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-600 text-[10px] font-black uppercase">
-                                                                ⬜ Not Covered
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-6 py-4 text-center">
-                                                        {!u.coverage_log ? (
-                                                            <button
-                                                                onClick={() => {
-                                                                    setCoverageForm(prev => ({
-                                                                        ...prev,
-                                                                        unit_id: String(u.id),
-                                                                        unit_name: u.name
-                                                                    }));
-                                                                    setShowCoverModal(true);
-                                                                }}
-                                                                id={`btn-mark-covered-${u.id}`}
-                                                                className="bg-maroon hover:bg-maroon/90 text-white px-3.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider shadow-sm transition-all"
-                                                            >
-                                                                ✓ Mark Covered
-                                                            </button>
-                                                        ) : (
-                                                            <span className="text-[10px] text-black/30 font-bold uppercase tracking-wider">
-                                                                {u.coverage_log.date_covered}
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="bg-white p-12 rounded-[2.5rem] border border-black/5 shadow-2xl text-center">
-                                <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">Select a course to view curriculum delivery</p>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-3">
+                            <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} id="select-course"
+                                className="px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none shadow-sm bg-white border border-black/10 text-black rounded-2xl w-full sm:w-72">
+                                <option value="">Choose Course...</option>
+                                {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            {selectedCourse && (
+                                <button onClick={() => setShowManageUnitsModal(true)} id="btn-manage-units"
+                                    className="bg-white hover:bg-maroon hover:text-white border border-maroon/20 text-maroon p-3 rounded-2xl transition-all shadow-md" title="Manage Units">
+                                    <BookOpen className="w-5 h-5" />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Right Panel: Teacher Analytics & Flags */}
-                    <div className="space-y-8 animate-in fade-in duration-500">
-                        {/* Course Overview Stats */}
-                        {selectedCourse && (
-                            <div className="bg-white p-8 rounded-[2.5rem] border border-black/5 shadow-2xl space-y-6">
-                                <h3 className="text-base font-black text-black uppercase tracking-tight">Course Analytics</h3>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-black/[0.02] p-4 rounded-2xl border border-black/5">
-                                        <p className="text-black/40 text-[9px] font-black uppercase tracking-wider">Total Units</p>
-                                        <p className="text-3xl font-black text-black mt-1">{units.length}</p>
-                                    </div>
-                                    <div className="bg-black/[0.02] p-4 rounded-2xl border border-black/5">
-                                        <p className="text-black/40 text-[9px] font-black uppercase tracking-wider">Covered</p>
-                                        <p className="text-3xl font-black text-green-600 mt-1">
-                                            {units.filter(u => u.coverage_log).length}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <p className="text-[10px] text-black/40 font-bold uppercase tracking-wider">Delivery Progress</p>
-                                    <div className="h-3 bg-black/5 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-gradient-to-r from-maroon to-gold rounded-full transition-all duration-1000"
-                                            style={{
-                                                width: `${units.length > 0
-                                                    ? Math.round((units.filter(u => u.coverage_log).length / units.length) * 100)
-                                                    : 0}%`
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Student Confirmation Feedback */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-black/5 shadow-2xl space-y-6">
-                            <h3 className="text-base font-black text-black uppercase tracking-tight">Student confirmations</h3>
-
-                            <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
-                                {filteredAnalytics.map((item, idx) => (
-                                    <div key={idx} className={`p-4 rounded-2xl border ${item.flagged ? 'bg-red-50/50 border-red-100' : 'bg-black/[0.015] border-black/5'} space-y-3`}>
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h4 className="text-xs font-black text-black uppercase tracking-tight">{item.unit_name}</h4>
-                                                <p className="text-[9px] text-black/30 font-bold uppercase">{item.course_name}</p>
-                                            </div>
-                                            {item.flagged && (
-                                                <span className="flex items-center gap-0.5 px-2 py-0.5 bg-red-100 border border-red-200 text-red-700 text-[8px] font-black uppercase rounded-full">
-                                                    <AlertTriangle className="w-2.5 h-2.5" /> Flagged
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Confirmation Bars */}
-                                        <div className="space-y-1.5">
-                                            <div className="flex justify-between text-[9px] font-bold text-black/50 uppercase">
-                                                <span>Responses: {item.total_confirmations}</span>
-                                            </div>
-                                            <div className="h-2.5 bg-black/5 rounded-full overflow-hidden flex">
-                                                <div className="bg-green-500 h-full" style={{ width: `${item.yes_pct}%` }} title={`Yes: ${item.yes_pct}%`} />
-                                                <div className="bg-amber-400 h-full" style={{ width: `${item.partially_pct}%` }} title={`Partially: ${item.partially_pct}%`} />
-                                                <div className="bg-red-500 h-full" style={{ width: `${item.no_pct}%` }} title={`No: ${item.no_pct}%`} />
-                                            </div>
-                                            <div className="flex justify-between text-[8px] font-black uppercase tracking-wider">
-                                                <span className="text-green-600">Yes: {item.yes_pct}%</span>
-                                                <span className="text-amber-500">Partially: {item.partially_pct}%</span>
-                                                <span className="text-red-600">No: {item.no_pct}%</span>
-                                            </div>
+                    {selectedCourse ? (
+                        <>
+                            {/* Stats Row */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                {[
+                                    { label: 'Total Units', value: units.length, icon: Layers, color: 'text-maroon' },
+                                    { label: 'Students Enrolled', value: enrolledStudents.length, icon: Users, color: 'text-blue-600' },
+                                    { label: 'Intake Levels', value: intakeList.length, icon: Filter, color: 'text-purple-600' },
+                                    { label: 'Avg. Completion', value: enrolledStudents.length > 0 ? Math.round(enrolledStudents.reduce((a, s) => a + s.completion_pct, 0) / enrolledStudents.length) + '%' : '—', icon: BarChart2, color: 'text-green-600' },
+                                ].map(stat => (
+                                    <div key={stat.label} className="bg-white p-5 rounded-[1.5rem] border border-black/5 shadow-xl flex items-center gap-4">
+                                        <div className={`p-2.5 bg-black/5 rounded-xl ${stat.color}`}><stat.icon className="w-5 h-5" /></div>
+                                        <div>
+                                            <p className="text-[9px] font-black text-black/40 uppercase tracking-wider">{stat.label}</p>
+                                            <p className="text-xl font-black text-black mt-0.5">{stat.value}</p>
                                         </div>
                                     </div>
                                 ))}
-
-                                {filteredAnalytics.length === 0 && (
-                                    <p className="text-[10px] text-black/30 text-center font-bold py-6 uppercase tracking-widest">No confirmations recorded yet.</p>
-                                )}
                             </div>
+
+                            {/* Tab Navigation */}
+                            <div className="flex gap-2 bg-black/[0.03] p-1.5 rounded-2xl w-fit">
+                                {[
+                                    { key: 'students', label: 'Students', icon: Users },
+                                    { key: 'units', label: 'Units Grid', icon: Layers },
+                                    { key: 'analytics', label: 'Analytics', icon: BarChart2 },
+                                ].map(tab => (
+                                    <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                                            activeTab === tab.key ? 'bg-maroon text-white shadow-lg' : 'text-black/50 hover:text-black'
+                                        }`}>
+                                        <tab.icon className="w-4 h-4" />{tab.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* ── TAB: STUDENTS ──────────────────────────────────────────── */}
+                            {activeTab === 'students' && (
+                                <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+                                    {/* Student List Panel */}
+                                    <div className="xl:col-span-2 bg-white rounded-[2rem] border border-black/5 shadow-xl overflow-hidden">
+                                        <div className="p-6 border-b border-black/5">
+                                            <h3 className="text-sm font-black text-black uppercase tracking-tight mb-3">Student Registry</h3>
+                                            <div className="flex gap-2">
+                                                <div className="relative flex-1">
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
+                                                    <input value={studentSearch} onChange={e => setStudentSearch(e.target.value)} placeholder="Search student..."
+                                                        className="w-full pl-9 pr-3 py-2.5 text-xs bg-black/[0.03] border border-transparent focus:border-maroon/20 rounded-xl outline-none font-bold text-black" />
+                                                </div>
+                                                <select value={intakeFilter} onChange={e => setIntakeFilter(e.target.value)}
+                                                    className="text-[10px] font-black uppercase tracking-wider px-3 py-2.5 bg-black/[0.03] border border-transparent rounded-xl outline-none text-black">
+                                                    <option value="all">All Intakes</option>
+                                                    {intakeList.map(i => <option key={i} value={i}>{i}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="overflow-y-auto max-h-[600px] divide-y divide-black/5">
+                                            {filteredStudents.length === 0 ? (
+                                                <div className="p-8 text-center">
+                                                    <Users className="w-8 h-8 text-black/15 mx-auto mb-2" />
+                                                    <p className="text-[10px] font-black text-black/20 uppercase">No students found</p>
+                                                </div>
+                                            ) : (
+                                                filteredStudents.map(student => {
+                                                    const isSelected = selectedStudentId === student.id;
+                                                    const pct = student.completion_pct;
+                                                    const pctColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+                                                    return (
+                                                        <button key={student.id} onClick={() => {
+                                                            if (isSelected) { setSelectedStudentId(null); setStudentUnitView([]); }
+                                                            else { setSelectedStudentId(student.id); loadStudentUnitView(student.id); }
+                                                        }}
+                                                            className={`w-full text-left px-6 py-4 transition-colors ${isSelected ? 'bg-maroon/5' : 'hover:bg-black/[0.02]'}`}>
+                                                            <div className="flex items-center justify-between mb-2">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${isSelected ? 'bg-maroon text-white' : 'bg-black/5 text-black/50'}`}>
+                                                                        {student.name.charAt(0).toUpperCase()}
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-black text-black uppercase tracking-tight">{student.name}</p>
+                                                                        <p className="text-[9px] text-black/40 font-bold">{student.intake || 'No Intake'}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <p className="text-xs font-black text-black">{pct}%</p>
+                                                                    <p className="text-[9px] text-black/30 font-bold">{student.covered_units}/{student.total_units}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="h-1.5 bg-black/5 rounded-full overflow-hidden">
+                                                                <div className={`h-full ${pctColor} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Student Unit Drawer */}
+                                    <div className="xl:col-span-3 bg-white rounded-[2rem] border border-black/5 shadow-xl overflow-hidden">
+                                        {!selectedStudentId ? (
+                                            <div className="flex flex-col items-center justify-center h-full p-16 text-center">
+                                                <UserCheck className="w-12 h-12 text-black/10 mb-4" />
+                                                <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.25em]">Select a student to view and manage their unit coverage</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className="p-6 border-b border-black/5 flex items-center justify-between">
+                                                    <div>
+                                                        <h3 className="text-sm font-black text-black uppercase">
+                                                            {enrolledStudents.find(s => s.id === selectedStudentId)?.name}
+                                                        </h3>
+                                                        <p className="text-[10px] text-black/40 font-bold uppercase mt-0.5">
+                                                            Intake: {enrolledStudents.find(s => s.id === selectedStudentId)?.intake || 'N/A'}
+                                                        </p>
+                                                    </div>
+                                                    <button onClick={() => { setSelectedStudentId(null); setStudentUnitView([]); }}
+                                                        className="p-2 hover:bg-black/5 rounded-xl text-black/40 transition-colors">
+                                                        <X className="w-5 h-5" />
+                                                    </button>
+                                                </div>
+                                                <div className="overflow-y-auto max-h-[580px]">
+                                                    {studentUnitLoading ? (
+                                                        <div className="flex justify-center p-12">
+                                                            <div className="w-8 h-8 border-4 border-maroon border-t-transparent rounded-full animate-spin" />
+                                                        </div>
+                                                    ) : (
+                                                        <table className="w-full">
+                                                            <thead>
+                                                                <tr className="bg-black/[0.015] border-b border-black/5">
+                                                                    <th className="px-5 py-3 text-left text-[9px] font-black text-black/40 uppercase tracking-widest">Unit / Topic</th>
+                                                                    <th className="px-5 py-3 text-center text-[9px] font-black text-black/40 uppercase tracking-widest">Status</th>
+                                                                    <th className="px-5 py-3 text-center text-[9px] font-black text-black/40 uppercase tracking-widest">Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-black/5">
+                                                                {studentUnitView.map(unit => {
+                                                                    const isCovered = !!unit.coverage_log;
+                                                                    return (
+                                                                        <tr key={unit.id} className="hover:bg-black/[0.005] transition-colors">
+                                                                            <td className="px-5 py-4">
+                                                                                <p className="text-xs font-black text-black uppercase">{unit.name}</p>
+                                                                                {unit.expected_duration && <p className="text-[9px] text-black/30 mt-0.5"><Clock className="inline w-3 h-3 mr-1" />{unit.expected_duration}</p>}
+                                                                            </td>
+                                                                            <td className="px-5 py-4 text-center">
+                                                                                {isCovered ? (
+                                                                                    <div>
+                                                                                        <span className="inline-flex px-2.5 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-[9px] font-black uppercase">✅ Covered</span>
+                                                                                        <p className="text-[9px] text-black/30 mt-1">{unit.coverage_log.date_covered}</p>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="inline-flex px-2.5 py-1 bg-black/[0.03] border border-black/10 rounded-full text-black/40 text-[9px] font-black uppercase">⬜ Not Covered</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-5 py-4 text-center">
+                                                                                {isCovered ? (
+                                                                                    <button onClick={() => handleUnmarkForStudent(unit, selectedStudentId)}
+                                                                                        className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded-xl transition-colors" title="Unmark">
+                                                                                        <Trash className="w-4 h-4" />
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <button onClick={() => handleMarkForStudent(unit, selectedStudentId)}
+                                                                                        id={`btn-mark-${unit.id}-${selectedStudentId}`}
+                                                                                        className="bg-maroon text-white px-3.5 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-maroon/90 transition-all">
+                                                                                        ✓ Mark
+                                                                                    </button>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── TAB: UNITS GRID ─────────────────────────────────────────── */}
+                            {activeTab === 'units' && (
+                                <div className="bg-white rounded-[2rem] border border-black/5 shadow-xl overflow-hidden" id="coverage-report-view">
+                                    <div className="p-6 border-b border-black/5 flex items-center justify-between">
+                                        <h3 className="text-sm font-black text-black uppercase">Curriculum Units</h3>
+                                        <p className="text-[10px] text-black/40 font-bold uppercase">Click "Batch Mark" to cover a unit for multiple students at once</p>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-black/[0.015] border-b border-black/5">
+                                                    {['#', 'Unit / Topic', 'Duration', 'Students Covered', 'Action'].map(h => (
+                                                        <th key={h} className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-black/5">
+                                                {units.map((unit, idx) => {
+                                                    const covPct = enrolledStudents.length > 0
+                                                        ? Math.round((unit.students_covered_count / enrolledStudents.length) * 100)
+                                                        : 0;
+                                                    return (
+                                                        <tr key={unit.id} className="hover:bg-black/[0.005] transition-colors">
+                                                            <td className="px-6 py-4 text-xs font-black text-black/30">{idx + 1}</td>
+                                                            <td className="px-6 py-4">
+                                                                <p className="text-xs font-black text-black uppercase">{unit.name}</p>
+                                                                {unit.description && <p className="text-[9px] text-black/30 mt-0.5">{unit.description}</p>}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-xs text-black/50 font-bold">{unit.expected_duration || '—'}</td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-24 h-2 bg-black/5 rounded-full overflow-hidden">
+                                                                        <div className={`h-full rounded-full transition-all duration-700 ${covPct >= 80 ? 'bg-green-500' : covPct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                                                            style={{ width: `${covPct}%` }} />
+                                                                    </div>
+                                                                    <span className="text-[10px] font-black text-black/50">{unit.students_covered_count}/{enrolledStudents.length}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <button onClick={() => handleOpenBatchModal(unit)}
+                                                                    id={`btn-batch-${unit.id}`}
+                                                                    className="bg-maroon text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-maroon/90 transition-all shadow-sm">
+                                                                    Batch Mark
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── TAB: ANALYTICS ─────────────────────────────────────────── */}
+                            {activeTab === 'analytics' && (
+                                <div className="bg-white rounded-[2rem] border border-black/5 shadow-xl p-8 space-y-6">
+                                    <h3 className="text-sm font-black text-black uppercase">Coverage Analytics by Student</h3>
+                                    {enrolledStudents.length === 0 ? (
+                                        <p className="text-[10px] font-black text-black/20 uppercase text-center py-8">No students enrolled yet</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {[...enrolledStudents].sort((a, b) => a.completion_pct - b.completion_pct).map(student => {
+                                                const pct = student.completion_pct;
+                                                return (
+                                                    <div key={student.id} className="flex items-center gap-4 p-4 rounded-2xl border border-black/5 hover:bg-black/[0.01] transition-colors">
+                                                        <div className="w-8 h-8 bg-black/5 rounded-full flex items-center justify-center text-xs font-black text-black/50">
+                                                            {student.name.charAt(0)}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex justify-between items-baseline mb-1.5">
+                                                                <p className="text-xs font-black text-black uppercase truncate">{student.name}</p>
+                                                                <span className="text-[10px] font-black text-black/40 ml-2 whitespace-nowrap">{student.covered_units}/{student.total_units}</span>
+                                                            </div>
+                                                            <div className="h-2 bg-black/5 rounded-full overflow-hidden">
+                                                                <div className={`h-full rounded-full transition-all duration-700 ${pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                                                    style={{ width: `${pct}%` }} />
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right min-w-[3rem]">
+                                                            <p className="text-sm font-black text-black">{pct}%</p>
+                                                            <p className="text-[9px] text-black/30 font-bold uppercase">{student.intake || '—'}</p>
+                                                        </div>
+                                                        {pct < 30 && <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" title="Low coverage" />}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="bg-white p-16 rounded-[2rem] border border-black/5 shadow-xl text-center">
+                            <Layers className="w-10 h-10 text-black/10 mx-auto mb-4" />
+                            <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">Select a course to begin managing student coverage</p>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 
-            {/* ── ADMIN PORTAL VIEW ──────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* ── ADMIN PORTAL VIEW ───────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
             {isAdmin && (
-                <div id="coverage-report-view" className="space-y-8 animate-in fade-in duration-500">
-                    {/* Filter toolbar */}
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-black/5 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div>
-                            <h3 className="text-lg font-black text-black uppercase tracking-tight">College-Wide Overview</h3>
-                            <p className="text-xs text-black/40 font-bold uppercase mt-1 tracking-wider">Monitor curriculum progress across departments</p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 items-center">
-                            {/* Department filter */}
-                            <select
-                                value={selectedDept}
-                                onChange={e => setSelectedDept(e.target.value)}
-                                id="select-dept"
-                                className="px-4 py-3 text-[10px] font-black uppercase tracking-widest outline-none shadow-sm bg-white border border-black/10 text-black rounded-2xl min-w-[150px]"
-                            >
-                                <option value="">All Departments</option>
-                                {departmentsList.map(dept => (
-                                    <option key={dept} value={dept}>{dept}</option>
-                                ))}
-                            </select>
-
-                            {/* Search bar */}
-                            <div className="flex items-center gap-3 p-2 px-4 shadow-sm min-w-[200px] bg-white border border-black/5 rounded-2xl">
-                                <Search className="w-4 h-4 text-gray-300" />
-                                <input
-                                    type="text"
-                                    placeholder="Search course..."
-                                    value={searchTerm}
-                                    onChange={e => setSearchTerm(e.target.value)}
-                                    className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/20 uppercase tracking-widest w-full font-sans"
-                                />
-                            </div>
-                        </div>
+                <div className="space-y-6" id="coverage-report-view">
+                    <div className="flex items-center gap-3">
+                        <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Search course..." className="px-4 py-3 text-xs bg-white border border-black/10 rounded-2xl outline-none font-bold text-black shadow-sm w-64" />
+                        <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="px-4 py-3 text-[10px] font-black uppercase tracking-wider bg-white border border-black/10 rounded-2xl outline-none text-black shadow-sm">
+                            <option value="">All Departments</option>
+                            {departmentsList.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
                     </div>
 
-                    {/* Flagged units warning banner */}
-                    {adminOverview.some(c => c.flagged_units?.length > 0) && (
-                        <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex items-start gap-4 text-red-950">
-                            <AlertTriangle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
-                            <div>
-                                <h4 className="text-sm font-black uppercase tracking-wider">Attention: Curriculum Delivery Reviews Needed</h4>
-                                <p className="text-xs font-bold mt-1 text-red-800">
-                                    A significant number of students have reported "No" or "Partially" taught on several units. Review is highly recommended.
-                                </p>
-                            </div>
+                    <div className="bg-white rounded-[2rem] border border-black/5 shadow-xl overflow-hidden">
+                        <div className="p-6 border-b border-black/5">
+                            <h3 className="text-sm font-black text-black uppercase">Course Coverage Overview</h3>
                         </div>
-                    )}
-
-                    {/* Overview Table */}
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="bg-maroon/[0.03] border-b border-black/5">
-                                        <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Course Name</th>
-                                        <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Department</th>
-                                        <th className="px-6 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Covered Progress</th>
-                                        <th className="px-6 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Coverage %</th>
-                                        <th className="px-6 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Total Confirmations</th>
-                                        <th className="px-6 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Review Flags</th>
+                                    <tr className="bg-black/[0.015] border-b border-black/5">
+                                        {['Course', 'Department', 'Total Units', 'Enrolled', 'Students w/ Coverage', 'Confirmations'].map(h => (
+                                            <th key={h} className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">{h}</th>
+                                        ))}
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-black/5 bg-white">
-                                    {filteredOverview.map(row => (
-                                        <tr key={row.course_id} className="hover:bg-maroon/[0.015] transition-colors">
-                                            <td className="px-6 py-5">
-                                                <p className="text-sm font-black text-black uppercase tracking-tight">{row.course_name}</p>
-                                                <p className="text-[8px] font-bold text-black/30 mt-0.5">ID: {row.course_id}</p>
-                                            </td>
-                                            <td className="px-6 py-5 text-xs font-black text-maroon uppercase tracking-tight">
-                                                {row.department}
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex flex-col items-center max-w-[150px] mx-auto">
-                                                    <span className="text-[10px] font-bold text-black/50 mb-1">{row.covered_units} of {row.total_units} Units</span>
-                                                    <div className="h-1.5 w-full bg-black/5 rounded-full overflow-hidden">
-                                                        <div className="bg-maroon h-full" style={{ width: `${row.coverage_pct}%` }} />
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-center text-sm font-black text-black">
-                                                {row.coverage_pct}%
-                                            </td>
-                                            <td className="px-6 py-5 text-center text-xs font-black text-black/60">
-                                                {row.total_confirmations} submissions
-                                            </td>
-                                            <td className="px-6 py-5">
-                                                <div className="flex justify-center">
-                                                    {row.flagged_units?.length > 0 ? (
-                                                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 border border-red-200 text-red-700 text-[9px] font-black uppercase rounded-full animate-pulse">
-                                                            <AlertTriangle className="w-3 h-3" /> {row.flagged_units.length} Flagged
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 border border-green-200 text-green-700 text-[9px] font-black uppercase rounded-full">
-                                                            ✅ Normal
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-
-                                    {filteredOverview.length === 0 && (
-                                        <tr>
-                                            <td colSpan="6" className="py-12 text-center text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">
-                                                No overview entries matches criteria.
-                                            </td>
-                                        </tr>
-                                    )}
+                                <tbody className="divide-y divide-black/5">
+                                    {adminOverview
+                                        .filter(item => {
+                                            const s = searchTerm.toLowerCase();
+                                            const matchSearch = !s || item.course_name.toLowerCase().includes(s) || (item.department || '').toLowerCase().includes(s);
+                                            const matchDept = !selectedDept || (item.department || '').toLowerCase() === selectedDept.toLowerCase();
+                                            return matchSearch && matchDept;
+                                        })
+                                        .map(item => (
+                                            <tr key={item.course_id} className="hover:bg-black/[0.005] transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <p className="text-xs font-black text-black uppercase">{item.course_name}</p>
+                                                    <p className="text-[9px] text-black/30 font-bold">{item.course_id}</p>
+                                                </td>
+                                                <td className="px-6 py-4 text-xs font-bold text-black/60">{item.department || '—'}</td>
+                                                <td className="px-6 py-4 text-xs font-black text-black">{item.total_units}</td>
+                                                <td className="px-6 py-4 text-xs font-black text-black">{item.enrolled_students}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-maroon/5 border border-maroon/20 rounded-full text-maroon text-[9px] font-black uppercase">
+                                                        {item.students_with_coverage} students
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-xs font-bold text-black/60">{item.total_confirmations}</td>
+                                            </tr>
+                                        ))}
                                 </tbody>
                             </table>
                         </div>
@@ -899,296 +990,77 @@ export default function UnitCoverage() {
                 </div>
             )}
 
-            {/* ── MODAL: MARK AS COVERED (✓ Mark as Covered) ────────────────── */}
-            {showCoverModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-8 border-b border-black/5 bg-gradient-to-r from-maroon/[0.02] to-transparent flex justify-between items-center">
-                            <h3 className="text-lg font-black text-maroon uppercase tracking-tight">✓ Mark Unit as Covered</h3>
-                            <button onClick={() => setShowCoverModal(false)} className="text-gray-400 hover:text-black"><X className="w-6 h-6" /></button>
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* ── BATCH MARK MODAL ────────────────────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {showBatchModal && batchUnit && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="p-6 border-b border-black/5 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-sm font-black text-black uppercase">Batch Mark Covered</h2>
+                                <p className="text-[10px] text-black/40 font-bold mt-0.5 uppercase">{batchUnit.name}</p>
+                            </div>
+                            <button onClick={() => setShowBatchModal(false)} className="p-2 hover:bg-black/5 rounded-xl text-black/40"><X className="w-5 h-5" /></button>
                         </div>
 
-                        <form onSubmit={handleMarkCovered} className="p-8 space-y-6">
-                            {/* Auto-create unit option / Name entry */}
-                            {!coverageForm.unit_id ? (
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">New Unit Name *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={coverageForm.unit_name}
-                                        onChange={e => setCoverageForm(prev => ({ ...prev, unit_name: e.target.value }))}
-                                        placeholder="E.g. Microsoft Excel"
-                                        id="input-unit-name"
-                                        className="w-full p-4 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none focus:border-maroon transition-all"
-                                    />
-                                    <p className="text-[9px] text-black/30 font-bold uppercase">If this unit doesn't exist, it will be automatically created under the course.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-1.5 bg-maroon/5 p-4 rounded-2xl border border-maroon/10">
-                                    <p className="text-[10px] text-maroon font-black uppercase tracking-wider">Selected Unit</p>
-                                    <p className="text-xs font-black text-black uppercase mt-1">{coverageForm.unit_name}</p>
-                                </div>
-                            )}
-
-                            {/* Optional fields for auto-created units */}
-                            {!coverageForm.unit_id && (
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">Expected Duration</label>
-                                        <input
-                                            type="text"
-                                            value={coverageForm.expected_duration}
-                                            onChange={e => setCoverageForm(prev => ({ ...prev, expected_duration: e.target.value }))}
-                                            placeholder="E.g. 10 Hours"
-                                            id="input-unit-duration"
-                                            className="w-full p-4 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none focus:border-maroon transition-all"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">Unit Remarks</label>
-                                        <input
-                                            type="text"
-                                            value={coverageForm.unit_remarks}
-                                            onChange={e => setCoverageForm(prev => ({ ...prev, unit_remarks: e.target.value }))}
-                                            placeholder="E.g. Core module"
-                                            id="input-unit-remarks"
-                                            className="w-full p-4 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none focus:border-maroon transition-all"
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">Coverage Remarks (Optional)</label>
-                                <textarea
-                                    value={coverageForm.remarks}
-                                    onChange={e => setCoverageForm(prev => ({ ...prev, remarks: e.target.value }))}
-                                    placeholder="E.g. Class successfully completed theory and practical tests."
-                                    id="textarea-coverage-remarks"
-                                    className="w-full p-4 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-bold outline-none focus:border-maroon transition-all h-24"
-                                />
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">Supporting Material URL (Optional)</label>
-                                <input
-                                    type="url"
-                                    value={coverageForm.material_urls}
-                                    onChange={e => setCoverageForm(prev => ({ ...prev, material_urls: e.target.value }))}
-                                    placeholder="E.g. https://drive.google.com/..."
-                                    id="input-material-url"
-                                    className="w-full p-4 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-bold outline-none focus:border-maroon transition-all"
-                                />
-                            </div>
-
-                            <div className="flex gap-4 pt-4 border-t border-black/5">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCoverModal(false)}
-                                    id="btn-close-cover"
-                                    className="flex-1 py-4 bg-black/[0.05] hover:bg-black/[0.08] text-black text-xs font-black uppercase tracking-widest rounded-2xl transition-all"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    id="btn-submit-cover"
-                                    className="flex-1 py-4 bg-maroon hover:bg-maroon/90 text-gold text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all"
-                                >
-                                    Mark as Covered
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* ── MODAL: MANAGE UNITS ────────────────────────────────────────── */}
-            {showManageUnitsModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-8 border-b border-black/5 bg-gradient-to-r from-maroon/[0.02] to-transparent flex justify-between items-center">
-                            <h3 className="text-lg font-black text-maroon uppercase tracking-tight">Manage Curriculum Units</h3>
-                            <button onClick={() => setShowManageUnitsModal(false)} className="text-gray-400 hover:text-black"><X className="w-6 h-6" /></button>
-                        </div>
-
-                        <div className="p-8 space-y-6">
-                            {/* Add unit form */}
-                            {!editingUnit ? (
-                                <form onSubmit={handleAddUnit} className="flex gap-2 items-end">
-                                    <div className="flex-1 space-y-1">
-                                        <label className="text-[9px] text-black/40 font-black uppercase tracking-wider">Unit / Topic Name</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={newUnitForm.name}
-                                            onChange={e => setNewUnitForm(prev => ({ ...prev, name: e.target.value }))}
-                                            placeholder="E.g. Advanced Excel Formatting"
-                                            id="input-new-unit"
-                                            className="w-full p-3.5 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none focus:border-maroon transition-all"
-                                        />
-                                    </div>
-                                    <button
-                                        type="submit"
-                                        id="btn-add-unit"
-                                        className="bg-maroon hover:bg-maroon/90 text-gold px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg transition-all"
-                                    >
-                                        Add
+                        <form onSubmit={handleBatchMark} className="flex flex-col flex-1 overflow-hidden">
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                                {/* Intake Filter */}
+                                <div className="flex items-center justify-between gap-2">
+                                    <select value={batchIntakeFilter} onChange={e => setBatchIntakeFilter(e.target.value)}
+                                        className="text-[10px] font-black uppercase tracking-wider px-3 py-2.5 bg-black/[0.03] border border-transparent rounded-xl outline-none text-black">
+                                        <option value="all">All Intakes</option>
+                                        {intakeList.map(i => <option key={i} value={i}>{i}</option>)}
+                                    </select>
+                                    <button type="button" onClick={toggleBatchAll}
+                                        className="flex items-center gap-2 text-[10px] font-black text-maroon uppercase tracking-wider hover:underline">
+                                        {batchFilteredStudents.every(s => batchSelectedStudents.has(s.id)) ? (
+                                            <><MinusSquare className="w-4 h-4" /> Deselect All</>
+                                        ) : (
+                                            <><CheckSquare className="w-4 h-4" /> Select All</>
+                                        )}
                                     </button>
-                                </form>
-                            ) : (
-                                <form onSubmit={handleUpdateUnit} className="bg-black/[0.015] p-6 rounded-3xl border border-black/5 space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <h4 className="text-xs font-black uppercase text-maroon tracking-wider">Edit Unit Metadata</h4>
-                                        <button type="button" onClick={() => setEditingUnit(null)} className="text-xs text-black/40 hover:text-black font-black uppercase">Cancel</button>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[9px] text-black/40 font-black uppercase tracking-wider">Unit Name</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={editingUnit.name}
-                                            onChange={e => setEditingUnit(prev => ({ ...prev, name: e.target.value }))}
-                                            id="edit-unit-name"
-                                            className="w-full p-3.5 bg-white border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none"
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[9px] text-black/40 font-black uppercase tracking-wider">Expected Duration</label>
-                                            <input
-                                                type="text"
-                                                value={editingUnit.expected_duration || ''}
-                                                onChange={e => setEditingUnit(prev => ({ ...prev, expected_duration: e.target.value }))}
-                                                id="edit-unit-duration"
-                                                className="w-full p-3.5 bg-white border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none"
-                                            />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[9px] text-black/40 font-black uppercase tracking-wider">Remarks</label>
-                                            <input
-                                                type="text"
-                                                value={editingUnit.unit_remarks || ''}
-                                                onChange={e => setEditingUnit(prev => ({ ...prev, unit_remarks: e.target.value }))}
-                                                id="edit-unit-remarks"
-                                                className="w-full p-3.5 bg-white border border-black/10 rounded-2xl text-xs font-black uppercase tracking-widest outline-none"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-[9px] text-black/40 font-black uppercase tracking-wider">Description</label>
-                                        <textarea
-                                            value={editingUnit.description || ''}
-                                            onChange={e => setEditingUnit(prev => ({ ...prev, description: e.target.value }))}
-                                            id="edit-unit-desc"
-                                            className="w-full p-3.5 bg-white border border-black/10 rounded-2xl text-xs font-bold outline-none h-16"
-                                        />
-                                    </div>
-                                    <button
-                                        type="submit"
-                                        id="btn-save-unit"
-                                        className="w-full bg-maroon hover:bg-maroon/90 text-gold py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg transition-all"
-                                    >
-                                        Save Changes
-                                    </button>
-                                </form>
-                            )}
+                                </div>
 
-                            {/* Units Registry list */}
-                            <div className="max-h-[300px] overflow-y-auto custom-scrollbar space-y-2 pr-1">
-                                {units.map((u, index) => (
-                                    <div key={u.id} className="p-4 bg-black/[0.015] border border-black/5 rounded-2xl flex items-center justify-between gap-4">
-                                        <div>
-                                            <span className="text-[9px] font-black text-black/30 uppercase tracking-widest">Order: {index + 1}</span>
-                                            <p className="text-xs font-black text-black uppercase mt-0.5">{u.name}</p>
-                                        </div>
-
-                                        <div className="flex items-center gap-1">
-                                            {!u.coverage_log && (
-                                                <button
-                                                    onClick={() => setEditingUnit(u)}
-                                                    id={`btn-edit-unit-modal-${u.id}`}
-                                                    className="p-2 hover:bg-black/5 rounded-lg text-gray-500 hover:text-black"
-                                                >
-                                                    <Edit className="w-3.5 h-3.5" />
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => handleArchiveUnit(u.id, u.name, !u.is_archived)}
-                                                id={`btn-archive-unit-modal-${u.id}`}
-                                                className={`p-2 hover:bg-black/5 rounded-lg ${u.is_archived ? 'text-green-600' : 'text-gray-400 hover:text-red-500'}`}
-                                                title={u.is_archived ? 'Unarchive' : 'Archive'}
-                                            >
-                                                <Archive className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── MODAL: CONFIRMATION (Student confirmation Yes/Partially/No) ──── */}
-            {showConfirmationModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in duration-300">
-                        <div className="p-8 border-b border-black/5 bg-gradient-to-r from-maroon/[0.02] to-transparent flex justify-between items-center">
-                            <h3 className="text-lg font-black text-maroon uppercase tracking-tight">Student Confirmation</h3>
-                            <button onClick={() => setShowConfirmationModal(false)} className="text-gray-400 hover:text-black"><X className="w-6 h-6" /></button>
-                        </div>
-
-                        <form onSubmit={handleConfirmSubmit} className="p-8 space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">Was this unit fully taught? *</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {['Yes', 'Partially', 'No'].map(opt => (
-                                        <button
-                                            key={opt}
-                                            type="button"
-                                            onClick={() => setConfirmationForm(prev => ({ ...prev, response: opt }))}
-                                            id={`btn-opt-${opt.toLowerCase()}`}
-                                            className={`py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all
-                                                ${confirmationForm.response === opt
-                                                    ? 'bg-maroon text-gold border-maroon shadow-md'
-                                                    : 'bg-black/[0.02] border-black/10 text-black hover:bg-black/[0.04]'
-                                                }
-                                            `}
-                                        >
-                                            {opt}
-                                        </button>
+                                {/* Student Checklist */}
+                                <div className="space-y-1.5 max-h-60 overflow-y-auto border border-black/5 rounded-2xl p-3">
+                                    {batchFilteredStudents.map(student => (
+                                        <label key={student.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-black/[0.02] cursor-pointer transition-colors">
+                                            <input type="checkbox" checked={batchSelectedStudents.has(student.id)} onChange={() => toggleBatchStudent(student.id)}
+                                                className="w-4 h-4 accent-maroon" />
+                                            <div className="flex-1">
+                                                <p className="text-xs font-black text-black uppercase">{student.name}</p>
+                                                <p className="text-[9px] text-black/30 font-bold">{student.intake || 'No Intake'} · {student.covered_units}/{student.total_units} units covered</p>
+                                            </div>
+                                            {student.covered_units === student.total_units && <Check className="w-3.5 h-3.5 text-green-500" />}
+                                        </label>
                                     ))}
                                 </div>
+
+                                <p className="text-[10px] font-bold text-black/40 uppercase">{batchSelectedStudents.size} student(s) selected</p>
+
+                                {/* Remarks */}
+                                <div>
+                                    <label className="text-[10px] font-black text-black/50 uppercase tracking-wider block mb-1.5">Remarks (Optional)</label>
+                                    <textarea value={batchForm.remarks} onChange={e => setBatchForm(f => ({ ...f, remarks: e.target.value }))} rows={2}
+                                        placeholder="e.g. Practical session covered today"
+                                        className="w-full px-4 py-3 text-xs bg-black/[0.02] border border-black/8 rounded-2xl outline-none focus:border-maroon/30 resize-none font-medium text-black" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-black/50 uppercase tracking-wider block mb-1.5">Material URL (Optional)</label>
+                                    <input type="url" value={batchForm.material_urls} onChange={e => setBatchForm(f => ({ ...f, material_urls: e.target.value }))}
+                                        placeholder="https://drive.google.com/..."
+                                        className="w-full px-4 py-3 text-xs bg-black/[0.02] border border-black/8 rounded-2xl outline-none focus:border-maroon/30 font-medium text-black" />
+                                </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] text-black/40 font-black uppercase tracking-wider">Optional Comment</label>
-                                <textarea
-                                    value={confirmationForm.comment}
-                                    onChange={e => setConfirmationForm(prev => ({ ...prev, comment: e.target.value }))}
-                                    placeholder="Write any thoughts, queries or observations here..."
-                                    id="textarea-confirm-comment"
-                                    className="w-full p-4 bg-black/[0.02] border border-black/10 rounded-2xl text-xs font-bold outline-none focus:border-maroon transition-all h-24"
-                                />
-                            </div>
-
-                            <div className="flex gap-4 pt-4 border-t border-black/5">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowConfirmationModal(false)}
-                                    id="btn-close-confirm"
-                                    className="flex-1 py-4 bg-black/[0.05] hover:bg-black/[0.08] text-black text-xs font-black uppercase tracking-widest rounded-2xl transition-all"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    id="btn-submit-confirm"
-                                    className="flex-1 py-4 bg-maroon hover:bg-maroon/90 text-gold text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all"
-                                >
-                                    Submit
+                            <div className="p-6 border-t border-black/5 flex gap-3">
+                                <button type="button" onClick={() => setShowBatchModal(false)}
+                                    className="flex-1 border border-black/10 text-black/50 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest">Cancel</button>
+                                <button type="submit" disabled={batchLoading || batchSelectedStudents.size === 0}
+                                    className="flex-1 bg-maroon text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg hover:bg-maroon/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                                    {batchLoading ? 'Marking...' : `Mark for ${batchSelectedStudents.size} Student(s)`}
                                 </button>
                             </div>
                         </form>
@@ -1196,107 +1068,82 @@ export default function UnitCoverage() {
                 </div>
             )}
 
-            {/* ── CUSTOM DUPLICATE DETECTION DIALOG ──────────────────────────── */}
-            {duplicateDialog && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[1050] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl w-full max-w-md overflow-hidden p-8 space-y-6 animate-in zoom-in duration-300">
-                        <div className="flex items-center gap-3 text-amber-600">
-                            <AlertTriangle className="w-8 h-8 shrink-0" />
-                            <h3 className="text-lg font-black uppercase tracking-tight">Similar unit detected</h3>
+            {/* ── Manage Units Modal ─────────────────────────────────────────── */}
+            {showManageUnitsModal && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="p-6 border-b border-black/5 flex items-center justify-between">
+                            <h2 className="text-sm font-black text-black uppercase">Manage Units</h2>
+                            <button onClick={() => setShowManageUnitsModal(false)} className="p-2 hover:bg-black/5 rounded-xl text-black/40"><X className="w-5 h-5" /></button>
                         </div>
-
-                        <div className="space-y-4">
-                            <p className="text-xs font-bold text-black/60">
-                                You entered <strong className="text-black uppercase">"{duplicateDialog.entered_name}"</strong>. A similar unit already exists in this course:
-                            </p>
-                            <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl">
-                                {duplicateDialog.candidates.map(candidate => (
-                                    <div key={candidate.id} className="text-xs font-black uppercase text-amber-950">
-                                        — {candidate.name}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                            {units.map((u, idx) => (
+                                <div key={u.id} className="flex items-center gap-3 p-4 bg-black/[0.02] rounded-2xl border border-black/5">
+                                    <div className="flex flex-col gap-0.5">
+                                        <button onClick={() => handleMoveUnit(idx, 'up')} disabled={idx === 0} className="text-black/30 hover:text-maroon disabled:opacity-20"><ChevronUp className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => handleMoveUnit(idx, 'down')} disabled={idx === units.length - 1} className="text-black/30 hover:text-maroon disabled:opacity-20"><ChevronDown className="w-3.5 h-3.5" /></button>
                                     </div>
+                                    {editingUnit?.id === u.id ? (
+                                        <form onSubmit={handleUpdateUnit} className="flex-1 flex items-center gap-2">
+                                            <input value={editingUnit.name} onChange={e => setEditingUnit(p => ({ ...p, name: e.target.value }))} className="flex-1 px-3 py-2 text-xs bg-white border border-maroon/30 rounded-xl outline-none font-black text-black" />
+                                            <input value={editingUnit.expected_duration || ''} onChange={e => setEditingUnit(p => ({ ...p, expected_duration: e.target.value }))} placeholder="Duration" className="w-24 px-3 py-2 text-[10px] bg-white border border-black/10 rounded-xl outline-none text-black" />
+                                            <button type="submit" className="bg-maroon text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase"><Check className="w-3.5 h-3.5" /></button>
+                                            <button type="button" onClick={() => setEditingUnit(null)} className="text-black/30 hover:text-black px-2 py-2 rounded-xl"><X className="w-3.5 h-3.5" /></button>
+                                        </form>
+                                    ) : (
+                                        <div className="flex-1 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-xs font-black text-black uppercase">{u.name}</p>
+                                                {u.expected_duration && <p className="text-[9px] text-black/30 mt-0.5">{u.expected_duration}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => setEditingUnit(u)} className="p-2 hover:bg-black/5 rounded-xl text-black/30 hover:text-maroon transition-colors"><Edit className="w-3.5 h-3.5" /></button>
+                                                <button onClick={() => handleArchiveUnit(u.id, u.name, !u.is_archived)} className={`p-2 hover:bg-black/5 rounded-xl transition-colors ${u.is_archived ? 'text-green-500' : 'text-black/30 hover:text-amber-500'}`} title={u.is_archived ? 'Unarchive' : 'Archive'}><Archive className="w-3.5 h-3.5" /></button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                            {/* Add Unit */}
+                            <form onSubmit={handleAddUnit} className="flex items-center gap-2 p-4 bg-maroon/[0.02] rounded-2xl border border-maroon/10">
+                                <input value={newUnitForm.name} onChange={e => setNewUnitForm(p => ({ ...p, name: e.target.value }))} placeholder="New unit name..." className="flex-1 px-3 py-2 text-xs bg-white border border-black/10 rounded-xl outline-none font-medium text-black" />
+                                <input value={newUnitForm.expected_duration} onChange={e => setNewUnitForm(p => ({ ...p, expected_duration: e.target.value }))} placeholder="Duration" className="w-24 px-3 py-2 text-[10px] bg-white border border-black/10 rounded-xl outline-none text-black" />
+                                <button type="submit" className="bg-maroon text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase flex items-center gap-1 shadow"><Plus className="w-3.5 h-3.5" />Add</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Student Confirmation Modal ─────────────────────────────────── */}
+            {showConfirmationModal && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md">
+                        <div className="p-6 border-b border-black/5 flex items-center justify-between">
+                            <h2 className="text-sm font-black text-black uppercase">Was This Unit Taught?</h2>
+                            <button onClick={() => setShowConfirmationModal(false)} className="p-2 hover:bg-black/5 rounded-xl text-black/40"><X className="w-5 h-5" /></button>
+                        </div>
+                        <form onSubmit={handleConfirmSubmit} className="p-6 space-y-4">
+                            <div className="grid grid-cols-3 gap-2">
+                                {['Yes', 'Partially', 'No'].map(opt => (
+                                    <button key={opt} type="button" onClick={() => setConfirmationForm(f => ({ ...f, response: opt }))}
+                                        className={`py-3 rounded-2xl font-black text-xs uppercase tracking-wider border-2 transition-all ${
+                                            confirmationForm.response === opt
+                                                ? opt === 'Yes' ? 'bg-green-600 border-green-600 text-white' : opt === 'Partially' ? 'bg-amber-500 border-amber-500 text-white' : 'bg-red-500 border-red-500 text-white'
+                                                : 'border-black/10 text-black/50 hover:border-black/20'
+                                        }`}>{opt}</button>
                                 ))}
                             </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <button
-                                onClick={() => {
-                                    // Use Existing Unit
-                                    const candidate = duplicateDialog.candidates[0];
-                                    setCoverageForm(prev => ({
-                                        ...prev,
-                                        unit_id: String(candidate.id),
-                                        unit_name: candidate.name
-                                    }));
-                                    setDuplicateDialog(null);
-                                    // Give state a small fraction to process unit_id
-                                    setTimeout(() => handleMarkCovered(null, false), 100);
-                                }}
-                                id="btn-use-existing"
-                                className="flex-1 py-3.5 bg-black/[0.05] hover:bg-black/[0.08] text-black text-xs font-black uppercase tracking-widest rounded-2xl transition-all"
-                            >
-                                Use Existing Unit
-                            </button>
-                            <button
-                                onClick={() => {
-                                    // Create New Unit (Force Create)
-                                    setDuplicateDialog(null);
-                                    handleMarkCovered(null, true);
-                                }}
-                                id="btn-create-new-unit"
-                                className="flex-1 py-3.5 bg-maroon hover:bg-maroon/90 text-gold text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all"
-                            >
-                                Create New Unit
-                            </button>
-                        </div>
+                            <textarea value={confirmationForm.comment} onChange={e => setConfirmationForm(f => ({ ...f, comment: e.target.value }))} rows={3}
+                                placeholder="Optional comment..." className="w-full px-4 py-3 text-xs bg-black/[0.02] border border-black/8 rounded-2xl outline-none resize-none focus:border-maroon/30 font-medium text-black" />
+                            <div className="flex gap-3">
+                                <button type="button" onClick={() => setShowConfirmationModal(false)} className="flex-1 border border-black/10 text-black/50 py-3.5 rounded-2xl font-black text-xs uppercase">Cancel</button>
+                                <button type="submit" className="flex-1 bg-maroon text-white py-3.5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-maroon/90">Submit</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
-
-            {/* ── CUSTOM CONFIRM DIALOG ─────────────────────────────────────── */}
-            {confirmDialog && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[1050] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl w-full max-w-sm overflow-hidden p-8 space-y-6 animate-in zoom-in duration-300">
-                        <p className="text-sm font-black text-black uppercase tracking-tight">{confirmDialog.message}</p>
-                        <div className="flex gap-4">
-                            <button
-                                onClick={() => setConfirmDialog(null)}
-                                id="btn-confirm-cancel"
-                                className="flex-grow py-3.5 bg-black/[0.05] hover:bg-black/[0.08] text-black text-xs font-black uppercase tracking-widest rounded-2xl transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={() => {
-                                    confirmDialog.onConfirm();
-                                    setConfirmDialog(null);
-                                }}
-                                id="btn-confirm-confirm"
-                                className="flex-grow py-3.5 bg-maroon hover:bg-maroon/90 text-gold text-xs font-black uppercase tracking-widest rounded-2xl shadow-lg transition-all"
-                            >
-                                Confirm
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Toast Notifications ────────────────────────────────────────── */}
-            {toast && (
-                <div className="fixed bottom-8 right-8 z-[9999] animate-in slide-in-from-bottom-5 duration-500">
-                    <div className={`px-6 py-4 rounded-2xl border shadow-2xl flex items-center gap-3 font-black text-xs uppercase tracking-widest
-                        ${toast.type === 'success' ? 'bg-green-50 border-green-200 text-green-700' : ''}
-                        ${toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-700' : ''}
-                        ${toast.type === 'info' ? 'bg-blue-50 border-blue-200 text-blue-700' : ''}
-                    `}>
-                        {toast.type === 'success' && <Check className="w-5 h-5" />}
-                        {toast.type === 'error' && <AlertTriangle className="w-5 h-5" />}
-                        {toast.type === 'info' && <Info className="w-5 h-5" />}
-                        <span>{toast.message}</span>
-                    </div>
-                </div>
-            )}
-
         </div>
     );
 }

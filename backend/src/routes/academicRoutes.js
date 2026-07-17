@@ -147,6 +147,7 @@ router.delete('/interactions/:id', authenticateToken, interactionController.dele
 // ── Unit Coverage Tracking ────────────────────────────────────────────────────
 router.get('/unit-coverage/courses/:courseId', authenticateToken, unitCoverageController.getCourseCoverage);
 router.post('/unit-coverage/mark', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.markUnitCovered);
+router.delete('/unit-coverage/logs/:logId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.deleteCoverageLog);
 router.get('/unit-coverage/logs', authenticateToken, unitCoverageController.getCoverageLogs);
 router.get('/unit-coverage/analytics', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.getCoverageAnalytics);
 router.get('/unit-coverage/admin', authenticateToken, authorizeRoles('admin', 'superadmin'), unitCoverageController.getAdminOverview);
