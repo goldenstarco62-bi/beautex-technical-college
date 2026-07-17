@@ -1,9 +1,5 @@
-/**
- * Student Unit Marks Controller
- * Records and retrieves student scores for each course unit.
- * Automatically calculates grades based on system settings thresholds.
- */
 import { query, run, queryOne } from '../config/database.js';
+import { parseCoursesField } from '../utils/courseParser.js';
 
 // ─── Grade Calculation Helpers ──────────────────────────────────────────────
 
@@ -31,24 +27,6 @@ export function calculateGrade(marks, thresholds) {
     if (marks >= credit)      return 'Credit';
     if (marks >= pass)        return 'Pass';
     return 'Fail';
-}
-
-// Helper to parse faculty courses list robustly
-function parseFacultyCourses(coursesField) {
-    if (!coursesField) return [];
-    if (Array.isArray(coursesField)) return coursesField;
-    if (typeof coursesField === 'string') {
-        const trimmed = coursesField.trim();
-        if (trimmed.startsWith('[')) {
-            try {
-                return JSON.parse(trimmed);
-            } catch (e) {
-                // fall through
-            }
-        }
-        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
-    }
-    return [];
 }
 
 // Helper to get allowed course IDs for a teacher
@@ -200,7 +178,7 @@ export async function saveStudentUnitMark(req, res) {
                 return res.status(404).json({ error: 'Student not found' });
             }
 
-            const sCourses = parseFacultyCourses(student.course).map(c => c.toLowerCase().trim());
+                const sCourses = parseCoursesField(student.course).map(c => c.toLowerCase().trim());
             const courseObj = await queryOne('SELECT name FROM courses WHERE id = ?', [course_id]);
             if (!courseObj || !sCourses.includes(courseObj.name.toLowerCase().trim())) {
                 return res.status(400).json({ error: 'Student is not enrolled in this course' });
@@ -287,7 +265,7 @@ export async function batchSaveUnitMarks(req, res) {
         const courseNameLower = courseObj.name.toLowerCase().trim();
         const enrolledStudentIds = new Set(
             students.filter(s => {
-                const sCourses = parseFacultyCourses(s.course).map(c => c.toLowerCase().trim());
+                const sCourses = parseCoursesField(s.course).map(c => c.toLowerCase().trim());
                 return sCourses.includes(courseNameLower);
             }).map(s => String(s.id).trim())
         );

@@ -819,6 +819,17 @@ async function runPostgresMigrations(database) {
         console.warn('⚠️ course_units migration warning (PostgreSQL):', e.message);
     }
 
+    // Migration: Extend course_units for Unit Coverage Tracking (PostgreSQL)
+    try {
+        await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS description TEXT');
+        await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS expected_duration TEXT');
+        await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS unit_remarks TEXT');
+        await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE');
+        console.log('✅ course_units extended for coverage tracking (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ course_units extension migration warning (PostgreSQL):', e.message);
+    }
+
     // Migration: Student Unit Marks table (competency-based grading)
     try {
         await database.query(`
@@ -840,6 +851,52 @@ async function runPostgresMigrations(database) {
         console.log('✅ student_unit_marks table ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ student_unit_marks migration warning (PostgreSQL):', e.message);
+    }
+
+    // ── Unit Coverage Tracking Tables (PostgreSQL) ────────────────────────────
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS unit_coverage_logs (
+                id SERIAL PRIMARY KEY,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL REFERENCES course_units(id) ON DELETE CASCADE,
+                teacher_id TEXT NOT NULL,
+                teacher_name TEXT NOT NULL,
+                academic_period TEXT,
+                date_covered DATE NOT NULL,
+                time_covered TEXT,
+                remarks TEXT,
+                material_urls TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ unit_coverage_logs table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ unit_coverage_logs migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS unit_coverage_confirmations (
+                id SERIAL PRIMARY KEY,
+                coverage_log_id INTEGER NOT NULL REFERENCES unit_coverage_logs(id) ON DELETE CASCADE,
+                student_id TEXT NOT NULL,
+                student_name TEXT NOT NULL,
+                response TEXT NOT NULL CHECK(response IN ('Yes', 'Partially', 'No')),
+                comment TEXT,
+                confirmed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(coverage_log_id, student_id)
+            )
+        `);
+        console.log('✅ unit_coverage_confirmations table ensured (PostgreSQL)');
+
+        await database.query('CREATE INDEX IF NOT EXISTS idx_ucl_course_id ON unit_coverage_logs(course_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_ucl_unit_id ON unit_coverage_logs(unit_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_ucc_coverage_log_id ON unit_coverage_confirmations(coverage_log_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_ucc_student_id ON unit_coverage_confirmations(student_id)');
+    } catch (e) {
+        console.warn('⚠️ unit_coverage_confirmations migration warning (PostgreSQL):', e.message);
     }
 }
 
@@ -1273,6 +1330,30 @@ async function runSqliteMigrations(database) {
         console.warn('⚠️ course_units migration warning (SQLite):', e.message);
     }
 
+    // Migration: Extend course_units for Unit Coverage Tracking
+    try {
+        const cuInfo = await database.all("PRAGMA table_info('course_units')");
+        const cuCols = cuInfo.map(c => c.name);
+        if (!cuCols.includes('description')) {
+            await database.run('ALTER TABLE course_units ADD COLUMN description TEXT');
+            console.log('✅ description column added to course_units (SQLite)');
+        }
+        if (!cuCols.includes('expected_duration')) {
+            await database.run('ALTER TABLE course_units ADD COLUMN expected_duration TEXT');
+            console.log('✅ expected_duration column added to course_units (SQLite)');
+        }
+        if (!cuCols.includes('unit_remarks')) {
+            await database.run('ALTER TABLE course_units ADD COLUMN unit_remarks TEXT');
+            console.log('✅ unit_remarks column added to course_units (SQLite)');
+        }
+        if (!cuCols.includes('is_archived')) {
+            await database.run('ALTER TABLE course_units ADD COLUMN is_archived INTEGER DEFAULT 0');
+            console.log('✅ is_archived column added to course_units (SQLite)');
+        }
+    } catch (e) {
+        console.warn('⚠️ course_units extension migration warning (SQLite):', e.message);
+    }
+
     // Migration: Student Unit Marks (competency-based grading)
     try {
         await database.run(`
@@ -1297,6 +1378,54 @@ async function runSqliteMigrations(database) {
         console.log('✅ student_unit_marks table ensured (SQLite)');
     } catch (e) {
         console.warn('⚠️ student_unit_marks migration warning (SQLite):', e.message);
+    }
+
+    // ── Unit Coverage Tracking Tables (SQLite) ────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS unit_coverage_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                teacher_id TEXT NOT NULL,
+                teacher_name TEXT NOT NULL,
+                academic_period TEXT,
+                date_covered DATE NOT NULL,
+                time_covered TEXT,
+                remarks TEXT,
+                material_urls TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (unit_id) REFERENCES course_units(id) ON DELETE CASCADE
+            )
+        `);
+        console.log('✅ unit_coverage_logs table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ unit_coverage_logs migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS unit_coverage_confirmations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                coverage_log_id INTEGER NOT NULL,
+                student_id TEXT NOT NULL,
+                student_name TEXT NOT NULL,
+                response TEXT NOT NULL CHECK(response IN ('Yes', 'Partially', 'No')),
+                comment TEXT,
+                confirmed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(coverage_log_id, student_id),
+                FOREIGN KEY (coverage_log_id) REFERENCES unit_coverage_logs(id) ON DELETE CASCADE
+            )
+        `);
+        console.log('✅ unit_coverage_confirmations table ensured (SQLite)');
+
+        await database.run('CREATE INDEX IF NOT EXISTS idx_ucl_course_id ON unit_coverage_logs(course_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_ucl_unit_id ON unit_coverage_logs(unit_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_ucc_coverage_log_id ON unit_coverage_confirmations(coverage_log_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_ucc_student_id ON unit_coverage_confirmations(student_id)');
+    } catch (e) {
+        console.warn('⚠️ unit_coverage_confirmations migration warning (SQLite):', e.message);
     }
 }
 

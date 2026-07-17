@@ -294,7 +294,7 @@ export default function MonthlyAttendanceSummary() {
             )}
 
             {/* ── PDF Export Container (hidden visually but rendered) ── */}
-            <div id="monthly-att-pdf" className="hidden">
+            <div id="monthly-att-pdf" style={{ position: 'absolute', left: '-9999px', top: 0, width: '794px', background: '#ffffff', backgroundColor: '#ffffff' }}>
                 <div style={{ padding: 32, fontFamily: 'Arial, sans-serif', backgroundColor: '#fff' }}>
                     <div style={{ borderBottom: '3px solid #800000', paddingBottom: 16, marginBottom: 24 }}>
                         <h1 style={{ color: '#800000', fontSize: 22, fontWeight: 900, margin: 0 }}>MONTHLY ATTENDANCE SUMMARY</h1>

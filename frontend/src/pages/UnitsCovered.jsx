@@ -263,6 +263,18 @@ export default function UnitsCovered() {
     // ── Batch submit ───────────────────────────────────────────────────────────
     const handleBatchSubmit = async () => {
         if (!selectedCourse || !batchUnit) return showToast('Select a course and unit first.', 'error');
+
+        // Validate all entered marks before submitting
+        const invalidEntries = Object.entries(batchMarks)
+            .filter(([, v]) => v !== '')
+            .filter(([, v]) => {
+                const n = Number(v);
+                return isNaN(n) || n < 0 || n > 100;
+            });
+        if (invalidEntries.length > 0) {
+            return showToast(`Invalid marks detected: all marks must be numbers between 0 and 100. Please correct ${invalidEntries.length} entr${invalidEntries.length === 1 ? 'y' : 'ies'} before saving.`, 'error');
+        }
+
         const entries = Object.entries(batchMarks)
             .filter(([, v]) => v !== '')
             .map(([student_id, marksVal]) => ({ student_id, marks: Number(marksVal) }));
@@ -285,6 +297,14 @@ export default function UnitsCovered() {
     // ── Single mark submit ─────────────────────────────────────────────────────
     const handleSingleSubmit = async (e) => {
         e.preventDefault();
+        // Client-side marks validation
+        const marksNum = Number(singleForm.marks);
+        if (singleForm.marks === '' || singleForm.marks === undefined) {
+            return showToast('Marks field is required.', 'error');
+        }
+        if (isNaN(marksNum) || marksNum < 0 || marksNum > 100) {
+            return showToast('Marks must be a valid number between 0 and 100.', 'error');
+        }
         try {
             await studentUnitMarksAPI.saveMark(singleForm);
             setShowModal(false);
@@ -393,7 +413,7 @@ export default function UnitsCovered() {
             student: { ...student, photoB64 },
             marks: studentMarks,
             logoB64,
-            style: customStyle || viewStyle
+            style: customStyle || null
         });
 
         setTimeout(async () => {

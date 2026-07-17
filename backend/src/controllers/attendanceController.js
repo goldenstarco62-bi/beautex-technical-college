@@ -1,23 +1,11 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
+import { parseCoursesField } from '../utils/courseParser.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
 // Helper to parse faculty courses list robustly
 function parseFacultyCourses(coursesField) {
-    if (!coursesField) return [];
-    if (Array.isArray(coursesField)) return coursesField;
-    if (typeof coursesField === 'string') {
-        const trimmed = coursesField.trim();
-        if (trimmed.startsWith('[')) {
-            try {
-                return JSON.parse(trimmed);
-            } catch (e) {
-                // fall through
-            }
-        }
-        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
-    }
-    return [];
+    return parseCoursesField(coursesField);
 }
 
 export async function getAllAttendance(req, res) {
@@ -123,6 +111,12 @@ export async function markAttendance(req, res) {
 
         if (!student_id || !course || !date || !status) {
             return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Validate status value
+        const validStatuses = ['Present', 'Absent', 'Late'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
         }
 
         // Authorization check for teachers
@@ -427,22 +421,7 @@ export async function getAttendanceSummary(req, res) {
             const sid = String(student.id || '').trim();
             if (!sid) continue;
 
-            let studentCourses = [];
-            if (student.course) {
-                if (typeof student.course === 'string') {
-                    if (student.course.startsWith('[')) {
-                        try {
-                            studentCourses = JSON.parse(student.course);
-                        } catch (e) {
-                            studentCourses = [student.course];
-                        }
-                    } else {
-                        studentCourses = student.course.split(',').map(c => c.trim()).filter(Boolean);
-                    }
-                } else if (Array.isArray(student.course)) {
-                    studentCourses = student.course;
-                }
-            }
+            const studentCourses = parseCoursesField(student.course);
 
             if (studentCourses.length === 0) {
                 studentCourses = ['Unassigned'];

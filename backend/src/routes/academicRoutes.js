@@ -17,6 +17,7 @@ import * as statsController from '../controllers/statsController.js';
 import * as interactionController from '../controllers/interactionController.js';
 import * as courseUnitController from '../controllers/courseUnitController.js';
 import * as studentUnitMarksController from '../controllers/studentUnitMarksController.js';
+import * as unitCoverageController from '../controllers/unitCoverageController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -142,5 +143,16 @@ router.get('/interactions', authenticateToken, interactionController.getInteract
 router.post('/interactions', authenticateToken, interactionController.createInteraction);
 router.post('/interactions/:id/react', authenticateToken, interactionController.toggleReaction);
 router.delete('/interactions/:id', authenticateToken, interactionController.deleteInteraction);
+
+// ── Unit Coverage Tracking ────────────────────────────────────────────────────
+router.get('/unit-coverage/courses/:courseId', authenticateToken, unitCoverageController.getCourseCoverage);
+router.post('/unit-coverage/mark', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.markUnitCovered);
+router.get('/unit-coverage/logs', authenticateToken, unitCoverageController.getCoverageLogs);
+router.get('/unit-coverage/analytics', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.getCoverageAnalytics);
+router.get('/unit-coverage/admin', authenticateToken, authorizeRoles('admin', 'superadmin'), unitCoverageController.getAdminOverview);
+router.post('/unit-coverage/confirmations', authenticateToken, authorizeRoles('student'), unitCoverageController.submitConfirmation);
+router.get('/unit-coverage/confirmations', authenticateToken, unitCoverageController.getConfirmations);
+router.get('/unit-coverage/student-progress', authenticateToken, unitCoverageController.getStudentProgress);
+router.put('/unit-coverage/units/:unitId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.updateUnit);
 
 export default router;

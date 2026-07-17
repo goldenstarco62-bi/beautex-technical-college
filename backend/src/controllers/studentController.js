@@ -3,6 +3,7 @@ import { sendWelcomeEmail } from '../services/emailService.js';
 import { sendLoginCredentials } from '../services/smsService.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { parseCoursesField } from '../utils/courseParser.js';
 
 // Generate random password
 function generatePassword(length = 12) {
@@ -19,20 +20,7 @@ const isMongo = async () => !!process.env.MONGODB_URI;
 
 // Helper to parse faculty courses list robustly
 function parseFacultyCourses(coursesField) {
-    if (!coursesField) return [];
-    if (Array.isArray(coursesField)) return coursesField;
-    if (typeof coursesField === 'string') {
-        const trimmed = coursesField.trim();
-        if (trimmed.startsWith('[')) {
-            try {
-                return JSON.parse(trimmed);
-            } catch (e) {
-                // fall through
-            }
-        }
-        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
-    }
-    return [];
+    return parseCoursesField(coursesField);
 }
 
 export async function getAllStudents(req, res) {
@@ -57,14 +45,7 @@ export async function getAllStudents(req, res) {
                 params.push(limit);
             }
             const students = await query(sql, params);
-            return res.json(students.map(s => {
-                let course = s.course;
-                if (typeof course === 'string' && course.startsWith('{') && course.endsWith('}')) {
-                    course = course.slice(1, -1).replace(/"/g, '');
-                }
-                const parsedCourse = typeof course === 'string' && course.startsWith('[') ? JSON.parse(course) : [course].filter(Boolean);
-                return { ...s, course: parsedCourse };
-            }));
+            return res.json(students.map(s => ({ ...s, course: parseCoursesField(s.course) })));
         }
 
         // Teachers see students in their courses
@@ -117,42 +98,13 @@ export async function getAllStudents(req, res) {
 
             const students = await query('SELECT * FROM students ORDER BY created_at DESC');
 
-            // Helper: normalise any course storage format to a lowercase string array
-            const parseCourse = (raw) => {
-                if (!raw) return [];
-                if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
-                    // PostgreSQL array literal: {"Course A","Course B"} or {Course A}
-                    return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim().toLowerCase()).filter(Boolean);
-                }
-                if (typeof raw === 'string' && raw.startsWith('[')) {
-                    try {
-                        const p = JSON.parse(raw);
-                        return (Array.isArray(p) ? p : [p]).map(s => String(s).trim().toLowerCase()).filter(Boolean);
-                    } catch (e) { /* fall through */ }
-                }
-                return [String(raw).trim().toLowerCase()].filter(Boolean);
-            };
+            // Helper: normalise any course storage format to a lowercase string array for filtering
+            const parseCourse = (raw) => parseCoursesField(raw).map(c => c.toLowerCase().trim());
 
             let filteredStudents = students.filter(s => {
                 const sCourses = parseCourse(s.course);
                 return sCourses.some(sc => allTutorCourses.includes(sc));
-            }).map(s => {
-                // Return original course strings parsed into an array (keeping original casing)
-                let courseArr = [];
-                try {
-                    if (typeof s.course === 'string' && s.course.startsWith('{') && s.course.endsWith('}')) {
-                        courseArr = s.course.slice(1, -1).split(',').map(x => x.replace(/^"|"$/g, '').trim()).filter(Boolean);
-                    } else if (typeof s.course === 'string' && s.course.startsWith('[')) {
-                        const p = JSON.parse(s.course);
-                        courseArr = Array.isArray(p) ? p : [p];
-                    } else {
-                        courseArr = [s.course].filter(Boolean);
-                    }
-                } catch (e) {
-                    courseArr = [s.course].filter(Boolean);
-                }
-                return { ...s, course: courseArr };
-            });
+            }).map(s => ({ ...s, course: parseCoursesField(s.course) }));
 
             if (limit) {
                 filteredStudents = filteredStudents.slice(0, limit);
@@ -171,10 +123,7 @@ export async function getAllStudents(req, res) {
                 return res.json(students.map(s => ({ ...s, course: Array.isArray(s.course) ? s.course : [s.course].filter(Boolean) })));
             }
             const students = await query('SELECT * FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
-            return res.json(students.map(s => ({
-                ...s,
-                course: typeof s.course === 'string' && s.course.startsWith('[') ? JSON.parse(s.course) : [s.course].filter(Boolean)
-            })));
+            return res.json(students.map(s => ({ ...s, course: parseCoursesField(s.course) })));
         }
 
         res.json([]);
@@ -243,21 +192,7 @@ export async function getStudent(req, res) {
             const instructorCourses = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [faculty.name]);
             const allTutorCourses = [...new Set([...coursesList.map(c => c.toLowerCase().trim()), ...instructorCourses.map(c => c.name.toLowerCase().trim())])];
 
-            const parseCourse = (raw) => {
-                if (!raw) return [];
-                if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
-                    return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim().toLowerCase()).filter(Boolean);
-                }
-                if (typeof raw === 'string' && raw.startsWith('[')) {
-                    try {
-                        const p = JSON.parse(raw);
-                        return (Array.isArray(p) ? p : [p]).map(s => String(s).trim().toLowerCase()).filter(Boolean);
-                    } catch (e) {}
-                }
-                return [String(raw).trim().toLowerCase()].filter(Boolean);
-            };
-
-            const sCourses = parseCourse(student.course);
+            const sCourses = parseCoursesField(student.course).map(c => c.toLowerCase().trim());
             const isAuthorized = sCourses.some(sc => allTutorCourses.includes(sc));
             if (!isAuthorized) {
                 return res.status(403).json({ error: 'Access denied. You are not authorized to view this student.' });

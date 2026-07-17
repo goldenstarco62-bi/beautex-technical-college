@@ -25,6 +25,7 @@ import {
     Receipt,
     PieChart,
     BookMarked,
+    CheckSquare,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { academicAPI } from '../../services/api';
@@ -44,6 +45,7 @@ const navSections = [
             { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
             { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Unit Coverage', path: '/unit-coverage', icon: CheckSquare, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Timetable', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Daily Ledger', path: '/daily-student-logs', icon: History, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Journal Entry', path: '/student-daily-reports', icon: FileText, roles: ['admin', 'superadmin', 'teacher'] },

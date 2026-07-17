@@ -384,5 +384,18 @@ export const studentUnitMarksAPI = {
     deleteMark: (id) => api.delete(`student-unit-marks/${id}`),
 };
 
+// ── Unit Coverage Tracking API ────────────────────────────────────────────────
+export const unitCoverageAPI = {
+    getCourseCoverage: (courseId) => api.get(`unit-coverage/courses/${encodeURIComponent(courseId)}`),
+    markCovered: (data) => api.post('unit-coverage/mark', data),
+    getLogs: (params) => api.get('unit-coverage/logs', { params }),
+    getAnalytics: (params) => api.get('unit-coverage/analytics', { params }),
+    getAdminOverview: (params) => api.get('unit-coverage/admin', { params }),
+    submitConfirmation: (data) => api.post('unit-coverage/confirmations', data),
+    getConfirmations: (params) => api.get('unit-coverage/confirmations', { params }),
+    getStudentProgress: () => api.get('unit-coverage/student-progress'),
+    updateUnit: (unitId, data) => api.put(`unit-coverage/units/${encodeURIComponent(unitId)}`, data),
+};
+
 export default api;
 

@@ -626,6 +626,14 @@ export async function recordPayment(req, res) {
         res.status(201).json({ message: 'Payment recorded successfully' });
 
     } catch (error) {
+        const isDuplicateRef = error.message && (
+            error.message.includes('UNIQUE constraint failed') ||
+            error.message.includes('duplicate key') ||
+            error.message.includes('unique violation')
+        );
+        if (isDuplicateRef) {
+            return res.status(409).json({ error: 'A payment with this transaction reference already exists. Please use a unique transaction reference.' });
+        }
         res.status(500).json({ error: error.message });
     }
 }

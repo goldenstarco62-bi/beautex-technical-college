@@ -1,23 +1,11 @@
 import { query, queryOne, run, getDb } from '../config/database.js';
+import { parseCoursesField } from '../utils/courseParser.js';
 
 const isMongo = () => !!process.env.MONGODB_URI;
 
 // Helper to parse faculty courses list robustly
 function parseFacultyCourses(coursesField) {
-    if (!coursesField) return [];
-    if (Array.isArray(coursesField)) return coursesField;
-    if (typeof coursesField === 'string') {
-        const trimmed = coursesField.trim();
-        if (trimmed.startsWith('[')) {
-            try {
-                return JSON.parse(trimmed);
-            } catch (e) {
-                // fall through
-            }
-        }
-        return trimmed.split(',').map(c => c.trim()).filter(Boolean);
-    }
-    return [];
+    return parseCoursesField(coursesField);
 }
 
 /**

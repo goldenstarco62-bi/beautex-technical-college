@@ -521,25 +521,41 @@ export async function recordMonthlyPayment(req, res) {
         }
 
         const numericAmount = parseFloat(amount);
+        if (isNaN(numericAmount) || numericAmount <= 0) {
+            return res.status(400).json({ error: 'amount must be a positive number' });
+        }
+
         const recordedBy = (req.user && (req.user.name || req.user.email)) || 'System';
 
         const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [student_id]);
         const canonicalId = student ? student.id : student_id;
 
         // 1. Record in overall payments ledger
-        await run(`
-            INSERT INTO payments 
-            (student_id, amount, method, transaction_ref, recorded_by, category, payment_date, remarks, status)
-            VALUES (?, ?, ?, ?, ?, 'Tuition Fee', ?, ?, 'Completed')
-        `, [
-            canonicalId, 
-            numericAmount, 
-            method, 
-            transaction_ref || `TX-${Date.now()}`, 
-            recordedBy, 
-            payment_date || new Date().toISOString(),
-            remarks || `Monthly tuition payment for ${month}/${year}`
-        ]);
+        try {
+            await run(`
+                INSERT INTO payments 
+                (student_id, amount, method, transaction_ref, recorded_by, category, payment_date, remarks, status)
+                VALUES (?, ?, ?, ?, ?, 'Tuition Fee', ?, ?, 'Completed')
+            `, [
+                canonicalId,
+                numericAmount,
+                method,
+                transaction_ref || `TX-${Date.now()}`,
+                recordedBy,
+                payment_date || new Date().toISOString(),
+                remarks || `Monthly tuition payment for ${month}/${year}`
+            ]);
+        } catch (insertErr) {
+            const isDuplicateRef = insertErr.message && (
+                insertErr.message.includes('UNIQUE constraint failed') ||
+                insertErr.message.includes('duplicate key') ||
+                insertErr.message.includes('unique violation')
+            );
+            if (isDuplicateRef) {
+                return res.status(409).json({ error: 'A payment with this transaction reference already exists. Please use a unique reference.' });
+            }
+            throw insertErr;
+        }
 
         // 2. Fetch the corresponding monthly tracking block
         let tracking = await queryOne(
@@ -582,6 +598,7 @@ export async function recordMonthlyPayment(req, res) {
         return res.status(500).json({ error: err.message });
     }
 }
+
 
 /**
  * Gets report data
