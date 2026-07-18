@@ -44,7 +44,7 @@ async function getTeacherAllowedCourseIds(req) {
     let coursesList = [];
     if (faculty) {
         tutorName = String(faculty.name || userName).toLowerCase().trim();
-        coursesList = parseFacultyCourses(faculty.courses).map(c => c.toLowerCase().trim());
+        coursesList = parseCoursesField(faculty.courses).map(c => c.toLowerCase().trim());
     }
 
     // 2. Query all course IDs that match the instructor name or course name in coursesList
