@@ -60,6 +60,15 @@ export default function UnitCoverage() {
     // ── Toast ─────────────────────────────────────────────────────────────────
     const [toast, setToast] = useState(null);
     const showToast = useCallback((message, type = 'success') => setToast({ message, type }), []);
+
+    // ── Confirmations Panel State ─────────────────────────────────────────────
+    const [confirmations, setConfirmations] = useState([]);
+    const [confirmationsLoading, setConfirmationsLoading] = useState(false);
+    const [confirmationFilter, setConfirmationFilter] = useState('all');
+    const [showCommentsModal, setShowCommentsModal] = useState(false);
+    const [commentsModalCourse, setCommentsModalCourse] = useState(null);
+    const [commentsModalData, setCommentsModalData] = useState([]);
+    const [commentsModalLoading, setCommentsModalLoading] = useState(false);
     useEffect(() => {
         if (!toast) return;
         const t = setTimeout(() => setToast(null), 4000);
@@ -144,6 +153,34 @@ export default function UnitCoverage() {
         }
     }, [showToast]);
 
+    const loadConfirmations = useCallback(async (courseId) => {
+        if (!courseId) return;
+        setConfirmationsLoading(true);
+        try {
+            const res = await unitCoverageAPI.getConfirmations({ course_id: courseId });
+            setConfirmations(Array.isArray(res.data) ? res.data : []);
+        } catch (e) {
+            console.error('loadConfirmations error:', e);
+            showToast('Failed to load confirmations', 'error');
+        } finally {
+            setConfirmationsLoading(false);
+        }
+    }, [showToast]);
+
+    const loadCommentsModalData = useCallback(async (courseId, courseName) => {
+        setCommentsModalCourse(courseName);
+        setShowCommentsModal(true);
+        setCommentsModalLoading(true);
+        try {
+            const res = await unitCoverageAPI.getConfirmations({ course_id: courseId });
+            setCommentsModalData(Array.isArray(res.data) ? res.data : []);
+        } catch (e) {
+            showToast('Failed to load comments', 'error');
+        } finally {
+            setCommentsModalLoading(false);
+        }
+    }, [showToast]);
+
     useEffect(() => {
         if (selectedCourse) {
             setSelectedStudentId(null);
@@ -153,6 +190,12 @@ export default function UnitCoverage() {
             loadCourseCoverageData(selectedCourse);
         }
     }, [selectedCourse, loadCourseCoverageData]);
+
+    useEffect(() => {
+        if (activeTab === 'confirmations' && selectedCourse) {
+            loadConfirmations(selectedCourse);
+        }
+    }, [activeTab, selectedCourse, loadConfirmations]);
 
     // ── Load specific student's unit view ─────────────────────────────────────
     const loadStudentUnitView = useCallback(async (studentId) => {
@@ -696,6 +739,7 @@ export default function UnitCoverage() {
                                     { key: 'students', label: 'Students', icon: Users },
                                     { key: 'units', label: 'Units Grid', icon: Layers },
                                     { key: 'analytics', label: 'Analytics', icon: BarChart2 },
+                                    { key: 'confirmations', label: 'Responses', icon: MessageSquare },
                                 ].map(tab => (
                                     <button key={tab.key} onClick={() => setActiveTab(tab.key)}
                                         className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
@@ -802,12 +846,14 @@ export default function UnitCoverage() {
                                                                 <tr className="bg-black/[0.015] border-b border-black/5">
                                                                     <th className="px-5 py-3 text-left text-[9px] font-black text-black/40 uppercase tracking-widest">Unit / Topic</th>
                                                                     <th className="px-5 py-3 text-center text-[9px] font-black text-black/40 uppercase tracking-widest">Status</th>
+                                                                    <th className="px-5 py-3 text-left text-[9px] font-black text-black/40 uppercase tracking-widest">Student Response</th>
                                                                     <th className="px-5 py-3 text-center text-[9px] font-black text-black/40 uppercase tracking-widest">Action</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-black/5">
                                                                 {studentUnitView.map(unit => {
                                                                     const isCovered = !!unit.coverage_log;
+                                                                    const conf = unit.student_confirmation;
                                                                     return (
                                                                         <tr key={unit.id} className="hover:bg-black/[0.005] transition-colors">
                                                                             <td className="px-5 py-4">
@@ -823,6 +869,24 @@ export default function UnitCoverage() {
                                                                                 ) : (
                                                                                     <span className="inline-flex px-2.5 py-1 bg-black/[0.03] border border-black/10 rounded-full text-black/40 text-[9px] font-black uppercase">⬜ Not Covered</span>
                                                                                 )}
+                                                                            </td>
+                                                                            <td className="px-5 py-4">
+                                                                                {isCovered && conf ? (
+                                                                                    <div className="space-y-1.5">
+                                                                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase border ${
+                                                                                            conf.response === 'Yes' ? 'bg-green-50 border-green-200 text-green-700' :
+                                                                                            conf.response === 'Partially' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                                                                            'bg-red-50 border-red-200 text-red-700'
+                                                                                        }`}>{conf.response}</span>
+                                                                                        {conf.comment && (
+                                                                                            <div className="bg-black/[0.025] rounded-lg px-3 py-2 max-w-[200px]">
+                                                                                                <p className="text-[9px] text-black/60 italic leading-relaxed">"{conf.comment}"</p>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ) : isCovered ? (
+                                                                                    <span className="text-[9px] text-black/25 italic">No response yet</span>
+                                                                                ) : <span className="text-black/20">—</span>}
                                                                             </td>
                                                                             <td className="px-5 py-4 text-center">
                                                                                 {isCovered ? (
@@ -942,6 +1006,97 @@ export default function UnitCoverage() {
                                     )}
                                 </div>
                             )}
+
+                            {/* ── TAB: CONFIRMATIONS ─────────────────────────────────────────── */}
+                            {activeTab === 'confirmations' && (
+                                <div className="bg-white rounded-[2rem] border border-black/5 shadow-xl overflow-hidden">
+                                    <div className="p-6 border-b border-black/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div>
+                                            <h3 className="text-sm font-black text-black uppercase flex items-center gap-2">
+                                                <MessageSquare className="w-4 h-4 text-maroon" /> Student Responses
+                                            </h3>
+                                            <p className="text-[10px] text-black/40 font-bold uppercase mt-0.5">
+                                                How students responded to your &ldquo;taught&rdquo; marks
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {['all', 'Yes', 'Partially', 'No'].map(f => (
+                                                <button key={f} onClick={() => setConfirmationFilter(f)}
+                                                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all ${
+                                                        confirmationFilter === f
+                                                            ? f === 'all' ? 'bg-black text-white shadow'
+                                                            : f === 'Yes' ? 'bg-green-600 text-white shadow'
+                                                            : f === 'Partially' ? 'bg-amber-500 text-white shadow'
+                                                            : 'bg-red-500 text-white shadow'
+                                                            : 'bg-black/5 text-black/50 hover:bg-black/10'
+                                                    }`}>{f === 'all' ? 'All' : f}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {confirmationsLoading ? (
+                                        <div className="flex justify-center p-12">
+                                            <div className="w-8 h-8 border-4 border-maroon border-t-transparent rounded-full animate-spin" />
+                                        </div>
+                                    ) : confirmations.filter(c => confirmationFilter === 'all' || c.response === confirmationFilter).length === 0 ? (
+                                        <div className="p-16 text-center">
+                                            <MessageSquare className="w-10 h-10 text-black/10 mx-auto mb-4" />
+                                            <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">
+                                                {confirmations.length === 0
+                                                    ? 'No student responses yet. Students respond after you mark units as taught.'
+                                                    : 'No responses match this filter.'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-black/5 max-h-[600px] overflow-y-auto">
+                                            {confirmations
+                                                .filter(c => confirmationFilter === 'all' || c.response === confirmationFilter)
+                                                .map(c => {
+                                                    const isFlagged = c.response === 'No' || c.response === 'Partially';
+                                                    return (
+                                                        <div key={c.id} className={`p-5 hover:bg-black/[0.005] transition-colors ${
+                                                            c.response === 'No' ? 'border-l-4 border-l-red-400' :
+                                                            c.response === 'Partially' ? 'border-l-4 border-l-amber-400' : ''
+                                                        }`}>
+                                                            <div className="flex items-start gap-4">
+                                                                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
+                                                                    c.response === 'Yes' ? 'bg-green-100 text-green-700' :
+                                                                    c.response === 'Partially' ? 'bg-amber-100 text-amber-700' :
+                                                                    'bg-red-100 text-red-700'
+                                                                }`}>
+                                                                    {(c.student_name || '?').charAt(0).toUpperCase()}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center flex-wrap gap-2 mb-1">
+                                                                        <p className="text-xs font-black text-black uppercase">{c.student_name}</p>
+                                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                                                                            c.response === 'Yes' ? 'bg-green-50 border-green-200 text-green-700' :
+                                                                            c.response === 'Partially' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                                                            'bg-red-50 border-red-200 text-red-700'
+                                                                        }`}>{c.response}</span>
+                                                                        {isFlagged && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                                                                    </div>
+                                                                    <p className="text-[10px] text-black/40 font-bold uppercase mb-2">
+                                                                        {c.unit_name} &middot; {c.course_name}
+                                                                    </p>
+                                                                    {c.comment ? (
+                                                                        <div className="bg-black/[0.025] rounded-xl px-4 py-3 mt-1">
+                                                                            <p className="text-xs text-black/70 italic">&ldquo;{c.comment}&rdquo;</p>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <p className="text-[10px] text-black/25 italic">No comment provided</p>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-[9px] text-black/30 font-bold whitespace-nowrap mt-1 flex-shrink-0">
+                                                                    {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </>
                     ) : (
                         <div className="bg-white p-16 rounded-[2rem] border border-black/5 shadow-xl text-center">
@@ -1000,7 +1155,17 @@ export default function UnitCoverage() {
                                                         {item.students_with_coverage} students
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-xs font-bold text-black/60">{item.total_confirmations}</td>
+                                                <td className="px-6 py-4">
+                                                    {item.total_confirmations > 0 ? (
+                                                        <button onClick={() => loadCommentsModalData(item.course_id, item.course_name)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full text-indigo-700 text-[9px] font-black uppercase hover:bg-indigo-100 transition-colors">
+                                                            <MessageSquare className="w-3 h-3" />
+                                                            {item.total_confirmations} responses
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-xs font-bold text-black/30">0</span>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                 </tbody>
@@ -1084,6 +1249,80 @@ export default function UnitCoverage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Admin Comments Modal ───────────────────────────────────────────── */}
+            {showCommentsModal && (
+                <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                        <div className="p-6 border-b border-black/5 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-sm font-black text-black uppercase flex items-center gap-2">
+                                    <MessageSquare className="w-4 h-4 text-maroon" /> Student Responses
+                                </h2>
+                                <p className="text-[10px] text-black/40 font-bold uppercase mt-0.5">{commentsModalCourse}</p>
+                            </div>
+                            <button onClick={() => { setShowCommentsModal(false); setCommentsModalData([]); }}
+                                className="p-2 hover:bg-black/5 rounded-xl text-black/40"><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            {commentsModalLoading ? (
+                                <div className="flex justify-center p-12">
+                                    <div className="w-8 h-8 border-4 border-maroon border-t-transparent rounded-full animate-spin" />
+                                </div>
+                            ) : commentsModalData.length === 0 ? (
+                                <div className="p-16 text-center">
+                                    <MessageSquare className="w-10 h-10 text-black/10 mx-auto mb-4" />
+                                    <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.3em]">No student responses for this course</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-black/5">
+                                    {commentsModalData.map(c => {
+                                        const isFlagged = c.response === 'No' || c.response === 'Partially';
+                                        return (
+                                            <div key={c.id} className={`p-5 ${
+                                                c.response === 'No' ? 'border-l-4 border-l-red-400' :
+                                                c.response === 'Partially' ? 'border-l-4 border-l-amber-400' : ''
+                                            }`}>
+                                                <div className="flex items-start gap-4">
+                                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
+                                                        c.response === 'Yes' ? 'bg-green-100 text-green-700' :
+                                                        c.response === 'Partially' ? 'bg-amber-100 text-amber-700' :
+                                                        'bg-red-100 text-red-700'
+                                                    }`}>
+                                                        {(c.student_name || '?').charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center flex-wrap gap-2 mb-1">
+                                                            <p className="text-xs font-black text-black uppercase">{c.student_name}</p>
+                                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                                                                c.response === 'Yes' ? 'bg-green-50 border-green-200 text-green-700' :
+                                                                c.response === 'Partially' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                                                'bg-red-50 border-red-200 text-red-700'
+                                                            }`}>{c.response}</span>
+                                                            {isFlagged && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                                                        </div>
+                                                        <p className="text-[10px] text-black/40 font-bold uppercase mb-2">{c.unit_name}</p>
+                                                        {c.comment ? (
+                                                            <div className="bg-black/[0.025] rounded-xl px-4 py-3">
+                                                                <p className="text-xs text-black/70 italic">&ldquo;{c.comment}&rdquo;</p>
+                                                            </div>
+                                                        ) : (
+                                                            <p className="text-[10px] text-black/25 italic">No comment provided</p>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-[9px] text-black/30 font-bold whitespace-nowrap mt-1 flex-shrink-0">
+                                                        {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

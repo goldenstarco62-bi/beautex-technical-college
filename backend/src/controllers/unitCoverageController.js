@@ -158,6 +158,7 @@ export async function getCourseCoverage(req, res) {
             let coverageLog = null;
             let confirmationStats = { yes: 0, partially: 0, no: 0, total: 0 };
             let studentsWhoHaveCovered = 0;
+            let studentConfirmation = null;
 
             if (student_id) {
                 // Single student view: get their specific log for this unit
@@ -165,6 +166,13 @@ export async function getCourseCoverage(req, res) {
                     `SELECT * FROM unit_coverage_logs WHERE unit_id = ? AND course_id = ? AND student_id = ? ORDER BY created_at DESC LIMIT 1`,
                     [unit.id, courseId, student_id]
                 );
+                // Include the student's confirmation response + comment for teacher visibility
+                if (coverageLog) {
+                    studentConfirmation = await queryOne(
+                        `SELECT * FROM unit_coverage_confirmations WHERE coverage_log_id = ? AND student_id = ?`,
+                        [coverageLog.id, student_id]
+                    ) || null;
+                }
             } else {
                 // Summary view: how many students have this unit covered
                 const countResult = await queryOne(
@@ -195,6 +203,7 @@ export async function getCourseCoverage(req, res) {
             return {
                 ...unit,
                 coverage_log: coverageLog || null,
+                student_confirmation: studentConfirmation,
                 confirmation_stats: confirmationStats,
                 students_covered_count: studentsWhoHaveCovered,
                 total_enrolled: enrolledStudents.length,
