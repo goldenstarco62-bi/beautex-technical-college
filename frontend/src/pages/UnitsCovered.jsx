@@ -1297,10 +1297,19 @@ export default function UnitsCovered() {
                                                     >
                                                         <ChevronDown className="w-3.5 h-3.5" />
                                                     </button>
+                                                    {/* Edit */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setEditingUnitId(u.id); setEditingUnitName(u.name); }}
+                                                        className="p-1.5 hover:bg-black/5 rounded-lg text-black/40 hover:text-maroon flex items-center justify-center"
+                                                        title="Edit Unit"
+                                                    >
+                                                        <Edit className="w-3.5 h-3.5" />
+                                                    </button>
                                                     {/* Delete */}
                                                     <button
                                                         type="button"
-                                                        onClick={() => openConfirm(`Delete unit "${u.name}"?`, () => handleDeleteUnit(u.id))}
+                                                        onClick={() => handleDeleteUnit(u.id)}
                                                         className="p-1.5 hover:bg-red-50 rounded-lg text-black/20 hover:text-red-500 flex items-center justify-center"
                                                         title="Delete Unit"
                                                     >

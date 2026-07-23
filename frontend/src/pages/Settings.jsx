@@ -386,13 +386,13 @@ export default function Settings() {
 
     const filteredAudit = auditLogs.filter(l => {
         const q = auditSearch.toLowerCase();
-        return l.action?.toLowerCase().includes(q) || l.username?.toLowerCase().includes(q) || l.ip_address?.toLowerCase().includes(q);
+        return l.action?.toLowerCase().includes(q) || l.user_email?.toLowerCase().includes(q) || l.ip_address?.toLowerCase().includes(q);
     });
 
     // Recent Activity data list (top 5 real audit logs or fallback beautiful mocks)
     const displayActivities = auditLogs.length > 0 
         ? auditLogs.slice(0, 5).map(l => ({
-            text: `${l.username || 'System'} ${l.action}`,
+            text: `${l.user_email || 'System'} ${l.action}`,
             time: l.created_at ? new Date(l.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'recently',
             dot: 'bg-green-500'
           }))
@@ -1976,7 +1976,7 @@ export default function Settings() {
                                                         {filteredAudit.map((l,i)=>(
                                                             <tr key={l.id||i} className="hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors">
                                                                 <td className="px-4 py-3 text-zinc-400 font-semibold">{l.created_at?new Date(l.created_at).toLocaleString():'—'}</td>
-                                                                <td className="px-4 py-3 font-bold text-zinc-700 dark:text-zinc-200">{l.username||'system'}</td>
+                                                                <td className="px-4 py-3 font-bold text-zinc-700 dark:text-zinc-200">{l.user_email||'system'}</td>
                                                                 <td className="px-4 py-3 text-maroon dark:text-gold font-black">{l.action}</td>
                                                                 <td className="px-4 py-3 font-mono text-zinc-500">{l.ip_address||'127.0.0.1'}</td>
                                                             </tr>

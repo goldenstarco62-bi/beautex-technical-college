@@ -186,7 +186,7 @@ export async function getAuditLogs(req, res) {
         }
 
         const totalRes = await queryOne('SELECT COUNT(*) as count FROM audit_logs');
-        const total = totalRes ? totalRes.count : 0;
+        const total = totalRes ? (parseInt(totalRes.count || totalRes.COUNT || totalRes.cnt || 0, 10)) : 0;
         const logs = await query(`
             SELECT * FROM audit_logs 
             ORDER BY created_at DESC 

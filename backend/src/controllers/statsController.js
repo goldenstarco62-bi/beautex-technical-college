@@ -250,7 +250,7 @@ export async function globalSearch(req, res) {
             [students, courses, faculty, inventory] = await Promise.all([
                 query('SELECT id, name, email as sub FROM students WHERE name LIKE ? OR email LIKE ? OR id LIKE ? LIMIT 5', [searchSql, searchSql, searchSql]),
                 query('SELECT id, name, department as sub FROM courses WHERE name LIKE ? LIMIT 5', [searchSql]),
-                query('SELECT id, name, role as sub FROM faculty WHERE name LIKE ? LIMIT 5', [searchSql]),
+                query('SELECT id, name, department as sub FROM faculty WHERE name LIKE ? LIMIT 5', [searchSql]),
                 query('SELECT id, name, item_code as sub FROM inv_items WHERE name LIKE ? OR item_code LIKE ? LIMIT 5', [searchSql, searchSql])
             ]);
         }

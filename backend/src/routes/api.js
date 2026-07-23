@@ -9,9 +9,11 @@ import systemRoutes from './systemRoutes.js';
 const router = express.Router();
 
 // Mount sub-routers (CORS and rate limits are handled at the main app level in server.js)
+// IMPORTANT: academicRoutes must come BEFORE studentRoutes so that the specific
+// /courses/:courseId/units/* routes take priority over the generic /courses/:id wildcard.
 router.use('/', authRoutes);
-router.use('/', studentRoutes);
 router.use('/', academicRoutes);
+router.use('/', studentRoutes);
 router.use('/', financeRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/', systemRoutes);
