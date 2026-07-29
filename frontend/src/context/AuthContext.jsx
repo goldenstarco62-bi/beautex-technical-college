@@ -47,16 +47,21 @@ export function AuthProvider({ children }) {
                     try {
                         const { data } = await authAPI.getMe();
                         if (data) {
-                            localStorage.setItem('user', JSON.stringify(data));
-                            setUser(data);
+                            // If the server says the user must change their password,
+                            // preserve that flag so the rest of the app can act on it.
+                            const updatedUser = { ...data };
+                            localStorage.setItem('user', JSON.stringify(updatedUser));
+                            setUser(updatedUser);
                         }
                     } catch (err) {
                         console.error('Auto-refresh user failed:', err);
-                        // If we get a 401/403, our token is likely stale or invalid
-                        if (err.response?.status === 401 || err.response?.status === 403) {
-                            console.warn('Session expired. Logging out...');
+                        const status = err.response?.status;
+                        // 401 / 403 / 404 → token is invalid or the account was removed
+                        if (status === 401 || status === 403 || status === 404) {
+                            console.warn('Session invalid or user not found. Logging out...');
                             logout();
                         }
+                        // For any other error (network, 500, etc.) keep the cached session
                     }
                 };
                 fetchUpdatedUser();
@@ -66,6 +71,7 @@ export function AuthProvider({ children }) {
             } catch (e) {
                 console.error('Failed to parse user data:', e);
                 localStorage.removeItem('user');
+                localStorage.removeItem('token');
             }
         }
 

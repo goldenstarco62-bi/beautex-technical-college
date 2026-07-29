@@ -9,6 +9,186 @@ import {
     ChevronLeft, ChevronRight, AlertCircle, Plus
 } from 'lucide-react';
 
+// Presence badge component
+const PresenceBadge = ({ onlineStatus }) => {
+    if (onlineStatus === 'Online') return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/15 text-green-600 border border-green-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping absolute"></span>
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 relative"></span>
+            Online
+        </span>
+    );
+    if (onlineStatus === 'Away') return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/15 text-amber-600 border border-amber-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+            Away
+        </span>
+    );
+    if (onlineStatus === 'Never') return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-blue-500/15 text-blue-600 border border-blue-500/20 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+            Pending First Login
+        </span>
+    );
+    return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-gray-200/60 text-gray-400 border border-gray-200 dark:bg-white/5 dark:border-white/10">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+            Offline
+        </span>
+    );
+};
+
+const UserDetailModal = ({ user, onClose, currentUser, handleRoleChange, handleStatusUpdate, handleResetPassword, handleDelete, handleFinancePermission, handleStudentPermission }) => {
+    if (!user) return null;
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-zinc-900 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]">
+                <div className="bg-maroon p-8 text-white flex justify-between items-center">
+                    <div className="flex items-center gap-6">
+                        <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center text-3xl font-black">
+                            {user.photo ? <img src={user.photo} className="w-full h-full object-cover rounded-2xl" /> : (user.email?.[0] || 'U').toUpperCase()}
+                        </div>
+                        <div>
+                            <h2 className="text-2xl font-black uppercase tracking-tight">{user.name || 'User Profile'}</h2>
+                            <p className="text-white/60 font-medium tracking-wide">{user.email}</p>
+                            <div className="mt-2"><PresenceBadge onlineStatus={user.online_status} /></div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all">
+                        <XCircle className="w-8 h-8" />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Personal Info */}
+                    <section className="space-y-4">
+                        <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">Institutional Identification</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div><p className="text-[10px] text-gray-400 uppercase font-black">System ID</p><p className="text-sm font-bold">#{user.id}</p></div>
+                            <div><p className="text-[10px] text-gray-400 uppercase font-black">Account Role</p><p className="text-sm font-bold uppercase text-gold">{user.role}</p></div>
+                            <div><p className="text-[10px] text-gray-400 uppercase font-black">Current Status</p>
+                                <p className={`text-sm font-bold uppercase ${user.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>{user.status}</p>
+                                <div className="mt-1"><PresenceBadge onlineStatus={user.online_status} /></div>
+                            </div>
+                            <div><p className="text-[10px] text-gray-400 uppercase font-black">Join Date</p><p className="text-sm font-bold">{new Date(user.created_at).toLocaleDateString()}</p></div>
+                        </div>
+                    </section>
+
+                    {/* Contact Info */}
+                    <section className="space-y-4">
+                        <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">Contact Details</h3>
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-3"><Mail className="w-4 h-4 text-maroon/40" /><span className="text-sm font-medium">{user.email}</span></div>
+                            <div className="flex items-center gap-3"><User className="w-4 h-4 text-maroon/40" /><span className="text-sm font-medium">{user.phone || 'N/A'}</span></div>
+                            <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-maroon/40" /><span className="text-sm font-medium">{user.address || 'N/A'}</span></div>
+                        </div>
+                    </section>
+
+                    {/* Role Management */}
+                    <section className="space-y-4">
+                        <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">Role Management</h3>
+                        <div className="space-y-2">
+                            <p className="text-[10px] text-gray-400 uppercase font-black">Assign System Role</p>
+                            <select
+                                value={user.role}
+                                onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                                className="w-full bg-zinc-100 dark:bg-zinc-800 border-none rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-maroon transition-all cursor-pointer"
+                            >
+                                <option value="student">Student Account</option>
+                                <option value="teacher">Faculty Member</option>
+                                <option value="admin">Administrator</option>
+                                <option value="superadmin">Superadmin</option>
+                            </select>
+                        </div>
+                        {/* Administrative Permissions — only superadmin can grant, only to admins */}
+                        {currentUser?.role === 'superadmin' && user.role === 'admin' && (
+                            <div className="mt-4 space-y-4">
+                                <div className="p-4 rounded-2xl border-2 border-dashed border-gold/40 bg-gold/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
+                                        <DollarSign className="w-3 h-3 text-gold" />
+                                        Finance Editor Access
+                                    </p>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                {user.can_edit_finance ? '✅ Finance Editing: GRANTED' : '🔒 Finance Editing: RESTRICTED'}
+                                            </p>
+                                            <p className="text-[9px] text-gray-400 mt-0.5">
+                                                {user.can_edit_finance
+                                                    ? 'This admin can record, edit and delete payments.'
+                                                    : 'This admin can only view financial records.'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleFinancePermission(user.id, !!user.can_edit_finance)}
+                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_finance
+                                                    ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
+                                                    : 'bg-gold/20 text-gold hover:bg-gold hover:text-maroon border border-gold/40'
+                                                }`}
+                                        >
+                                            {user.can_edit_finance ? 'Revoke' : 'Grant'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 rounded-2xl border-2 border-dashed border-maroon/40 bg-maroon/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
+                                        <Shield className="w-3 h-3 text-maroon" />
+                                        Student Registry Access
+                                    </p>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                {user.can_edit_students ? '✅ Registry Access: GRANTED' : '🔒 Registry Access: RESTRICTED'}
+                                            </p>
+                                            <p className="text-[9px] text-gray-400 mt-0.5">
+                                                {user.can_edit_students
+                                                    ? 'This admin can reset student passwords and update statuses.'
+                                                    : 'This admin can only view student records.'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleStudentPermission(user.id, !!user.can_edit_students)}
+                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_students
+                                                    ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
+                                                    : 'bg-maroon/20 text-maroon hover:bg-maroon hover:text-white border border-maroon/40'
+                                                }`}
+                                        >
+                                            {user.can_edit_students ? 'Revoke' : 'Grant'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Administrative Controls */}
+                    <section className="md:col-span-2 space-y-4 pt-4">
+                        <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">System Control Panel</h3>
+                        <div className="flex flex-wrap gap-4">
+                            {user.status === 'Pending Approval' && (
+                                <button onClick={() => handleStatusUpdate(user.id, 'Active')} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-green-500 text-white hover:bg-green-600 transition-all font-black uppercase text-[10px] tracking-widest shadow-lg">
+                                    <CheckCircle className="w-4 h-4" /> Approve Account
+                                </button>
+                            )}
+                            <button onClick={() => handleStatusUpdate(user.id, user.status === 'Active' ? 'Suspended' : 'Active')} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-maroon hover:text-white transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
+                                {user.status === 'Active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+                                {user.status === 'Active' ? 'Suspend Account' : 'Reactivate Account'}
+                            </button>
+                            <button onClick={() => handleResetPassword(user.id, user.email)} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-gold hover:text-maroon transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
+                                <Key className="w-4 h-4" /> Reset Credentials
+                            </button>
+                            <button onClick={() => handleDelete(user.id, user.email)} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
+                                <Trash2 className="w-4 h-4" /> Permanent Removal
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export default function Users() {
     const { user: currentUser } = useAuth();
     const [users, setUsers] = useState([]);
@@ -224,186 +404,6 @@ export default function Users() {
     };
 
     const filteredUsers = getFilteredUsers();
-
-    // Presence badge component
-    const PresenceBadge = ({ onlineStatus }) => {
-        if (onlineStatus === 'Online') return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-green-500/15 text-green-600 border border-green-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping absolute"></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 relative"></span>
-                Online
-            </span>
-        );
-        if (onlineStatus === 'Away') return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/15 text-amber-600 border border-amber-500/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                Away
-            </span>
-        );
-        if (onlineStatus === 'Never') return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-blue-500/15 text-blue-600 border border-blue-500/20 animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                Pending First Login
-            </span>
-        );
-        return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-gray-200/60 text-gray-400 border border-gray-200 dark:bg-white/5 dark:border-white/10">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600"></span>
-                Offline
-            </span>
-        );
-    };
-
-    const UserDetailModal = ({ user, onClose }) => {
-        if (!user) return null;
-        return (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                <div className="bg-white dark:bg-zinc-900 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col max-h-[90vh]">
-                    <div className="bg-maroon p-8 text-white flex justify-between items-center">
-                        <div className="flex items-center gap-6">
-                            <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center text-3xl font-black">
-                                {user.photo ? <img src={user.photo} className="w-full h-full object-cover rounded-2xl" /> : (user.email?.[0] || 'U').toUpperCase()}
-                            </div>
-                            <div>
-                                <h2 className="text-2xl font-black uppercase tracking-tight">{user.name || 'User Profile'}</h2>
-                                <p className="text-white/60 font-medium tracking-wide">{user.email}</p>
-                                <div className="mt-2"><PresenceBadge onlineStatus={user.online_status} /></div>
-                            </div>
-                        </div>
-                        <button onClick={onClose} className="p-3 hover:bg-white/10 rounded-2xl transition-all">
-                            <XCircle className="w-8 h-8" />
-                        </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Personal Info */}
-                        <section className="space-y-4">
-                            <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">Institutional Identification</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><p className="text-[10px] text-gray-400 uppercase font-black">System ID</p><p className="text-sm font-bold">#{user.id}</p></div>
-                                <div><p className="text-[10px] text-gray-400 uppercase font-black">Account Role</p><p className="text-sm font-bold uppercase text-gold">{user.role}</p></div>
-                                <div><p className="text-[10px] text-gray-400 uppercase font-black">Current Status</p>
-                                    <p className={`text-sm font-bold uppercase ${user.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>{user.status}</p>
-                                    <div className="mt-1"><PresenceBadge onlineStatus={user.online_status} /></div>
-                                </div>
-                                <div><p className="text-[10px] text-gray-400 uppercase font-black">Join Date</p><p className="text-sm font-bold">{new Date(user.created_at).toLocaleDateString()}</p></div>
-                            </div>
-                        </section>
-
-                        {/* Contact Info */}
-                        <section className="space-y-4">
-                            <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">Contact Details</h3>
-                            <div className="space-y-3">
-                                <div className="flex items-center gap-3"><Mail className="w-4 h-4 text-maroon/40" /><span className="text-sm font-medium">{user.email}</span></div>
-                                <div className="flex items-center gap-3"><User className="w-4 h-4 text-maroon/40" /><span className="text-sm font-medium">{user.phone || 'N/A'}</span></div>
-                                <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-maroon/40" /><span className="text-sm font-medium">{user.address || 'N/A'}</span></div>
-                            </div>
-                        </section>
-
-                        {/* Role Management */}
-                        <section className="space-y-4">
-                            <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">Role Management</h3>
-                            <div className="space-y-2">
-                                <p className="text-[10px] text-gray-400 uppercase font-black">Assign System Role</p>
-                                <select
-                                    value={user.role}
-                                    onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                                    className="w-full bg-zinc-100 dark:bg-zinc-800 border-none rounded-2xl px-6 py-4 text-xs font-black uppercase tracking-widest outline-none focus:ring-2 focus:ring-maroon transition-all cursor-pointer"
-                                >
-                                    <option value="student">Student Account</option>
-                                    <option value="teacher">Faculty Member</option>
-                                    <option value="admin">Administrator</option>
-                                    <option value="superadmin">Superadmin</option>
-                                </select>
-                            </div>
-                            {/* Administrative Permissions — only superadmin can grant, only to admins */}
-                            {currentUser.role === 'superadmin' && user.role === 'admin' && (
-                                <div className="mt-4 space-y-4">
-                                    <div className="p-4 rounded-2xl border-2 border-dashed border-gold/40 bg-gold/5">
-                                        <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
-                                            <DollarSign className="w-3 h-3 text-gold" />
-                                            Finance Editor Access
-                                        </p>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                                    {user.can_edit_finance ? '✅ Finance Editing: GRANTED' : '🔒 Finance Editing: RESTRICTED'}
-                                                </p>
-                                                <p className="text-[9px] text-gray-400 mt-0.5">
-                                                    {user.can_edit_finance
-                                                        ? 'This admin can record, edit and delete payments.'
-                                                        : 'This admin can only view financial records.'}
-                                                </p>
-                                            </div>
-                                            <button
-                                                onClick={() => handleFinancePermission(user.id, !!user.can_edit_finance)}
-                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_finance
-                                                        ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
-                                                        : 'bg-gold/20 text-gold hover:bg-gold hover:text-maroon border border-gold/40'
-                                                    }`}
-                                            >
-                                                {user.can_edit_finance ? 'Revoke' : 'Grant'}
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="p-4 rounded-2xl border-2 border-dashed border-maroon/40 bg-maroon/5">
-                                        <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
-                                            <Shield className="w-3 h-3 text-maroon" />
-                                            Student Registry Access
-                                        </p>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                                    {user.can_edit_students ? '✅ Registry Access: GRANTED' : '🔒 Registry Access: RESTRICTED'}
-                                                </p>
-                                                <p className="text-[9px] text-gray-400 mt-0.5">
-                                                    {user.can_edit_students
-                                                        ? 'This admin can reset student passwords and update statuses.'
-                                                        : 'This admin can only view student records.'}
-                                                </p>
-                                            </div>
-                                            <button
-                                                onClick={() => handleStudentPermission(user.id, !!user.can_edit_students)}
-                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_edit_students
-                                                        ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
-                                                        : 'bg-maroon/20 text-maroon hover:bg-maroon hover:text-white border border-maroon/40'
-                                                    }`}
-                                            >
-                                                {user.can_edit_students ? 'Revoke' : 'Grant'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </section>
-
-                        {/* Administrative Controls */}
-                        <section className="md:col-span-2 space-y-4 pt-4">
-                            <h3 className="text-maroon font-black uppercase text-xs tracking-widest border-b border-maroon/10 pb-2">System Control Panel</h3>
-                            <div className="flex flex-wrap gap-4">
-                                {user.status === 'Pending Approval' && (
-                                    <button onClick={() => handleStatusUpdate(user.id, 'Active')} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-green-500 text-white hover:bg-green-600 transition-all font-black uppercase text-[10px] tracking-widest shadow-lg">
-                                        <CheckCircle className="w-4 h-4" /> Approve Account
-                                    </button>
-                                )}
-                                <button onClick={() => handleStatusUpdate(user.id, user.status === 'Active' ? 'Suspended' : 'Active')} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-maroon hover:text-white transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
-                                    {user.status === 'Active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                                    {user.status === 'Active' ? 'Suspend Account' : 'Reactivate Account'}
-                                </button>
-                                <button onClick={() => handleResetPassword(user.id, user.email)} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800 hover:bg-gold hover:text-maroon transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
-                                    <Key className="w-4 h-4" /> Reset Credentials
-                                </button>
-                                <button onClick={() => handleDelete(user.id, user.email)} className="flex-1 flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all font-black uppercase text-[10px] tracking-widest shadow-sm">
-                                    <Trash2 className="w-4 h-4" /> Permanent Removal
-                                </button>
-                            </div>
-                        </section>
-                    </div>
-                </div>
-            </div>
-        );
-    };
 
     return (
         <div className="min-h-screen space-y-6 pb-20">
@@ -644,8 +644,19 @@ export default function Users() {
                 </div>
             </div>
 
-            {/* Modals */}
-            {showDetailModal && <UserDetailModal user={selectedUser} onClose={() => setShowDetailModal(false)} />}
+            {showDetailModal && (
+                <UserDetailModal
+                    user={selectedUser}
+                    onClose={() => setShowDetailModal(false)}
+                    currentUser={currentUser}
+                    handleRoleChange={handleRoleChange}
+                    handleStatusUpdate={handleStatusUpdate}
+                    handleResetPassword={handleResetPassword}
+                    handleDelete={handleDelete}
+                    handleFinancePermission={handleFinancePermission}
+                    handleStudentPermission={handleStudentPermission}
+                />
+            )}
 
             {/* Create User Modal */}
             {showCreateModal && (
