@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
 import { academicAPI, studentsAPI } from '../services/api';
-import { Building2, Calendar, Plus, Trash2, Edit, CheckCircle2, X, Search } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Building2, Calendar, Plus, Trash2, Edit, CheckCircle2, X, Search, Users, Shield } from 'lucide-react';
 
 const EMPTY_DEPT = { name: '', head_of_department: '', description: '' };
 const EMPTY_PERIOD = { name: '', start_date: '', end_date: '' };
 
 export default function AcademicMaster() {
+    const { user } = useAuth();
+    const userRole = (user?.role || '').toLowerCase();
+    const canEdit = ['admin', 'superadmin'].includes(userRole);
+
     const [departments, setDepartments] = useState([]);
     const [periods, setPeriods] = useState([]);
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('departments');
 
     const [showDeptModal, setShowDeptModal] = useState(false);
     const [editingDept, setEditingDept] = useState(null);
@@ -160,15 +166,40 @@ export default function AcademicMaster() {
 
     const activePeriod = periods.find(p => p.is_active);
 
+    // Compute student count per department
+    const deptsWithCount = departments.map(dept => ({
+        ...dept,
+        studentCount: students.filter(s => {
+            const depts = Array.isArray(s.department) ? s.department : (s.department ? [s.department] : []);
+            return depts.includes(dept.name);
+        }).length
+    }));
+
+    const tabs = [
+        { key: 'departments', label: 'Departments', icon: Building2 },
+        { key: 'periods', label: 'Academic Periods', icon: Calendar },
+        { key: 'promotion', label: 'Student Promotion', icon: Users },
+    ];
+
     return (
-        <div className="space-y-12 animate-in fade-in duration-700 pb-12">
+        <div className="space-y-10 animate-in fade-in duration-700 pb-12">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.3em] mb-1">Beautex Training Centre</p>
-                    <h1 className="text-3xl font-black text-maroon uppercase tracking-tight">Academic Master</h1>
+                    <div className="flex items-center gap-3 mb-2">
+                        <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.3em]">Beautex Training Centre</p>
+                        <span className={`text-[8px] font-black px-3 py-1 rounded-full uppercase tracking-widest flex items-center gap-1 ${
+                            userRole === 'superadmin'
+                                ? 'bg-maroon text-gold border border-gold/20'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                        }`}>
+                            <Shield className="w-2.5 h-2.5" />
+                            {userRole === 'superadmin' ? 'Super Admin' : 'Admin'}
+                        </span>
+                    </div>
+                    <h1 className="text-3xl font-black text-maroon uppercase tracking-tight">Departments & Academic</h1>
                     <div className="w-12 h-0.5 bg-gold mt-2" />
-                    <p className="text-xs text-maroon/40 font-bold mt-1">Campus Infrastructure & Timeline Management</p>
+                    <p className="text-xs text-maroon/40 font-bold mt-1">Manage departments, periods & student promotion</p>
                 </div>
                 {activePeriod && (
                     <div className="bg-green-50 border border-green-200 rounded-2xl px-5 py-3 flex items-center gap-2">
@@ -181,233 +212,302 @@ export default function AcademicMaster() {
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                    { label: 'Departments', value: departments.length },
-                    { label: 'Academic Periods', value: periods.length },
-                    { label: 'Active Period', value: activePeriod ? activePeriod.name : 'None' },
-                    { label: 'Registered Students', value: students.length },
+                    { label: 'Departments', value: departments.length, icon: Building2, bg: 'bg-maroon/5', color: 'text-maroon' },
+                    { label: 'Academic Periods', value: periods.length, icon: Calendar, bg: 'bg-blue-50', color: 'text-blue-600' },
+                    { label: 'Active Period', value: activePeriod ? activePeriod.name : 'None', icon: CheckCircle2, bg: 'bg-green-50', color: 'text-green-600' },
+                    { label: 'Registered Students', value: students.length, icon: Users, bg: 'bg-purple-50', color: 'text-purple-600' },
                 ].map((s, i) => (
-                    <div key={i} className="bg-white border border-maroon/8 rounded-2xl p-5 shadow-sm">
-                        <p className="text-2xl font-black text-maroon">{s.value}</p>
-                        <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mt-1">{s.label}</p>
+                    <div key={i} className="bg-white border border-maroon/8 rounded-2xl p-5 shadow-sm flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center shrink-0`}>
+                            <s.icon className={`w-5 h-5 ${s.color}`} />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-2xl font-black text-maroon truncate">{s.value}</p>
+                            <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mt-0.5">{s.label}</p>
+                        </div>
                     </div>
                 ))}
             </div>
 
-            {/* Departments */}
-            <section>
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2">
-                        <Building2 className="w-4 h-4" /> Departments ({departments.length})
-                    </h2>
+            {/* Tab Navigation */}
+            <div className="flex flex-wrap gap-2 bg-gray-50 p-1.5 rounded-2xl w-fit border border-gray-100 shadow-sm">
+                {tabs.map(tab => (
                     <button
-                        onClick={openNewDept}
-                        className="bg-maroon text-gold px-5 py-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20"
+                        key={tab.key}
+                        onClick={() => setActiveTab(tab.key)}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                            activeTab === tab.key
+                                ? 'bg-maroon text-gold shadow-lg border border-gold/20'
+                                : 'text-maroon/40 hover:text-maroon hover:bg-white'
+                        }`}
                     >
-                        <Plus className="w-3.5 h-3.5" /> New Department
+                        <tab.icon className="w-3.5 h-3.5" />
+                        {tab.label}
                     </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {departments.map(dept => (
-                        <div key={dept.id} className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl group hover:-translate-y-1 transition-all">
-                            <h3 className="text-xl font-black text-maroon mb-2 truncate">{dept.name}</h3>
-                            <p className="text-[10px] font-black text-gold uppercase tracking-widest mb-4">HOD: {dept.head_of_department || 'Unassigned'}</p>
-                            <p className="text-xs text-gray-400 line-clamp-2 font-medium mb-6 italic">"{dept.description || 'No description provided'}"</p>
-                            <div className="flex justify-between items-center pt-6 border-t border-gray-50">
-                                <span className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">
-                                    Since {dept.created_at ? new Date(dept.created_at).getFullYear() : '—'}
-                                </span>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => openEditDept(dept)}
-                                        className="p-2 text-gray-300 hover:text-maroon transition-colors"
-                                        title="Edit Department"
-                                    >
-                                        <Edit className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeptDelete(dept.id)}
-                                        className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-                                        title="Delete Department"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                    {departments.length === 0 && (
-                        <div className="col-span-3 py-16 text-center bg-gray-50 rounded-[2rem] border border-dashed border-gray-200 flex flex-col items-center gap-3">
-                            <Building2 className="w-8 h-8 text-gray-300" />
-                            <p className="text-xs font-black text-gray-300 uppercase tracking-[0.2em]">No departments defined yet</p>
-                            <button onClick={openNewDept} className="text-[10px] font-black text-maroon underline uppercase tracking-widest mt-1">
-                                Add First Department
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </section>
+                ))}
+            </div>
 
-            {/* Academic Periods */}
-            <section>
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2">
-                        <Calendar className="w-4 h-4" /> Academic Timeline ({periods.length})
-                    </h2>
-                    <button
-                        onClick={() => { setPeriodForm(EMPTY_PERIOD); setShowPeriodModal(true); }}
-                        className="bg-maroon text-gold px-5 py-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20"
-                    >
-                        <Plus className="w-3.5 h-3.5" /> New Period
-                    </button>
-                </div>
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="bg-gray-50/50">
-                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Period Name</th>
-                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Start Date</th>
-                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">End Date</th>
-                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {periods.map(period => (
-                                <tr key={period.id} className={`hover:bg-gray-50 transition-colors ${period.is_active ? 'bg-maroon/[0.02]' : ''}`}>
-                                    <td className="px-8 py-4">
-                                        <div className="flex items-center gap-3">
-                                            {period.is_active && <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />}
-                                            <span className={`text-xs font-black ${period.is_active ? 'text-maroon' : 'text-gray-800'}`}>
-                                                {period.name}
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-4 text-xs font-bold text-gray-400">
-                                        {period.start_date ? new Date(period.start_date).toLocaleDateString() : '—'}
-                                    </td>
-                                    <td className="px-8 py-4 text-xs font-bold text-gray-400">
-                                        {period.end_date ? new Date(period.end_date).toLocaleDateString() : '—'}
-                                    </td>
-                                    <td className="px-8 py-4">
-                                        <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${period.status === 'Ongoing' ? 'bg-green-100 text-green-600' :
-                                            period.status === 'Completed' ? 'bg-blue-100 text-blue-600' :
-                                                'bg-gray-100 text-gray-400'
-                                            }`}>
-                                            {period.status || 'Pending'}
+            {/* ── DEPARTMENTS TAB ── */}
+            {activeTab === 'departments' && (
+                <section>
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2">
+                            <Building2 className="w-4 h-4" /> Departments ({departments.length})
+                        </h2>
+                        {canEdit && (
+                            <button
+                                onClick={openNewDept}
+                                className="bg-maroon text-gold px-5 py-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20"
+                            >
+                                <Plus className="w-3.5 h-3.5" /> New Department
+                            </button>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {deptsWithCount.map(dept => (
+                            <div key={dept.id} className="bg-white p-7 rounded-[2rem] border border-gray-100 shadow-xl group hover:-translate-y-1 transition-all relative overflow-hidden">
+                                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-40 rounded-t-[2rem]" />
+                                <div className="flex items-start justify-between mb-4">
+                                    <div className="w-12 h-12 bg-maroon/5 rounded-2xl flex items-center justify-center">
+                                        <Building2 className="w-6 h-6 text-maroon/50" />
+                                    </div>
+                                    {dept.studentCount > 0 && (
+                                        <span className="text-[9px] font-black bg-maroon/5 text-maroon px-2.5 py-1 rounded-full uppercase tracking-widest flex items-center gap-1">
+                                            <Users className="w-2.5 h-2.5" />
+                                            {dept.studentCount} students
                                         </span>
-                                    </td>
-                                    <td className="px-8 py-4 text-right">
-                                        <div className="flex items-center justify-end gap-3">
-                                            {!period.is_active && period.status !== 'Completed' && (
-                                                <button
-                                                    onClick={() => handleActivatePeriod(period.id)}
-                                                    className="text-[9px] font-black text-green-600 uppercase tracking-widest hover:underline flex items-center gap-1"
-                                                >
-                                                    <CheckCircle2 className="w-3 h-3" /> Activate
-                                                </button>
-                                            )}
-                                            {period.is_active && (
-                                                <span className="text-[9px] font-black text-maroon uppercase tracking-widest opacity-40">Current Active</span>
-                                            )}
-                                            {period.status === 'Completed' && (
-                                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest opacity-60">Completed</span>
-                                            )}
+                                    )}
+                                </div>
+                                <h3 className="text-lg font-black text-maroon mb-1 leading-tight">{dept.name}</h3>
+                                <p className="text-[10px] font-black text-gold uppercase tracking-widest mb-3">HOD: {dept.head_of_department || 'Unassigned'}</p>
+                                <p className="text-xs text-gray-400 line-clamp-2 font-medium mb-5 italic">"{dept.description || 'No description provided'}"</p>
+                                <div className="flex justify-between items-center pt-5 border-t border-gray-50">
+                                    <span className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">
+                                        Since {dept.created_at ? new Date(dept.created_at).getFullYear() : '—'}
+                                    </span>
+                                    {canEdit && (
+                                        <div className="flex gap-1">
                                             <button
-                                                onClick={() => handlePeriodDelete(period.id)}
-                                                className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                                                onClick={() => openEditDept(dept)}
+                                                className="p-2 text-gray-300 hover:text-maroon hover:bg-maroon/5 rounded-lg transition-colors"
+                                                title="Edit Department"
+                                            >
+                                                <Edit className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeptDelete(dept.id)}
+                                                className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                title="Delete Department"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </section>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {departments.length === 0 && (
+                            <div className="col-span-3 py-16 text-center bg-gray-50 rounded-[2rem] border border-dashed border-gray-200 flex flex-col items-center gap-3">
+                                <Building2 className="w-8 h-8 text-gray-300" />
+                                <p className="text-xs font-black text-gray-300 uppercase tracking-[0.2em]">No departments defined yet</p>
+                                {canEdit && (
+                                    <button onClick={openNewDept} className="text-[10px] font-black text-maroon underline uppercase tracking-widest mt-1">
+                                        Add First Department
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </section>
+            )}
 
-            {/* Student Promotion */}
-            <section className="bg-maroon/2 border border-maroon/[0.08] rounded-[3rem] p-10">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
-                    <div>
-                        <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2 mb-2">
-                            <CheckCircle2 className="w-4 h-4" /> Student Promotion Engine
+            {/* ── ACADEMIC PERIODS TAB ── */}
+            {activeTab === 'periods' && (
+                <section>
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2">
+                            <Calendar className="w-4 h-4" /> Academic Timeline ({periods.length})
                         </h2>
-                        <p className="text-[10px] font-bold text-maroon/40 uppercase tracking-widest">Batch update student statuses for new academic cycles</p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-maroon/10">
-                        <div className="px-4 border-r border-maroon/5 flex items-center gap-2">
-                            <Search className="w-3 h-3 text-maroon/20" />
-                            <input
-                                type="text"
-                                placeholder="Search by name or course..."
-                                value={studentSearch}
-                                onChange={(e) => setStudentSearch(e.target.value)}
-                                className="text-[10px] font-bold text-maroon outline-none bg-transparent w-40 placeholder:text-maroon/20 uppercase"
-                            />
-                        </div>
-                        <div className="px-4 border-r border-maroon/5">
-                            <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest mb-1">Target Status</p>
-                            <select
-                                value={targetStatus}
-                                onChange={(e) => setTargetStatus(e.target.value)}
-                                className="text-xs font-black text-maroon outline-none bg-transparent"
+                        {canEdit && (
+                            <button
+                                onClick={() => { setPeriodForm(EMPTY_PERIOD); setShowPeriodModal(true); }}
+                                className="bg-maroon text-gold px-5 py-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20"
                             >
-                                <option value="Active">Active</option>
-                                <option value="Graduated">Graduated</option>
-                                <option value="Inactive">Inactive</option>
-                            </select>
-                        </div>
-                        <button
-                            onClick={handlePromote}
-                            disabled={promoting || selectedStudents.length === 0}
-                            className="bg-maroon text-gold px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 disabled:opacity-40"
-                        >
-                            {promoting ? 'Promoting...' : `Promote (${selectedStudents.length})`}
-                        </button>
+                                <Plus className="w-3.5 h-3.5" /> New Period
+                            </button>
+                        )}
                     </div>
-                </div>
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-gray-50/50">
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Period Name</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Start Date</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">End Date</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
+                                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {periods.map(period => (
+                                    <tr key={period.id} className={`hover:bg-gray-50 transition-colors ${period.is_active ? 'bg-maroon/[0.02]' : ''}`}>
+                                        <td className="px-8 py-4">
+                                            <div className="flex items-center gap-3">
+                                                {period.is_active && <div className="w-2 h-2 bg-green-500 rounded-full animate-ping" />}
+                                                <span className={`text-xs font-black ${period.is_active ? 'text-maroon' : 'text-gray-800'}`}>
+                                                    {period.name}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-8 py-4 text-xs font-bold text-gray-400">
+                                            {period.start_date ? new Date(period.start_date).toLocaleDateString() : '—'}
+                                        </td>
+                                        <td className="px-8 py-4 text-xs font-bold text-gray-400">
+                                            {period.end_date ? new Date(period.end_date).toLocaleDateString() : '—'}
+                                        </td>
+                                        <td className="px-8 py-4">
+                                            <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${period.status === 'Ongoing' ? 'bg-green-100 text-green-600' :
+                                                period.status === 'Completed' ? 'bg-blue-100 text-blue-600' :
+                                                    'bg-gray-100 text-gray-400'
+                                                }`}>
+                                                {period.status || 'Pending'}
+                                            </span>
+                                        </td>
+                                        <td className="px-8 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-3">
+                                                {canEdit && !period.is_active && period.status !== 'Completed' && (
+                                                    <button
+                                                        onClick={() => handleActivatePeriod(period.id)}
+                                                        className="text-[9px] font-black text-green-600 uppercase tracking-widest hover:underline flex items-center gap-1"
+                                                    >
+                                                        <CheckCircle2 className="w-3 h-3" /> Activate
+                                                    </button>
+                                                )}
+                                                {period.is_active && (
+                                                    <span className="text-[9px] font-black text-maroon uppercase tracking-widest opacity-40">Current Active</span>
+                                                )}
+                                                {period.status === 'Completed' && (
+                                                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest opacity-60">Completed</span>
+                                                )}
+                                                {canEdit && (
+                                                    <button
+                                                        onClick={() => handlePeriodDelete(period.id)}
+                                                        className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {periods.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="px-8 py-16 text-center">
+                                            <div className="flex flex-col items-center gap-3">
+                                                <Calendar className="w-8 h-8 text-gray-300" />
+                                                <p className="text-xs font-black text-gray-300 uppercase tracking-[0.2em]">No academic periods yet</p>
+                                                {canEdit && (
+                                                    <button
+                                                        onClick={() => { setPeriodForm(EMPTY_PERIOD); setShowPeriodModal(true); }}
+                                                        className="text-[10px] font-black text-maroon underline uppercase tracking-widest mt-1"
+                                                    >
+                                                        Create First Period
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                    {students.filter(s => {
-                        const search = studentSearch.toLowerCase();
-                        const courseStr = Array.isArray(s.course) ? s.course.join(', ') : (s.course || '');
-                        return s.name.toLowerCase().includes(search) ||
-                            courseStr.toLowerCase().includes(search) ||
-                            s.id.toLowerCase().includes(search);
-                    }).map(student => (
-                        <div
-                            key={student.id}
-                            onClick={() => toggleStudentSelection(student.id)}
-                            className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${selectedStudents.includes(student.id)
-                                ? 'bg-maroon border-gold/30 shadow-xl scale-[1.02]'
-                                : 'bg-white border-maroon/5 hover:border-maroon/20 hover:shadow-md'
-                                }`}
-                        >
-                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${selectedStudents.includes(student.id)
-                                ? 'bg-gold border-gold'
-                                : 'bg-transparent border-maroon/10'
-                                }`}>
-                                {selectedStudents.includes(student.id) && <CheckCircle2 className="w-3.5 h-3.5 text-maroon" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-black truncate uppercase tracking-tight ${selectedStudents.includes(student.id) ? 'text-gold' : 'text-maroon'}`}>
-                                    {student.name}
-                                </p>
-                                <p className={`text-[9px] font-black uppercase tracking-widest ${selectedStudents.includes(student.id) ? 'text-gold/50' : 'text-maroon/30'}`}>
-                                    {student.id} • {Array.isArray(student.course) ? student.course.join(', ') : student.course}
-                                </p>
-                            </div>
-                            <div className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${student.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'
-                                }`}>
-                                {student.status}
-                            </div>
+            {/* ── STUDENT PROMOTION TAB ── */}
+            {activeTab === 'promotion' && (
+                <section className="bg-maroon/2 border border-maroon/[0.08] rounded-[3rem] p-10">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+                        <div>
+                            <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2 mb-2">
+                                <CheckCircle2 className="w-4 h-4" /> Student Promotion Engine
+                            </h2>
+                            <p className="text-[10px] font-bold text-maroon/40 uppercase tracking-widest">Batch update student statuses for new academic cycles</p>
                         </div>
-                    ))}
-                </div>
-            </section>
+
+                        <div className="flex flex-wrap items-center gap-4 bg-white p-2 rounded-2xl shadow-sm border border-maroon/10">
+                            <div className="px-4 border-r border-maroon/5 flex items-center gap-2">
+                                <Search className="w-3 h-3 text-maroon/20" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by name or course..."
+                                    value={studentSearch}
+                                    onChange={(e) => setStudentSearch(e.target.value)}
+                                    className="text-[10px] font-bold text-maroon outline-none bg-transparent w-40 placeholder:text-maroon/20 uppercase"
+                                />
+                            </div>
+                            <div className="px-4 border-r border-maroon/5">
+                                <p className="text-[8px] font-black text-maroon/30 uppercase tracking-widest mb-1">Target Status</p>
+                                <select
+                                    value={targetStatus}
+                                    onChange={(e) => setTargetStatus(e.target.value)}
+                                    className="text-xs font-black text-maroon outline-none bg-transparent"
+                                >
+                                    <option value="Active">Active</option>
+                                    <option value="Graduated">Graduated</option>
+                                    <option value="Inactive">Inactive</option>
+                                </select>
+                            </div>
+                            <button
+                                onClick={handlePromote}
+                                disabled={promoting || selectedStudents.length === 0}
+                                className="bg-maroon text-gold px-8 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20 disabled:opacity-40"
+                            >
+                                {promoting ? 'Promoting...' : `Promote (${selectedStudents.length})`}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                        {students.filter(s => {
+                            const search = studentSearch.toLowerCase();
+                            const courseStr = Array.isArray(s.course) ? s.course.join(', ') : (s.course || '');
+                            return s.name.toLowerCase().includes(search) ||
+                                courseStr.toLowerCase().includes(search) ||
+                                s.id.toLowerCase().includes(search);
+                        }).map(student => (
+                            <div
+                                key={student.id}
+                                onClick={() => toggleStudentSelection(student.id)}
+                                className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center gap-4 ${selectedStudents.includes(student.id)
+                                    ? 'bg-maroon border-gold/30 shadow-xl scale-[1.02]'
+                                    : 'bg-white border-maroon/5 hover:border-maroon/20 hover:shadow-md'
+                                    }`}
+                            >
+                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${selectedStudents.includes(student.id)
+                                    ? 'bg-gold border-gold'
+                                    : 'bg-transparent border-maroon/10'
+                                    }`}>
+                                    {selectedStudents.includes(student.id) && <CheckCircle2 className="w-3.5 h-3.5 text-maroon" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-xs font-black truncate uppercase tracking-tight ${selectedStudents.includes(student.id) ? 'text-gold' : 'text-maroon'}`}>
+                                        {student.name}
+                                    </p>
+                                    <p className={`text-[9px] font-black uppercase tracking-widest ${selectedStudents.includes(student.id) ? 'text-gold/50' : 'text-maroon/30'}`}>
+                                        {student.id} • {Array.isArray(student.course) ? student.course.join(', ') : student.course}
+                                    </p>
+                                </div>
+                                <div className={`text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${student.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'
+                                    }`}>
+                                    {student.status}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
 
             {/* Department Modal */}
             {showDeptModal && (
