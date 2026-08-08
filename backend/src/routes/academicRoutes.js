@@ -64,6 +64,9 @@ router.delete('/announcements/:id', authenticateToken, authorizeRoles('admin', '
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 router.get('/notifications', authenticateToken, notificationController.getAll);
+router.get('/notifications/unread-count', authenticateToken, notificationController.getUnreadCount);
+router.put('/notifications/mark-all-read', authenticateToken, notificationController.markAllRead);
+router.patch('/notifications/read-all', authenticateToken, notificationController.markAllRead);
 router.put('/notifications/:id/read', authenticateToken, notificationController.markRead);
 
 // ── Sessions (Timetable) ──────────────────────────────────────────────────────
@@ -154,6 +157,4 @@ router.get('/unit-coverage/admin', authenticateToken, authorizeRoles('admin', 's
 router.post('/unit-coverage/confirmations', authenticateToken, authorizeRoles('student'), unitCoverageController.submitConfirmation);
 router.get('/unit-coverage/confirmations', authenticateToken, unitCoverageController.getConfirmations);
 router.get('/unit-coverage/student-progress', authenticateToken, unitCoverageController.getStudentProgress);
-router.put('/unit-coverage/units/:unitId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.updateUnit);
-
 export default router;

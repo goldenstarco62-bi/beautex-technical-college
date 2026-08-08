@@ -106,7 +106,9 @@ export const announcementsAPI = {
 // Notifications
 export const notificationsAPI = {
     getAll: () => api.get('notifications'),
+    getUnreadCount: () => api.get('notifications/unread-count'),
     markRead: (id) => api.put(`notifications/${encodeURIComponent(id)}/read`),
+    markAllRead: () => api.put('notifications/mark-all-read'),
 };
 
 // Dashboard & Stats
@@ -315,6 +317,19 @@ export const studentDailyReportsAPI = {
 // Inventory Management
 export const inventoryAPI = {
     getDashboard: () => api.get('inventory/dashboard'),
+    getStockSummary: () => api.get('inventory/stock-summary'),
+    // Multi-item Requisitions Workflow
+    getRequisitions: (params) => api.get('inventory/requisitions', { params }),
+    getRequisition: (id) => api.get(`inventory/requisitions/${id}`),
+    createRequisition: (data) => api.post('inventory/requisitions', data),
+    submitRequisition: (id) => api.post(`inventory/requisitions/${id}/submit`),
+    approveRequisition: (id, data) => api.post(`inventory/requisitions/${id}/approve`, data),
+    rejectRequisition: (id, data) => api.post(`inventory/requisitions/${id}/reject`, data),
+    requestModification: (id, data) => api.post(`inventory/requisitions/${id}/request-modification`, data),
+    resubmitRequisition: (id, data) => api.post(`inventory/requisitions/${id}/resubmit`, data),
+    issueItems: (id, data) => api.post(`inventory/requisitions/${id}/issue`, data),
+    confirmCollection: (id) => api.post(`inventory/requisitions/${id}/confirm-collection`),
+    cancelRequisition: (id) => api.post(`inventory/requisitions/${id}/cancel`),
     // Categories
     getCategories: () => api.get('inventory/categories'),
     createCategory: (data) => api.post('inventory/categories', data),

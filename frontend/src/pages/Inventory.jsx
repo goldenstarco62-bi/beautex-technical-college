@@ -973,15 +973,24 @@ const StatusBadge = ({ status }) => {
         Damaged: { bg: 'bg-red-50 text-red-700 border-red-100', icon: AlertTriangle },
         Expired: { bg: 'bg-rose-50 text-rose-700 border-rose-100', icon: AlertCircle },
         Pending: { bg: 'bg-amber-50 text-amber-700 border-amber-100', icon: Clock },
+        PENDING: { bg: 'bg-amber-500/10 text-amber-600 border-amber-500/20', icon: Clock },
+        DRAFT: { bg: 'bg-gray-500/10 text-gray-500 border-gray-500/20', icon: Pencil },
         Approved: { bg: 'bg-emerald-50 text-emerald-700 border-emerald-100', icon: CheckCircle2 },
+        APPROVED: { bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', icon: CheckCircle2 },
         Rejected: { bg: 'bg-red-50 text-red-700 border-red-100', icon: X },
+        REJECTED: { bg: 'bg-rose-500/10 text-rose-600 border-rose-500/20', icon: X },
         Purchased: { bg: 'bg-blue-50 text-blue-700 border-blue-100', icon: ShoppingCart },
+        MODIFICATION_REQUIRED: { bg: 'bg-orange-500/10 text-orange-600 border-orange-500/20', icon: RefreshCcw },
+        PARTIALLY_ISSUED: { bg: 'bg-blue-500/10 text-blue-600 border-blue-500/20', icon: PackageOpen },
+        ISSUED: { bg: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20', icon: Box },
+        COMPLETED: { bg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', icon: CheckCircle2 },
+        CANCELLED: { bg: 'bg-gray-500/10 text-gray-400 border-gray-500/20', icon: X }
     };
     const c = cfg[status] || { bg: 'bg-gray-50 text-gray-500 border-gray-100', icon: Package };
     return (
-        <span className={`inline-flex items-center gap-2 text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest border ${c.bg} transition-all hover:scale-105 active:scale-95 cursor-default`}>
+        <span className={`inline-flex items-center gap-1.5 text-[9px] font-black px-3.5 py-1 rounded-full uppercase tracking-widest border ${c.bg} transition-all cursor-default`}>
             <c.icon className="w-3 h-3" />
-            {status}
+            {status?.replace(/_/g, ' ')}
         </span>
     );
 };
@@ -1340,190 +1349,1023 @@ export default function Inventory() {
 }
 
 function RequestsTab({ role }) {
-    const [requests, setRequests] = useState([]);
+    const { user } = useAuth();
+    const isAdmin = ['admin', 'superadmin'].includes((user?.role || '').toLowerCase());
+
+    const [requisitions, setRequisitions] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [items, setItems] = useState([]);
-    const [formData, setFormData] = useState({ item_name: '', department: 'Beauty Therapy', quantity: 1, purpose: '', item_id: '' });
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
 
-    const load = useCallback(() => {
+    const [filterStatus, setFilterStatus] = useState('ALL');
+    const [filterDept, setFilterDept] = useState('ALL');
+    const [filterPriority, setFilterPriority] = useState('ALL');
+    const [search, setSearch] = useState('');
+
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [selectedReqId, setSelectedReqId] = useState(null);
+    const [detailModal, setDetailModal] = useState(false);
+    const [issueModal, setIssueModal] = useState(false);
+    const [toast, setToast] = useState(null);
+
+    const showToast = (msg, type = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 4000);
+    };
+
+    const fetchRequisitions = useCallback(() => {
         setLoading(true);
-        Promise.all([
-            inventoryAPI.getRequests(),
-            inventoryAPI.getItems()
-        ]).then(([r, i]) => {
-            setRequests(r.data);
-            setItems(i.data);
-        }).finally(() => setLoading(false));
-    }, []);
+        const params = {
+            page,
+            limit: 10,
+            status: filterStatus !== 'ALL' ? filterStatus : undefined,
+            department: filterDept !== 'ALL' ? filterDept : undefined,
+            priority: filterPriority !== 'ALL' ? filterPriority : undefined,
+            search: search.trim() || undefined
+        };
 
-    useEffect(() => { load(); }, [load]);
+        inventoryAPI.getRequisitions(params)
+            .then(res => {
+                setRequisitions(res.data.data || []);
+                setTotalPages(res.data.pagination?.totalPages || 1);
+                setTotalCount(res.data.pagination?.total || 0);
+            })
+            .catch(err => {
+                console.error('Failed to fetch requisitions:', err);
+                showToast('REQUISITIONS SYNC FAILED', 'error');
+            })
+            .finally(() => setLoading(false));
+    }, [page, filterStatus, filterDept, filterPriority, search]);
 
-    const submit = async (e) => {
-        e.preventDefault();
-        try {
-            await inventoryAPI.createRequest(formData);
-            setShowModal(false);
-            load();
-        } catch (e) { alert(e.response?.data?.error || 'Error'); }
-    };
-
-    const handleAction = async (id, status) => {
-        try {
-            await inventoryAPI.updateRequest(id, { status });
-            load();
-        } catch (e) { alert('Action failed'); }
-    };
-
-    const handleDelete = async (id, itemName) => {
-        if (!window.confirm(`Delete requisition for "${itemName}"? This cannot be undone.`)) return;
-        try {
-            await inventoryAPI.deleteRequest(id);
-            load();
-        } catch (e) { alert(e.response?.data?.error || 'Failed to delete request'); }
-    };
+    useEffect(() => { fetchRequisitions(); }, [fetchRequisitions]);
+    useEffect(() => { setPage(1); }, [filterStatus, filterDept, filterPriority, search]);
 
     return (
-        <div className="space-y-10 animate-in slide-in-from-bottom-8 duration-700">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="space-y-8 animate-in slide-in-from-bottom-8 duration-700">
+            {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-[-0.05em] mb-1">Logistics Requisitions</h2>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Operational Supply Pipeline
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Requisition & Stock Control</h2>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2 mt-1">
+                        <span className="w-2 h-2 rounded-full bg-gold animate-pulse" />
+                        Multi-Item Operational Requisitions Lattice
                     </p>
                 </div>
-                <button 
-                    onClick={() => setShowModal(true)} 
-                    className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:scale-[1.05] active:scale-95 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all border border-white/10 group"
-                >
-                    <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform stroke-[3]" /> New Request
-                </button>
+
+                <div className="flex flex-wrap items-center gap-3">
+                    <button
+                        onClick={() => setShowCreateModal(true)}
+                        className="flex items-center gap-3 bg-gradient-to-r from-maroon to-[#800000] text-gold px-6 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] shadow-lg hover:scale-105 active:scale-95 transition-all border border-white/10"
+                    >
+                        <Plus className="w-4 h-4 stroke-[3]" /> NEW REQUISITION
+                    </button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3">
-                {loading ? (
-                    <div className="py-20 text-center flex flex-col items-center gap-6">
-                        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-[1.5rem] animate-spin shadow-2xl"></div>
-                        <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.5em] animate-pulse">Syncing Requisition Lattice...</p>
-                    </div>
-                ) : requests.length > 0 ? requests.map(req => (
-                    <div key={req.id} className="bg-white dark:bg-[#111] px-4 py-3 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 hover:ring-1 hover:ring-maroon/10 transition-all duration-300 group relative overflow-hidden ring-1 ring-black/5">
-                        <div className="flex items-center gap-3 relative z-10">
-                            <div className="w-9 h-9 bg-gray-50 dark:bg-black rounded-xl flex items-center justify-center border border-black/5 dark:border-white/5 shrink-0">
-                                <FileSpreadsheet className="w-5 h-5 text-gray-400 group-hover:text-maroon transition-colors" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <p className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight group-hover:text-maroon dark:group-hover:text-gold transition-colors">{req.item_name}</p>
-                                    <StatusBadge status={req.status} />
-                                </div>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                                    <div className="flex items-center gap-1">
-                                        <User className="w-3 h-3" />
-                                        <span>{req.requested_by_name}</span>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <Building2 className="w-3 h-3" />
-                                        <span>{req.department}</span>
-                                    </div>
-                                    <span className="px-2 py-0.5 bg-gray-50 dark:bg-white/5 rounded-full border border-black/5">Vol: {req.quantity}</span>
-                                    {req.purpose && (
-                                        <span className="text-gray-400 italic truncate max-w-[200px]">" {req.purpose} "</span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+            {/* Search and Filters */}
+            <div className="flex flex-col md:flex-row items-stretch gap-3 bg-white dark:bg-[#111] p-3 rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm ring-1 ring-black/5">
+                <div className="relative flex-1">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="SEARCH BY REQ#, NAME, PURPOSE..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-xl text-[10px] font-bold tracking-widest text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all"
+                    />
+                </div>
 
-                        <div className="flex items-center gap-2 relative z-10 shrink-0">
-                            {(req.status === 'Pending' && (role === 'admin' || role === 'superadmin')) && (
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={() => handleAction(req.id, 'Approved')} 
-                                        className="h-8 px-4 rounded-lg bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all active:scale-95"
-                                    >
-                                        Approve
-                                    </button>
-                                    <button 
-                                        onClick={() => handleAction(req.id, 'Rejected')} 
-                                        className="h-8 px-4 rounded-lg bg-rose-500/10 text-rose-600 border border-rose-500/20 text-[9px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all active:scale-95"
-                                    >
-                                        Reject
-                                    </button>
-                                </div>
-                            )}
-                            {(req.status === 'Approved' && (role === 'admin' || role === 'superadmin')) && (
-                                <button 
-                                    onClick={() => handleAction(req.id, 'Issued')} 
-                                    className="h-8 px-4 rounded-lg bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 active:scale-95 transition-all"
-                                >
-                                    Issue Stock
-                                </button>
-                            )}
-                            <button className="w-10 h-10 bg-gray-50 dark:bg-black text-gray-400 rounded-xl hover:bg-maroon hover:text-gold transition-all border border-black/5 dark:border-white/5 flex items-center justify-center group/eye" title="View">
-                                <Eye className="w-4 h-4 group-hover/eye:scale-110 transition-transform" />
+                <div className="flex flex-wrap gap-2">
+                    <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value)}
+                        className="px-4 py-3 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-xl text-[9px] font-black text-gray-700 dark:text-gray-300 uppercase tracking-widest focus:outline-none cursor-pointer"
+                    >
+                        <option value="ALL">All Statuses</option>
+                        <option value="DRAFT">Draft</option>
+                        <option value="PENDING">Pending Approval</option>
+                        <option value="APPROVED">Approved</option>
+                        <option value="MODIFICATION_REQUIRED">Modification Req.</option>
+                        <option value="PARTIALLY_ISSUED">Partially Issued</option>
+                        <option value="ISSUED">Issued (Ready Pickup)</option>
+                        <option value="COMPLETED">Completed</option>
+                        <option value="REJECTED">Rejected</option>
+                        <option value="CANCELLED">Cancelled</option>
+                    </select>
+
+                    <select
+                        value={filterDept}
+                        onChange={e => setFilterDept(e.target.value)}
+                        className="px-4 py-3 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-xl text-[9px] font-black text-gray-700 dark:text-gray-300 uppercase tracking-widest focus:outline-none cursor-pointer"
+                    >
+                        <option value="ALL">All Departments</option>
+                        <option value="Beauty Therapy">Beauty Therapy</option>
+                        <option value="Hairdressing">Hairdressing</option>
+                        <option value="ICT Department">ICT Sector</option>
+                        <option value="Administration">Administration</option>
+                        <option value="Barbering">Barbering</option>
+                    </select>
+
+                    <select
+                        value={filterPriority}
+                        onChange={e => setFilterPriority(e.target.value)}
+                        className="px-4 py-3 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-xl text-[9px] font-black text-gray-700 dark:text-gray-300 uppercase tracking-widest focus:outline-none cursor-pointer"
+                    >
+                        <option value="ALL">All Priorities</option>
+                        <option value="Normal">Normal Priority</option>
+                        <option value="Urgent">Urgent Priority</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* List Table / Cards */}
+            <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden ring-1 ring-black/5 min-h-[400px]">
+                <div className="overflow-x-auto no-scrollbar">
+                    <table className="w-full border-collapse">
+                        <thead>
+                            <tr className="bg-gray-50/50 dark:bg-white/[0.01] border-b border-gray-100 dark:border-white/5">
+                                <th className="px-5 py-4 text-left text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Requisition #</th>
+                                <th className="px-5 py-4 text-left text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Requester & Sector</th>
+                                <th className="px-5 py-4 text-left text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Items & Qty</th>
+                                <th className="px-5 py-4 text-left text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Priority</th>
+                                <th className="px-5 py-4 text-left text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Status</th>
+                                <th className="px-5 py-4 text-right text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50/50 dark:divide-white/5">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="6" className="py-20 text-center">
+                                        <div className="flex flex-col items-center gap-4">
+                                            <div className="w-10 h-10 border-4 border-maroon border-t-gold rounded-xl animate-spin shadow-lg" />
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Querying Requisition Lattice...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : requisitions.length === 0 ? (
+                                <tr>
+                                    <td colSpan="6" className="py-20 text-center">
+                                        <div className="flex flex-col items-center gap-3">
+                                            <PackageOpen className="w-12 h-12 text-gray-300" />
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">No Requisitions Found</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : requisitions.map(req => (
+                                <tr key={req.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.015] transition-all group">
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-xl bg-maroon/5 flex items-center justify-center border border-maroon/10 shrink-0">
+                                                <ClipboardList className="w-4 h-4 text-maroon" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[11px] font-black text-gray-900 dark:text-white tracking-tight uppercase group-hover:text-maroon transition-colors">{req.requisition_number}</p>
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">{new Date(req.created_at).toLocaleDateString()}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                        <div>
+                                            <p className="text-[11px] font-black text-gray-800 dark:text-gray-200 uppercase">{req.requester_name}</p>
+                                            <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">{req.department}</p>
+                                        </div>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <span className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 rounded-lg text-[10px] font-black text-gray-700 dark:text-gray-300 uppercase">
+                                                {req.total_items || 0} line items
+                                            </span>
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase">
+                                                ({req.total_issued_qty || 0}/{req.total_requested_qty || 0} units)
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                        <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border ${
+                                            req.priority === 'Urgent' 
+                                                ? 'bg-rose-500/10 text-rose-600 border-rose-500/20 animate-pulse' 
+                                                : 'bg-gray-100 dark:bg-white/5 text-gray-500 border-gray-200 dark:border-white/5'
+                                        }`}>
+                                            {req.priority}
+                                        </span>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                        <StatusBadge status={req.status} />
+                                    </td>
+
+                                    <td className="px-5 py-4 text-right">
+                                        <button
+                                            onClick={() => { setSelectedReqId(req.id); setDetailModal(true); }}
+                                            className="px-4 py-2 bg-maroon text-gold hover:bg-maroon/90 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 ml-auto"
+                                        >
+                                            <Eye className="w-3.5 h-3.5" /> View & Action
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-6 py-4 bg-gray-50/50 dark:bg-white/[0.01] border-t border-gray-100 dark:border-white/5">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                            Page {page} of {totalPages} ({totalCount} requisitions)
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <button
+                                disabled={page === 1}
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                className="p-2 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-maroon hover:text-gold disabled:opacity-30 transition-all"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
                             </button>
-                            {(role === 'admin' || role === 'superadmin') && (
-                                <button
-                                    onClick={() => handleDelete(req.id, req.item_name)}
-                                    className="w-10 h-10 bg-rose-50 dark:bg-rose-950/20 text-rose-400 rounded-xl hover:bg-rose-500 hover:text-white transition-all border border-rose-100 dark:border-rose-500/20 flex items-center justify-center group/del"
-                                    title="Delete Requisition"
-                                >
-                                    <Trash2 className="w-4 h-4 group-hover/del:scale-110 transition-transform" />
-                                </button>
-                            )}
+                            <button
+                                disabled={page === totalPages}
+                                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                className="p-2 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-maroon hover:text-gold disabled:opacity-30 transition-all"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
                         </div>
-                    </div>
-                )) : (
-                    <div className="py-20 text-center bg-white dark:bg-[#111] rounded-2xl border-2 border-dashed border-gray-100 dark:border-white/5 flex flex-col items-center">
-                        <div className="w-16 h-16 bg-gray-50/50 dark:bg-white/[0.02] rounded-2xl flex items-center justify-center mb-6">
-                            <PackageOpen className="w-10 h-10 text-gray-200" />
-                        </div>
-                        <h4 className="text-[12px] font-black text-gray-300 uppercase tracking-[0.5em]">No Pending Logistics Manifests</h4>
                     </div>
                 )}
             </div>
 
-            {showModal && (
-                <Modal title="Initialize Fleet Requisition" onClose={() => setShowModal(false)}>
-                    <form onSubmit={submit} className="space-y-8 py-4">
-                        <SelectField label="Inventory Reference (Auto-Link)" value={formData.item_id} onChange={e => {
-                            const item = items.find(i => String(i.id) === e.target.value);
-                            setFormData({...formData, item_id: e.target.value, item_name: item ? item.name : formData.item_name});
-                        }}>
-                            <option value="">Query Live Stock Infrastructure...</option>
-                            {items.map(i => <option key={i.id} value={i.id}>{i.name.toUpperCase()} (AVAILABLE: {i.quantity})</option>)}
-                        </SelectField>
-
-                        <InputField label="Operational Item Nomenclature" value={formData.item_name} onChange={e => setFormData({...formData, item_name: e.target.value})} placeholder="ENTRUSTED ASSET NAME" required />
-                        
-                        <div className="grid grid-cols-2 gap-6">
-                            <InputField label="Flow Volume Requested" type="number" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} required />
-                            <SelectField label="Originating Sector" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required>
-                                <option value="Beauty Therapy">Beauty Therapy</option>
-                                <option value="Hairdressing">Hairdressing</option>
-                                <option value="ICT">ICT Sector</option>
-                                <option value="Administration">Central Admin</option>
-                                <option value="Barbering">Professional Barbering</option>
-                            </SelectField>
-                        </div>
-
-                        <div className="relative">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 block px-1">Mission Critical Purpose</label>
-                            <textarea 
-                                value={formData.purpose} 
-                                onChange={e => setFormData({...formData, purpose: e.target.value})}
-                                className="w-full px-6 py-5 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-[1.5rem] text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-4 focus:ring-maroon/5 transition-all min-h-[120px]"
-                                placeholder="DETAIL OPERATIONAL REQUIREMENT..."
-                            />
-                        </div>
-
-                        <button type="submit" className="w-full bg-gradient-to-r from-maroon to-[#800000] text-gold h-16 rounded-2xl text-[12px] font-black uppercase tracking-[0.3em] shadow-[0_20px_50px_-10px_rgba(128,0,0,0.4)] active:scale-95 transition-all mt-6 border border-white/10">
-                            TRANSMIT REQUISITION SIGNAL
-                        </button>
-                    </form>
-                </Modal>
+            {/* Modals */}
+            {showCreateModal && (
+                <NewRequisitionModal
+                    onClose={() => setShowCreateModal(false)}
+                    onSuccess={() => { setShowCreateModal(false); fetchRequisitions(); showToast('REQUISITION CREATED SUCCESSFULLY'); }}
+                />
             )}
+
+            {detailModal && selectedReqId && (
+                <RequisitionDetailModal
+                    requisitionId={selectedReqId}
+                    onClose={() => { setDetailModal(false); setSelectedReqId(null); }}
+                    onRefresh={() => { fetchRequisitions(); }}
+                    onOpenIssueModal={() => { setIssueModal(true); }}
+                    showToast={showToast}
+                />
+            )}
+
+            {issueModal && selectedReqId && (
+                <IssueItemsModal
+                    requisitionId={selectedReqId}
+                    onClose={() => setIssueModal(false)}
+                    onSuccess={() => {
+                        setIssueModal(false);
+                        fetchRequisitions();
+                        showToast('STOCK ISSUED SUCCESSFULLY');
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+/**
+ * Modal to Create a Multi-Item Requisition
+ */
+function NewRequisitionModal({ onClose, onSuccess }) {
+    const { user } = useAuth();
+    const userDept = user?.department || 'Beauty Therapy';
+
+    const [department, setDepartment] = useState(userDept);
+    const [priority, setPriority] = useState('Normal');
+    const [requiredDate, setRequiredDate] = useState('');
+    const [purpose, setPurpose] = useState('');
+    const [availableItems, setAvailableItems] = useState([]);
+    const [submitting, setSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+
+    const [reqItems, setReqItems] = useState([
+        { item_id: '', item_name: '', category_name: '', requested_qty: 1, unit_type: 'Piece', purpose_remarks: '' }
+    ]);
+
+    useEffect(() => {
+        inventoryAPI.getItems({ limit: 100 }).then(res => {
+            setAvailableItems(res.data.data || res.data || []);
+        }).catch(() => {});
+    }, []);
+
+    const handleItemChange = (idx, field, value) => {
+        const updated = [...reqItems];
+        updated[idx][field] = value;
+
+        // Auto-fill category & unit_type if item_id selected
+        if (field === 'item_id' && value) {
+            const found = availableItems.find(i => String(i.id) === String(value));
+            if (found) {
+                updated[idx].item_name = found.name;
+                updated[idx].category_name = found.category_name || '';
+                updated[idx].unit_type = found.unit_type || 'Piece';
+            }
+        }
+
+        setReqItems(updated);
+    };
+
+    const addRow = () => {
+        setReqItems(prev => [...prev, { item_id: '', item_name: '', category_name: '', requested_qty: 1, unit_type: 'Piece', purpose_remarks: '' }]);
+    };
+
+    const removeRow = (idx) => {
+        if (reqItems.length === 1) return;
+        setReqItems(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const handleSave = async (submitImmediately = false) => {
+        setErrorMsg('');
+        const validItems = reqItems.filter(i => i.item_name.trim());
+        if (validItems.length === 0) {
+            setErrorMsg('At least one valid item is required');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await inventoryAPI.createRequisition({
+                department,
+                priority,
+                required_date: requiredDate || undefined,
+                purpose,
+                items: validItems,
+                submit_immediately: submitImmediately
+            });
+            onSuccess();
+        } catch (err) {
+            setErrorMsg(err.response?.data?.error || err.message || 'Failed to save requisition');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <Modal title="Create Multi-Item Requisition" onClose={onClose}>
+            <div className="space-y-6">
+                {errorMsg && (
+                    <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs font-bold uppercase tracking-wider">
+                        {errorMsg}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <SelectField label="Department Sector" value={department} onChange={e => setDepartment(e.target.value)}>
+                        <option value="Beauty Therapy">Beauty Therapy</option>
+                        <option value="Hairdressing">Hairdressing</option>
+                        <option value="ICT Department">ICT Sector</option>
+                        <option value="Administration">Administration</option>
+                        <option value="Barbering">Barbering</option>
+                    </SelectField>
+
+                    <SelectField label="Priority Level" value={priority} onChange={e => setPriority(e.target.value)}>
+                        <option value="Normal">Normal Priority</option>
+                        <option value="Urgent">Urgent Priority</option>
+                    </SelectField>
+
+                    <InputField label="Required By Date" type="date" value={requiredDate} onChange={e => setRequiredDate(e.target.value)} />
+                </div>
+
+                <div>
+                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Overall Purpose / Notes</label>
+                    <input
+                        type="text"
+                        placeholder="e.g. Practical examination supplies for Term 2..."
+                        value={purpose}
+                        onChange={e => setPurpose(e.target.value)}
+                        className="w-full px-5 py-3.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 rounded-2xl text-[11px] font-bold text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-maroon/20 transition-all"
+                    />
+                </div>
+
+                {/* Line Items Builder Table */}
+                <div className="border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50/50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                        <p className="text-[10px] font-black text-maroon dark:text-gold uppercase tracking-widest">Requisition Line Items ({reqItems.length})</p>
+                        <button type="button" onClick={addRow} className="text-[9px] font-black text-maroon dark:text-gold uppercase tracking-widest hover:underline flex items-center gap-1">
+                            <Plus className="w-3.5 h-3.5" /> Add Item Row
+                        </button>
+                    </div>
+
+                    <div className="p-4 space-y-3 max-h-[300px] overflow-y-auto no-scrollbar">
+                        {reqItems.map((item, idx) => (
+                            <div key={idx} className="flex flex-col md:flex-row gap-3 p-3 bg-gray-50/30 dark:bg-white/[0.01] rounded-xl border border-gray-100 dark:border-white/5 items-stretch md:items-center">
+                                <div className="flex-1">
+                                    <select
+                                        value={item.item_id}
+                                        onChange={e => handleItemChange(idx, 'item_id', e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-black border border-gray-200 dark:border-white/10 rounded-xl text-[10px] font-bold text-gray-900 dark:text-white"
+                                    >
+                                        <option value="">Select Stock Item (or type manually)...</option>
+                                        {availableItems.map(inv => (
+                                            <option key={inv.id} value={inv.id}>
+                                                {inv.name.toUpperCase()} (Available: {inv.quantity} {inv.unit_type})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {!item.item_id && (
+                                        <input
+                                            type="text"
+                                            placeholder="Or custom item name..."
+                                            value={item.item_name}
+                                            onChange={e => handleItemChange(idx, 'item_name', e.target.value)}
+                                            className="w-full mt-2 px-3 py-1.5 bg-white dark:bg-black border border-gray-200 dark:border-white/10 rounded-xl text-[10px] font-bold"
+                                        />
+                                    )}
+                                </div>
+
+                                <div className="w-24">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        placeholder="Qty"
+                                        value={item.requested_qty}
+                                        onChange={e => handleItemChange(idx, 'requested_qty', parseInt(e.target.value) || 1)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-black border border-gray-200 dark:border-white/10 rounded-xl text-[10px] font-bold text-center"
+                                    />
+                                </div>
+
+                                <div className="w-28">
+                                    <input
+                                        type="text"
+                                        placeholder="Unit (Piece)"
+                                        value={item.unit_type}
+                                        onChange={e => handleItemChange(idx, 'unit_type', e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-black border border-gray-200 dark:border-white/10 rounded-xl text-[10px] font-bold"
+                                    />
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => removeRow(idx)}
+                                    disabled={reqItems.length === 1}
+                                    className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-xl disabled:opacity-20 transition-all self-end md:self-center"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-100 dark:border-white/5">
+                    <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => handleSave(false)}
+                        className="flex-1 px-6 py-4 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+                    >
+                        Save Draft
+                    </button>
+                    <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={() => handleSave(true)}
+                        className="flex-1 px-6 py-4 bg-gradient-to-r from-maroon to-[#800000] text-gold rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-all"
+                    >
+                        {submitting ? 'Submitting...' : 'Submit Requisition'}
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+/**
+ * Requisition Detail & Approval Action Modal
+ */
+function RequisitionDetailModal({ requisitionId, onClose, onRefresh, onOpenIssueModal, showToast }) {
+    const { user } = useAuth();
+    const isAdmin = ['admin', 'superadmin'].includes((user?.role || '').toLowerCase());
+    const userEmail = String(user?.email || '').toLowerCase();
+
+    const [req, setReq] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [actionNotes, setActionNotes] = useState('');
+    const [approvedQtyMap, setApprovedQtyMap] = useState({});
+    const [processing, setProcessing] = useState(false);
+
+    const loadDetail = useCallback(() => {
+        setLoading(true);
+        inventoryAPI.getRequisition(requisitionId)
+            .then(res => {
+                setReq(res.data);
+                // Initialize approved qty map
+                const map = {};
+                (res.data.items || []).forEach(i => {
+                    map[i.id] = i.approved_qty > 0 ? i.approved_qty : i.requested_qty;
+                });
+                setApprovedQtyMap(map);
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('FAILED TO LOAD DETAILS', 'error');
+            })
+            .finally(() => setLoading(false));
+    }, [requisitionId]);
+
+    useEffect(() => { loadDetail(); }, [loadDetail]);
+
+    if (loading || !req) {
+        return (
+            <Modal title="Requisition Intelligence" onClose={onClose}>
+                <div className="py-16 flex flex-col items-center justify-center gap-4">
+                    <div className="w-10 h-10 border-4 border-maroon border-t-gold rounded-xl animate-spin" />
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Loading Detail...</p>
+                </div>
+            </Modal>
+        );
+    }
+
+    const isRequester = String(req.requester_email).toLowerCase() === userEmail;
+
+    // Handler for admin approve
+    const handleApprove = async () => {
+        setProcessing(true);
+        try {
+            const itemsPayload = (req.items || []).map(i => ({
+                requisition_item_id: i.id,
+                approved_qty: parseInt(approvedQtyMap[i.id]) || 0
+            }));
+
+            await inventoryAPI.approveRequisition(req.id, {
+                items: itemsPayload,
+                approval_comments: actionNotes
+            });
+            showToast('REQUISITION APPROVED');
+            loadDetail();
+            onRefresh();
+        } catch (err) {
+            showToast(err.response?.data?.error || 'APPROVE FAILED', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handler for admin reject
+    const handleReject = async () => {
+        if (!actionNotes.trim()) {
+            showToast('REJECTION REASON REQUIRED', 'error');
+            return;
+        }
+        setProcessing(true);
+        try {
+            await inventoryAPI.rejectRequisition(req.id, { rejection_reason: actionNotes });
+            showToast('REQUISITION REJECTED');
+            loadDetail();
+            onRefresh();
+        } catch (err) {
+            showToast(err.response?.data?.error || 'REJECT FAILED', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handler for admin request modification
+    const handleRequestModification = async () => {
+        if (!actionNotes.trim()) {
+            showToast('MODIFICATION NOTE REQUIRED', 'error');
+            return;
+        }
+        setProcessing(true);
+        try {
+            await inventoryAPI.requestModification(req.id, { modification_note: actionNotes });
+            showToast('MODIFICATION REQUEST SENT');
+            loadDetail();
+            onRefresh();
+        } catch (err) {
+            showToast(err.response?.data?.error || 'ACTION FAILED', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handler for submit draft
+    const handleSubmitDraft = async () => {
+        setProcessing(true);
+        try {
+            await inventoryAPI.submitRequisition(req.id);
+            showToast('REQUISITION SUBMITTED');
+            loadDetail();
+            onRefresh();
+        } catch (err) {
+            showToast(err.response?.data?.error || 'SUBMIT FAILED', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handler for confirm collection
+    const handleConfirmCollection = async () => {
+        setProcessing(true);
+        try {
+            await inventoryAPI.confirmCollection(req.id);
+            showToast('COLLECTION CONFIRMED — COMPLETED');
+            loadDetail();
+            onRefresh();
+        } catch (err) {
+            showToast(err.response?.data?.error || 'CONFIRMATION FAILED', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    // Handler for cancel
+    const handleCancel = async () => {
+        if (!window.confirm('Cancel this requisition?')) return;
+        setProcessing(true);
+        try {
+            await inventoryAPI.cancelRequisition(req.id);
+            showToast('REQUISITION CANCELLED');
+            loadDetail();
+            onRefresh();
+        } catch (err) {
+            showToast(err.response?.data?.error || 'CANCEL FAILED', 'error');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    return (
+        <Modal title={`Requisition ${req.requisition_number}`} onClose={onClose}>
+            <div className="space-y-6">
+                {/* Header Summary */}
+                <div className="p-4 bg-gray-50 dark:bg-white/[0.02] rounded-2xl border border-gray-100 dark:border-white/5 flex flex-wrap justify-between gap-4">
+                    <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Requester</p>
+                        <p className="text-[13px] font-black text-gray-900 dark:text-white uppercase mt-0.5">{req.requester_name}</p>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase">{req.department} ({req.requester_email})</p>
+                    </div>
+
+                    <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Priority & Date</p>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className={`px-2.5 py-0.5 rounded text-[8px] font-black uppercase ${req.priority === 'Urgent' ? 'bg-rose-500/10 text-rose-600' : 'bg-gray-200 dark:bg-white/10 text-gray-700'}`}>
+                                {req.priority}
+                            </span>
+                            <span className="text-[9px] font-bold text-gray-500">Required: {req.required_date || 'N/A'}</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Status</p>
+                        <StatusBadge status={req.status} />
+                    </div>
+                </div>
+
+                {req.purpose && (
+                    <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-xl">
+                        <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Purpose / Notes</p>
+                        <p className="text-[11px] font-bold text-gray-700 dark:text-gray-300 italic">"{req.purpose}"</p>
+                    </div>
+                )}
+
+                {/* Status Lifecycle Stepper */}
+                <div className="py-2">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Requisition Lifecycle</p>
+                    <div className="grid grid-cols-4 gap-2">
+                        {[
+                            { label: 'Submitted', active: ['PENDING', 'APPROVED', 'MODIFICATION_REQUIRED', 'PARTIALLY_ISSUED', 'ISSUED', 'COMPLETED'].includes(req.status) },
+                            { label: 'Approved', active: ['APPROVED', 'PARTIALLY_ISSUED', 'ISSUED', 'COMPLETED'].includes(req.status) },
+                            { label: 'Issued', active: ['PARTIALLY_ISSUED', 'ISSUED', 'COMPLETED'].includes(req.status) },
+                            { label: 'Completed', active: req.status === 'COMPLETED' }
+                        ].map((step, idx) => (
+                            <div key={idx} className={`p-2.5 rounded-xl border text-center transition-all ${
+                                step.active 
+                                    ? 'bg-maroon/10 border-maroon/30 text-maroon dark:text-gold font-black' 
+                                    : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/5 text-gray-400'
+                            }`}>
+                                <p className="text-[8px] uppercase tracking-widest font-black">Step 0{idx + 1}</p>
+                                <p className="text-[10px] uppercase font-bold">{step.label}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Items Table */}
+                <div>
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Requested Line Items ({req.items?.length || 0})</p>
+                    <div className="border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="bg-gray-50/50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+                                    <th className="px-4 py-2.5 text-left text-[9px] font-black text-gray-400 uppercase">Item Name</th>
+                                    <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Req Qty</th>
+                                    <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Appr Qty</th>
+                                    <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Iss Qty</th>
+                                    <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Stock Avail</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                                {(req.items || []).map(item => (
+                                    <tr key={item.id} className="hover:bg-gray-50/30 dark:hover:bg-white/[0.01]">
+                                        <td className="px-4 py-3">
+                                            <p className="text-[11px] font-black text-gray-900 dark:text-white uppercase leading-tight">{item.item_name}</p>
+                                            <p className="text-[8px] text-gray-400 uppercase mt-0.5">{item.category_name || 'General'}</p>
+                                        </td>
+
+                                        <td className="px-3 py-3 text-center text-[11px] font-black text-gray-700 dark:text-gray-300">
+                                            {item.requested_qty} {item.unit_type}
+                                        </td>
+
+                                        <td className="px-3 py-3 text-center">
+                                            {req.status === 'PENDING' && isAdmin && !isRequester ? (
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={approvedQtyMap[item.id] || 0}
+                                                    onChange={e => setApprovedQtyMap({ ...approvedQtyMap, [item.id]: e.target.value })}
+                                                    className="w-16 px-2 py-1 bg-white dark:bg-black border border-maroon/20 rounded text-center text-[10px] font-bold"
+                                                />
+                                            ) : (
+                                                <span className="text-[11px] font-black text-emerald-600">{item.approved_qty}</span>
+                                            )}
+                                        </td>
+
+                                        <td className="px-3 py-3 text-center text-[11px] font-black text-blue-600">
+                                            {item.issued_qty}
+                                        </td>
+
+                                        <td className="px-3 py-3 text-center">
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
+                                                (item.available_stock_qty || 0) < item.requested_qty 
+                                                    ? 'bg-rose-500/10 text-rose-600' 
+                                                    : 'bg-emerald-500/10 text-emerald-600'
+                                            }`}>
+                                                {item.available_stock_qty !== undefined ? `${item.available_stock_qty} on hand` : 'N/A'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* Actions & Decision Notes Panel */}
+                <div className="p-4 bg-gray-50/50 dark:bg-white/[0.02] rounded-2xl border border-gray-100 dark:border-white/5 space-y-4">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Workflow Actions</p>
+
+                    {(isAdmin || isRequester) && (
+                        <textarea
+                            placeholder="Approval comments / Rejection reason / Modification notes..."
+                            value={actionNotes}
+                            onChange={e => setActionNotes(e.target.value)}
+                            className="w-full px-4 py-3 bg-white dark:bg-black border border-gray-200 dark:border-white/10 rounded-xl text-[10px] font-bold focus:outline-none"
+                        />
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                        {/* Admin Pending Actions */}
+                        {req.status === 'PENDING' && isAdmin && !isRequester && (
+                            <>
+                                <button
+                                    disabled={processing}
+                                    onClick={handleApprove}
+                                    className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-md"
+                                >
+                                    Approve Requisition
+                                </button>
+                                <button
+                                    disabled={processing}
+                                    onClick={handleRequestModification}
+                                    className="px-5 py-2.5 bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all shadow-md"
+                                >
+                                    Request Modification
+                                </button>
+                                <button
+                                    disabled={processing}
+                                    onClick={handleReject}
+                                    className="px-5 py-2.5 bg-rose-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-500 transition-all shadow-md"
+                                >
+                                    Reject Requisition
+                                </button>
+                            </>
+                        )}
+
+                        {/* Admin Issue Stock Action */}
+                        {['APPROVED', 'PARTIALLY_ISSUED'].includes(req.status) && isAdmin && (
+                            <button
+                                disabled={processing}
+                                onClick={onOpenIssueModal}
+                                className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-md flex items-center gap-2"
+                            >
+                                <Box className="w-4 h-4" /> Issue Stock Items
+                            </button>
+                        )}
+
+                        {/* Trainer Confirm Collection */}
+                        {['ISSUED', 'PARTIALLY_ISSUED'].includes(req.status) && (
+                            <button
+                                disabled={processing}
+                                onClick={handleConfirmCollection}
+                                className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-md flex items-center gap-2"
+                            >
+                                <CheckCircle2 className="w-4 h-4" /> Confirm Collection
+                            </button>
+                        )}
+
+                        {/* Trainer Submit Draft */}
+                        {req.status === 'DRAFT' && isRequester && (
+                            <button
+                                disabled={processing}
+                                onClick={handleSubmitDraft}
+                                className="px-5 py-2.5 bg-maroon text-gold rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-md"
+                            >
+                                Submit Requisition
+                            </button>
+                        )}
+
+                        {/* Cancel Button */}
+                        {!['COMPLETED', 'CANCELLED'].includes(req.status) && (isAdmin || isRequester) && (
+                            <button
+                                disabled={processing}
+                                onClick={handleCancel}
+                                className="px-4 py-2.5 bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-500 hover:text-white transition-all ml-auto"
+                            >
+                                Cancel Requisition
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Audit Timeline */}
+                {req.timeline && req.timeline.length > 0 && (
+                    <ApprovalTimeline timeline={req.timeline} />
+                )}
+            </div>
+        </Modal>
+    );
+}
+
+/**
+ * Issue Items Modal for Admins
+ */
+function IssueItemsModal({ requisitionId, onClose, onSuccess }) {
+    const [req, setReq] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [issueQtyMap, setIssueQtyMap] = useState({});
+    const [notes, setNotes] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+    const [errorMsg, setErrorMsg] = useState('');
+
+    useEffect(() => {
+        inventoryAPI.getRequisition(requisitionId).then(res => {
+            setReq(res.data);
+            const map = {};
+            (res.data.items || []).forEach(i => {
+                const remaining = Math.max(0, (i.approved_qty > 0 ? i.approved_qty : i.requested_qty) - (i.issued_qty || 0));
+                map[i.id] = remaining;
+            });
+            setIssueQtyMap(map);
+        }).finally(() => setLoading(false));
+    }, [requisitionId]);
+
+    const handleIssueSubmit = async (e) => {
+        e.preventDefault();
+        setErrorMsg('');
+
+        const itemsPayload = Object.entries(issueQtyMap)
+            .map(([reqItemId, qty]) => ({ requisition_item_id: parseInt(reqItemId), issue_qty: parseInt(qty) || 0 }))
+            .filter(i => i.issue_qty > 0);
+
+        if (itemsPayload.length === 0) {
+            setErrorMsg('Specify at least one item with issue_qty > 0');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            await inventoryAPI.issueItems(requisitionId, {
+                items: itemsPayload,
+                notes
+            });
+            onSuccess();
+        } catch (err) {
+            setErrorMsg(err.response?.data?.error || err.response?.data?.details?.[0] || 'Issue stock failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    if (loading || !req) {
+        return (
+            <Modal title="Issue Stock" onClose={onClose}>
+                <div className="py-12 text-center text-xs font-bold">Loading requisition data...</div>
+            </Modal>
+        );
+    }
+
+    return (
+        <Modal title={`Issue Stock for REQ ${req.requisition_number}`} onClose={onClose}>
+            <form onSubmit={handleIssueSubmit} className="space-y-6">
+                {errorMsg && (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs font-bold">
+                        {errorMsg}
+                    </div>
+                )}
+
+                <div className="border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="bg-gray-50/50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+                                <th className="px-4 py-2.5 text-left text-[9px] font-black text-gray-400 uppercase">Item</th>
+                                <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Approved Qty</th>
+                                <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Issued So Far</th>
+                                <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Available Stock</th>
+                                <th className="px-3 py-2.5 text-center text-[9px] font-black text-gray-400 uppercase">Issue Now</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                            {(req.items || []).map(item => {
+                                const avail = item.available_stock_qty !== undefined ? item.available_stock_qty : (item.current_stock_qty || 0);
+                                const issueQty = issueQtyMap[item.id] || 0;
+                                const isOverStock = issueQty > avail;
+
+                                return (
+                                    <tr key={item.id} className="hover:bg-gray-50/30">
+                                        <td className="px-4 py-3">
+                                            <p className="text-[11px] font-black uppercase text-gray-900 dark:text-white">{item.item_name}</p>
+                                        </td>
+                                        <td className="px-3 py-3 text-center text-[11px] font-black">{item.approved_qty}</td>
+                                        <td className="px-3 py-3 text-center text-[11px] font-black text-blue-600">{item.issued_qty}</td>
+                                        <td className="px-3 py-3 text-center text-[11px] font-black">
+                                            <span className={avail < issueQty ? 'text-rose-500 font-bold' : 'text-emerald-600'}>
+                                                {avail}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-3 text-center">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max={avail}
+                                                value={issueQtyMap[item.id] || 0}
+                                                onChange={e => setIssueQtyMap({ ...issueQtyMap, [item.id]: parseInt(e.target.value) || 0 })}
+                                                className={`w-20 px-2 py-1 bg-white dark:bg-black border rounded text-center text-[10px] font-bold ${
+                                                    isOverStock ? 'border-rose-500 text-rose-500 ring-2 ring-rose-500/20' : 'border-gray-200 dark:border-white/10'
+                                                }`}
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div>
+                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Issue Transaction Notes</label>
+                    <input
+                        type="text"
+                        placeholder="e.g. Issued batch #4829 from main store..."
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 dark:bg-black border border-gray-100 dark:border-white/5 rounded-xl text-[10px] font-bold"
+                    />
+                </div>
+
+                <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                    {submitting ? 'Processing Issue...' : 'Authorize Stock Issue & Deduct Inventory'}
+                </button>
+            </form>
+        </Modal>
+    );
+}
+
+/**
+ * Audit Trail Timeline Component
+ */
+function ApprovalTimeline({ timeline }) {
+    return (
+        <div className="p-4 bg-gray-50/50 dark:bg-white/[0.01] rounded-2xl border border-gray-100 dark:border-white/5">
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-4">Audit Trail & History</p>
+            <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-200 dark:before:bg-white/10">
+                {timeline.map((event, idx) => (
+                    <div key={idx} className="relative">
+                        <div className="absolute -left-6 top-1.5 w-3 h-3 rounded-full bg-maroon border-2 border-white dark:border-black" />
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black text-gray-900 dark:text-white uppercase">{event.action?.replace(/_/g, ' ')}</span>
+                                <span className="text-[8px] font-bold text-gray-400">• {new Date(event.timestamp).toLocaleString()}</span>
+                            </div>
+                            <p className="text-[9px] font-bold text-gray-500 uppercase">By {event.user_name || event.user_email}</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

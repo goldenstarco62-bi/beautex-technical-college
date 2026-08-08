@@ -71,8 +71,50 @@ const notificationController = {
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
-    }
+    },
 
+    markAllRead: async (req, res) => {
+        try {
+            const userId = req.user.id;
+            if (await isMongo()) {
+                const Notification = (await import('../models/mongo/Notification.js')).default;
+                await Notification.updateMany({ $or: [{ user_id: userId }, { user_id: null }] }, { is_read: true });
+            } else {
+                const isPostgres = (await import('../config/database.js')).getActiveDbEngine() === 'postgres';
+                const sql = isPostgres
+                    ? 'UPDATE notifications SET is_read = TRUE WHERE user_id = $1 OR user_id IS NULL'
+                    : 'UPDATE notifications SET is_read = 1 WHERE user_id = ? OR user_id IS NULL';
+                await query(sql, [userId]);
+            }
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
+    },
+
+    getUnreadCount: async (req, res) => {
+        try {
+            const userId = req.user.id;
+            let count = 0;
+            if (await isMongo()) {
+                const Notification = (await import('../models/mongo/Notification.js')).default;
+                count = await Notification.countDocuments({
+                    $or: [{ user_id: userId }, { user_id: null }],
+                    is_read: false
+                });
+            } else {
+                const isPostgres = (await import('../config/database.js')).getActiveDbEngine() === 'postgres';
+                const sql = isPostgres
+                    ? 'SELECT COUNT(*) as count FROM notifications WHERE (user_id = $1 OR user_id IS NULL) AND (is_read = FALSE OR is_read IS NULL)'
+                    : 'SELECT COUNT(*) as count FROM notifications WHERE (user_id = ? OR user_id IS NULL) AND (is_read = 0 OR is_read IS NULL)';
+                const result = await query(sql, [userId]);
+                count = parseInt(result[0]?.count || 0, 10);
+            }
+            res.json({ unreadCount: count });
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
+    }
 };
 
 export default notificationController;

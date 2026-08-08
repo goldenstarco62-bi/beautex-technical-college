@@ -219,3 +219,112 @@ CREATE TABLE IF NOT EXISTS inv_procurement_wishlist (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================================
+-- INVENTORY REQUISITION SYSTEM (Multi-item workflow)
+-- ============================================================
+
+-- Requisition Headers
+CREATE TABLE IF NOT EXISTS inv_requisitions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requisition_number TEXT UNIQUE NOT NULL,   -- REQ-YYYY-NNNNN
+  requester_id TEXT NOT NULL,                -- users.id
+  requester_email TEXT NOT NULL,
+  requester_name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  purpose TEXT,
+  priority TEXT DEFAULT 'Normal' CHECK(priority IN ('Normal', 'Urgent')),
+  required_date DATE,
+  status TEXT DEFAULT 'DRAFT' CHECK(status IN (
+    'DRAFT','PENDING','APPROVED','REJECTED',
+    'MODIFICATION_REQUIRED','PARTIALLY_ISSUED','ISSUED','COMPLETED','CANCELLED'
+  )),
+  -- Approval fields
+  approved_by TEXT,
+  approved_by_name TEXT,
+  approved_at DATETIME,
+  approval_comments TEXT,
+  -- Rejection fields
+  rejected_by TEXT,
+  rejected_by_name TEXT,
+  rejected_at DATETIME,
+  rejection_reason TEXT,
+  -- Modification fields
+  modification_requested_by TEXT,
+  modification_requested_by_name TEXT,
+  modification_note TEXT,
+  modification_requested_at DATETIME,
+  -- Issue fields
+  issued_by TEXT,
+  issued_by_name TEXT,
+  issued_at DATETIME,
+  -- Collection fields
+  confirmed_by TEXT,
+  confirmed_by_name TEXT,
+  confirmed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Requisition Line Items
+CREATE TABLE IF NOT EXISTS inv_requisition_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  requisition_id INTEGER NOT NULL,
+  item_id INTEGER,                           -- NULL if item not in system
+  item_name TEXT NOT NULL,
+  category_name TEXT,
+  requested_qty INTEGER NOT NULL,
+  approved_qty INTEGER DEFAULT 0,
+  issued_qty INTEGER DEFAULT 0,
+  unit_type TEXT DEFAULT 'Piece',
+  purpose_remarks TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (requisition_id) REFERENCES inv_requisitions(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_id) REFERENCES inv_items(id)
+);
+
+-- Stock Reservations (approved but not yet issued)
+CREATE TABLE IF NOT EXISTS inv_stock_reservations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL,
+  requisition_id INTEGER NOT NULL,
+  requisition_item_id INTEGER NOT NULL,
+  reserved_qty INTEGER NOT NULL,
+  status TEXT DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','RELEASED','FULFILLED')),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (item_id) REFERENCES inv_items(id),
+  FOREIGN KEY (requisition_id) REFERENCES inv_requisitions(id) ON DELETE CASCADE,
+  FOREIGN KEY (requisition_item_id) REFERENCES inv_requisition_items(id) ON DELETE CASCADE
+);
+
+-- Immutable Inventory Audit Log
+CREATE TABLE IF NOT EXISTS inv_audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT,
+  user_email TEXT,
+  user_name TEXT,
+  action TEXT NOT NULL,
+  module TEXT DEFAULT 'inventory',
+  record_type TEXT,
+  record_id TEXT,
+  previous_value TEXT,                       -- JSON text
+  new_value TEXT,                            -- JSON text
+  ip_address TEXT,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_inv_req_status ON inv_requisitions(status);
+CREATE INDEX IF NOT EXISTS idx_inv_req_requester ON inv_requisitions(requester_email);
+CREATE INDEX IF NOT EXISTS idx_inv_req_dept ON inv_requisitions(department);
+CREATE INDEX IF NOT EXISTS idx_inv_req_created ON inv_requisitions(created_at);
+CREATE INDEX IF NOT EXISTS idx_inv_req_items_req ON inv_requisition_items(requisition_id);
+CREATE INDEX IF NOT EXISTS idx_inv_req_items_item ON inv_requisition_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_inv_reservations_item ON inv_stock_reservations(item_id);
+CREATE INDEX IF NOT EXISTS idx_inv_reservations_req ON inv_stock_reservations(requisition_id);
+CREATE INDEX IF NOT EXISTS idx_inv_reservations_status ON inv_stock_reservations(status);
+CREATE INDEX IF NOT EXISTS idx_inv_audit_record ON inv_audit_logs(record_type, record_id);
+CREATE INDEX IF NOT EXISTS idx_inv_audit_user ON inv_audit_logs(user_email);
+CREATE INDEX IF NOT EXISTS idx_inv_audit_timestamp ON inv_audit_logs(timestamp);

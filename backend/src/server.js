@@ -179,29 +179,36 @@ process.on('unhandledRejection', (reason) => {
     logger.error({ reason }, '🔥 UNHANDLED PROMISE REJECTION');
 });
 
-// Initialize database (deferred to first request or async background)
-let dbInitialized = false;
+// Initialize database & background tasks
+let dbInitPromise = null;
 let loadedApiRoutes = null;
+
+const startServices = () => {
+    if (!dbInitPromise) {
+        logger.info('🏗️  Initializing database & services...');
+        dbInitPromise = (async () => {
+            await initializeDatabase();
+            
+            // Auto initialize monthly fee records in background (NON-BLOCKING)
+            import('./controllers/monthlyFeeController.js')
+                .then(m => m.autoInitializeCurrentMonth())
+                .then(() => logger.info('✅ Monthly fee tracker initialized successfully'))
+                .catch(monthlyFeeErr => logger.warn({ err: monthlyFeeErr }, '⚠️  Monthly fee tracker auto-initialization warning'));
+        })();
+    }
+    return dbInitPromise;
+};
+
+// Pre-warm database & pre-load API routes immediately on load
+startServices();
+import('./routes/api.js').then(m => { loadedApiRoutes = m.default; }).catch(err => logger.error({ err }, 'Failed to pre-load API routes'));
 
 const ensureServices = async (req, res, next) => {
     try {
-        if (!dbInitialized) {
-            logger.info('🏗️  First request received. Initializing services...');
-            await initializeDatabase();
-            dbInitialized = true;
-
-            // Auto initialize monthly fee records for the current month
-            try {
-                const { autoInitializeCurrentMonth } = await import('./controllers/monthlyFeeController.js');
-                await autoInitializeCurrentMonth();
-                logger.info('✅ Monthly fee tracker initialized successfully');
-            } catch (monthlyFeeErr) {
-                logger.warn({ err: monthlyFeeErr }, '⚠️  Monthly fee tracker auto-initialization warning');
-            }
-        }
+        await startServices();
 
         if (!loadedApiRoutes) {
-            logger.info('💉 Lazy loading API routes...');
+            logger.info('💉 Loading API routes...');
             const { default: routes } = await import('./routes/api.js');
             loadedApiRoutes = routes;
         }
@@ -216,13 +223,14 @@ const ensureServices = async (req, res, next) => {
     }
 };
 
-// Internal API routes (Lazy Loaded)
+// Internal API routes
 app.use('/api', ensureServices, (req, res, next) => {
     if (loadedApiRoutes) {
         return loadedApiRoutes(req, res, next);
     }
     next();
 });
+
 
 
 

@@ -3,6 +3,7 @@
  */
 import express from 'express';
 import * as inventoryController from '../controllers/inventoryController.js';
+import * as requisitionController from '../controllers/requisitionController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 
@@ -10,6 +11,20 @@ const router = express.Router();
 
 // Inventory Dashboard
 router.get('/dashboard', authenticateToken, authorizeRoles('admin', 'superadmin', 'teacher'), inventoryController.getDashboardStats);
+router.get('/stock-summary', authenticateToken, requisitionController.getStockSummary);
+
+// Requisition System Routes
+router.get('/requisitions', authenticateToken, requisitionController.getRequisitions);
+router.get('/requisitions/:id', authenticateToken, requisitionController.getRequisition);
+router.post('/requisitions', authenticateToken, requisitionController.createRequisition);
+router.post('/requisitions/:id/submit', authenticateToken, requisitionController.submitRequisition);
+router.post('/requisitions/:id/approve', authenticateToken, authorizeRoles('admin', 'superadmin'), requisitionController.approveRequisition);
+router.post('/requisitions/:id/reject', authenticateToken, authorizeRoles('admin', 'superadmin'), requisitionController.rejectRequisition);
+router.post('/requisitions/:id/request-modification', authenticateToken, authorizeRoles('admin', 'superadmin'), requisitionController.requestModification);
+router.post('/requisitions/:id/resubmit', authenticateToken, requisitionController.resubmitRequisition);
+router.post('/requisitions/:id/issue', authenticateToken, authorizeRoles('admin', 'superadmin'), requisitionController.issueItems);
+router.post('/requisitions/:id/confirm-collection', authenticateToken, requisitionController.confirmCollection);
+router.post('/requisitions/:id/cancel', authenticateToken, requisitionController.cancelRequisition);
 
 // Categories
 router.get('/categories', authenticateToken, inventoryController.getCategories);

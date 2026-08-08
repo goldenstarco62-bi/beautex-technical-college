@@ -44,17 +44,24 @@ export const getDashboardStats = async (req, res) => {
             totalItems,
             totalValue,
             lowStock,
+            outOfStock,
             issuedToday,
             pendingRequestsCount,
+            pendingRequisitionsCount,
+            readyForCollectionCount,
             expiringSoon,
             recentTransactions,
-            recentRequests
+            recentRequests,
+            recentRequisitions
         ] = await Promise.all([
             queryOne('SELECT COUNT(*) as count, SUM(quantity) as total_qty FROM inv_items WHERE status != ?', ['Discontinued']),
             queryOne('SELECT SUM(quantity * purchase_price) as value FROM inv_items WHERE status != ?', ['Discontinued']),
-            query('SELECT COUNT(*) as count FROM inv_items WHERE quantity <= minimum_stock_level AND quantity > 0 AND status = ?', ['Available']),
-            queryOne(`SELECT COUNT(*) as count FROM inv_stock_out WHERE date_issued = ${getCurrentDateSQL()} ${!isAdmin ? 'AND issued_to_email = ?' : ''}`, !isAdmin ? [userEmail] : []),
-            queryOne(`SELECT COUNT(*) as count FROM inv_department_requests WHERE status = 'Pending' ${!isAdmin ? 'AND requested_by = ?' : ''}`, !isAdmin ? [userEmail] : []),
+            queryOne('SELECT COUNT(*) as count FROM inv_items WHERE quantity <= minimum_stock_level AND quantity > 0 AND status = ?', ['Available']),
+            queryOne('SELECT COUNT(*) as count FROM inv_items WHERE quantity = 0 AND status = ?', ['Available']),
+            queryOne(`SELECT COUNT(*) as count FROM inv_stock_out WHERE date_issued = ${getCurrentDateSQL()} ${!isAdmin ? 'AND LOWER(issued_to_email) = LOWER(?)' : ''}`, !isAdmin ? [userEmail] : []),
+            queryOne(`SELECT COUNT(*) as count FROM inv_department_requests WHERE status = 'Pending' ${!isAdmin ? 'AND LOWER(requested_by) = LOWER(?)' : ''}`, !isAdmin ? [userEmail] : []),
+            queryOne(`SELECT COUNT(*) as count FROM inv_requisitions WHERE status = 'PENDING' ${!isAdmin ? 'AND LOWER(requester_email) = LOWER(?)' : ''}`, !isAdmin ? [userEmail] : []),
+            queryOne(`SELECT COUNT(*) as count FROM inv_requisitions WHERE status IN ('ISSUED', 'PARTIALLY_ISSUED') ${!isAdmin ? 'AND LOWER(requester_email) = LOWER(?)' : ''}`, !isAdmin ? [userEmail] : []),
             query(`SELECT i.name, i.expiry_date, i.quantity, c.name as category 
                    FROM inv_items i LEFT JOIN inv_categories c ON i.category_id = c.id 
                    WHERE i.expiry_date IS NOT NULL AND i.expiry_date >= ${getCurrentDateSQL()} 
@@ -62,50 +69,33 @@ export const getDashboardStats = async (req, res) => {
                    ORDER BY i.expiry_date ASC LIMIT 10`),
             query(`SELECT so.*, i.name as item_name, i.unit_type 
                    FROM inv_stock_out so LEFT JOIN inv_items i ON so.item_id = i.id 
-                   WHERE 1=1 ${!isAdmin ? 'AND so.issued_to_email = ?' : ''}
+                   WHERE 1=1 ${!isAdmin ? 'AND LOWER(so.issued_to_email) = LOWER(?)' : ''}
                    ORDER BY so.created_at DESC LIMIT 10`, !isAdmin ? [userEmail] : []),
             query(`SELECT * FROM inv_department_requests 
-                   WHERE 1=1 ${!isAdmin ? 'AND requested_by = ?' : ''} 
-                   ORDER BY created_at DESC LIMIT 5`, !isAdmin ? [userEmail] : [])
+                   WHERE 1=1 ${!isAdmin ? 'AND LOWER(requested_by) = LOWER(?)' : ''} 
+                   ORDER BY created_at DESC LIMIT 5`, !isAdmin ? [userEmail] : []),
+            query(`SELECT r.*, 
+                    (SELECT COUNT(*) FROM inv_requisition_items ri WHERE ri.requisition_id = r.id) as total_items
+                   FROM inv_requisitions r
+                   WHERE 1=1 ${!isAdmin ? 'AND LOWER(r.requester_email) = LOWER(?)' : ''}
+                   ORDER BY r.created_at DESC LIMIT 5`, !isAdmin ? [userEmail] : [])
         ]);
 
-        if (isAdmin) {
-            const expiredItems = await queryOne(`SELECT COUNT(*) as count FROM inv_items WHERE expiry_date < ${getCurrentDateSQL()} AND status = 'Available'`);
-            const outOfStock = await query('SELECT COUNT(*) as count FROM inv_items WHERE quantity = 0 AND status = ?', ['Available']);
-            const damagedItems = await query(`SELECT COUNT(*) as count FROM inv_damage_logs WHERE report_date >= ${getDateIntervalSQL(-30)}`);
-
-            res.json({
-                totalItems: totalItems?.count || 0,
-                totalQty: totalItems?.total_qty || 0,
-                totalValue: totalValue?.value || 0,
-                lowStockCount: lowStock?.[0]?.count || 0,
-                issuedToday: issuedToday?.count || 0,
-                pendingRequests: pendingRequestsCount?.count || 0,
-                expiringSoon: expiringSoon || [],
-                expiredCount: expiredItems?.count || 0,
-                outOfStockCount: outOfStock?.[0]?.count || 0,
-                recentTransactions: recentTransactions || [],
-                damagedLastMonth: damagedItems?.[0]?.count || 0,
-                recentRequests: recentRequests || []
-            });
-        } else {
-            // Teacher specific dashboard
-            const myTotalIssued = await queryOne('SELECT SUM(quantity_issued) as sum FROM inv_stock_out WHERE issued_to_email = ?', [userEmail]);
-            const approvedRequests = await queryOne("SELECT COUNT(*) as count FROM inv_department_requests WHERE status = 'Approved' AND requested_by = ?", [userEmail]);
-            
-            res.json({
-                totalItems: 0,
-                totalQty: myTotalIssued?.sum || 0,
-                totalValue: 0,
-                lowStockCount: 0,
-                issuedToday: issuedToday?.count || 0,
-                pendingRequests: pendingRequestsCount?.count || 0,
-                approvedRequests: approvedRequests?.count || 0,
-                expiringSoon: [],
-                recentTransactions: recentTransactions || [],
-                recentRequests: recentRequests || []
-            });
-        }
+        res.json({
+            totalItems: totalItems?.count || 0,
+            totalQty: totalItems?.total_qty || 0,
+            totalValue: totalValue?.value || 0,
+            lowStockCount: lowStock?.count || 0,
+            outOfStockCount: outOfStock?.count || 0,
+            issuedToday: issuedToday?.count || 0,
+            pendingRequests: pendingRequestsCount?.count || 0,
+            pendingRequisitions: pendingRequisitionsCount?.count || 0,
+            readyForCollection: readyForCollectionCount?.count || 0,
+            expiringSoon: expiringSoon || [],
+            recentTransactions: recentTransactions || [],
+            recentRequests: recentRequests || [],
+            recentRequisitions: recentRequisitions || []
+        });
     } catch (err) {
         console.error('[inventory] Inventory Dashboard Critical Error:', {
             message: err.message,
@@ -180,7 +170,15 @@ export const getItems = async (req, res) => {
                       WHERE 1=1`;
         const params = [];
 
-        if (category_id) { baseSql += ' AND i.category_id = ?'; params.push(category_id); }
+        if (category_id && category_id !== 'ALL') {
+            if (/^\d+$/.test(category_id)) {
+                baseSql += ' AND i.category_id = ?';
+                params.push(parseInt(category_id, 10));
+            } else {
+                baseSql += ' AND (LOWER(c.name) LIKE LOWER(?) OR LOWER(c.department) LIKE LOWER(?))';
+                params.push(`%${category_id}%`, `%${category_id}%`);
+            }
+        }
         if (status) { baseSql += ' AND i.status = ?'; params.push(status); }
         if (search) { 
             baseSql += ' AND (i.name LIKE ? OR i.item_code LIKE ? OR i.description LIKE ? OR i.serial_number LIKE ?)'; 

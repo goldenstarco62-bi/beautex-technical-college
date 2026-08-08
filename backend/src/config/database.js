@@ -1451,6 +1451,139 @@ async function runSqliteMigrations(database) {
     } catch (e) {
         console.warn('⚠️ unit_coverage_logs student_id migration warning (SQLite):', e.message);
     }
+
+    // ── Inventory Requisition System (SQLite) ─────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS inv_requisitions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requisition_number TEXT UNIQUE NOT NULL,
+                requester_id TEXT NOT NULL,
+                requester_email TEXT NOT NULL,
+                requester_name TEXT NOT NULL,
+                department TEXT NOT NULL,
+                purpose TEXT,
+                priority TEXT DEFAULT 'Normal' CHECK(priority IN ('Normal', 'Urgent')),
+                required_date DATE,
+                status TEXT DEFAULT 'DRAFT' CHECK(status IN (
+                    'DRAFT','PENDING','APPROVED','REJECTED',
+                    'MODIFICATION_REQUIRED','PARTIALLY_ISSUED','ISSUED','COMPLETED','CANCELLED'
+                )),
+                approved_by TEXT,
+                approved_by_name TEXT,
+                approved_at DATETIME,
+                approval_comments TEXT,
+                rejected_by TEXT,
+                rejected_by_name TEXT,
+                rejected_at DATETIME,
+                rejection_reason TEXT,
+                modification_requested_by TEXT,
+                modification_requested_by_name TEXT,
+                modification_note TEXT,
+                modification_requested_at DATETIME,
+                issued_by TEXT,
+                issued_by_name TEXT,
+                issued_at DATETIME,
+                confirmed_by TEXT,
+                confirmed_by_name TEXT,
+                confirmed_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS inv_requisition_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requisition_id INTEGER NOT NULL,
+                item_id INTEGER,
+                item_name TEXT NOT NULL,
+                category_name TEXT,
+                requested_qty INTEGER NOT NULL,
+                approved_qty INTEGER DEFAULT 0,
+                issued_qty INTEGER DEFAULT 0,
+                unit_type TEXT DEFAULT 'Piece',
+                purpose_remarks TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (requisition_id) REFERENCES inv_requisitions(id) ON DELETE CASCADE,
+                FOREIGN KEY (item_id) REFERENCES inv_items(id)
+            )
+        `);
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS inv_stock_reservations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL,
+                requisition_id INTEGER NOT NULL,
+                requisition_item_id INTEGER NOT NULL,
+                reserved_qty INTEGER NOT NULL,
+                status TEXT DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','RELEASED','FULFILLED')),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (item_id) REFERENCES inv_items(id),
+                FOREIGN KEY (requisition_id) REFERENCES inv_requisitions(id) ON DELETE CASCADE,
+                FOREIGN KEY (requisition_item_id) REFERENCES inv_requisition_items(id) ON DELETE CASCADE
+            )
+        `);
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS inv_audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT,
+                user_email TEXT,
+                user_name TEXT,
+                action TEXT NOT NULL,
+                module TEXT DEFAULT 'inventory',
+                record_type TEXT,
+                record_id TEXT,
+                previous_value TEXT,
+                new_value TEXT,
+                ip_address TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        // Indexes
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_req_status ON inv_requisitions(status)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_req_requester ON inv_requisitions(requester_email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_req_dept ON inv_requisitions(department)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_req_created ON inv_requisitions(created_at)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_req_items_req ON inv_requisition_items(requisition_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_req_items_item ON inv_requisition_items(item_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_reservations_item ON inv_stock_reservations(item_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_reservations_req ON inv_stock_reservations(requisition_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_reservations_status ON inv_stock_reservations(status)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_audit_record ON inv_audit_logs(record_type, record_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_inv_audit_user ON inv_audit_logs(user_email)');
+        console.log('✅ Inventory requisition system tables ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ Inventory requisition migration warning (SQLite):', e.message);
+    }
+
+    // ── inv_items image_url column (SQLite parity with Postgres schema) ─────
+    try {
+        const invItemsCols = await database.all("PRAGMA table_info('inv_items')");
+        const invItemsColNames = invItemsCols.map(c => c.name);
+        if (!invItemsColNames.includes('image_url')) {
+            await database.run('ALTER TABLE inv_items ADD COLUMN image_url TEXT');
+            console.log('✅ image_url column added to inv_items (SQLite)');
+        }
+    } catch (e) {
+        console.warn('⚠️ inv_items image_url migration warning (SQLite):', e.message);
+    }
+
+    // ── notifications link_data column ───────────────────────────────────────
+    try {
+        const notifCols = await database.all("PRAGMA table_info('notifications')");
+        const notifColNames = notifCols.map(c => c.name);
+        if (!notifColNames.includes('link_data')) {
+            await database.run('ALTER TABLE notifications ADD COLUMN link_data TEXT');
+            console.log('✅ link_data column added to notifications (SQLite)');
+        }
+        if (!notifColNames.includes('notification_category')) {
+            await database.run("ALTER TABLE notifications ADD COLUMN notification_category TEXT DEFAULT 'system'");
+            console.log('✅ notification_category column added to notifications (SQLite)');
+        }
+    } catch (e) {
+        console.warn('⚠️ notifications columns migration warning (SQLite):', e.message);
+    }
 }
 
 
