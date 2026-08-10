@@ -203,18 +203,11 @@ export default function Faculty() {
     };
 
     const handleResetPassword = async (member) => {
-        if (!window.confirm(`Reset password for ${member.name}?\n\nA new temporary password will be generated and sent to:\n\u{1F4E7} ${member.email}\n\nThe instructor will be required to change it on next login.`)) return;
+        if (!window.confirm(`Reset password for ${member.name}?\n\nA new temporary password will be generated and sent to:\n📧 ${member.email}\n\nThe instructor will be required to change it on next login.`)) return;
         setResetLoading(true);
         try {
-            const usersRes = await usersAPI.getAll();
-            const matchedUser = usersRes.data.find(u => u.email?.toLowerCase() === member.email?.toLowerCase());
-            if (!matchedUser) {
-                alert('No system account found for this instructor. They may not have a login account yet.');
-                setResetLoading(false);
-                return;
-            }
-            await usersAPI.resetPassword(matchedUser.id);
-            alert(`\u2705 Password reset successful!\n\nA temporary password has been sent to:\n\u{1F4E7} ${member.email}\n\nThe instructor must change it on next login.`);
+            await usersAPI.resetByEmail(member.email);
+            alert(`✅ Password reset successful!\n\nA temporary password has been sent to:\n📧 ${member.email}\n\nThe instructor must change it on next login.`);
         } catch (error) {
             alert(error.response?.data?.error || 'Failed to reset password. Please try again.');
         } finally {

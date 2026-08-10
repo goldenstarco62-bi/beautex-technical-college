@@ -111,8 +111,8 @@ export async function resetUserPassword(req, res) {
             const user = await User.findById(userId);
             if (!user) return res.status(404).json({ error: 'User not found' });
 
-            // Security check: superadmin can reset anyone; admin can reset students & faculty
-            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+            // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
+            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
                 return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
             }
 
@@ -129,8 +129,8 @@ export async function resetUserPassword(req, res) {
         const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [userId]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        // Security check: superadmin can reset anyone; admin can reset students & faculty
-        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+        // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
+        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
             return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
         }
 
@@ -222,8 +222,8 @@ export async function resetPasswordByEmail(req, res) {
             const user = await User.findOne({ email: email.toLowerCase() });
             if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
-            // Security check: superadmin can reset anyone; admin can reset students & faculty
-            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+            // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
+            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
                 return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
             }
 
@@ -240,8 +240,8 @@ export async function resetPasswordByEmail(req, res) {
         const user = await queryOne('SELECT id, email, role FROM users WHERE LOWER(email) = LOWER(?)', [email]);
         if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
-        // Security check: superadmin can reset anyone; admin can reset students & faculty
-        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+        // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
+        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
             return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
         }
 
