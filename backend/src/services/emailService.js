@@ -4,46 +4,27 @@ dotenv.config();
 
 // Create transporter
 // For development, we use Ethereal if no real SMTP credentials are provided
+const getSmtpCredentials = () => {
+    const user = (process.env.SMTP_USER || 'beautexcollege01@gmail.com').trim();
+    const pass = (process.env.SMTP_PASS || 'tyly zhcc racc aqxv').trim();
+    return { user, pass };
+};
+
 const createTransporter = async () => {
-    // Check for real SMTP credentials
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-        const config = {
-            auth: {
-                user: process.env.SMTP_USER,
-                pass: process.env.SMTP_PASS,
-            }
-        };
+    const { user, pass } = getSmtpCredentials();
+    const config = {
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false, // use startTLS
+        requireTLS: true,
+        connectionTimeout: 10000, // 10s
+        greetingTimeout: 10000,   // 10s
+        auth: { user, pass },
+        tls: { rejectUnauthorized: false }
+    };
 
-        // Robust Gmail configuration
-        config.host = 'smtp.gmail.com';
-        config.port = 587;
-        config.secure = false; // use startTLS
-        config.requireTLS = true;
-        config.connectionTimeout = 10000; // 10s
-        config.greetingTimeout = 10000;   // 10s
-        config.tls = {
-            rejectUnauthorized: false // Helps in many server environments
-        };
-
-        console.log(`📡 Initializing Secure SMTP Transporter for: ${process.env.SMTP_USER}`);
-        return nodemailer.createTransport(config);
-    } else {
-        // Use Ethereal for testing if no credentials are provided
-        const testAccount = await nodemailer.createTestAccount();
-        console.log('📧 Using Ethereal Email for testing');
-        console.log(`   User: ${testAccount.user}`);
-        console.log(`   Pass: ${testAccount.pass}`);
-
-        return nodemailer.createTransport({
-            host: 'smtp.ethereal.email',
-            port: 587,
-            secure: false,
-            auth: {
-                user: testAccount.user,
-                pass: testAccount.pass,
-            },
-        });
-    }
+    console.log(`📡 Initializing Secure SMTP Transporter for: ${user}`);
+    return nodemailer.createTransport(config);
 };
 
 let transporter = null;
@@ -75,11 +56,12 @@ export const sendWelcomeEmail = async (email, role, tempPassword) => {
             transporter = await createTransporter();
         }
 
+        const { user: senderEmail } = getSmtpCredentials();
         const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
         console.log(`📧 Dispatching email: To: ${email}, Login: ${loginUrl}, Mode: ${process.env.NODE_ENV}`);
 
         const info = await transporter.sendMail({
-            from: `"Beautex Technical Training College" <${process.env.SMTP_USER}>`,
+            from: `"Beautex Technical Training College" <${senderEmail}>`,
             to: email,
             subject: 'Welcome to Beautex Technical Training College - Your Login Credentials',
             html: `
@@ -136,10 +118,11 @@ export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
             transporter = await createTransporter();
         }
 
+        const { user: senderEmail } = getSmtpCredentials();
         const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
 
         const info = await transporter.sendMail({
-            from: `"Academic Registry" <${process.env.SMTP_USER}>`,
+            from: `"Academic Registry" <${senderEmail}>`,
             to: email,
             subject: 'Account Password Reset - Beautex Technical Training College',
             html: `
