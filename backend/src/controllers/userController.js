@@ -111,9 +111,9 @@ export async function resetUserPassword(req, res) {
             const user = await User.findById(userId);
             if (!user) return res.status(404).json({ error: 'User not found' });
 
-            // Security check: if not superadmin, can only reset students
-            if (req.user.role !== 'superadmin' && user.role !== 'student') {
-                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+            // Security check: superadmin can reset anyone; admin can reset students & faculty
+            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
             }
 
             user.password = hashedPassword;
@@ -129,9 +129,9 @@ export async function resetUserPassword(req, res) {
         const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [userId]);
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        // Security check: if not superadmin, can only reset students
-        if (req.user.role !== 'superadmin' && user.role !== 'student') {
-            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+        // Security check: superadmin can reset anyone; admin can reset students & faculty
+        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
         }
 
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, userId]);
@@ -210,8 +210,9 @@ export async function getAuditLogs(req, res) {
 
 export async function resetPasswordByEmail(req, res) {
     try {
-        const { email } = req.body;
-        if (!email) return res.status(400).json({ error: 'Email is required' });
+        const { email: rawEmail } = req.body;
+        if (!rawEmail) return res.status(400).json({ error: 'Email is required' });
+        const email = rawEmail.toLowerCase().trim();
 
         const tempPassword = crypto.randomBytes(4).toString('hex'); // 8 hex chars
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
@@ -221,9 +222,9 @@ export async function resetPasswordByEmail(req, res) {
             const user = await User.findOne({ email: email.toLowerCase() });
             if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
-            // Security check: if not superadmin, can only reset students
-            if (req.user.role !== 'superadmin' && user.role !== 'student') {
-                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+            // Security check: superadmin can reset anyone; admin can reset students & faculty
+            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
             }
 
             user.password = hashedPassword;
@@ -236,12 +237,12 @@ export async function resetPasswordByEmail(req, res) {
             return;
         }
 
-        const user = await queryOne('SELECT id, email, role FROM users WHERE email = ?', [email]);
+        const user = await queryOne('SELECT id, email, role FROM users WHERE LOWER(email) = LOWER(?)', [email]);
         if (!user) return res.status(404).json({ error: 'No account found with that email address' });
 
-        // Security check: if not superadmin, can only reset students
-        if (req.user.role !== 'superadmin' && user.role !== 'student') {
-            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student accounts.' });
+        // Security check: superadmin can reset anyone; admin can reset students & faculty
+        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'faculty') {
+            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
         }
 
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, user.id]);

@@ -207,7 +207,7 @@ export default function Faculty() {
         setResetLoading(true);
         try {
             const usersRes = await usersAPI.getAll();
-            const matchedUser = usersRes.data.find(u => u.email === member.email);
+            const matchedUser = usersRes.data.find(u => u.email?.toLowerCase() === member.email?.toLowerCase());
             if (!matchedUser) {
                 alert('No system account found for this instructor. They may not have a login account yet.');
                 setResetLoading(false);
