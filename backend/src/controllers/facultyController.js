@@ -1,5 +1,5 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
-import { sendWelcomeEmail } from '../services/emailService.js';
+import { sendWelcomeEmail, sendAdminResetPasswordEmail } from '../services/emailService.js';
 import { sendLoginCredentials } from '../services/smsService.js';
 import bcrypt from 'bcryptjs';
 
@@ -165,15 +165,84 @@ export async function createFaculty(req, res) {
 
 export async function updateFaculty(req, res) {
     try {
+        const facultyId = req.params.id;
+        const newEmail = req.body.email ? String(req.body.email).toLowerCase().trim() : null;
+
         if (await isMongo()) {
             const Faculty = (await import('../models/mongo/Faculty.js')).default;
+            const User = (await import('../models/mongo/User.js')).default;
+
+            const oldFaculty = await Faculty.findOne({ id: facultyId });
+            if (!oldFaculty) return res.status(404).json({ error: 'Faculty not found' });
+
+            const oldEmail = oldFaculty.email ? String(oldFaculty.email).toLowerCase().trim() : null;
+            const isEmailChanged = Boolean(newEmail && oldEmail && newEmail !== oldEmail);
+
+            if (isEmailChanged) {
+                const existingUser = await User.findOne({ email: newEmail });
+                if (existingUser && existingUser.email !== oldEmail) {
+                    return res.status(400).json({ error: 'The email address is already in use by another account.' });
+                }
+            }
+
+            const updatePayload = { ...req.body, updated_at: new Date() };
+            if (newEmail) updatePayload.email = newEmail;
+
             const updatedFaculty = await Faculty.findOneAndUpdate(
-                { id: req.params.id },
-                { $set: { ...req.body, updated_at: new Date() } },
+                { id: facultyId },
+                { $set: updatePayload },
                 { new: true, runValidators: true }
             );
-            if (!updatedFaculty) return res.status(404).json({ error: 'Faculty not found' });
-            return res.json(updatedFaculty);
+
+            let passwordResetSent = false;
+            if (isEmailChanged) {
+                const tempPassword = generatePassword();
+                const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+                const user = await User.findOne({ email: oldEmail });
+                if (user) {
+                    user.email = newEmail;
+                    user.password = hashedPassword;
+                    user.must_change_password = true;
+                    if (req.body.name) user.name = req.body.name;
+                    await user.save();
+                } else {
+                    const newUser = new User({
+                        name: updatedFaculty.name || req.body.name,
+                        email: newEmail,
+                        password: hashedPassword,
+                        role: 'teacher',
+                        status: 'Active',
+                        must_change_password: true
+                    });
+                    await newUser.save();
+                }
+
+                sendAdminResetPasswordEmail(newEmail, tempPassword)
+                    .then(() => console.log(`[faculty] Password reset email sent to new address: ${newEmail}`))
+                    .catch(err => console.error('[faculty] Failed to send reset email to new address:', err.message));
+                passwordResetSent = true;
+            }
+
+            return res.json({
+                ...updatedFaculty.toObject(),
+                password_reset_sent: passwordResetSent,
+                message: isEmailChanged ? 'Faculty updated and password reset email sent to new address.' : 'Faculty updated successfully.'
+            });
+        }
+
+        // SQL Mode (SQLite / PostgreSQL)
+        const oldFaculty = await queryOne('SELECT * FROM faculty WHERE id = ?', [facultyId]);
+        if (!oldFaculty) return res.status(404).json({ error: 'Faculty not found' });
+
+        const oldEmail = oldFaculty.email ? String(oldFaculty.email).toLowerCase().trim() : null;
+        const isEmailChanged = Boolean(newEmail && oldEmail && newEmail !== oldEmail);
+
+        if (isEmailChanged) {
+            const existingUser = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [newEmail]);
+            if (existingUser) {
+                return res.status(400).json({ error: 'The email address is already in use by another account.' });
+            }
         }
 
         const allowedFields = [
@@ -187,20 +256,43 @@ export async function updateFaculty(req, res) {
                 return JSON.stringify(req.body[f]);
             }
             if (f === 'email') {
-                return String(req.body[f] || '').toLowerCase().trim();
+                return newEmail;
             }
             return req.body[f];
         });
         const setClause = fields.map(f => `${f} = ?`).join(', ');
-        values.push(req.params.id);
+        values.push(facultyId);
 
         const result = await run(`UPDATE faculty SET ${setClause} WHERE id = ?`, values);
         if (result.changes === 0) return res.status(404).json({ error: 'Faculty not found' });
 
-        // Build response from the known update payload — avoids an extra SELECT round-trip
+        let passwordResetSent = false;
+        if (isEmailChanged) {
+            const tempPassword = generatePassword();
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            const user = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [oldEmail]);
+            if (user) {
+                await run('UPDATE users SET email = ?, password = ?, must_change_password = ? WHERE id = ?', [newEmail, hashedPassword, 1, user.id]);
+            } else {
+                await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldFaculty.name, newEmail, hashedPassword, 'teacher', 'Active', 1]);
+            }
+
+            sendAdminResetPasswordEmail(newEmail, tempPassword)
+                .then(() => console.log(`[faculty] Password reset email sent to new address: ${newEmail}`))
+                .catch(err => console.error('[faculty] Failed to send reset email to new address:', err.message));
+            passwordResetSent = true;
+        }
+
         const updatedFields = {};
-        fields.forEach(f => { updatedFields[f] = req.body[f]; });
-        res.json({ id: req.params.id, ...updatedFields });
+        fields.forEach(f => { updatedFields[f] = f === 'email' ? newEmail : req.body[f]; });
+
+        res.json({
+            id: facultyId,
+            ...updatedFields,
+            password_reset_sent: passwordResetSent,
+            message: isEmailChanged ? 'Faculty updated and password reset email sent to new address.' : 'Faculty updated successfully.'
+        });
     } catch (error) {
         console.error('Update faculty error:', error);
         res.status(500).json({ error: 'Failed to update faculty' });

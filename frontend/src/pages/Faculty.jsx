@@ -69,7 +69,10 @@ export default function Faculty() {
         e.preventDefault();
         try {
             if (editingFaculty) {
-                await facultyAPI.update(editingFaculty.id, formData);
+                const res = await facultyAPI.update(editingFaculty.id, formData);
+                if (res.data?.password_reset_sent) {
+                    alert(`✅ Faculty details updated!\n\nSince the email address was updated to:\n📧 ${formData.email}\n\nA password reset email with new temporary credentials has been sent to the new email address.`);
+                }
             } else {
                 const newId = `FAC-${Date.now().toString().slice(-6)}`;
                 await facultyAPI.create({ ...formData, id: newId });

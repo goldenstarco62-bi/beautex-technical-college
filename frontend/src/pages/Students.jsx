@@ -215,10 +215,13 @@ export default function Students() {
         setSaving(true);
         try {
             if (editingStudent) {
-                await studentsAPI.update(editingStudent.id, formData);
+                const res = await studentsAPI.update(editingStudent.id, formData);
                 const updatedList = allStudents.map(s => s.id === editingStudent.id ? { ...s, ...formData } : s);
                 setAllStudents(updatedList);
                 setStudents(updatedList);
+                if (res.data?.password_reset_sent) {
+                    alert(`✅ Student details updated!\n\nSince the email address was updated to:\n📧 ${formData.email}\n\nA password reset email with new temporary credentials has been sent to the new email address.`);
+                }
             } else {
                 await studentsAPI.create(formData);
                 const newStudent = { ...formData, course: Array.isArray(formData.course) ? formData.course : [formData.course] };
