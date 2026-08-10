@@ -219,17 +219,40 @@ export async function resetPasswordByEmail(req, res) {
 
         if (await isMongo()) {
             const User = (await import('../models/mongo/User.js')).default;
-            const user = await User.findOne({ email: email.toLowerCase() });
-            if (!user) return res.status(404).json({ error: 'No account found with that email address' });
+            let user = await User.findOne({ email: email.toLowerCase() });
 
-            // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
-            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
-                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
+            if (!user) {
+                // Check if student or faculty exists with this email and provision User account automatically
+                const Student = (await import('../models/mongo/Student.js')).default;
+                const Faculty = (await import('../models/mongo/Faculty.js')).default;
+
+                const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const studentDoc = await Student.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+                const facultyDoc = !studentDoc ? await Faculty.findOne({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } }) : null;
+
+                if (!studentDoc && !facultyDoc) {
+                    return res.status(404).json({ error: 'No account found with that email address' });
+                }
+
+                user = new User({
+                    name: studentDoc ? studentDoc.name : facultyDoc.name,
+                    email: studentDoc ? studentDoc.email.toLowerCase() : facultyDoc.email.toLowerCase(),
+                    password: hashedPassword,
+                    role: studentDoc ? 'student' : 'teacher',
+                    status: 'Active',
+                    must_change_password: true
+                });
+                await user.save();
+            } else {
+                // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
+                if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
+                    return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
+                }
+
+                user.password = hashedPassword;
+                user.must_change_password = true;
+                await user.save();
             }
-
-            user.password = hashedPassword;
-            user.must_change_password = true;
-            await user.save();
 
             res.json({ message: 'Password reset - temporary credentials emailed' });
             sendAdminResetPasswordEmail(user.email, tempPassword)
@@ -237,19 +260,37 @@ export async function resetPasswordByEmail(req, res) {
             return;
         }
 
-        const user = await queryOne('SELECT id, email, role FROM users WHERE LOWER(email) = LOWER(?)', [email]);
-        if (!user) return res.status(404).json({ error: 'No account found with that email address' });
+        let user = await queryOne('SELECT id, email, role FROM users WHERE LOWER(email) = LOWER(?)', [email]);
+        if (!user) {
+            // Check if student or faculty exists with this email in SQL database
+            const student = await queryOne('SELECT name, email FROM students WHERE LOWER(email) = LOWER(?)', [email]);
+            const faculty = !student ? await queryOne('SELECT name, email FROM faculty WHERE LOWER(email) = LOWER(?)', [email]) : null;
 
-        // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
-        if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
-            return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
+            if (!student && !faculty) {
+                return res.status(404).json({ error: 'No account found with that email address' });
+            }
+
+            const targetName = student ? student.name : faculty.name;
+            const targetEmail = student ? student.email : faculty.email;
+            const targetRole = student ? 'student' : 'teacher';
+
+            await run(
+                'INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)',
+                [targetName, targetEmail.toLowerCase().trim(), hashedPassword, targetRole, 'Active', 1]
+            );
+            user = { email: targetEmail, role: targetRole };
+        } else {
+            // Security check: superadmin can reset anyone; admin can reset students & faculty (teachers)
+            if (req.user.role !== 'superadmin' && user.role !== 'student' && user.role !== 'teacher' && user.role !== 'faculty') {
+                return res.status(403).json({ error: 'Access denied. You can only reset passwords for student and faculty accounts.' });
+            }
+
+            await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, user.id]);
         }
-
-        await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, user.id]);
 
         // Respond immediately — email is fire-and-forget (non-blocking)
         res.json({ message: 'Password reset - temporary credentials emailed' });
-        sendAdminResetPasswordEmail(user.email, tempPassword)
+        sendAdminResetPasswordEmail(user.email || email, tempPassword)
             .catch(err => console.warn('[user] Email delivery failed for password reset by email:', err.message));
     } catch (error) {
         console.error('Reset password by email error:', error);
