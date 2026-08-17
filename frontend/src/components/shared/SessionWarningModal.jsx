@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { SESSION_WARNING_BEFORE_MS } from '../../utils/sessionConfig';
 
 /**

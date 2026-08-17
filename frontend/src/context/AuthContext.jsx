@@ -10,7 +10,7 @@ import {
 } from '../utils/sessionConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Context
+// Context default (consumed when used outside AuthProvider — gives a clear shape)
 // ─────────────────────────────────────────────────────────────────────────────
 const AuthContext = createContext({
     user: null,
@@ -24,37 +24,39 @@ const AuthContext = createContext({
 });
 
 // How often the heartbeat pings /auth/ping to keep last_seen_at current in DB.
-// This is SEPARATE from the inactivity timer — the heartbeat only runs while
-// the user is active (timer is alive).
+// Completely separate from the inactivity timer.
 const HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
 
+// Throttle DOM-activity events so we don't call resetTimer thousands of times/s
+const THROTTLE_MS = 500;
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Provider
+// AuthProvider
 // ─────────────────────────────────────────────────────────────────────────────
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
 
-    // ── Warning modal state ──────────────────────────────────────────────────
-    const [showWarning, setShowWarning] = useState(false);
+    // ── React state ─────────────────────────────────────────────────────────
+    const [user, setUser]                       = useState(null);
+    const [loading, setLoading]                 = useState(true);
+    const [showWarning, setShowWarning]         = useState(false);
     const [warningSecondsLeft, setWarningSecondsLeft] = useState(
         Math.round(SESSION_WARNING_BEFORE_MS / 1000)
     );
 
-    // ── Refs (don't trigger re-renders) ─────────────────────────────────────
-    const heartbeatRef     = useRef(null); // setInterval handle — DB last_seen_at
-    const inactivityRef    = useRef(null); // setTimeout handle — main logout timer
-    const warningRef       = useRef(null); // setTimeout handle — show-warning trigger
-    const warningCountRef  = useRef(null); // setInterval handle — countdown ticks
-    const channelRef       = useRef(null); // BroadcastChannel
+    // ── Mutable refs (no re-render on change) ────────────────────────────────
+    const heartbeatRef    = useRef(null);   // setInterval — DB last_seen_at
+    const inactivityRef   = useRef(null);   // setTimeout — main logout countdown
+    const warningRef      = useRef(null);   // setTimeout — show-warning trigger
+    const warningCountRef = useRef(null);   // setInterval — countdown ticks
+    const channelRef      = useRef(null);   // BroadcastChannel
+    const lastActivityRef = useRef(0);      // timestamp of last processed activity event
 
-    // Keep a stable reference to the logout function so the event listeners
-    // that are registered once on mount can still call the latest version.
+    // Stable ref to the latest logout function so closures registered once
+    // on mount always call the most recent version without stale capture.
     const logoutRef = useRef(null);
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
+    // ── Heartbeat ─────────────────────────────────────────────────────────────
 
-    /** Stop the DB heartbeat ping. */
     const stopHeartbeat = useCallback(() => {
         if (heartbeatRef.current) {
             clearInterval(heartbeatRef.current);
@@ -62,7 +64,6 @@ export function AuthProvider({ children }) {
         }
     }, []);
 
-    /** Start / restart the DB heartbeat ping. */
     const startHeartbeat = useCallback(() => {
         stopHeartbeat();
         heartbeatRef.current = setInterval(() => {
@@ -70,29 +71,31 @@ export function AuthProvider({ children }) {
         }, HEARTBEAT_INTERVAL_MS);
     }, [stopHeartbeat]);
 
-    /** Clear all inactivity-related timers and hide the warning modal. */
+    // ── Timer helpers ─────────────────────────────────────────────────────────
+
+    /** Cancel all inactivity-related timers and hide the warning modal. */
     const clearInactivityTimers = useCallback(() => {
         if (inactivityRef.current)   { clearTimeout(inactivityRef.current);   inactivityRef.current = null; }
         if (warningRef.current)      { clearTimeout(warningRef.current);       warningRef.current = null; }
         if (warningCountRef.current) { clearInterval(warningCountRef.current); warningCountRef.current = null; }
-        // Only update state when the warning is actually showing to avoid
-        // unnecessary React re-renders on every activity event.
-        setShowWarning(prev => prev ? false : prev);
+        // Use functional form to avoid unnecessary re-renders when already false
+        setShowWarning(prev => (prev ? false : prev));
         setWarningSecondsLeft(Math.round(SESSION_WARNING_BEFORE_MS / 1000));
     }, []);
 
-    // ── Logout ───────────────────────────────────────────────────────────────
+    // ── Logout ────────────────────────────────────────────────────────────────
 
     /**
-     * Full logout:
-     *   1. Notify backend for audit trail (fire-and-forget).
-     *   2. Stop all timers.
-     *   3. Clear localStorage.
-     *   4. Broadcast logout to other tabs.
-     *   5. Set user = null  →  ProtectedRoute redirects to /login.
+     * Full logout sequence:
+     *  1. Notify backend for audit trail (fire-and-forget).
+     *  2. Stop all timers.
+     *  3. Clear localStorage.
+     *  4. Broadcast logout to other tabs.
+     *  5. setUser(null) → ProtectedRoute redirects to /login.
      */
     const logout = useCallback((reason = 'manual') => {
-        // Fire-and-forget — we don't wait for the server response
+        // Call logout API while token is still in localStorage so the
+        // Authorization header is set correctly.
         authAPI.logout();
 
         stopHeartbeat();
@@ -101,41 +104,32 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
 
-        // Tell other tabs to log out too
+        // Tell all other open tabs to log out too
         try {
             channelRef.current?.postMessage({ type: 'LOGOUT', reason });
-        } catch (_) { /* BroadcastChannel not supported — silently ignore */ }
+        } catch (_) { /* BroadcastChannel unavailable — ignore */ }
 
         setUser(null);
     }, [stopHeartbeat, clearInactivityTimers]);
 
-    // Keep the ref in sync so old event listener closures always call the
-    // most recent logout function.
+    // Keep the ref pointing at the latest logout so closures registered once
+    // on mount always invoke the current function.
     logoutRef.current = logout;
 
-    // ── Inactivity Timer ─────────────────────────────────────────────────────
+    // ── Inactivity timers ────────────────────────────────────────────────────
 
     /**
-     * Reset (or start) the inactivity timer.
-     *
-     * Called:
-     *   • On every activity event (mousemove, keydown, touch, scroll, …)
-     *   • After login
-     *   • From external components via context (resetSessionTimer)
-     *
-     * Broadcasts ACTIVITY to other tabs so they also reset their timers, keeping
-     * all open tabs alive as long as one of them is active.
-     */
-    /**
-     * Reset the inactivity timer WITHOUT broadcasting to other tabs.
-     * Used when we receive an ACTIVITY message FROM another tab — we must
-     * reset our own timer but must NOT re-broadcast, otherwise we create an
-     * infinite ping-pong loop: Tab A → ACTIVITY → Tab B resets → Tab B broadcasts
-     * → Tab A resets → Tab A broadcasts → ... forever.
+     * Reset (or start) the inactivity countdown WITHOUT broadcasting to other
+     * tabs.  Used for:
+     *  • Receiving an ACTIVITY cross-tab message (broadcasting again would
+     *    create an infinite Tab-A ↔ Tab-B ping-pong loop).
+     *  • Page-load bootstrap.
+     *  • Login startup.
      */
     const resetTimerSilent = useCallback(() => {
         clearInactivityTimers();
 
+        // Warn at SESSION_WARNING_MS (default 90 s)
         warningRef.current = setTimeout(() => {
             setShowWarning(true);
 
@@ -145,7 +139,6 @@ export function AuthProvider({ children }) {
             warningCountRef.current = setInterval(() => {
                 secs -= 1;
                 setWarningSecondsLeft(secs);
-
                 if (secs <= 0) {
                     clearInterval(warningCountRef.current);
                     warningCountRef.current = null;
@@ -153,79 +146,67 @@ export function AuthProvider({ children }) {
             }, 1000);
         }, SESSION_WARNING_MS);
 
+        // Logout at SESSION_TIMEOUT_MS (default 120 s)
         inactivityRef.current = setTimeout(() => {
             logoutRef.current?.('inactivity');
         }, SESSION_TIMEOUT_MS);
     }, [clearInactivityTimers]);
 
     /**
-     * Reset the inactivity timer AND broadcast ACTIVITY to other open tabs.
-     * Only called from real DOM activity events (mousemove, click, keydown …).
-     * Never call this from a BroadcastChannel message handler — use
-     * resetTimerSilent() there to prevent the cross-tab feedback loop.
+     * Reset the inactivity countdown AND broadcast ACTIVITY to other open tabs.
+     * Only called from real DOM-event handlers — never from BroadcastChannel
+     * message handlers (that would restart the cross-tab loop).
      */
     const resetTimer = useCallback(() => {
         resetTimerSilent();
-
-        // Tell other tabs a real user activity occurred so they also reset.
         try {
             channelRef.current?.postMessage({ type: 'ACTIVITY', timestamp: Date.now() });
         } catch (_) { /* BroadcastChannel unavailable — ignore */ }
     }, [resetTimerSilent]);
 
-    // ── "Stay Logged In" handler ─────────────────────────────────────────────
+    // ── "Stay Logged In" ─────────────────────────────────────────────────────
+
     const handleStayLoggedIn = useCallback(() => {
         resetTimer();
     }, [resetTimer]);
 
-    // ── BroadcastChannel setup ───────────────────────────────────────────────
+    // ── BroadcastChannel ─────────────────────────────────────────────────────
+
     const initChannel = useCallback(() => {
-        // Close any existing channel before creating a new one to avoid leaks
-        // when initChannel is called more than once (e.g. login after inactivity logout).
+        // Close previous channel to prevent leaks (e.g. re-login after inactivity logout)
         try { channelRef.current?.close(); } catch (_) {}
 
         try {
             const ch = new BroadcastChannel(SESSION_CHANNEL_NAME);
             ch.onmessage = (e) => {
-                if (e.data?.type === 'LOGOUT') {
-                    // Another tab logged out — mirror the logout locally WITHOUT
-                    // re-broadcasting (the original tab already broadcast LOGOUT).
+                const { type } = e.data || {};
+                if (type === 'LOGOUT') {
+                    // Mirror the logout locally — don't re-broadcast
                     stopHeartbeat();
                     clearInactivityTimers();
                     localStorage.removeItem('token');
                     localStorage.removeItem('user');
                     setUser(null);
-                } else if (e.data?.type === 'ACTIVITY') {
-                    // Another tab had real user activity — reset our timer SILENTLY.
-                    // Do NOT call resetTimer() here because that would re-broadcast
-                    // ACTIVITY, creating an infinite cross-tab loop.
+                } else if (type === 'ACTIVITY') {
+                    // Another tab had real activity — reset our own timer SILENTLY
+                    // (do NOT call resetTimer or we re-broadcast → infinite loop)
                     resetTimerSilent();
                 }
             };
             channelRef.current = ch;
         } catch (_) {
-            // Safari private mode / old browsers may not support BroadcastChannel
+            // Safari private browsing / old browsers: BroadcastChannel unavailable
             channelRef.current = null;
         }
     }, [stopHeartbeat, clearInactivityTimers, resetTimerSilent]);
 
     // ── Activity event listeners ─────────────────────────────────────────────
 
-    /**
-     * Throttled activity handler.
-     * We use a simple ref-based throttle to avoid calling resetTimer()
-     * thousands of times per second (e.g. on mousemove).
-     */
-    const lastActivityRef = useRef(0);
-    const THROTTLE_MS = 500; // only react once per 500 ms
-
     const handleActivity = useCallback(() => {
         const now = Date.now();
         if (now - lastActivityRef.current < THROTTLE_MS) return;
         lastActivityRef.current = now;
-        // resetTimer() resets the local timer AND broadcasts ACTIVITY to other tabs.
-        // It is safe to call here because this handler is only attached to real DOM events.
-        resetTimer();
+        resetTimer(); // resets timer + broadcasts to other tabs
     }, [resetTimer]);
 
     const attachActivityListeners = useCallback(() => {
@@ -240,18 +221,17 @@ export function AuthProvider({ children }) {
         );
     }, [handleActivity]);
 
-    // ── Bootstrap (runs once on mount) ──────────────────────────────────────
+    // ── Bootstrap — runs exactly once on mount ────────────────────────────────
     useEffect(() => {
         const token     = localStorage.getItem('token');
         const savedUser = localStorage.getItem('user');
 
         if (token && savedUser) {
             try {
-                const parsedUser = JSON.parse(savedUser);
-                setUser(parsedUser);
+                setUser(JSON.parse(savedUser));
 
-                // Always revalidate with the server on load
-                const fetchUpdatedUser = async () => {
+                // Revalidate the session with the server in the background
+                (async () => {
                     try {
                         const { data } = await authAPI.getMe();
                         if (data) {
@@ -261,35 +241,32 @@ export function AuthProvider({ children }) {
                     } catch (err) {
                         const status = err.response?.status;
                         if (status === 401 || status === 403 || status === 404) {
-                            console.warn('[session] Session invalid or user not found — logging out.');
+                            console.warn('[session] Revalidation failed — logging out.');
                             logoutRef.current?.('invalid_token');
                         }
+                        // Any other error (network, 500 …) → keep cached session
                     }
-                };
-                fetchUpdatedUser();
+                })();
 
-                // Start everything (use silent reset on bootstrap — no other
-                // tabs need to know we just loaded, only real activity should broadcast).
+                // Start session management (silent — page-load ≠ user activity)
                 initChannel();
                 startHeartbeat();
                 attachActivityListeners();
                 resetTimerSilent();
             } catch (e) {
-                console.error('[session] Failed to parse saved user:', e);
-                localStorage.removeItem('user');
+                // Malformed JSON in localStorage
+                console.error('[session] Could not parse stored user:', e);
                 localStorage.removeItem('token');
+                localStorage.removeItem('user');
             }
         }
 
         setLoading(false);
 
-        // Listen for the event fired by the Axios 401 interceptor (api.js)
-        const onSessionExpired = () => {
-            logoutRef.current?.('token_expired');
-        };
+        // Listen for the 401-interceptor event fired by api.js
+        const onSessionExpired = () => logoutRef.current?.('token_expired');
         window.addEventListener('session:expired', onSessionExpired);
 
-        // Cleanup on unmount
         return () => {
             stopHeartbeat();
             clearInactivityTimers();
@@ -298,11 +275,12 @@ export function AuthProvider({ children }) {
             try { channelRef.current?.close(); } catch (_) {}
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // intentionally empty — run once on mount
+    }, []); // intentionally empty — runs once on mount only
 
-    // ── Login ────────────────────────────────────────────────────────────────
+    // ── Login ─────────────────────────────────────────────────────────────────
     const login = async (email, password) => {
         const { data } = await authAPI.login(email, password);
+
         if (data.token) {
             localStorage.setItem('token', data.token);
         }
@@ -311,14 +289,13 @@ export function AuthProvider({ children }) {
             setUser(data.user);
         }
 
-        // Start session management on fresh login.
-        // Detach any stale listeners first (guards against login-after-inactivity-logout
-        // where logout() did not detach listeners, to prevent duplicate listeners).
+        // Detach any stale listeners before re-attaching to prevent duplicate
+        // listeners when the user logs in again after an inactivity logout.
         detachActivityListeners();
         initChannel();
         startHeartbeat();
         attachActivityListeners();
-        resetTimerSilent(); // silent: login is not user interaction that other tabs need to know about
+        resetTimerSilent(); // silent: login itself is not user "activity"
 
         return data;
     };
@@ -328,13 +305,13 @@ export function AuthProvider({ children }) {
         await authAPI.register(email, password, role);
     };
 
-    // ── updateUser helper ─────────────────────────────────────────────────────
+    // ── Update user helper ────────────────────────────────────────────────────
     const updateUser = (newData) => {
         const updated = { ...user, ...newData };
         try {
             localStorage.setItem('user', JSON.stringify(updated));
         } catch (e) {
-            console.error('[session] Failed to save user to localStorage (quota exceeded?):', e);
+            console.error('[session] localStorage write failed (quota exceeded?):', e);
         }
         setUser(updated);
     };
@@ -350,15 +327,18 @@ export function AuthProvider({ children }) {
                 register,
                 logout,
                 loading,
-                /** Exposed so individual components can manually reset the timer
-                 *  (e.g. auto-saving forms, long file uploads, video playback). */
+                /**
+                 * Exposed so long-running components (file uploads, video players,
+                 * auto-saving forms) can manually prevent the inactivity timer from
+                 * firing while they are active.
+                 */
                 resetSessionTimer: resetTimer,
             }}
         >
             {children}
 
-            {/* Global session warning modal — rendered here so it appears on
-                every page without any per-page setup. */}
+            {/* Rendered here so every portal automatically gets the warning
+                without any per-page setup. */}
             <SessionWarningModal
                 visible={showWarning}
                 onStayLoggedIn={handleStayLoggedIn}
@@ -369,7 +349,7 @@ export function AuthProvider({ children }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Hook
+// useAuth hook
 // ─────────────────────────────────────────────────────────────────────────────
 export function useAuth() {
     const context = useContext(AuthContext);
