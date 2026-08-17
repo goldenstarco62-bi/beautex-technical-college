@@ -11,7 +11,7 @@ const api = axios.create({
     },
 });
 
-// Add token to requests
+// Add token to every outgoing request
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -19,6 +19,33 @@ api.interceptors.request.use((config) => {
     }
     return config;
 });
+
+// ─── Global 401 / session-expired interceptor ─────────────────────────────
+// If the backend returns 401 (token expired or invalid) on ANY request, clear
+// auth storage immediately and signal AuthContext to log the user out.
+// This runs even when the frontend inactivity timer hasn't fired yet (e.g.
+// after a page refresh with a stale token).
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            // Avoid acting on the login endpoint itself
+            const requestUrl = error.config?.url || '';
+            const isLoginEndpoint = requestUrl.includes('auth/login');
+
+            if (!isLoginEndpoint) {
+                // Clear storage immediately so subsequent requests don't retry
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+
+                // Dispatch a synthetic event so AuthContext (which owns the
+                // React state) can react and redirect to /login cleanly.
+                window.dispatchEvent(new CustomEvent('session:expired'));
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 // Auth
 export const authAPI = {
@@ -30,6 +57,8 @@ export const authAPI = {
     getMe: () => api.get('auth/me'),
     // Lightweight heartbeat — just triggers the auth middleware which updates last_seen_at
     ping: () => api.get('auth/ping'),
+    // Explicit logout — used for audit trail; fire-and-forget from the frontend
+    logout: () => api.post('auth/logout').catch(() => {}),
 };
 
 // Profile

@@ -40,6 +40,9 @@ router.post('/auth/reset-password', authController.resetPassword);
 router.get('/auth/me', authenticateToken, authController.getMe);
 // Lightweight heartbeat — triggers authenticateToken (which updates last_seen_at) without fetching the full user record
 router.get('/auth/ping', authenticateToken, (_req, res) => res.json({ ok: true }));
+// Explicit logout — records audit log entry; token must still be valid at time of call
+router.post('/auth/logout', authenticateToken, authController.logout);
+
 
 // Profile (all authenticated users)
 router.get('/profile', authenticateToken, profileController.getProfile);

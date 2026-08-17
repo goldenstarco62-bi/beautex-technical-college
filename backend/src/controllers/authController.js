@@ -463,3 +463,33 @@ export async function resetPassword(req, res) {
         res.status(500).json({ error: 'Failed to reset password' });
     }
 }
+
+/**
+ * Logout
+ *
+ * JWTs are stateless — there is nothing to invalidate server-side.
+ * This endpoint exists purely to write an audit-log entry so administrators
+ * can see when and why each session was ended.
+ *
+ * The frontend has already cleared the token from localStorage before calling
+ * this, so even if this request fails the user is still logged out on their end.
+ */
+export async function logout(req, res) {
+    try {
+        const reason = req.body?.reason || 'manual';
+
+        await logActivity({
+            userEmail: req.user?.email || 'unknown',
+            action: 'LOGOUT',
+            resource: 'Auth',
+            details: `User logged out (reason: ${reason})`,
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || req.socket?.remoteAddress,
+        });
+
+        res.json({ message: 'Logged out successfully' });
+    } catch (error) {
+        // Non-fatal — audit failure should never crash the logout flow
+        console.error('[auth] Logout audit log error (non-fatal):', error.message);
+        res.json({ message: 'Logged out successfully' });
+    }
+}
