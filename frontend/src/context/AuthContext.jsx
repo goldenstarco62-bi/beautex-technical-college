@@ -75,7 +75,9 @@ export function AuthProvider({ children }) {
         if (inactivityRef.current)   { clearTimeout(inactivityRef.current);   inactivityRef.current = null; }
         if (warningRef.current)      { clearTimeout(warningRef.current);       warningRef.current = null; }
         if (warningCountRef.current) { clearInterval(warningCountRef.current); warningCountRef.current = null; }
-        setShowWarning(false);
+        // Only update state when the warning is actually showing to avoid
+        // unnecessary React re-renders on every activity event.
+        setShowWarning(prev => prev ? false : prev);
         setWarningSecondsLeft(Math.round(SESSION_WARNING_BEFORE_MS / 1000));
     }, []);
 
@@ -124,10 +126,16 @@ export function AuthProvider({ children }) {
      * Broadcasts ACTIVITY to other tabs so they also reset their timers, keeping
      * all open tabs alive as long as one of them is active.
      */
-    const resetTimer = useCallback(() => {
+    /**
+     * Reset the inactivity timer WITHOUT broadcasting to other tabs.
+     * Used when we receive an ACTIVITY message FROM another tab — we must
+     * reset our own timer but must NOT re-broadcast, otherwise we create an
+     * infinite ping-pong loop: Tab A → ACTIVITY → Tab B resets → Tab B broadcasts
+     * → Tab A resets → Tab A broadcasts → ... forever.
+     */
+    const resetTimerSilent = useCallback(() => {
         clearInactivityTimers();
 
-        // ── Warning timer: fires at SESSION_WARNING_MS (e.g. 90 s) ──────────
         warningRef.current = setTimeout(() => {
             setShowWarning(true);
 
@@ -145,16 +153,25 @@ export function AuthProvider({ children }) {
             }, 1000);
         }, SESSION_WARNING_MS);
 
-        // ── Logout timer: fires at SESSION_TIMEOUT_MS (e.g. 120 s) ──────────
         inactivityRef.current = setTimeout(() => {
             logoutRef.current?.('inactivity');
         }, SESSION_TIMEOUT_MS);
+    }, [clearInactivityTimers]);
 
-        // Inform other tabs so they reset too (throttle: no need for every mousemove)
+    /**
+     * Reset the inactivity timer AND broadcast ACTIVITY to other open tabs.
+     * Only called from real DOM activity events (mousemove, click, keydown …).
+     * Never call this from a BroadcastChannel message handler — use
+     * resetTimerSilent() there to prevent the cross-tab feedback loop.
+     */
+    const resetTimer = useCallback(() => {
+        resetTimerSilent();
+
+        // Tell other tabs a real user activity occurred so they also reset.
         try {
             channelRef.current?.postMessage({ type: 'ACTIVITY', timestamp: Date.now() });
-        } catch (_) { /* ignore */ }
-    }, [clearInactivityTimers]);
+        } catch (_) { /* BroadcastChannel unavailable — ignore */ }
+    }, [resetTimerSilent]);
 
     // ── "Stay Logged In" handler ─────────────────────────────────────────────
     const handleStayLoggedIn = useCallback(() => {
@@ -163,20 +180,26 @@ export function AuthProvider({ children }) {
 
     // ── BroadcastChannel setup ───────────────────────────────────────────────
     const initChannel = useCallback(() => {
+        // Close any existing channel before creating a new one to avoid leaks
+        // when initChannel is called more than once (e.g. login after inactivity logout).
+        try { channelRef.current?.close(); } catch (_) {}
+
         try {
             const ch = new BroadcastChannel(SESSION_CHANNEL_NAME);
             ch.onmessage = (e) => {
                 if (e.data?.type === 'LOGOUT') {
-                    // Another tab logged out — we must also log out without
-                    // posting back (prevents ping-pong loop)
+                    // Another tab logged out — mirror the logout locally WITHOUT
+                    // re-broadcasting (the original tab already broadcast LOGOUT).
                     stopHeartbeat();
                     clearInactivityTimers();
                     localStorage.removeItem('token');
                     localStorage.removeItem('user');
                     setUser(null);
                 } else if (e.data?.type === 'ACTIVITY') {
-                    // Another tab had activity — reset our own inactivity timer
-                    resetTimer();
+                    // Another tab had real user activity — reset our timer SILENTLY.
+                    // Do NOT call resetTimer() here because that would re-broadcast
+                    // ACTIVITY, creating an infinite cross-tab loop.
+                    resetTimerSilent();
                 }
             };
             channelRef.current = ch;
@@ -184,7 +207,7 @@ export function AuthProvider({ children }) {
             // Safari private mode / old browsers may not support BroadcastChannel
             channelRef.current = null;
         }
-    }, [stopHeartbeat, clearInactivityTimers, resetTimer]);
+    }, [stopHeartbeat, clearInactivityTimers, resetTimerSilent]);
 
     // ── Activity event listeners ─────────────────────────────────────────────
 
@@ -200,6 +223,8 @@ export function AuthProvider({ children }) {
         const now = Date.now();
         if (now - lastActivityRef.current < THROTTLE_MS) return;
         lastActivityRef.current = now;
+        // resetTimer() resets the local timer AND broadcasts ACTIVITY to other tabs.
+        // It is safe to call here because this handler is only attached to real DOM events.
         resetTimer();
     }, [resetTimer]);
 
@@ -243,11 +268,12 @@ export function AuthProvider({ children }) {
                 };
                 fetchUpdatedUser();
 
-                // Start everything
+                // Start everything (use silent reset on bootstrap — no other
+                // tabs need to know we just loaded, only real activity should broadcast).
                 initChannel();
                 startHeartbeat();
                 attachActivityListeners();
-                resetTimer();
+                resetTimerSilent();
             } catch (e) {
                 console.error('[session] Failed to parse saved user:', e);
                 localStorage.removeItem('user');
@@ -285,11 +311,14 @@ export function AuthProvider({ children }) {
             setUser(data.user);
         }
 
-        // Start session management on fresh login
+        // Start session management on fresh login.
+        // Detach any stale listeners first (guards against login-after-inactivity-logout
+        // where logout() did not detach listeners, to prevent duplicate listeners).
+        detachActivityListeners();
         initChannel();
         startHeartbeat();
         attachActivityListeners();
-        resetTimer();
+        resetTimerSilent(); // silent: login is not user interaction that other tabs need to know about
 
         return data;
     };

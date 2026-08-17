@@ -29,11 +29,20 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            // Avoid acting on the login endpoint itself
             const requestUrl = error.config?.url || '';
-            const isLoginEndpoint = requestUrl.includes('auth/login');
 
-            if (!isLoginEndpoint) {
+            // Never trigger session:expired for auth utility endpoints:
+            // • auth/login  — login failures are handled by the login form itself
+            // • auth/logout — calling logout() after token is gone would cause a
+            //                 recursive loop: 401 → session:expired → logout() →
+            //                 authAPI.logout() → 401 → session:expired → ...
+            // • auth/ping   — heartbeat should fail silently if token expired
+            const isBypassEndpoint =
+                requestUrl.includes('auth/login') ||
+                requestUrl.includes('auth/logout') ||
+                requestUrl.includes('auth/ping');
+
+            if (!isBypassEndpoint) {
                 // Clear storage immediately so subsequent requests don't retry
                 localStorage.removeItem('token');
                 localStorage.removeItem('user');
@@ -46,6 +55,7 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
+
 
 // Auth
 export const authAPI = {
