@@ -116,32 +116,37 @@ export async function getCourseCoverage(req, res) {
             [courseId]
         );
 
-        // Get all enrolled students for this course
-        const enrolledStudents = await getEnrolledStudents(courseId);
+        // ── BULK QUERY 1: ALL coverage logs for this course in one shot ────────
+        // Replaces N individual per-unit queries. DESC order ensures first-seen
+        // entry per (student_id, unit_id) is always the most recent.
+        const allLogs = await query(
+            `SELECT * FROM unit_coverage_logs
+             WHERE course_id = ? AND student_id IS NOT NULL
+             ORDER BY created_at DESC`,
+            [courseId]
+        );
 
-        // Build per-student coverage maps
-        // Map: student_id -> Set of covered unit_ids
-        const studentCoverageMaps = {};
-        if (enrolledStudents.length > 0) {
-            const allLogs = await query(
-                `SELECT student_id, unit_id, id, date_covered, teacher_name FROM unit_coverage_logs
-                 WHERE course_id = ? AND student_id IS NOT NULL ORDER BY created_at DESC`,
-                [courseId]
-            );
-            for (const log of allLogs) {
-                if (!studentCoverageMaps[log.student_id]) {
-                    studentCoverageMaps[log.student_id] = {};
-                }
-                // Only keep the latest log per unit per student
-                if (!studentCoverageMaps[log.student_id][log.unit_id]) {
-                    studentCoverageMaps[log.student_id][log.unit_id] = log;
-                }
+        // studentUnitLogMap[student_id][unit_id] = latestLog
+        const studentUnitLogMap = {};
+        // unitLatestLogMap[unit_id] = latest log (course-wide, for summary view)
+        const unitLatestLogMap = {};
+        // unitStudentCount[unit_id] = Set of distinct student_ids who have coverage
+        const unitStudentCount = {};
+
+        for (const log of allLogs) {
+            if (!studentUnitLogMap[log.student_id]) studentUnitLogMap[log.student_id] = {};
+            if (!studentUnitLogMap[log.student_id][log.unit_id]) {
+                studentUnitLogMap[log.student_id][log.unit_id] = log;
             }
+            if (!unitLatestLogMap[log.unit_id]) unitLatestLogMap[log.unit_id] = log;
+            if (!unitStudentCount[log.unit_id]) unitStudentCount[log.unit_id] = new Set();
+            unitStudentCount[log.unit_id].add(log.student_id);
         }
 
-        // Build students list with progress stats
+        // Build enrolled students with progress stats (no extra queries needed)
+        const enrolledStudents = await getEnrolledStudents(courseId);
         const studentsWithProgress = enrolledStudents.map(s => {
-            const coverage = studentCoverageMaps[s.id] || {};
+            const coverage = studentUnitLogMap[s.id] || {};
             const coveredCount = Object.keys(coverage).length;
             const total = units.length;
             return {
@@ -152,53 +157,50 @@ export async function getCourseCoverage(req, res) {
             };
         });
 
-        // Enrich units — if a specific student_id is requested, show their coverage per unit
-        // Otherwise show summary (how many students covered each unit)
-        const enriched = await Promise.all(units.map(async (unit) => {
+        // ── BULK QUERY 2: ALL confirmations for this course in one shot ────────
+        // Replaces N individual per-log queries.
+        const allConfirmations = await query(
+            `SELECT ucc.*, ucl.unit_id AS log_unit_id
+             FROM unit_coverage_confirmations ucc
+             JOIN unit_coverage_logs ucl ON ucl.id = ucc.coverage_log_id
+             WHERE ucl.course_id = ?`,
+            [courseId]
+        );
+
+        // logConfirmationMap[coverage_log_id] = confirmation row
+        const logConfirmationMap = {};
+        // unitConfirmationStats[unit_id] = { yes, partially, no }
+        const unitConfirmationStats = {};
+
+        for (const conf of allConfirmations) {
+            if (!logConfirmationMap[conf.coverage_log_id]) {
+                logConfirmationMap[conf.coverage_log_id] = conf;
+            }
+            const uid = conf.log_unit_id;
+            if (!unitConfirmationStats[uid]) unitConfirmationStats[uid] = { yes: 0, partially: 0, no: 0 };
+            const r = (conf.response || '').toLowerCase();
+            if (r === 'yes') unitConfirmationStats[uid].yes++;
+            else if (r === 'partially') unitConfirmationStats[uid].partially++;
+            else if (r === 'no') unitConfirmationStats[uid].no++;
+        }
+
+        // ── ENRICH UNITS — pure in-memory, zero extra DB queries ──────────────
+        const enriched = units.map(unit => {
             let coverageLog = null;
-            let confirmationStats = { yes: 0, partially: 0, no: 0, total: 0 };
-            let studentsWhoHaveCovered = 0;
             let studentConfirmation = null;
+            const studentsWhoHaveCovered = unitStudentCount[unit.id]?.size || 0;
 
             if (student_id) {
-                // Single student view: get their specific log for this unit
-                coverageLog = await queryOne(
-                    `SELECT * FROM unit_coverage_logs WHERE unit_id = ? AND course_id = ? AND student_id = ? ORDER BY created_at DESC LIMIT 1`,
-                    [unit.id, courseId, student_id]
-                );
-                // Include the student's confirmation response + comment for teacher visibility
+                coverageLog = studentUnitLogMap[student_id]?.[unit.id] || null;
                 if (coverageLog) {
-                    studentConfirmation = await queryOne(
-                        `SELECT * FROM unit_coverage_confirmations WHERE coverage_log_id = ? AND student_id = ?`,
-                        [coverageLog.id, student_id]
-                    ) || null;
+                    studentConfirmation = logConfirmationMap[coverageLog.id] || null;
                 }
             } else {
-                // Summary view: how many students have this unit covered
-                const countResult = await queryOne(
-                    `SELECT COUNT(DISTINCT student_id) as cnt FROM unit_coverage_logs WHERE unit_id = ? AND course_id = ? AND student_id IS NOT NULL`,
-                    [unit.id, courseId]
-                );
-                studentsWhoHaveCovered = parseInt(countResult?.cnt) || 0;
-                // Also get the latest log for display purposes (course-wide)
-                coverageLog = await queryOne(
-                    `SELECT * FROM unit_coverage_logs WHERE unit_id = ? AND course_id = ? ORDER BY created_at DESC LIMIT 1`,
-                    [unit.id, courseId]
-                );
+                coverageLog = unitLatestLogMap[unit.id] || null;
             }
 
-            // Confirmation stats (for teacher analytics)
-            if (coverageLog) {
-                const confirmations = await query(
-                    `SELECT response, COUNT(*) as cnt FROM unit_coverage_confirmations WHERE coverage_log_id = ? GROUP BY response`,
-                    [coverageLog.id]
-                );
-                confirmations.forEach(c => {
-                    const key = c.response.toLowerCase();
-                    confirmationStats[key] = parseInt(c.cnt) || 0;
-                });
-                confirmationStats.total = confirmationStats.yes + confirmationStats.partially + confirmationStats.no;
-            }
+            const raw = unitConfirmationStats[unit.id] || { yes: 0, partially: 0, no: 0 };
+            const confirmationStats = { ...raw, total: raw.yes + raw.partially + raw.no };
 
             return {
                 ...unit,
@@ -208,7 +210,7 @@ export async function getCourseCoverage(req, res) {
                 students_covered_count: studentsWhoHaveCovered,
                 total_enrolled: enrolledStudents.length,
             };
-        }));
+        });
 
         res.json({ course, units: enriched, students: studentsWithProgress });
     } catch (error) {

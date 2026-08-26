@@ -873,115 +873,112 @@ export default function ActivityReports() {
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-8 pb-20 animate-in fade-in slide-in-from-bottom-6 duration-1000">
-            {/* Elegant Header Area */}
-            <div className="relative overflow-hidden bg-white/40 backdrop-blur-3xl rounded-[2.5rem] border border-white/60 shadow-2xl p-6 md:p-8">
-                <div className="absolute top-0 right-0 w-[40%] h-full bg-gradient-to-l from-maroon/5 to-transparent pointer-events-none"></div>
-                <div className="absolute -top-24 -right-24 w-64 h-64 bg-gold/10 rounded-full blur-[80px]"></div>
-                
-                <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
-                    <div className="flex items-center gap-8">
-                        <div className="relative group">
-                            <div className="absolute -inset-4 bg-maroon/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
-                            <div className="w-14 h-14 bg-gradient-to-br from-maroon to-maroon-950 rounded-2xl flex items-center justify-center shadow-2xl transform transition-transform group-hover:-rotate-6 duration-500">
-                                <BarChart3 className="w-7 h-7 text-gold" />
+        <div className="max-w-7xl mx-auto space-y-6 pb-20 animate-in fade-in slide-in-from-bottom-6 duration-700">
+            {/* Premium Header Banner */}
+            <div className="relative overflow-hidden rounded-3xl p-7 md:p-9 text-white shadow-2xl"
+                style={{ background: 'linear-gradient(135deg, #6b0000 0%, #800000 40%, #8a1a1a 100%)' }}>
+
+                {/* Decorative elements */}
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute inset-0 opacity-[0.04]"
+                        style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+                    <div className="absolute top-0 right-0 w-96 h-96 rounded-full opacity-[0.07]"
+                        style={{ background: 'radial-gradient(circle, #FFD700 0%, transparent 70%)', transform: 'translate(30%, -40%)' }} />
+                    <div className="absolute bottom-0 left-1/3 w-64 h-64 rounded-full opacity-[0.05]"
+                        style={{ background: 'radial-gradient(circle, #FFD700 0%, transparent 70%)', transform: 'translateY(50%)' }} />
+                    {/* Top shimmer line */}
+                    <div className="absolute top-0 left-0 right-0 h-px"
+                        style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,215,0,0.3) 40%, rgba(255,215,0,0.6) 60%, transparent 100%)' }} />
+                </div>
+
+                <div className="relative flex flex-col lg:flex-row justify-between items-start lg:items-center gap-7">
+                    <div className="flex items-center gap-6">
+                        {/* Icon badge */}
+                        <div className="relative group shrink-0">
+                            <div className="absolute -inset-3 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-700 blur-xl"
+                                style={{ background: 'radial-gradient(circle, rgba(255,215,0,0.3) 0%, transparent 70%)' }} />
+                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl transition-transform duration-500 group-hover:-rotate-6"
+                                style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.06) 100%)', border: '1px solid rgba(255,255,255,0.15)' }}>
+                                <BarChart3 className="w-7 h-7" style={{ color: '#FFD700' }} />
                             </div>
                         </div>
                         <div>
                             <div className="flex items-center gap-3 mb-2">
-                                <span className="h-[2px] w-12 bg-gradient-to-r from-gold to-maroon"></span>
-                                <p className="text-[11px] text-maroon/70 font-black tracking-[0.4em] uppercase">Operations Intelligence</p>
+                                <div className="h-px w-10" style={{ background: 'linear-gradient(90deg, rgba(255,215,0,0.8), rgba(255,215,0,0.2))' }} />
+                                <p className="text-[10px] text-white/50 font-black tracking-[0.4em] uppercase">Operations Intelligence</p>
                             </div>
-                            <h1 className="text-2xl md:text-3xl font-black text-maroon tracking-tighter uppercase leading-none">
-                                Activity <span className="text-gold font-serif italic text-2xl lowercase mx-1">&</span> Metrics
+                            <h1 className="text-2xl md:text-3xl font-black tracking-tight uppercase leading-none">
+                                Activity <span className="font-serif italic text-2xl lowercase mx-1" style={{ color: '#FFD700' }}>&</span> Metrics
                             </h1>
-                            <p className="text-sm text-gray-500 font-medium mt-3 border-l-4 border-gold/40 pl-5 max-w-lg leading-relaxed italic">
-                                Institutional performance analytics and operational logs for the current academic period.
+                            <p className="text-sm text-white/50 font-medium mt-2.5 max-w-lg leading-relaxed">
+                                Institutional performance analytics and operational logs.
                             </p>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-4 print:hidden">
+                    <div className="flex flex-wrap gap-3 print:hidden">
                         <button
                             onClick={() => window.print()}
-                            className="flex items-center gap-3 bg-white/80 backdrop-blur-md text-maroon border border-maroon/10 px-6 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-maroon hover:text-gold transition-all shadow-xl active:scale-95 group"
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-[0.2em] transition-all active:scale-95"
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
                         >
-                            <Printer className="w-3.5 h-3.5 group-hover:animate-bounce" />
+                            <Printer className="w-3.5 h-3.5" />
                             Print Manifest
                         </button>
                         <button
                             onClick={handleGenerateAttendancePDFs}
                             disabled={loading}
-                            className="flex items-center gap-2 px-4 py-2 bg-gold/10 text-gold border border-gold/20 rounded-xl hover:bg-gold/20 transition-all text-sm font-bold disabled:opacity-50"
-                            title="Automate Daily Attendance Reports for all Departments"
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all disabled:opacity-50"
+                            style={{ background: 'rgba(255,215,0,0.12)', border: '1px solid rgba(255,215,0,0.2)', color: '#FFD700' }}
+                            title="Automate Daily Attendance Reports"
                         >
-                            <Fingerprint className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} />
-                            <span className="hidden sm:inline">Automate Attendance Reports</span>
+                            <Fingerprint className={`w-3.5 h-3.5 ${loading ? 'animate-pulse' : ''}`} />
+                            <span className="hidden sm:inline">Automate Reports</span>
                         </button>
-
                         <button
                             onClick={openCreateModal}
-                            className="flex items-center gap-2 px-4 py-2 bg-maroon text-white rounded-xl hover:bg-maroon/90 transition-all shadow-lg shadow-maroon/20 text-sm font-bold"
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all shadow-lg active:scale-95"
+                            style={{ background: 'linear-gradient(135deg, #FFD700, #E6A000)', color: '#6b0000' }}
                         >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3.5 h-3.5" />
                             <span className="hidden sm:inline">Create Report</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Trend Chart Area (Only shown when data exists) */}
+                {/* Trend Chart Area */}
                 {chartData.length > 0 && (
-                    <div className="mt-8 pt-6 border-t border-maroon/5 animate-in fade-in duration-1000">
+                    <div className="mt-8 pt-6 border-t border-white/8 animate-in fade-in duration-700">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-[10px] font-black text-maroon/40 uppercase tracking-[.3em]">Institutional Performance Velocity</h3>
-                            <div className="flex items-center gap-6">
+                            <h3 className="text-[10px] font-black text-white/35 uppercase tracking-[.3em]">Institutional Performance Velocity</h3>
+                            <div className="flex items-center gap-5">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-maroon"></div>
-                                    <span className="text-[9px] font-black uppercase text-gray-400">Attendance %</span>
+                                    <div className="w-2.5 h-2.5 rounded-full bg-white/60" />
+                                    <span className="text-[9px] font-bold uppercase text-white/35">Attendance %</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-3 h-3 rounded-full bg-gold"></div>
-                                    <span className="text-[9px] font-black uppercase text-gray-400">Activity Vol.</span>
+                                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: '#FFD700' }} />
+                                    <span className="text-[9px] font-bold uppercase text-white/35">Activity Vol.</span>
                                 </div>
                             </div>
                         </div>
-                        <div className="h-40 w-full">
+                        <div className="h-36 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={chartData}>
                                     <defs>
                                         <linearGradient id="colorAttendance" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#800000" stopOpacity={0.1}/>
-                                            <stop offset="95%" stopColor="#800000" stopOpacity={0}/>
+                                            <stop offset="5%" stopColor="rgba(255,255,255,0.4)" stopOpacity={1}/>
+                                            <stop offset="95%" stopColor="rgba(255,255,255,0)" stopOpacity={0}/>
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#80000010" />
-                                    <XAxis 
-                                        dataKey="name" 
-                                        axisLine={false} 
-                                        tickLine={false} 
-                                        tick={{fill: '#800000', fontSize: 9, fontWeight: 900}} 
-                                        dy={10}
-                                    />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 9, fontWeight: 900}} dy={10} />
                                     <YAxis hide />
-                                    <Tooltip 
-                                        contentStyle={{backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #80000010', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)'}}
-                                        labelStyle={{fontWeight: 900, textTransform: 'uppercase', fontSize: '10px', color: '#800000', marginBottom: '8px'}}
-                                    />
-                                    <Area 
-                                        type="monotone" 
-                                        dataKey="attendance" 
-                                        stroke="#800000" 
-                                        strokeWidth={4}
-                                        fillOpacity={1} 
-                                        fill="url(#colorAttendance)" 
-                                    />
-                                    <Area 
-                                        type="monotone" 
-                                        dataKey={activeTab === 'weekly' ? 'revenue' : 'classes'} 
-                                        stroke="#C5A059" 
-                                        strokeWidth={4}
-                                        fill="transparent"
-                                    />
+                                    <Tooltip contentStyle={{backgroundColor: 'rgba(100,0,0,0.9)', backdropFilter: 'blur(12px)', borderRadius: '12px', border: '1px solid rgba(255,215,0,0.2)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)'}} labelStyle={{fontWeight: 900, textTransform: 'uppercase', fontSize: '10px', color: '#FFD700', marginBottom: '4px'}} itemStyle={{color: 'rgba(255,255,255,0.8)', fontSize: '10px'}} />
+                                    <Area type="monotone" dataKey="attendance" stroke="rgba(255,255,255,0.7)" strokeWidth={3} fillOpacity={1} fill="url(#colorAttendance)" />
+                                    <Area type="monotone" dataKey={activeTab === 'weekly' ? 'revenue' : 'classes'} stroke="#FFD700" strokeWidth={2} fill="transparent" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
@@ -990,8 +987,10 @@ export default function ActivityReports() {
             </div>
 
             {/* Smart Navigation Hub */}
-            <div className="flex flex-col md:flex-row gap-4 sticky top-6 z-40 print:hidden">
-                <div className="flex-1 bg-white/70 backdrop-blur-xl rounded-[2rem] p-2 shadow-2xl border border-white/80 flex gap-2">
+            <div className="flex flex-col md:flex-row gap-3 sticky top-[65px] z-40 print:hidden">
+                {/* Tab buttons */}
+                <div className="flex-1 rounded-2xl p-1.5 shadow-xl border flex gap-1"
+                    style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', borderColor: 'rgba(128,0,0,0.08)' }}>
                     {[
                         { id: 'daily', label: 'Daily Logs', icon: Calendar },
                         { id: 'weekly', label: 'Weekly Audits', icon: TrendingUp },
@@ -1001,26 +1000,34 @@ export default function ActivityReports() {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-[1.5rem] font-black text-[10px] uppercase tracking-[.25em] transition-all duration-500 ${activeTab === tab.id
-                                ? 'bg-maroon text-gold shadow-[0_15px_30px_-10px_rgba(128,0,0,0.4)] translate-y-[-2px]'
-                                : 'text-maroon/40 hover:text-maroon hover:bg-maroon/5'
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-[.2em] transition-all duration-300 ${
+                                activeTab === tab.id
+                                    ? 'text-white shadow-lg'
+                                    : 'text-maroon/40 hover:text-maroon hover:bg-maroon/5'
                             }`}
+                            style={activeTab === tab.id ? {
+                                background: 'linear-gradient(135deg, #800000, #6b0000)',
+                                color: '#FFD700',
+                                boxShadow: '0 8px 20px -6px rgba(128,0,0,0.4)'
+                            } : {}}
                         >
-                            <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'animate-pulse' : ''}`} />
+                            <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? 'text-yellow-300' : ''}`} />
                             <span className="hidden sm:inline">{tab.label}</span>
                         </button>
                     ))}
                 </div>
 
-                <div className="flex items-center gap-3 bg-white/70 backdrop-blur-xl rounded-[2rem] px-8 py-2 shadow-2xl border border-white/80">
-                    <div className="flex items-center gap-4 border-r border-maroon/10 pr-6 mr-2">
+                {/* Date filter */}
+                <div className="flex items-center gap-3 rounded-2xl px-5 py-2 shadow-xl border"
+                    style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(20px)', borderColor: 'rgba(128,0,0,0.08)' }}>
+                    <div className="flex items-center gap-3 border-r border-maroon/10 pr-4 mr-1">
                         <div className="flex items-center gap-2">
                             <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest whitespace-nowrap">From</label>
                             <input
                                 type="date"
                                 value={filterDateFrom}
                                 onChange={e => setFilterDateFrom(e.target.value)}
-                                className="px-3 py-2 bg-transparent border-none text-maroon font-black text-[11px] outline-none cursor-pointer"
+                                className="px-2 py-1.5 bg-transparent border-none text-maroon font-bold text-[11px] outline-none cursor-pointer rounded-lg hover:bg-maroon/5 transition-colors"
                             />
                         </div>
                         <div className="flex items-center gap-2">
@@ -1029,118 +1036,196 @@ export default function ActivityReports() {
                                 type="date"
                                 value={filterDateTo}
                                 onChange={e => setFilterDateTo(e.target.value)}
-                                className="px-3 py-2 bg-transparent border-none text-maroon font-black text-[11px] outline-none cursor-pointer"
+                                className="px-2 py-1.5 bg-transparent border-none text-maroon font-bold text-[11px] outline-none cursor-pointer rounded-lg hover:bg-maroon/5 transition-colors"
                             />
                         </div>
                     </div>
-                    { (filterDateFrom || filterDateTo) && (
+                    {(filterDateFrom || filterDateTo) && (
                         <button
                             onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); }}
-                            className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                            className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all"
                         >
-                            <X className="w-4 h-4" />
+                            <X className="w-3.5 h-3.5" />
                         </button>
                     )}
-                    <div className="flex items-center gap-2 bg-maroon/5 px-4 py-2 rounded-xl">
+                    <div className="flex items-center gap-2 bg-maroon/6 px-3 py-1.5 rounded-xl">
                         <span className="text-[10px] font-black text-maroon uppercase tracking-widest">
-                            {activeTab === 'daily' ? dailyReports.length : activeTab === 'weekly' ? weeklyReports.length : monthlyReports.length} Active Records
+                            {activeTab === 'daily' ? dailyReports.length : activeTab === 'weekly' ? weeklyReports.length : monthlyReports.length} Records
                         </span>
                     </div>
                 </div>
             </div>
 
             {/* Reports Intelligence Feed */}
-            <div className="bg-white/40 backdrop-blur-3xl rounded-[3rem] p-6 md:p-8 shadow-3xl border border-white/60 min-h-[400px]">
+            <div className="space-y-4">
 
                 {activeTab === 'daily' && (
-                    <div className="grid grid-cols-1 gap-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xs font-black text-maroon uppercase tracking-[.4em]">Chronological Daily Audit Logs</h2>
-                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{filteredDailyReports.length} Entries Archived</span>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between px-1 mb-5">
+                            <div>
+                                <h2 className="text-sm font-black text-gray-800 uppercase tracking-wider">Chronological Daily Audit Logs</h2>
+                                <p className="text-[10px] text-gray-400 font-medium mt-0.5">Operational records sorted by date</p>
+                            </div>
+                            <div className="flex items-center gap-2 bg-maroon/6 border border-maroon/8 px-3.5 py-1.5 rounded-xl">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                                <span className="text-[10px] font-black text-maroon uppercase tracking-widest">{filteredDailyReports.length} Entries Archived</span>
+                            </div>
                         </div>
 
                         {filteredDailyReports.length === 0 ? (
-                            <div className="text-center py-20 bg-maroon/[0.02] rounded-[2rem] border border-maroon/5 border-dashed">
-                                <Calendar className="w-12 h-12 text-maroon/10 mx-auto mb-4" />
-                                <p className="text-sm font-black text-maroon/40 uppercase tracking-widest">No operational logs for this cycle</p>
+                            <div className="text-center py-24 rounded-3xl border-2 border-dashed"
+                                style={{ borderColor: 'rgba(128,0,0,0.08)', background: 'rgba(128,0,0,0.01)' }}>
+                                <Calendar className="w-14 h-14 mx-auto mb-4 opacity-10" style={{ color: '#800000' }} />
+                                <p className="text-sm font-black uppercase tracking-widest" style={{ color: 'rgba(128,0,0,0.3)' }}>No operational logs for this cycle</p>
                             </div>
                         ) : (
                             <>
-                            {paginatedDailyReports.map((report) => (
-                                <div key={report.id} className="group relative bg-white rounded-[2rem] p-6 border border-maroon/5 hover:border-maroon/20 hover:shadow-2xl transition-all duration-500 overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-maroon to-gold transform -translate-x-full group-hover:translate-x-0 transition-transform duration-500 rounded-r-full"></div>
-                                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 relative z-10">
-                                        <div className="flex items-center gap-5">
-                                            <div className="w-12 h-12 bg-maroon/5 rounded-2xl flex flex-col items-center justify-center border border-maroon/10 group-hover:bg-maroon group-hover:border-maroon transition-all duration-500 flex-shrink-0">
-                                                <span className="text-[7px] font-black uppercase text-maroon/40 group-hover:text-gold/60 tracking-tight">{report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { month: 'short' }) : ''}</span>
-                                                <span className="text-xl font-black text-maroon group-hover:text-gold transition-colors">{report.report_date ? new Date(report.report_date).getDate() : '--'}</span>
-                                            </div>
-                                            <div>
-                                                <h3 className="font-black text-lg text-maroon uppercase tracking-tight">{report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'No Date'}</h3>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-gold"></div>
-                                                    <span className="text-[10px] font-black text-maroon/60 uppercase tracking-widest">{report.department || 'INSTITUTIONAL'}</span>
+                            {paginatedDailyReports.map((report, idx) => {
+                                const attendancePct = parseFloat(report.total_attendance_percentage) || 0;
+                                const attendanceColor = attendancePct >= 80 ? '#16a34a' : attendancePct >= 60 ? '#d97706' : '#dc2626';
+                                const attendanceBg = attendancePct >= 80 ? 'rgba(22,163,74,0.08)' : attendancePct >= 60 ? 'rgba(217,119,6,0.08)' : 'rgba(220,38,38,0.08)';
+
+                                return (
+                                    <div key={report.id}
+                                        className="group relative bg-white rounded-2xl border overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5"
+                                        style={{ borderColor: 'rgba(128,0,0,0.06)', boxShadow: '0 2px 12px rgba(0,0,0,0.04)' }}>
+
+                                        {/* Left accent bar */}
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 rounded-r-full transition-all duration-300"
+                                            style={{ background: `linear-gradient(to bottom, ${attendanceColor}, ${attendanceColor}88)` }} />
+
+                                        <div className="pl-5 pr-5 py-5">
+                                            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+
+                                                {/* Left: Date + Department */}
+                                                <div className="flex items-center gap-4">
+                                                    {/* Date badge */}
+                                                    <div className="shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center border transition-all duration-300 group-hover:border-maroon/20"
+                                                        style={{ background: 'linear-gradient(135deg, rgba(128,0,0,0.05), rgba(128,0,0,0.02))', borderColor: 'rgba(128,0,0,0.08)' }}>
+                                                        <span className="text-[8px] font-black uppercase tracking-wider text-maroon/40">
+                                                            {report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { month: 'short' }) : ''}
+                                                        </span>
+                                                        <span className="text-2xl font-black leading-none" style={{ color: '#800000' }}>
+                                                            {report.report_date ? new Date(report.report_date).getDate() : '--'}
+                                                        </span>
+                                                        <span className="text-[7px] font-bold text-maroon/30">
+                                                            {report.report_date ? new Date(report.report_date).getFullYear() : ''}
+                                                        </span>
+                                                    </div>
+
+                                                    <div>
+                                                        <h3 className="font-black text-base text-gray-800 leading-tight">
+                                                            {report.report_date ? new Date(report.report_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : 'No Date'}
+                                                        </h3>
+                                                        <div className="flex items-center gap-2 mt-1.5">
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
+                                                                style={{ background: 'rgba(128,0,0,0.06)', color: '#800000' }}>
+                                                                {report.department || 'ALL DEPARTMENTS'}
+                                                            </span>
+                                                            {report.reported_by && (
+                                                                <span className="text-[10px] font-medium text-gray-400">by {report.reported_by}</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Center: Stats */}
+                                                <div className="flex items-center gap-3 lg:gap-6 flex-1 lg:justify-center">
+                                                    {/* Attendance */}
+                                                    <div className="flex flex-col items-center px-4 py-2 rounded-xl"
+                                                        style={{ background: attendanceBg }}>
+                                                        <span className="text-[9px] font-black uppercase tracking-wider mb-0.5" style={{ color: attendanceColor }}>Attendance</span>
+                                                        <span className="text-2xl font-black leading-none" style={{ color: attendanceColor }}>{attendancePct}%</span>
+                                                    </div>
+
+                                                    <div className="h-10 w-px bg-gray-100" />
+
+                                                    {/* Students */}
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-0.5">Students</span>
+                                                        <div className="flex items-baseline gap-1">
+                                                            <span className="text-xl font-black text-gray-800">{report.total_students_present}</span>
+                                                            <span className="text-sm text-gray-400 font-bold">/ {report.total_students_expected}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="h-10 w-px bg-gray-100" />
+
+                                                    {/* Classes */}
+                                                    <div className="flex flex-col items-center">
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-0.5">Classes</span>
+                                                        <div className="text-xl font-black text-gray-800"
+                                                            dangerouslySetInnerHTML={{ __html: report.classes_conducted || '—' }} />
+                                                    </div>
+                                                </div>
+
+                                                {/* Right: Actions */}
+                                                <div className="flex items-center gap-1.5 print:hidden shrink-0">
+                                                    <button
+                                                        onClick={() => handleRetroSync(report)}
+                                                        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all border hover:scale-105"
+                                                        style={{ background: 'rgba(59,130,246,0.06)', borderColor: 'rgba(59,130,246,0.12)', color: '#2563eb' }}
+                                                        title="Sync Audit Data"
+                                                    >
+                                                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setViewingReport(report)}
+                                                        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all border hover:scale-105"
+                                                        style={{ background: 'rgba(128,0,0,0.05)', borderColor: 'rgba(128,0,0,0.08)', color: '#800000' }}
+                                                        title="View Report"
+                                                    >
+                                                        <Eye className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openEditModal(report)}
+                                                        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all border hover:scale-105"
+                                                        style={{ background: 'rgba(128,0,0,0.05)', borderColor: 'rgba(128,0,0,0.08)', color: '#800000' }}
+                                                        title="Edit Report"
+                                                    >
+                                                        <Edit className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDownload(report)}
+                                                        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all border hover:scale-105"
+                                                        style={{ background: 'rgba(255,215,0,0.08)', borderColor: 'rgba(255,215,0,0.2)', color: '#92710a' }}
+                                                        title="Download PDF"
+                                                    >
+                                                        <FileDown className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(report.id, 'daily')}
+                                                        className="w-9 h-9 rounded-xl flex items-center justify-center transition-all border hover:border-red-200 hover:bg-red-50 hover:text-red-600 hover:scale-105"
+                                                        style={{ background: 'rgba(128,0,0,0.04)', borderColor: 'rgba(128,0,0,0.06)', color: 'rgba(128,0,0,0.4)' }}
+                                                        title="Delete Report"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-4 flex-1 justify-center px-10 border-l border-maroon/5">
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Attendance</p>
-                                                <p className="text-xl font-black text-maroon">{report.total_attendance_percentage}%</p>
-                                            </div>
-                                            <div className="w-px h-10 bg-maroon/5 mx-4"></div>
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Students</p>
-                                                <p className="text-xl font-black text-maroon">{report.total_students_present}/{report.total_students_expected}</p>
-                                            </div>
-                                            <div className="w-px h-10 bg-maroon/5 mx-4"></div>
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-black text-maroon/30 uppercase tracking-[0.2em] mb-1">Classes</p>
-                                                <p className="text-xl font-black text-maroon" dangerouslySetInnerHTML={{ __html: report.classes_conducted }} />
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 print:hidden">
-                                            <button
-                                                onClick={() => handleRetroSync(report)}
-                                                className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all border border-blue-100 shadow-sm"
-                                                title="Sync Audit Data"
-                                            >
-                                                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                                            </button>
-                                            <button onClick={() => setViewingReport(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5">
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                            <button onClick={() => openEditModal(report)} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-maroon hover:text-gold transition-all border border-maroon/5">
-                                                <Edit className="w-4 h-4" />
-                                            </button>
-                                            <button onClick={() => handleDownload(report)} className="p-3 bg-gold/5 text-maroon rounded-xl hover:bg-gold hover:text-maroon transition-all border border-gold/10">
-                                                <FileDown className="w-4 h-4" />
-                                            </button>
-                                            <button onClick={() => handleDelete(report.id, 'daily')} className="p-3 bg-maroon/5 text-maroon rounded-xl hover:bg-red-600 hover:text-white transition-all border border-maroon/5">
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    {report.incidents && (
-                                        <div className="mt-4 flex flex-wrap gap-2 pt-4 border-t border-maroon/5">
+
+                                            {/* Incidents banner */}
                                             {report.incidents && (
-                                                <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-2xl px-4 py-2">
-                                                    <AlertCircle className="w-3 h-3 text-red-500" />
-                                                    <span className="text-[10px] font-black text-red-700 uppercase tracking-wider">{report.incidents.length > 40 ? report.incidents.substring(0, 40) + '...' : report.incidents}</span>
+                                                <div className="mt-4 pt-4 border-t border-gray-50">
+                                                    <div className="inline-flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl px-3.5 py-2">
+                                                        <AlertCircle className="w-3 h-3 text-red-500 shrink-0" />
+                                                        <span className="text-[10px] font-bold text-red-700">
+                                                            {report.incidents.length > 50 ? report.incidents.substring(0, 50) + '…' : report.incidents}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                    )}
-                                </div>
-                            ))}
-                            <PaginationControls 
-                                totalItems={filteredDailyReports.length} 
-                                currentPage={currentPage} 
-                                setCurrentPage={setCurrentPage} 
-                                itemsPerPage={itemsPerPage} 
+                                    </div>
+                                );
+                            })}
+                            <PaginationControls
+                                totalItems={filteredDailyReports.length}
+                                currentPage={currentPage}
+                                setCurrentPage={setCurrentPage}
+                                itemsPerPage={itemsPerPage}
                             />
                             </>
-
                         )}
                     </div>
                 )}

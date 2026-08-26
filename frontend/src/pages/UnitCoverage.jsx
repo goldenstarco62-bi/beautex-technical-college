@@ -69,6 +69,17 @@ export default function UnitCoverage() {
     const [commentsModalCourse, setCommentsModalCourse] = useState(null);
     const [commentsModalData, setCommentsModalData] = useState([]);
     const [commentsModalLoading, setCommentsModalLoading] = useState(false);
+
+    // ── Admin Drill-Down State ────────────────────────────────────────────────
+    const [showAdminDrillDown, setShowAdminDrillDown] = useState(false);
+    const [adminDrillCourse, setAdminDrillCourse] = useState(null); // { course_id, course_name }
+    const [adminDrillStudents, setAdminDrillStudents] = useState([]);
+    const [adminDrillUnits, setAdminDrillUnits] = useState([]);
+    const [adminDrillLoading, setAdminDrillLoading] = useState(false);
+    const [adminDrillSelectedStudent, setAdminDrillSelectedStudent] = useState(null);
+    const [adminDrillStudentUnits, setAdminDrillStudentUnits] = useState([]);
+    const [adminDrillStudentLoading, setAdminDrillStudentLoading] = useState(false);
+    const [adminDrillStudentSearch, setAdminDrillStudentSearch] = useState('');
     useEffect(() => {
         if (!toast) return;
         const t = setTimeout(() => setToast(null), 4000);
@@ -178,6 +189,39 @@ export default function UnitCoverage() {
             showToast('Failed to load comments', 'error');
         } finally {
             setCommentsModalLoading(false);
+        }
+    }, [showToast]);
+
+    // ── Admin Drill-Down Loaders ──────────────────────────────────────────────
+    const openAdminDrillDown = useCallback(async (courseId, courseName) => {
+        setAdminDrillCourse({ course_id: courseId, course_name: courseName });
+        setAdminDrillSelectedStudent(null);
+        setAdminDrillStudentUnits([]);
+        setAdminDrillStudentSearch('');
+        setShowAdminDrillDown(true);
+        setAdminDrillLoading(true);
+        try {
+            const res = await unitCoverageAPI.getCourseCoverage(courseId);
+            setAdminDrillStudents(res.data?.students || []);
+            setAdminDrillUnits(res.data?.units || []);
+        } catch (e) {
+            showToast('Failed to load course coverage', 'error');
+        } finally {
+            setAdminDrillLoading(false);
+        }
+    }, [showToast]);
+
+    const loadAdminStudentUnits = useCallback(async (courseId, studentId) => {
+        if (!courseId || !studentId) return;
+        setAdminDrillStudentLoading(true);
+        try {
+            const res = await unitCoverageAPI.getCourseCoverage(courseId, { student_id: studentId });
+            setAdminDrillStudentUnits(res.data?.units || []);
+        } catch (e) {
+            console.error('loadAdminStudentUnits error:', e?.response?.data || e);
+            showToast('Failed to load student units', 'error');
+        } finally {
+            setAdminDrillStudentLoading(false);
         }
     }, [showToast]);
 
@@ -1128,7 +1172,7 @@ export default function UnitCoverage() {
                             <table className="w-full">
                                 <thead>
                                     <tr className="bg-black/[0.015] border-b border-black/5">
-                                        {['Course', 'Department', 'Total Units', 'Enrolled', 'Students w/ Coverage', 'Confirmations'].map(h => (
+                                        {['Course', 'Department', 'Total Units', 'Enrolled', 'Students w/ Coverage', 'Confirmations', 'Details'].map(h => (
                                             <th key={h} className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">{h}</th>
                                         ))}
                                     </tr>
@@ -1166,11 +1210,228 @@ export default function UnitCoverage() {
                                                         <span className="text-xs font-bold text-black/30">0</span>
                                                     )}
                                                 </td>
+                                                <td className="px-6 py-4">
+                                                    <button
+                                                        onClick={() => openAdminDrillDown(item.course_id, item.course_name)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-maroon/5 border border-maroon/20 rounded-full text-maroon text-[9px] font-black uppercase hover:bg-maroon hover:text-white transition-all"
+                                                    >
+                                                        <Eye className="w-3 h-3" /> View Students
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* ── ADMIN COURSE DRILL-DOWN MODAL ───────────────────────────────── */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {showAdminDrillDown && adminDrillCourse && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+
+                        {/* Modal Header */}
+                        <div className="p-6 border-b border-black/5 flex items-center justify-between flex-shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-maroon/10 rounded-xl">
+                                    <Users className="w-5 h-5 text-maroon" />
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-black text-black uppercase tracking-tight">{adminDrillCourse.course_name}</h2>
+                                    <p className="text-[10px] text-black/40 font-bold uppercase mt-0.5">Student Unit Coverage — Read-Only View</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setShowAdminDrillDown(false); setAdminDrillSelectedStudent(null); setAdminDrillStudentUnits([]); }}
+                                className="p-2 hover:bg-black/5 rounded-xl text-black/40 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {adminDrillLoading ? (
+                            <div className="flex justify-center items-center flex-1 p-16">
+                                <div className="flex flex-col items-center gap-4">
+                                    <div className="w-10 h-10 border-4 border-maroon border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-[10px] font-black text-black/30 uppercase tracking-widest">Loading Coverage Data...</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-1 overflow-hidden">
+
+                                {/* Left: Student List */}
+                                <div className="w-72 flex-shrink-0 border-r border-black/5 flex flex-col">
+                                    <div className="p-4 border-b border-black/5">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/30" />
+                                            <input
+                                                value={adminDrillStudentSearch}
+                                                onChange={e => setAdminDrillStudentSearch(e.target.value)}
+                                                placeholder="Search student..."
+                                                className="w-full pl-9 pr-3 py-2.5 text-xs bg-black/[0.03] border border-transparent rounded-xl outline-none focus:border-maroon/20 font-medium text-black"
+                                            />
+                                        </div>
+                                        <p className="text-[9px] font-black text-black/30 uppercase mt-2">{adminDrillStudents.length} Student(s) Enrolled</p>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto divide-y divide-black/5">
+                                        {adminDrillStudents.length === 0 ? (
+                                            <div className="p-8 text-center">
+                                                <Users className="w-8 h-8 text-black/10 mx-auto mb-2" />
+                                                <p className="text-[10px] font-black text-black/20 uppercase">No students enrolled</p>
+                                            </div>
+                                        ) : (
+                                            adminDrillStudents
+                                                .filter(s => !adminDrillStudentSearch || s.name.toLowerCase().includes(adminDrillStudentSearch.toLowerCase()))
+                                                .map(student => {
+                                                    const pct = student.completion_pct;
+                                                    const pctColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+                                                    const isSelected = adminDrillSelectedStudent === student.id;
+                                                    return (
+                                                        <button
+                                                            key={student.id}
+                                                            onClick={() => {
+                                                                setAdminDrillSelectedStudent(student.id);
+                                                                loadAdminStudentUnits(adminDrillCourse?.course_id, student.id);
+                                                            }}
+                                                            className={`w-full text-left px-4 py-3.5 transition-colors ${
+                                                                isSelected ? 'bg-maroon/5 border-l-4 border-l-maroon' : 'hover:bg-black/[0.02] border-l-4 border-l-transparent'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <p className={`text-xs font-black uppercase truncate ${isSelected ? 'text-maroon' : 'text-black'}`}>{student.name}</p>
+                                                                <span className="text-[9px] font-black text-black/40 ml-2 whitespace-nowrap">{pct}%</span>
+                                                            </div>
+                                                            <p className="text-[9px] text-black/30 font-bold mb-2">{student.intake || 'No Intake'} · {student.covered_units}/{student.total_units} units</p>
+                                                            <div className="h-1.5 bg-black/5 rounded-full overflow-hidden">
+                                                                <div className={`h-full ${pctColor} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }} />
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Right: Unit Coverage Detail */}
+                                <div className="flex-1 flex flex-col overflow-hidden">
+                                    {!adminDrillSelectedStudent ? (
+                                        <div className="flex flex-col items-center justify-center flex-1 p-16 text-center">
+                                            <UserCheck className="w-12 h-12 text-black/10 mb-4" />
+                                            <p className="text-[10px] font-black text-black/20 uppercase tracking-[0.25em]">Select a student to view their unit coverage</p>
+                                            {/* Summary cards */}
+                                            {adminDrillStudents.length > 0 && (
+                                                <div className="grid grid-cols-3 gap-4 mt-8 w-full max-w-md">
+                                                    {[
+                                                        { label: 'Units', value: adminDrillUnits.length, color: 'text-maroon' },
+                                                        { label: 'Enrolled', value: adminDrillStudents.length, color: 'text-blue-600' },
+                                                        { label: 'Avg. %', value: adminDrillStudents.length > 0 ? Math.round(adminDrillStudents.reduce((a, s) => a + s.completion_pct, 0) / adminDrillStudents.length) + '%' : '—', color: 'text-green-600' },
+                                                    ].map(card => (
+                                                        <div key={card.label} className="bg-black/[0.02] rounded-2xl p-4 text-center">
+                                                            <p className={`text-2xl font-black ${card.color}`}>{card.value}</p>
+                                                            <p className="text-[9px] font-black text-black/30 uppercase mt-1">{card.label}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Student detail header */}
+                                            <div className="p-5 border-b border-black/5 flex items-center justify-between flex-shrink-0">
+                                                <div>
+                                                    <h3 className="text-sm font-black text-black uppercase">
+                                                        {adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.name}
+                                                    </h3>
+                                                    <p className="text-[10px] text-black/40 font-bold uppercase mt-0.5">
+                                                        Intake: {adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.intake || 'N/A'}
+                                                        {' · '}
+                                                        {adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.covered_units} / {adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.total_units} units covered
+                                                    </p>
+                                                </div>
+                                                <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase border ${
+                                                    (adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.completion_pct || 0) >= 80
+                                                        ? 'bg-green-50 border-green-200 text-green-700'
+                                                        : (adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.completion_pct || 0) >= 50
+                                                        ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                                        : 'bg-red-50 border-red-200 text-red-700'
+                                                }`}>
+                                                    {adminDrillStudents.find(s => s.id === adminDrillSelectedStudent)?.completion_pct}%
+                                                </span>
+                                            </div>
+
+                                            {/* Unit table */}
+                                            <div className="flex-1 overflow-y-auto">
+                                                {adminDrillStudentLoading ? (
+                                                    <div className="flex justify-center p-12">
+                                                        <div className="w-8 h-8 border-4 border-maroon border-t-transparent rounded-full animate-spin" />
+                                                    </div>
+                                                ) : (
+                                                    <table className="w-full">
+                                                        <thead className="sticky top-0 z-10">
+                                                            <tr className="bg-white border-b border-black/5">
+                                                                {['#', 'Unit / Topic', 'Status', 'Date Covered', 'Trainer', 'Student Response'].map(h => (
+                                                                    <th key={h} className="px-5 py-3 text-left text-[9px] font-black text-black/40 uppercase tracking-widest">{h}</th>
+                                                                ))}
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-black/5">
+                                                            {adminDrillStudentUnits.map((unit, idx) => {
+                                                                const isCovered = !!unit.coverage_log;
+                                                                const conf = unit.student_confirmation;
+                                                                return (
+                                                                    <tr key={unit.id} className={`transition-colors ${
+                                                                        isCovered ? 'hover:bg-green-50/30' : 'hover:bg-black/[0.005]'
+                                                                    }`}>
+                                                                        <td className="px-5 py-3.5 text-[9px] font-black text-black/30">{idx + 1}</td>
+                                                                        <td className="px-5 py-3.5">
+                                                                            <p className="text-xs font-black text-black uppercase">{unit.name}</p>
+                                                                            {unit.expected_duration && <p className="text-[9px] text-black/30 mt-0.5"><Clock className="inline w-3 h-3 mr-1" />{unit.expected_duration}</p>}
+                                                                        </td>
+                                                                        <td className="px-5 py-3.5">
+                                                                            {isCovered ? (
+                                                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-green-50 border border-green-200 rounded-full text-green-700 text-[9px] font-black uppercase">✅ Covered</span>
+                                                                            ) : (
+                                                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-black/[0.03] border border-black/10 rounded-full text-black/40 text-[9px] font-black uppercase">⬜ Pending</span>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-5 py-3.5 text-[10px] text-black/50 font-bold">
+                                                                            {isCovered ? unit.coverage_log.date_covered : '—'}
+                                                                        </td>
+                                                                        <td className="px-5 py-3.5 text-[10px] text-black/60 font-bold">
+                                                                            {isCovered ? unit.coverage_log.teacher_name : '—'}
+                                                                        </td>
+                                                                        <td className="px-5 py-3.5">
+                                                                            {isCovered && conf ? (
+                                                                                <div className="space-y-1">
+                                                                                    <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase border ${
+                                                                                        conf.response === 'Yes' ? 'bg-green-50 border-green-200 text-green-700' :
+                                                                                        conf.response === 'Partially' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                                                                        'bg-red-50 border-red-200 text-red-700'
+                                                                                    }`}>{conf.response}</span>
+                                                                                    {conf.comment && (
+                                                                                        <p className="text-[9px] text-black/50 italic max-w-[160px] truncate" title={conf.comment}>"{conf.comment}"</p>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : isCovered ? (
+                                                                                <span className="text-[9px] text-black/25 italic">No response</span>
+                                                                            ) : (
+                                                                                <span className="text-black/20">—</span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

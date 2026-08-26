@@ -98,7 +98,11 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
 
     return (
         <div className="h-16 px-4 md:px-6 flex items-center justify-between sticky top-0 left-0 w-full z-40 transition-all duration-300"
-            style={{ backgroundColor: 'var(--portal-theme, #800000)', borderBottom: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 2px 12px rgba(0,0,0,0.25)' }}>
+            style={{
+                background: 'linear-gradient(135deg, #6b0000 0%, #800000 50%, #7a0000 100%)',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                boxShadow: '0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)'
+            }}>
 
             {/* Left: Hamburger + Mobile Logo */}
             <div className="flex items-center gap-3">
@@ -121,15 +125,21 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
             <div className="flex-1 max-w-sm mx-4 hidden sm:block">
                 <button
                     onClick={onSearchClick}
-                    className="w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all group bg-white/10 hover:bg-white/20 border border-white/15"
+                    className="w-full flex items-center justify-between px-4 py-2 rounded-xl transition-all group border"
+                    style={{
+                        background: 'rgba(255,255,255,0.08)',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.14)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
                 >
                     <div className="flex items-center gap-2.5">
-                        <Search className="w-4 h-4 text-white/50" />
-                        <span className="text-[11px] font-medium text-white/40">
+                        <Search className="w-4 h-4 text-white/40" />
+                        <span className="text-[11px] font-medium text-white/35">
                             Search anything...
                         </span>
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-white/10 text-white/30">
+                    <div className="flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-white/8 text-white/25">
                         <Command className="w-2.5 h-2.5" />K
                     </div>
                 </button>
@@ -249,17 +259,18 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                 {/* User Info */}
                 <Link
                     to="/profile"
-                    className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all group hover:bg-white/15"
+                    className="hidden sm:flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all group hover:bg-white/10"
                 >
                     <div>
-                        <p className="text-[11px] font-black uppercase leading-tight text-white/90 group-hover:text-yellow-300">
+                        <p className="text-[11px] font-black uppercase leading-tight text-white/85 group-hover:text-yellow-300 transition-colors">
                             {(user?.name || user?.email?.split('@')[0] || 'User').toUpperCase().substring(0, 16)}
                         </p>
-                        <p className="text-[9px] font-semibold capitalize text-white/40">
+                        <p className="text-[9px] font-semibold capitalize text-white/35">
                             {user?.role || 'Admin'}
                         </p>
                     </div>
-                    <div className="w-8 h-8 bg-yellow-400 text-maroon font-black rounded-full flex items-center justify-center text-xs shadow-md group-hover:scale-105 transition-transform overflow-hidden border-2 border-white/20">
+                    <div className="w-8 h-8 font-black rounded-full flex items-center justify-center text-xs shadow-lg group-hover:scale-105 transition-transform overflow-hidden border-2 border-white/20"
+                        style={{ background: 'linear-gradient(135deg, #FFD700, #E6C200)', color: '#800000' }}>
                         {user?.photo ? (
                             <img src={user?.photo} alt="Avatar" className="w-full h-full object-cover" />
                         ) : userInitial}
