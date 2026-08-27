@@ -299,3 +299,31 @@ input[type=number] {
 .rich-text-content p:last-child {
     margin-bottom: 0;
 }
+
+/* Institutional Report Print Styles */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #finance-registry-report-capture, #finance-registry-report-capture *,
+    #printable-report, #printable-report *,
+    #finance-report-capture, #finance-report-capture * {
+        visibility: visible;
+    }
+    #finance-registry-report-capture, #finance-report-capture {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+    #printable-report {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+}

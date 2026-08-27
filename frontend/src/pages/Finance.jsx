@@ -5,7 +5,8 @@ import {
     CreditCard, TrendingUp, AlertCircle, DollarSign, Plus, X,
     FileDown, Printer, Eye, CheckCircle2, Clock, BarChart3,
     ArrowUpRight, ShieldCheck, Banknote, Users, Activity,
-    ChevronRight, Receipt, Wallet, PiggyBank, AlertTriangle, Settings, Trash2, Pencil, RefreshCcw
+    ChevronRight, Receipt, Wallet, PiggyBank, AlertTriangle, Settings, Trash2, Pencil, RefreshCcw,
+    Filter, Calendar, FileText
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -297,10 +298,18 @@ function StudentFinanceView({ studentFee, payments }) {
 }
 
 // ─── ADMIN VIEW ───────────────────────────────────────────────────────────────
-function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRecord, onViewReport, onEditPayment, onDeletePayment, onEditFee, fetchAdminData, canEditFinance, canRecordFinance }) {
+function AdminFinanceView({
+    analytics, payments, studentFees, allStudents, onRecord, onViewReport,
+    onEditPayment, onDeletePayment, onEditFee, fetchAdminData, canEditFinance, canRecordFinance,
+    onDownloadRegistryPDF, onPrintRegistryPDF, onPreviewRegistryReport, generatingRegistryPdf
+}) {
     const [activeTab, setActiveTab] = useState('overview');
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [methodFilter, setMethodFilter] = useState('all');
+    const [categoryFilter, setCategoryFilter] = useState('all');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     const summary = analytics?.summary || {};
 
     const filteredFees = studentFees.filter(f => {
@@ -309,9 +318,62 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
         return matchSearch && matchStatus;
     });
 
-    const filteredPayments = payments.filter(p =>
-        !search || (p.student_name || '').toLowerCase().includes(search.toLowerCase()) || (p.transaction_ref || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredPayments = payments.filter(p => {
+        const query = search.toLowerCase();
+        const matchSearch = !search ||
+            (p.student_name || '').toLowerCase().includes(query) ||
+            (p.student_id || '').toLowerCase().includes(query) ||
+            (p.transaction_ref || '').toLowerCase().includes(query);
+
+        const matchMethod = methodFilter === 'all' || (p.method || 'Cash').toLowerCase() === methodFilter.toLowerCase();
+        const matchCategory = categoryFilter === 'all' || (p.category || 'Tuition Fee').toLowerCase() === categoryFilter.toLowerCase();
+
+        let matchDate = true;
+        if (p.payment_date) {
+            const pDate = new Date(p.payment_date).toISOString().split('T')[0];
+            if (startDate && pDate < startDate) matchDate = false;
+            if (endDate && pDate > endDate) matchDate = false;
+        }
+
+        return matchSearch && matchMethod && matchCategory && matchDate;
+    });
+
+    const totalRegistryAmount = filteredPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const methodTotals = filteredPayments.reduce((acc, p) => {
+        const m = p.method || 'Cash';
+        acc[m] = (acc[m] || 0) + (Number(p.amount) || 0);
+        return acc;
+    }, {});
+
+    const getFilterSummary = () => {
+        const parts = [];
+        if (search) {
+            const rawClean = search.replace(/^[-_\s]+/, '').trim();
+            const query = rawClean.toLowerCase();
+            const matchedStudent = (allStudents || []).find(s =>
+                (s.name || '').toLowerCase().includes(query) ||
+                (s.id || '').toLowerCase().includes(query)
+            );
+
+            if (matchedStudent) {
+                let details = `Student: ${matchedStudent.name} (${matchedStudent.id})`;
+                if (matchedStudent.course) {
+                    details += ` - ${matchedStudent.course}`;
+                }
+                parts.push(details);
+            } else if (filteredPayments.length > 0 && filteredPayments[0].student_name) {
+                const first = filteredPayments[0];
+                parts.push(`Student: ${first.student_name} (${first.student_id})`);
+            } else {
+                parts.push(`Student Details: ${rawClean}`);
+            }
+        }
+        if (methodFilter !== 'all') parts.push(`Method: ${methodFilter}`);
+        if (categoryFilter !== 'all') parts.push(`Category: ${categoryFilter}`);
+        if (startDate || endDate) parts.push(`Date: ${startDate || 'Start'} to ${endDate || 'Present'}`);
+        return parts.length > 0 ? parts.join(' | ') : 'All Payment Records';
+    };
 
     const collectionRate = summary.total_revenue_expected > 0
         ? ((summary.total_revenue_collected / summary.total_revenue_expected) * 100).toFixed(1)
@@ -547,45 +609,204 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
             )}
 
             {activeTab === 'payments' && (
-                <div className="space-y-6 animate-in slide-in-from-right-5 duration-700">
-                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl p-8 flex flex-col md:flex-row gap-4 justify-between items-center">
-                        <div className="relative w-full md:w-96">
-                            <Activity className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search Reference, Student Name, or ID..."
-                                className="w-full pl-12 pr-6 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-maroon/20 text-xs font-black uppercase tracking-widest placeholder:text-gray-300 transition-all"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
+                <div className="space-y-8 animate-in slide-in-from-right-5 duration-700">
+                    {/* Payment Registry Executive Analytics Banner */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-gradient-to-br from-maroon to-maroon/90 text-white rounded-[2.5rem] p-8 shadow-xl relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-gold/10 rounded-full -mr-12 -mt-12 blur-xl" />
+                            <div className="flex items-center justify-between mb-4">
+                                <span className="text-[10px] font-black text-gold/80 uppercase tracking-[0.3em]">Total Collections</span>
+                                <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
+                                    <Banknote className="w-5 h-5 text-gold" />
+                                </div>
+                            </div>
+                            <h3 className="text-2xl font-black tracking-tight text-white">KSh {fmt(totalRegistryAmount)}</h3>
+                            <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mt-2">Sum of {filteredPayments.length} Filtered Entries</p>
                         </div>
-                        <div className="flex gap-4">
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-4 py-2 rounded-full flex items-center gap-2">
-                                <Receipt className="w-3 h-3" /> {filteredPayments.length} Entries Found
-                            </span>
+
+                        <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-xl relative overflow-hidden">
+                            <div className="flex items-center justify-between mb-4">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Record Volume</span>
+                                <div className="w-10 h-10 bg-emerald-50 rounded-2xl flex items-center justify-center">
+                                    <Receipt className="w-5 h-5 text-emerald-600" />
+                                </div>
+                            </div>
+                            <h3 className="text-2xl font-black tracking-tight text-gray-800">{filteredPayments.length} <span className="text-sm font-bold text-gray-400">/ {payments.length}</span></h3>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-2">Verified Ledger Entries</p>
+                        </div>
+
+                        <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-xl relative overflow-hidden flex flex-col justify-between">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em]">Method Distribution</span>
+                                <div className="w-10 h-10 bg-amber-50 rounded-2xl flex items-center justify-center">
+                                    <Activity className="w-5 h-5 text-amber-600" />
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {Object.entries(methodTotals).map(([m, sum]) => (
+                                    <div key={m} className="px-3 py-1.5 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-2">
+                                        <span className="text-[9px] font-black text-maroon uppercase">{m}:</span>
+                                        <span className="text-[9px] font-black text-emerald-600">KSh {fmt(sum)}</span>
+                                    </div>
+                                ))}
+                                {Object.keys(methodTotals).length === 0 && (
+                                    <span className="text-[9px] font-bold text-gray-300 uppercase">No Data</span>
+                                )}
+                            </div>
                         </div>
                     </div>
 
+                    {/* Filter Controls & Action Header */}
+                    <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-2xl p-8 space-y-6">
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 pb-6 border-b border-gray-100">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <ShieldCheck className="w-4 h-4 text-gold" />
+                                    <h2 className="text-lg font-black text-maroon uppercase tracking-tight">Payment Registry Controls</h2>
+                                </div>
+                                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">
+                                    Official Payment Record Audit & Institutional PDF Export
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+                                <button
+                                    onClick={() => onPreviewRegistryReport && onPreviewRegistryReport(filteredPayments, getFilterSummary())}
+                                    className="flex-1 sm:flex-none px-6 py-3.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-gray-200 transition-all flex items-center justify-center gap-2 shadow-sm"
+                                >
+                                    <Eye className="w-4 h-4 text-maroon" /> Preview Manifest
+                                </button>
+                                <button
+                                    onClick={() => onPrintRegistryPDF && onPrintRegistryPDF(filteredPayments, getFilterSummary())}
+                                    className="flex-1 sm:flex-none px-6 py-3.5 bg-white border-2 border-maroon/20 hover:bg-maroon/5 text-maroon rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                                >
+                                    <Printer className="w-4 h-4 text-maroon" /> Print Registry
+                                </button>
+                                <button
+                                    onClick={() => onDownloadRegistryPDF && onDownloadRegistryPDF(filteredPayments, getFilterSummary())}
+                                    disabled={generatingRegistryPdf}
+                                    className="flex-1 sm:flex-none px-7 py-3.5 bg-maroon text-gold rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-maroon/90 hover:scale-[1.02] transition-all flex items-center justify-center gap-2.5 border border-gold/20 disabled:opacity-50"
+                                >
+                                    <FileDown className="w-4 h-4" /> {generatingRegistryPdf ? 'Generating PDF...' : 'Download PDF Registry'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Comprehensive Filter Toolbar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                            {/* Search */}
+                            <div className="relative lg:col-span-2">
+                                <Activity className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search Ref, Student Name, or ID..."
+                                    className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-maroon/20 text-xs font-black uppercase tracking-widest placeholder:text-gray-300 transition-all"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Method Filter */}
+                            <div>
+                                <select
+                                    value={methodFilter}
+                                    onChange={(e) => setMethodFilter(e.target.value)}
+                                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-black text-gray-700 outline-none cursor-pointer uppercase tracking-widest focus:ring-2 focus:ring-maroon/20"
+                                >
+                                    <option value="all">All Methods</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Cheque">Cheque</option>
+                                    <option value="M-Pesa">M-Pesa</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            {/* Category Filter */}
+                            <div>
+                                <select
+                                    value={categoryFilter}
+                                    onChange={(e) => setCategoryFilter(e.target.value)}
+                                    className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-xs font-black text-gray-700 outline-none cursor-pointer uppercase tracking-widest focus:ring-2 focus:ring-maroon/20"
+                                >
+                                    <option value="all">All Categories</option>
+                                    <option value="Tuition Fee">Tuition Fee</option>
+                                    <option value="Registration">Registration</option>
+                                    <option value="Exam Fee">Exam Fee</option>
+                                    <option value="Uniform">Uniform</option>
+                                    <option value="Hostel">Hostel</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            {/* Reset Filters */}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => { setSearch(''); setMethodFilter('all'); setCategoryFilter('all'); setStartDate(''); setEndDate(''); }}
+                                    className="w-full py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all"
+                                >
+                                    Reset Filters
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Date Range Sub-Bar */}
+                        <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-gray-50">
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-maroon" /> Date Range Filter:
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase">From</span>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 outline-none"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-bold text-gray-400 uppercase">To</span>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-gray-700 outline-none"
+                                />
+                            </div>
+                            {(startDate || endDate || methodFilter !== 'all' || categoryFilter !== 'all' || search) && (
+                                <span className="text-[9px] font-black text-maroon uppercase tracking-widest bg-maroon/5 px-3 py-1.5 rounded-xl border border-maroon/10 ml-auto">
+                                    Active Filter Applied ({filteredPayments.length} records selected)
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Payment Records Table */}
                     <div className="bg-white rounded-[3rem] border border-gray-100 shadow-2xl overflow-hidden">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-gray-50/70 border-b border-gray-100">
+                                        <th className="px-8 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">#</th>
                                         <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Student Account</th>
+                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Category</th>
                                         <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Protocol / Ref</th>
                                         <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Method</th>
                                         <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Credit (KSh)</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Receipt</th>
+                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
                                     {filteredPayments.map((p, i) => (
-                                        <tr key={p.id || i} className="hover:bg-gray-50/50 transition-all group">
+                                        <tr key={p.id || p._id || i} className="hover:bg-gray-50/50 transition-all group">
+                                            <td className="px-8 py-6 text-[10px] font-black text-gray-300">{i + 1}</td>
                                             <td className="px-10 py-6">
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-black text-gray-800 uppercase tracking-tight group-hover:text-maroon transition-colors">{p.student_name || p.student_id}</span>
                                                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{p.student_id}</span>
                                                 </div>
+                                            </td>
+                                            <td className="px-10 py-6 text-center">
+                                                <span className="text-[9px] font-black text-gray-600 bg-gray-50 px-3 py-1 rounded-lg uppercase">{p.category || 'Tuition Fee'}</span>
                                             </td>
                                             <td className="px-10 py-6 text-center">
                                                 <div className="flex flex-col items-center">
@@ -601,15 +822,15 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                             </td>
                                             <td className="px-10 py-6 text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <button onClick={() => onViewReport({ ...p, type: 'payment' })} className="p-2.5 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm">
+                                                    <button onClick={() => onViewReport({ ...p, type: 'payment' })} className="p-2.5 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm" title="View Receipt">
                                                         <Eye className="w-3.5 h-3.5" />
                                                     </button>
                                                     {canEditFinance && (
                                                         <>
-                                                            <button onClick={() => onEditPayment(p)} className="p-2.5 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all shadow-sm text-amber-600">
+                                                            <button onClick={() => onEditPayment(p)} className="p-2.5 bg-amber-50 hover:bg-amber-500 hover:text-white rounded-xl transition-all shadow-sm text-amber-600" title="Edit Record">
                                                                 <Pencil className="w-3.5 h-3.5" />
                                                             </button>
-                                                            <button onClick={() => onDeletePayment(p.id || p._id)} className="p-2.5 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-600">
+                                                            <button onClick={() => onDeletePayment(p.id || p._id)} className="p-2.5 bg-red-50 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm text-red-600" title="Delete Record">
                                                                 <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
                                                         </>
@@ -620,13 +841,26 @@ function AdminFinanceView({ analytics, payments, studentFees, allStudents, onRec
                                     ))}
                                     {filteredPayments.length === 0 && (
                                         <tr>
-                                            <td colSpan="5" className="px-10 py-24 text-center">
+                                            <td colSpan="7" className="px-10 py-24 text-center">
                                                 <Receipt className="w-12 h-12 text-gray-100 mx-auto mb-4" />
-                                                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No matching transactions found</p>
+                                                <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">No matching payment transactions found</p>
                                             </td>
                                         </tr>
                                     )}
                                 </tbody>
+                                {filteredPayments.length > 0 && (
+                                    <tfoot>
+                                        <tr className="bg-maroon/5 border-t-2 border-maroon/10">
+                                            <td colSpan="5" className="px-10 py-6 text-[10px] font-black text-maroon uppercase tracking-[0.3em]">
+                                                Total Payment Collections ({filteredPayments.length} Records)
+                                            </td>
+                                            <td className="px-10 py-6 text-lg font-black text-emerald-700 text-right tracking-tight">
+                                                KSh {fmt(totalRegistryAmount)}
+                                            </td>
+                                            <td className="px-10 py-6"></td>
+                                        </tr>
+                                    </tfoot>
+                                )}
                             </table>
                         </div>
                     </div>
@@ -760,10 +994,81 @@ export default function Finance() {
     const [viewingReport, setViewingReport] = useState(null);
     const [printingReport, setPrintingReport] = useState(null);
     const [editingRecord, setEditingRecord] = useState(null); // {type: 'payment' | 'fee', data: any }
+    const [printingRegistry, setPrintingRegistry] = useState(null);
+    const [viewingRegistryModal, setViewingRegistryModal] = useState(null);
+    const [generatingRegistryPdf, setGeneratingRegistryPdf] = useState(false);
 
     // Finance edit permission: superadmin always yes, admin only if granted
     const canEditFinance = user?.role === 'superadmin' || (user?.role === 'admin' && !!user?.can_edit_finance);
     const canRecordFinance = user?.role === 'superadmin' || user?.role === 'admin';
+
+    const handleDownloadRegistryPDF = async (recordsToExport, filterSummary) => {
+        if (!recordsToExport || recordsToExport.length === 0) {
+            alert('No payment records found to export.');
+            return;
+        }
+        setGeneratingRegistryPdf(true);
+        setPrintingRegistry({ payments: recordsToExport, filterSummary, generatedAt: new Date(), user });
+
+        setTimeout(async () => {
+            const element = document.getElementById('finance-registry-report-capture');
+            if (!element) {
+                setGeneratingRegistryPdf(false);
+                setPrintingRegistry(null);
+                return;
+            }
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    windowWidth: 850,
+                    logging: false,
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const imgProps = pdf.getImageProperties(imgData);
+                const ratio = imgProps.height / imgProps.width;
+                const totalRenderedHeight = pdfWidth * ratio;
+
+                let heightLeft = totalRenderedHeight;
+                let position = 0;
+
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'FAST');
+                heightLeft -= pdfHeight;
+
+                while (heightLeft > 0) {
+                    position -= pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'FAST');
+                    heightLeft -= pdfHeight;
+                }
+
+                const fileName = `Payment_Registry_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+                pdf.save(fileName);
+            } catch (err) {
+                console.error('PDF generation error:', err);
+                alert('Failed to generate PDF. Please try printing directly instead.');
+            } finally {
+                setGeneratingRegistryPdf(false);
+                setPrintingRegistry(null);
+            }
+        }, 800);
+    };
+
+    const handlePrintRegistryPDF = (recordsToPrint, filterSummary) => {
+        if (!recordsToPrint || recordsToPrint.length === 0) {
+            alert('No payment records found to print.');
+            return;
+        }
+        setPrintingRegistry({ payments: recordsToPrint, filterSummary, generatedAt: new Date(), user });
+        setTimeout(() => {
+            window.print();
+            setPrintingRegistry(null);
+        }, 500);
+    };
 
     useEffect(() => {
         user?.role === 'student' ? fetchStudentData() : fetchAdminData();
@@ -959,6 +1264,10 @@ export default function Finance() {
                         onEditPayment={(p) => canEditFinance ? setEditingRecord({ type: 'payment', data: { ...p } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
                         onEditFee={(f) => canEditFinance ? setEditingRecord({ type: 'fee', data: { ...f } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
                         onDeletePayment={(id) => canEditFinance ? handleDeleteRecord('payment', id) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
+                        onDownloadRegistryPDF={handleDownloadRegistryPDF}
+                        onPrintRegistryPDF={handlePrintRegistryPDF}
+                        onPreviewRegistryReport={(records, filterSummary) => setViewingRegistryModal({ records, filterSummary })}
+                        generatingRegistryPdf={generatingRegistryPdf}
                     />
                 </div>
             )}
@@ -1723,6 +2032,299 @@ export default function Finance() {
                     </div>
                 )
             }
+
+            {/* Preview Payment Registry Modal */}
+            {viewingRegistryModal && (
+                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-xl flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[3rem] max-w-4xl w-full shadow-2xl relative max-h-[92vh] flex flex-col overflow-hidden border border-white/20">
+                        {/* Header */}
+                        <div className="px-10 py-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-maroon text-gold rounded-2xl flex items-center justify-center shadow-lg">
+                                    <Receipt className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-maroon uppercase tracking-widest leading-none">
+                                        Payment Registry Manifest Preview
+                                    </h3>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-1">
+                                        {viewingRegistryModal.records?.length || 0} Records • Scope: {viewingRegistryModal.filterSummary}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => handleDownloadRegistryPDF(viewingRegistryModal.records, viewingRegistryModal.filterSummary)}
+                                    disabled={generatingRegistryPdf}
+                                    className="px-5 py-2.5 bg-maroon text-gold rounded-xl font-black text-[9px] uppercase tracking-widest shadow-md hover:bg-maroon/90 transition-all flex items-center gap-2"
+                                >
+                                    <FileDown className="w-4 h-4" /> Download PDF
+                                </button>
+                                <button
+                                    onClick={() => handlePrintRegistryPDF(viewingRegistryModal.records, viewingRegistryModal.filterSummary)}
+                                    className="px-5 py-2.5 bg-white border border-gray-200 text-maroon rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center gap-2"
+                                >
+                                    <Printer className="w-4 h-4" /> Print
+                                </button>
+                                <button
+                                    onClick={() => setViewingRegistryModal(null)}
+                                    className="p-2.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-xl transition-all"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content Preview */}
+                        <div className="flex-1 overflow-y-auto p-10 bg-gray-50/30">
+                            <div className="bg-white rounded-3xl p-10 border border-gray-100 shadow-sm space-y-8">
+                                {/* Header */}
+                                <div className="flex justify-between items-start pb-6 border-b-2 border-maroon">
+                                    <div className="flex items-center gap-4">
+                                        <img src="/app-icon-v2.png" alt="Logo" className="w-16 h-16 object-contain" />
+                                        <div>
+                                            <h2 className="text-lg font-black uppercase text-maroon">BEAUTEX TECHNICAL TRAINING COLLEGE</h2>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Department of Financial Services & Accounts</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="px-4 py-2 bg-maroon text-gold rounded-xl text-[10px] font-black uppercase tracking-widest">OFFICIAL MANIFEST</span>
+                                        <p className="text-[9px] font-black text-gray-400 mt-2 uppercase">{new Date().toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+                                    </div>
+                                </div>
+
+                                {/* Summary Row */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <div className="p-4 bg-maroon/5 rounded-2xl border border-maroon/10">
+                                        <p className="text-[9px] font-black text-maroon/60 uppercase">Total Revenue Collected</p>
+                                        <p className="text-xl font-black text-maroon mt-1">
+                                            KSh {fmt(viewingRegistryModal.records?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                                        </p>
+                                    </div>
+                                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                                        <p className="text-[9px] font-black text-emerald-600/60 uppercase">Total Records</p>
+                                        <p className="text-xl font-black text-emerald-700 mt-1">
+                                            {viewingRegistryModal.records?.length || 0} Entries
+                                        </p>
+                                    </div>
+                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                        <p className="text-[9px] font-black text-amber-700/60 uppercase">Filter Scope</p>
+                                        <p className="text-xs font-black text-amber-800 mt-2 uppercase truncate">{viewingRegistryModal.filterSummary}</p>
+                                    </div>
+                                </div>
+
+                                {/* Table */}
+                                <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                                    <table className="w-full text-left text-xs">
+                                        <thead>
+                                            <tr className="bg-gray-50 border-b border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                                <th className="p-4">#</th>
+                                                <th className="p-4">Date</th>
+                                                <th className="p-4">Reference</th>
+                                                <th className="p-4">Student</th>
+                                                <th className="p-4">Category</th>
+                                                <th className="p-4">Method</th>
+                                                <th className="p-4 text-right">Amount (KSh)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {viewingRegistryModal.records?.map((p, idx) => (
+                                                <tr key={idx} className="hover:bg-gray-50/50">
+                                                    <td className="p-4 text-[10px] font-bold text-gray-300">{idx + 1}</td>
+                                                    <td className="p-4 font-bold text-gray-700">{new Date(p.payment_date).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' })}</td>
+                                                    <td className="p-4 font-mono font-black text-gray-800 text-[10px]">{p.transaction_ref}</td>
+                                                    <td className="p-4 font-black text-gray-800">
+                                                        {p.student_name || p.student_id}
+                                                        <div className="text-[8px] text-gray-400">{p.student_id}</div>
+                                                    </td>
+                                                    <td className="p-4 text-gray-600">{p.category || 'Tuition Fee'}</td>
+                                                    <td className="p-4 font-black text-maroon">{p.method}</td>
+                                                    <td className="p-4 text-right font-black text-emerald-700">KSh {fmt(p.amount)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-maroon/5 border-t border-maroon/10">
+                                                <td colSpan="6" className="p-4 font-black text-maroon uppercase tracking-widest text-[10px]">TOTAL COLLECTIONS</td>
+                                                <td className="p-4 text-right font-black text-emerald-800 text-sm">
+                                                    KSh {fmt(viewingRegistryModal.records?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-10 py-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+                            <button
+                                onClick={() => setViewingRegistryModal(null)}
+                                className="px-6 py-3 bg-white border border-gray-200 text-gray-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all"
+                            >
+                                Close Preview
+                            </button>
+                            <button
+                                onClick={() => handleDownloadRegistryPDF(viewingRegistryModal.records, viewingRegistryModal.filterSummary)}
+                                disabled={generatingRegistryPdf}
+                                className="px-8 py-3 bg-maroon text-gold rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-maroon/90 transition-all flex items-center gap-2"
+                            >
+                                <FileDown className="w-4 h-4" /> Download PDF Manifest
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Offscreen / Printable Institutional Payment Registry Report Container */}
+            {printingRegistry && (
+                <div className="fixed inset-0 bg-white z-[-1] pointer-events-none opacity-0 overflow-hidden">
+                    <div id="finance-registry-report-capture" className="w-[850px] bg-white text-[#1a1a1a] font-sans p-[50px] relative">
+                        {/* Outer institutional double border */}
+                        <div className="absolute inset-0 border-[16px] border-maroon/5 opacity-70" />
+                        <div className="absolute top-8 left-8 right-8 bottom-8 border border-maroon/20" />
+
+                        <div className="relative z-10 space-y-8">
+                            {/* Institutional Header */}
+                            <div className="flex justify-between items-start pb-6 border-b-2 border-maroon">
+                                <div className="flex items-center gap-5">
+                                    <img src="/app-icon-v2.png" alt="Beautex Logo" className="w-20 h-20 object-contain" />
+                                    <div>
+                                        <h1 className="text-xl font-black uppercase tracking-[0.2em] text-maroon leading-tight">
+                                            BEAUTEX TECHNICAL<br />TRAINING COLLEGE
+                                        </h1>
+                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.3em] mt-1">
+                                            Department of Finance & Registry Accounts
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="bg-maroon text-gold px-5 py-2.5 rounded-xl inline-block mb-2 shadow-sm">
+                                        <p className="text-[11px] font-black uppercase tracking-widest">PAYMENT REGISTRY MANIFEST</p>
+                                    </div>
+                                    <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
+                                        Official Audit Document
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Audit Scope & Metadata */}
+                            <div className="grid grid-cols-2 gap-8 bg-gray-50/80 p-6 rounded-2xl border border-gray-100">
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Generated By</p>
+                                        <p className="text-xs font-black text-gray-800 uppercase">{printingRegistry.user?.name || 'Administrator'} ({printingRegistry.user?.role || 'Super Admin'})</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Report Timestamp</p>
+                                        <p className="text-xs font-black text-gray-800 uppercase">
+                                            {new Date(printingRegistry.generatedAt || new Date()).toLocaleString('en-KE', { dateStyle: 'full', timeStyle: 'short' })}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="text-right space-y-3">
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Audit Scope / Filters</p>
+                                        <p className="text-xs font-black text-maroon uppercase">{printingRegistry.filterSummary || 'All Records'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Entries Captured</p>
+                                        <p className="text-xs font-black text-emerald-700 uppercase">{printingRegistry.payments?.length || 0} Payment Records</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Executive Summary Cards */}
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="p-5 bg-maroon/5 rounded-2xl border border-maroon/10">
+                                    <p className="text-[8px] font-black text-maroon/60 uppercase tracking-widest mb-1">Total Revenue Collected</p>
+                                    <p className="text-xl font-black text-maroon tracking-tight">
+                                        KSh {fmt(printingRegistry.payments?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                                    </p>
+                                </div>
+                                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
+                                    <p className="text-[8px] font-black text-emerald-600/60 uppercase tracking-widest mb-1">Record Count</p>
+                                    <p className="text-xl font-black text-emerald-700 tracking-tight">
+                                        {printingRegistry.payments?.length || 0} Verified Payments
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Payments Table */}
+                            <div className="border border-gray-200 rounded-2xl overflow-hidden">
+                                <table className="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                        <tr className="bg-maroon text-white font-black uppercase text-[9px] tracking-wider">
+                                            <th className="p-3">#</th>
+                                            <th className="p-3">Date</th>
+                                            <th className="p-3">Reference / Receipt</th>
+                                            <th className="p-3">Student Name & ID</th>
+                                            <th className="p-3">Category</th>
+                                            <th className="p-3">Method</th>
+                                            <th className="p-3 text-right">Amount (KSh)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {printingRegistry.payments?.map((p, idx) => (
+                                            <tr key={idx} className={idx % 2 === 1 ? 'bg-gray-50/60' : 'bg-white'}>
+                                                <td className="p-3 text-[10px] font-bold text-gray-400">{idx + 1}</td>
+                                                <td className="p-3 font-bold text-gray-700">
+                                                    {new Date(p.payment_date).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </td>
+                                                <td className="p-3 font-mono font-black text-gray-800 text-[10px]">{p.transaction_ref}</td>
+                                                <td className="p-3 font-black text-gray-800">
+                                                    {p.student_name || p.student_id}
+                                                    <div className="text-[9px] font-bold text-gray-400">{p.student_id}</div>
+                                                </td>
+                                                <td className="p-3 font-bold text-gray-600">{p.category || 'Tuition Fee'}</td>
+                                                <td className="p-3 font-black text-maroon">{p.method}</td>
+                                                <td className="p-3 text-right font-black text-emerald-700">
+                                                    KSh {fmt(p.amount)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="bg-maroon/10 border-t-2 border-maroon">
+                                            <td colSpan="6" className="p-4 font-black text-maroon uppercase tracking-widest text-[10px]">
+                                                GRAND TOTAL PAYMENTS COLLECTED
+                                            </td>
+                                            <td className="p-4 text-right font-black text-emerald-800 text-sm">
+                                                KSh {fmt(printingRegistry.payments?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            {/* Institutional Sign-off & Verification Footer */}
+                            <div className="pt-8 border-t border-gray-200 flex justify-between items-end">
+                                <div className="max-w-[320px] space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full" />
+                                        <p className="text-[9px] font-black text-emerald-700 uppercase tracking-widest">
+                                            Officially Audited & Synchronized
+                                        </p>
+                                    </div>
+                                    <p className="text-[8px] font-bold text-gray-400 uppercase leading-relaxed">
+                                        This document is an official financial registry statement generated from the Beautex Technical Training College Central Database.
+                                        All transactions listed are verified and legally binding.
+                                    </p>
+                                </div>
+                                <div className="text-right space-y-3">
+                                    <div className="border-b border-gray-300 pb-2 px-8 inline-block">
+                                        <span className="font-serif italic text-xl text-maroon/30">Institutional Seal</span>
+                                    </div>
+                                    <p className="text-[9px] font-black text-gray-800 uppercase tracking-[0.2em]">Registrar of Accounts</p>
+                                    <p className="text-[8px] font-bold text-maroon/40 font-mono uppercase">
+                                        BTTC-FIN-REG-{Date.now().toString(36).toUpperCase()}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
