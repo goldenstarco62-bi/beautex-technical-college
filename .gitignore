@@ -35,5 +35,9 @@ frontend/*.err
 .vercel
 # vercel.json (Removed from ignore so custom routing works)
 
+# Vite temporary files
+*.timestamp-*.mjs
+*.timestamp-*
+
 # Agent brain / conversation artifacts
 brain/

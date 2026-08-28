@@ -45,7 +45,7 @@ export default function MobileBottomNav({ onMenuClick }) {
     });
 
     return (
-        <div className={`lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] z-[100] mobile-bottom-nav transition-all duration-500 ${hidden ? 'translate-y-[120%] opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
+        <div className={`lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] z-30 mobile-bottom-nav transition-all duration-500 ${hidden ? 'translate-y-[120%] opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
             <div className="bg-white/90 dark:bg-black/90 backdrop-blur-2xl border border-white/40 dark:border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.15)] rounded-[2.5rem] flex items-center justify-around h-18 px-4 py-2 overflow-hidden transition-all duration-300">
                 {filteredItems.map((item) => {
                     const Icon = item.icon;

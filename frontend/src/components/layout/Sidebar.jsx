@@ -93,7 +93,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
             const periods = Array.isArray(res.data) ? res.data : [];
             const active = periods.find(p => p.is_active) || periods[0] || null;
             setActivePeriod(active);
-        }).catch(() => {});
+        }).catch(() => { });
     }, []);
 
     // Calculate term progress

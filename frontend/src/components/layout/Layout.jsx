@@ -68,7 +68,7 @@ export default function Layout({ children }) {
             <SearchHub isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
             {/* Sidebar */}
-            <div className="print:hidden relative z-10">
+            <div className="print:hidden">
                 <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
             </div>
 
