@@ -5,6 +5,7 @@ import { profileAPI } from '../services/api';
 
 export default function Profile() {
     const { user, updateUser } = useAuth();
+    const isStudent = ['student', 'teacher'].includes(user?.role?.toLowerCase());
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [profile, setProfile] = useState({
@@ -39,6 +40,7 @@ export default function Profile() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isStudent) return; // students cannot submit personal details
         setSaving(true);
         try {
             await profileAPI.update(profile);
@@ -66,7 +68,7 @@ export default function Profile() {
         const reader = new FileReader();
         reader.onloadend = () => {
             const img = new Image();
-            img.onload = () => {
+            img.onload = async () => {
                 const canvas = document.createElement('canvas');
                 let width = img.width;
                 let height = img.height;
@@ -91,7 +93,20 @@ export default function Profile() {
 
                 // Convert to compressed JPEG
                 const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                setProfile({ ...profile, photo: compressedBase64 });
+                const updatedProfile = { ...profile, photo: compressedBase64 };
+                setProfile(updatedProfile);
+
+                // For students, auto-save the photo immediately since they
+                // cannot use the full submit form.
+                if (isStudent) {
+                    try {
+                        await profileAPI.update({ photo: compressedBase64 });
+                        updateUser({ photo: compressedBase64 });
+                    } catch (err) {
+                        console.error('Failed to save photo:', err);
+                        alert('Failed to save profile photo. Please try again.');
+                    }
+                }
             };
             img.src = reader.result;
         };
@@ -162,32 +177,57 @@ export default function Profile() {
 
                 {/* Right Column: Edit Form */}
                 <div className="md:col-span-2">
+                    {/* Student notice banner */}
+                    {isStudent && (
+                        <div className="mb-6 flex items-start gap-4 px-6 py-5 bg-maroon/5 border border-maroon/10 rounded-3xl">
+                            <Lock className="w-5 h-5 text-maroon shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-xs font-black text-maroon uppercase tracking-widest">Personal Details Locked</p>
+                                <p className="text-xs text-black/50 font-medium leading-relaxed mt-1">
+                                    Your name, phone number, and address are managed by the college administration and cannot be edited here. You may update your profile photo at any time.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
                     <form onSubmit={handleSubmit} className="bg-white p-10 rounded-[3rem] border border-black/5 shadow-2xl space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-1 flex items-center gap-2">
                                     <User className="w-3 h-3 text-maroon" /> Display Name
+                                    {isStudent && <Lock className="w-3 h-3 text-black/20" />}
                                 </label>
                                 <input
                                     type="text"
                                     name="name"
                                     value={profile.name}
-                                    onChange={handleChange}
+                                    onChange={isStudent ? undefined : handleChange}
+                                    readOnly={isStudent}
                                     placeholder="Enter your full name"
-                                    className="w-full px-6 py-4 bg-maroon/[0.02] border border-black/5 rounded-2xl text-sm font-bold text-black outline-none focus:ring-2 ring-maroon/10 focus:bg-white transition-all shadow-sm"
+                                    className={`w-full px-6 py-4 border rounded-2xl text-sm font-bold text-black outline-none transition-all shadow-sm ${
+                                        isStudent
+                                            ? 'bg-black/[0.03] border-black/5 text-black/40 cursor-not-allowed select-none'
+                                            : 'bg-maroon/[0.02] border-black/5 focus:ring-2 ring-maroon/10 focus:bg-white'
+                                    }`}
                                 />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-1 flex items-center gap-2">
                                     <Phone className="w-3 h-3 text-maroon" /> Phone Number
+                                    {isStudent && <Lock className="w-3 h-3 text-black/20" />}
                                 </label>
                                 <input
                                     type="text"
                                     name="phone"
                                     value={profile.phone}
-                                    onChange={handleChange}
+                                    onChange={isStudent ? undefined : handleChange}
+                                    readOnly={isStudent}
                                     placeholder="+254..."
-                                    className="w-full px-6 py-4 bg-maroon/[0.02] border border-black/5 rounded-2xl text-sm font-bold text-black outline-none focus:ring-2 ring-maroon/10 focus:bg-white transition-all shadow-sm"
+                                    className={`w-full px-6 py-4 border rounded-2xl text-sm font-bold text-black outline-none transition-all shadow-sm ${
+                                        isStudent
+                                            ? 'bg-black/[0.03] border-black/5 text-black/40 cursor-not-allowed select-none'
+                                            : 'bg-maroon/[0.02] border-black/5 focus:ring-2 ring-maroon/10 focus:bg-white'
+                                    }`}
                                 />
                             </div>
                         </div>
@@ -195,27 +235,35 @@ export default function Profile() {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-black/40 uppercase tracking-widest ml-1 flex items-center gap-2">
                                 <MapPin className="w-3 h-3 text-maroon" /> Physical Address
+                                {isStudent && <Lock className="w-3 h-3 text-black/20" />}
                             </label>
                             <textarea
                                 name="address"
                                 value={profile.address}
-                                onChange={handleChange}
+                                onChange={isStudent ? undefined : handleChange}
+                                readOnly={isStudent}
                                 rows="3"
                                 placeholder="Enter city, region, or full address"
-                                className="w-full px-6 py-4 bg-maroon/[0.02] border border-black/5 rounded-2xl text-sm font-bold text-black outline-none focus:ring-2 ring-maroon/10 focus:bg-white transition-all resize-none shadow-sm"
+                                className={`w-full px-6 py-4 border rounded-2xl text-sm font-bold text-black outline-none transition-all resize-none shadow-sm ${
+                                    isStudent
+                                        ? 'bg-black/[0.03] border-black/5 text-black/40 cursor-not-allowed select-none'
+                                        : 'bg-maroon/[0.02] border-black/5 focus:ring-2 ring-maroon/10 focus:bg-white'
+                                }`}
                             />
                         </div>
 
-                        <div className="pt-4">
-                            <button
-                                type="submit"
-                                disabled={saving}
-                                className="w-full bg-black text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-xl hover:bg-maroon hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                            >
-                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-gold" />}
-                                {saving ? 'Updating...' : 'Commit Profile Changes'}
-                            </button>
-                        </div>
+                        {!isStudent && (
+                            <div className="pt-4">
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="w-full bg-black text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-xl hover:bg-maroon hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                                >
+                                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-gold" />}
+                                    {saving ? 'Updating...' : 'Commit Profile Changes'}
+                                </button>
+                            </div>
+                        )}
                     </form>
 
                     <div className="mt-8 p-8 bg-gold/[0.05] border border-gold/10 rounded-3xl">
