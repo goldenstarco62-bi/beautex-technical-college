@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { facultyAPI, usersAPI, coursesAPI } from '../services/api';
 import { Plus, Search, Edit, Trash2, X, Printer, Mail, Phone, BookOpen, Award, MapPin, Key, Download } from 'lucide-react';
 import html2canvas from 'html2canvas';
@@ -14,6 +14,8 @@ export default function Faculty() {
     const [showProfile, setShowProfile] = useState(null);
     const [editingFaculty, setEditingFaculty] = useState(null);
     const [resetLoading, setResetLoading] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
     const [formData, setFormData] = useState({
         id: '', name: '', email: '', department: '', position: '', specialization: '', contact: '', passport: '', courses: '', status: 'Active', category: 'Trainer'
     });
@@ -22,6 +24,7 @@ export default function Faculty() {
 
     const [availableCourses, setAvailableCourses] = useState([]);
     const [selectedCourses, setSelectedCourses] = useState([]);
+
 
     useEffect(() => {
         fetchFaculty();
@@ -53,7 +56,16 @@ export default function Faculty() {
             member.email.toLowerCase().includes(searchQuery.toLowerCase())
         );
         setFilteredFaculty(filtered);
+        setCurrentPage(1);
     }, [searchQuery, faculty]);
+
+    const totalPages = useMemo(() => Math.ceil(filteredFaculty.length / ITEMS_PER_PAGE) || 1, [filteredFaculty.length, ITEMS_PER_PAGE]);
+
+    const paginatedFaculty = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredFaculty.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredFaculty, currentPage, ITEMS_PER_PAGE]);
+
 
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this faculty member?')) return;
@@ -279,7 +291,7 @@ export default function Faculty() {
 
                 {/* Faculty Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredFaculty.map((member) => (
+                    {paginatedFaculty.map((member) => (
                         <div key={member.id} className="bg-white border border-maroon/8 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all group">
                             {/* Card Top — Gold accent bar */}
                             <div className="h-0.5 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60"></div>
@@ -355,6 +367,37 @@ export default function Faculty() {
                         </div>
                     ))}
                 </div>
+
+                {/* Pagination Controls */}
+                {filteredFaculty.length > 0 && (
+                    <div className="px-6 py-4 bg-white border border-maroon/5 rounded-3xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                        <p className="text-[10px] font-bold text-maroon/60 uppercase tracking-wider">
+                            Showing <span className="font-black text-maroon">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredFaculty.length)}</span> to <span className="font-black text-maroon">{Math.min(currentPage * ITEMS_PER_PAGE, filteredFaculty.length)}</span> of <span className="font-black text-maroon">{filteredFaculty.length}</span> instructors
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="px-3.5 py-1.5 bg-maroon/5 border border-maroon/10 rounded-xl text-[10px] font-black uppercase text-maroon disabled:opacity-40 disabled:cursor-not-allowed hover:bg-maroon hover:text-white transition-all shadow-sm"
+                            >
+                                Prev
+                            </button>
+
+                            <span className="text-[10px] font-black text-maroon px-3 py-1.5 bg-gold/10 rounded-xl border border-gold/20">
+                                Page {currentPage} of {totalPages}
+                            </span>
+
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                disabled={currentPage >= totalPages}
+                                className="px-3.5 py-1.5 bg-maroon/5 border border-maroon/10 rounded-xl text-[10px] font-black uppercase text-maroon disabled:opacity-40 disabled:cursor-not-allowed hover:bg-maroon hover:text-white transition-all shadow-sm"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Add/Edit Modal */}

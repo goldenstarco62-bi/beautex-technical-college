@@ -29,6 +29,9 @@ export default function TrainerReports() {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
     const [expandedDepts, setExpandedDepts] = useState({});
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
+
 
     // Departments derived from courses
     const departments = useMemo(() => {
@@ -170,11 +173,23 @@ export default function TrainerReports() {
         return matchesSearch && matchesDept && matchesCourse && matchesDateFrom && matchesDateTo;
     }).sort((a, b) => new Date(b.report_date) - new Date(a.report_date));
 
+    // Reset page to 1 whenever filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, filterDepartment, filterCourse, filterDateFrom, filterDateTo]);
+
+    const totalPages = useMemo(() => Math.ceil(filteredReports.length / ITEMS_PER_PAGE) || 1, [filteredReports.length, ITEMS_PER_PAGE]);
+
+    const paginatedReports = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredReports.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredReports, currentPage, ITEMS_PER_PAGE]);
+
     // Grouping for admin/superadmin
     const groupedReports = useMemo(() => {
         if (!isAdmin) return null;
         const grouped = {};
-        filteredReports.forEach(r => {
+        paginatedReports.forEach(r => {
             const course = courses.find(c => c.name === r.course_id);
             const dept = course?.department || 'Unassigned Department';
             const courseName = r.course_id || 'General Operations';
@@ -184,7 +199,8 @@ export default function TrainerReports() {
             grouped[dept][courseName].push(r);
         });
         return grouped;
-    }, [filteredReports, isAdmin, courses]);
+    }, [paginatedReports, isAdmin, courses]);
+
 
     const toggleDept = (dept) => {
         setExpandedDepts(prev => ({ ...prev, [dept]: !prev[dept] }));
@@ -392,7 +408,7 @@ export default function TrainerReports() {
                         </div>
                     ) : (
                         /* TEACHER VIEW: Flat list */
-                        filteredReports.map((report) => (
+                        paginatedReports.map((report) => (
                             <TrainerReportCard 
                                 key={report._id || report.id} 
                                 report={report} 
@@ -407,15 +423,47 @@ export default function TrainerReports() {
                         ))
                     )
                 ) : (
-                    <div className="py-32 text-center bg-white rounded-[3rem] border border-dashed border-maroon/10">
-                        <div className="w-20 h-20 bg-maroon/5 rounded-full flex items-center justify-center mx-auto mb-6">
-                            <ClipboardList className="w-10 h-10 text-maroon/10" />
+                    <div className="py-24 text-center bg-white rounded-[2.5rem] border border-dashed border-maroon/10">
+                        <div className="w-16 h-16 bg-maroon/5 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <ClipboardList className="w-8 h-8 text-maroon/20" />
                         </div>
-                        <h3 className="text-xl font-black text-maroon uppercase tracking-tight">Registry Empty</h3>
-                        <p className="text-[10px] font-bold text-maroon/20 uppercase tracking-[0.3em] mt-2">No activity records documented for this period.</p>
+                        <h3 className="text-lg font-black text-maroon uppercase tracking-tight">Registry Empty</h3>
+                        <p className="text-[10px] font-bold text-maroon/40 uppercase tracking-[0.2em] mt-1">No activity records documented for this period.</p>
                     </div>
                 )}
             </div>
+
+            {/* ── 20 Per Page Pagination Bar ──────────────────────────── */}
+            {filteredReports.length > 0 && (
+                <div className="px-6 py-4 bg-white border border-maroon/5 rounded-3xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                    <p className="text-[10px] font-bold text-maroon/60 uppercase tracking-wider">
+                        Showing <span className="font-black text-maroon">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredReports.length)}</span> to <span className="font-black text-maroon">{Math.min(currentPage * ITEMS_PER_PAGE, filteredReports.length)}</span> of <span className="font-black text-maroon">{filteredReports.length}</span> records
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="px-3.5 py-1.5 bg-maroon/5 border border-maroon/10 rounded-xl text-[10px] font-black uppercase text-maroon disabled:opacity-40 disabled:cursor-not-allowed hover:bg-maroon hover:text-white transition-all shadow-sm"
+                        >
+                            Prev
+                        </button>
+
+                        <span className="text-[10px] font-black text-maroon px-3 py-1.5 bg-gold/10 rounded-xl border border-gold/20">
+                            Page {currentPage} of {totalPages}
+                        </span>
+
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage >= totalPages}
+                            className="px-3.5 py-1.5 bg-maroon/5 border border-maroon/10 rounded-xl text-[10px] font-black uppercase text-maroon disabled:opacity-40 disabled:cursor-not-allowed hover:bg-maroon hover:text-white transition-all shadow-sm"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
+
 
             {/* Modal */}
             {showModal && (
