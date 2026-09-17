@@ -512,6 +512,7 @@ export default function Results() {
                             onChange={e => setSelectedPeriod(e.target.value)}
                             className="bg-transparent text-xs font-black uppercase text-black outline-none cursor-pointer"
                         >
+                            <option value="">All Academic Periods</option>
                             {periods.map(p => (
                                 <option key={p.id} value={p.id}>
                                     {p.academic_year} {p.term_name} — {p.cat_name} ({p.status})
@@ -519,6 +520,7 @@ export default function Results() {
                             ))}
                         </select>
                     </div>
+
 
                     <button onClick={loadResultsAndStats} className="bg-white text-maroon p-3 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-md border border-maroon/10" title="Refresh">
                         <RefreshCw className="w-4.5 h-4.5" />
@@ -1309,7 +1311,28 @@ export default function Results() {
                                         </tr>
                                     ))}
                                 </tbody>
+                                <tfoot>
+                                    {(() => {
+                                        const validScores = slipStudentTarget.results.filter(r => r.percentage !== null && r.percentage !== undefined);
+                                        if (validScores.length === 0) return null;
+                                        const avgPct = Math.round((validScores.reduce((acc, r) => acc + parseFloat(r.percentage), 0) / validScores.length) * 10) / 10;
+                                        let overallGrade = 'Fail';
+                                        if (avgPct >= 70) overallGrade = 'Distinction';
+                                        else if (avgPct >= 60) overallGrade = 'Credit';
+                                        else if (avgPct >= 50) overallGrade = 'Pass';
+
+                                        return (
+                                            <tr className="border-t-2 border-maroon bg-maroon/5 text-xs font-black">
+                                                <td className="py-3.5 text-left uppercase text-maroon">CUMULATIVE OVERALL TOTAL SUMMARY</td>
+                                                <td className="py-3.5 text-center text-maroon font-black">{validScores.length} Units Evaluated</td>
+                                                <td className="py-3.5 text-center text-maroon font-black text-sm">{avgPct}%</td>
+                                                <td className="py-3.5 text-right uppercase text-maroon font-black text-sm">{overallGrade}</td>
+                                            </tr>
+                                        );
+                                    })()}
+                                </tfoot>
                             </table>
+
 
                             {/* Footer Signatures */}
                             <div className="pt-8 border-t flex justify-between items-end text-[10px] font-black uppercase text-gray-500">
