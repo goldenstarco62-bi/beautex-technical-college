@@ -420,6 +420,14 @@ async function runPostgresMigrations(database) {
             await database.query('ALTER TABLE students ADD COLUMN level TEXT DEFAULT \'Module 1\'');
             console.log('✅ level column added to students');
         }
+        if (!existingStudentCols.includes('id_status')) {
+            await database.query('ALTER TABLE students ADD COLUMN id_status TEXT DEFAULT \'Not Generated\'');
+            console.log('✅ id_status column added to students');
+        }
+        if (!existingStudentCols.includes('passport_status')) {
+            await database.query('ALTER TABLE students ADD COLUMN passport_status TEXT DEFAULT \'Not Generated\'');
+            console.log('✅ passport_status column added to students');
+        }
 
         // --- Faculty Table Migrations ---
         const facultyCols = await database.query(`

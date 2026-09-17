@@ -20,44 +20,57 @@ export default function IDCard({ data, role }) {
                 {/* Top Section */}
                 <div className="bg-[#800000] text-white px-4 py-1.5 border-b-2 border-[#FFD700]">
                     <h1 className="text-[9pt] font-black uppercase tracking-tight leading-none text-center">Beautex Technical Training College</h1>
-                    <p className="text-[6.5pt] font-bold uppercase tracking-widest text-center text-[#FFD700] mt-0.5">Official Student ID Card</p>
+                    <p className="text-[5.5pt] font-bold italic text-center text-[#FFD700] mt-0.5 tracking-wide">"Empowering Minds. Shaping Innovation."</p>
+                    <p className="text-[5.5pt] font-bold uppercase tracking-widest text-center text-white/50 mt-0.5">Official Student ID Card</p>
                 </div>
 
                 {/* Middle Section */}
                 <div className="flex px-5 pt-2.5 gap-5 relative z-10">
-                    {/* Left: Passport Photo (Slightly smaller to give text more room) */}
+                    {/* Left: Passport Photo */}
                     <div className="shrink-0">
                         <div className="w-[26mm] h-[32mm] bg-gray-50 border-2 border-[#800000] rounded-sm overflow-hidden shadow-inner relative">
                             {data.photo ? (
                                 <img src={data.photo} alt={data.name} className="w-full h-full object-cover" />
                             ) : (
-                                <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
-                                    <User className="w-10 h-10 opacity-20" />
-                                    <span className="text-[5pt] uppercase font-black opacity-20 mt-1">Photo</span>
+                                <div className="w-full h-full flex flex-col items-center justify-center bg-red-50 gap-1">
+                                    <User className="w-8 h-8 text-red-300" />
+                                    <span className="text-[4.5pt] uppercase font-black text-red-400 text-center leading-tight px-1">Photo Required</span>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Right: Student Details - Reduced Font Sizes and Fixed Overlap */}
-                    <div className="flex-1 space-y-1.5 text-left overflow-hidden">
+                    {/* Right: Student Details */}
+                    <div className="flex-1 space-y-1 text-left overflow-hidden">
                         <div className="mb-0.5">
                             <p className="text-[6.5pt] font-black text-[#800000] uppercase tracking-widest leading-none mb-0.5">Full Name</p>
                             <p className="text-[10pt] font-bold text-gray-900 border-b border-gray-50 pb-0.5 truncate">{data.name}</p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                             <div>
                                 <p className="text-[6.5pt] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Admission No</p>
-                                <p className="text-[9pt] font-bold text-gray-800">{data.id}</p>
+                                <p className="text-[8.5pt] font-bold text-gray-800">{data.id}</p>
                             </div>
                             <div>
-                                <p className="text-[6.5pt] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Valid Until</p>
-                                <p className="text-[9pt] font-bold text-gray-800">Dec {expiryYear}</p>
+                                <p className="text-[6.5pt] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Blood Group</p>
+                                <p className="text-[8.5pt] font-bold text-gray-800">{data.blood_group || 'N/A'}</p>
                             </div>
                             <div className="col-span-2 pt-0.5">
                                 <p className="text-[6.5pt] font-black text-[#800000] uppercase tracking-widest leading-none mb-0.5">Course / Programme</p>
-                                <p className="text-[9.5pt] font-black text-gray-900 uppercase leading-snug">{data.course || 'Cosmetology'}</p>
+                                <p className="text-[8.5pt] font-black text-gray-900 uppercase leading-snug">{data.course || 'Cosmetology'}</p>
+                            </div>
+                            <div>
+                                <p className="text-[6.5pt] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Reg. Date</p>
+                                <p className="text-[7.5pt] font-bold text-gray-700">
+                                    {data.enrolled_date ? new Date(data.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-[6.5pt] font-black text-gray-400 uppercase tracking-widest leading-none mb-0.5">Completion</p>
+                                <p className="text-[7.5pt] font-bold text-gray-700">
+                                    {data.completion_date ? new Date(data.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                </p>
                             </div>
                         </div>
                     </div>

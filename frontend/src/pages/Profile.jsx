@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Mail, Shield, Camera, Save, Lock, Phone, MapPin, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { profileAPI } from '../services/api';
+import { compressImage } from '../utils/imageCompressor';
 
 export default function Profile() {
     const { user, updateUser } = useAuth();
@@ -59,58 +60,24 @@ export default function Profile() {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Ensure it's an image
-        if (!file.type.startsWith('image/')) {
-            alert('Please select an image file.');
-            return;
+        try {
+            const compressedBase64 = await compressImage(file, 600, 0.75);
+            const updatedProfile = { ...profile, photo: compressedBase64 };
+            setProfile(updatedProfile);
+
+            if (isStudent) {
+                try {
+                    await profileAPI.update({ photo: compressedBase64 });
+                    updateUser({ photo: compressedBase64 });
+                } catch (err) {
+                    console.error('Failed to save photo:', err);
+                    alert('Failed to save profile photo. Please try again.');
+                }
+            }
+        } catch (err) {
+            console.error('Error processing photo upload:', err);
+            alert('Please select a valid image file.');
         }
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const img = new Image();
-            img.onload = async () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width;
-                let height = img.height;
-                const MAX_SIZE = 512;
-
-                if (width > height) {
-                    if (width > MAX_SIZE) {
-                        height *= MAX_SIZE / width;
-                        width = MAX_SIZE;
-                    }
-                } else {
-                    if (height > MAX_SIZE) {
-                        width *= MAX_SIZE / height;
-                        height = MAX_SIZE;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-
-                // Convert to compressed JPEG
-                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-                const updatedProfile = { ...profile, photo: compressedBase64 };
-                setProfile(updatedProfile);
-
-                // For students, auto-save the photo immediately since they
-                // cannot use the full submit form.
-                if (isStudent) {
-                    try {
-                        await profileAPI.update({ photo: compressedBase64 });
-                        updateUser({ photo: compressedBase64 });
-                    } catch (err) {
-                        console.error('Failed to save photo:', err);
-                        alert('Failed to save profile photo. Please try again.');
-                    }
-                }
-            };
-            img.src = reader.result;
-        };
-        reader.readAsDataURL(file);
     };
 
     if (loading) {

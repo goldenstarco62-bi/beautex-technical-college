@@ -86,6 +86,8 @@ export const studentsAPI = {
     delete: (id) => api.delete(`students/${encodeURIComponent(id)}`),
     search: (query) => api.get(`students/search?q=${query}`),
     bulkUpdateStatus: (ids, status) => api.put('students/bulk-status', { ids, status }),
+    logDocumentGeneration: (id, docType, action) =>
+        api.post(`students/${encodeURIComponent(id)}/document-log`, { docType, action }),
 };
 
 

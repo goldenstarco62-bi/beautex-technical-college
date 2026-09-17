@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { studentsAPI, usersAPI, coursesAPI } from '../services/api';
-import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download, Clock } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, X, Printer, FileBarChart, Eye, Key, Mail, Phone, MapPin, BookOpen, User, Calendar, Shield, Download, Clock, CreditCard, FileText, RefreshCw, AlertTriangle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { useNavigate } from 'react-router-dom';
 import IDCard from '../components/shared/IDCard';
+import StudentPassport from '../components/shared/StudentPassport';
 import { useAuth } from '../context/AuthContext';
 import { calculateRemainingTime } from '../utils/dateUtils';
+import { compressImage } from '../utils/imageCompressor';
 
 export default function Students() {
     const navigate = useNavigate();
@@ -51,7 +53,10 @@ export default function Students() {
         enrolled_date: new Date().toISOString().split('T')[0]
     });
     const [printingStudent, setPrintingStudent] = useState(null);
+    const [printingPassport, setPrintingPassport] = useState(null);
+    const [docLoading, setDocLoading] = useState({ id: false, passport: false });
     const [availableCourses, setAvailableCourses] = useState([]);
+    const [profileStudentData, setProfileStudentData] = useState(null); // live copy of profile modal student
 
     useEffect(() => {
         fetchStudents();
@@ -324,14 +329,16 @@ export default function Students() {
         });
     };
 
-    const handlePhotoUpload = (e) => {
+    const handlePhotoUpload = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormData(prev => ({ ...prev, photo: reader.result }));
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressedPhoto = await compressImage(file, 600, 0.75);
+                setFormData(prev => ({ ...prev, photo: compressedPhoto }));
+            } catch (err) {
+                console.error('Error compressing photo:', err);
+                alert('Failed to process uploaded photo. Please try a different image.');
+            }
         }
     };
 
@@ -341,6 +348,31 @@ export default function Students() {
             window.print();
             setPrintingStudent(null);
         }, 500);
+    };
+
+    const handlePrintPassport = (student) => {
+        setPrintingPassport(student);
+        setTimeout(() => {
+            window.print();
+            setPrintingPassport(null);
+        }, 500);
+    };
+
+    // Shared helper to log document generation via API and update local state
+    const logDoc = async (student, docType, action) => {
+        try {
+            await studentsAPI.logDocumentGeneration(student.id, docType, action);
+            const statusField = docType === 'id' ? 'id_status' : 'passport_status';
+            const updateStatus = (list) =>
+                list.map(s => s.id === student.id ? { ...s, [statusField]: 'Generated' } : s);
+            setAllStudents(prev => updateStatus(prev));
+            setStudents(prev => updateStatus(prev));
+            if (profileStudentData?.id === student.id) {
+                setProfileStudentData(prev => ({ ...prev, [statusField]: 'Generated' }));
+            }
+        } catch (err) {
+            console.error('Failed to log document generation', err);
+        }
     };
 
     const handleDownloadID = async (student) => {
@@ -402,12 +434,53 @@ export default function Students() {
                     pdf.text(`Generated on ${date} | System Verified ID`, 105, 280, { align: 'center' });
 
                     pdf.save(`ID_Card_${student.id}_${student.name.replace(/\s+/g, '_')}.pdf`);
+                    await logDoc(student, 'id', student.id_status === 'Generated' ? 'regenerate' : 'generate');
                 } catch (err) {
                     console.error("PDF generation failed:", err);
                     alert("Failed to generate PDF. Please ensure all resources are loaded.");
                 }
             }
             setPrintingStudent(null);
+        }, 1200);
+    };
+
+    const handleDownloadPassport = async (student) => {
+        setPrintingPassport(student);
+        setTimeout(async () => {
+            const passportEl = document.getElementById(`passport-${student.id}`);
+            if (passportEl) {
+                try {
+                    const canvas = await html2canvas(passportEl, { scale: 3, useCORS: true, backgroundColor: '#ffffff' });
+                    const img = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+                    pdf.setTextColor(128, 0, 0);
+                    pdf.setFontSize(11);
+                    pdf.text('BEAUTEX TECHNICAL TRAINING COLLEGE', 148.5, 12, { align: 'center' });
+                    pdf.setTextColor(130, 130, 130);
+                    pdf.setFontSize(7);
+                    pdf.text('OFFICIAL STUDENT PASSPORT', 148.5, 18, { align: 'center' });
+
+                    const pdfW = 297;
+                    const pdfH = 210;
+                    const usableW = pdfW - 20;
+                    const ratio = canvas.height / canvas.width;
+                    const imgH = Math.min(usableW * ratio, pdfH - 30);
+
+                    pdf.addImage(img, 'PNG', 10, 22, usableW, imgH);
+
+                    pdf.setFontSize(6);
+                    pdf.setTextColor(180, 180, 180);
+                    pdf.text(`Generated: ${new Date().toLocaleDateString()} | Verified Document`, 148.5, pdfH - 5, { align: 'center' });
+
+                    pdf.save(`Passport_${student.id}_${student.name.replace(/\s+/g, '_')}.pdf`);
+                    await logDoc(student, 'passport', student.passport_status === 'Generated' ? 'regenerate' : 'generate');
+                } catch (err) {
+                    console.error('Passport PDF failed:', err);
+                    alert('Failed to generate passport PDF.');
+                }
+            }
+            setPrintingPassport(null);
         }, 1200);
     };
 
@@ -658,7 +731,7 @@ export default function Students() {
                                     <td className="px-6 py-5">
                                         <div className="flex items-center gap-3">
                                             <button
-                                                onClick={() => setShowProfileModal(student)}
+                                                onClick={() => { setProfileStudentData(student); setShowProfileModal(student); }}
                                                 className="w-10 h-10 rounded-full bg-parchment-200 border border-maroon/10 overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-maroon/30 transition-all"
                                                 title="View Full Profile"
                                             >
@@ -670,7 +743,7 @@ export default function Students() {
                                             </button>
                                             <div className="flex flex-col">
                                                 <button
-                                                    onClick={() => setShowProfileModal(student)}
+                                                    onClick={() => { setProfileStudentData(student); setShowProfileModal(student); }}
                                                     className="text-sm font-bold text-gray-800 hover:text-maroon transition-colors text-left"
                                                 >
                                                     {student.name}
@@ -706,7 +779,7 @@ export default function Students() {
                                     </td>
                                     <td className="px-6 py-5">
                                         <div className="flex gap-2">
-                                            <button onClick={() => setShowProfileModal(student)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Profile"><Eye className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => { setProfileStudentData(student); setShowProfileModal(student); }} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Profile"><Eye className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => navigate(`/reports?studentId=${student.id}`)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Academic Reports"><FileBarChart className="w-3.5 h-3.5" /></button>
                                             {isAdmin && (
                                                 <>
@@ -814,52 +887,63 @@ export default function Students() {
 
 
             {/* Student Profile Modal */}
-            {showProfileModal && (
+            {showProfileModal && (() => {
+                const student = profileStudentData || showProfileModal;
+                const hasPhoto = !!student.photo;
+
+                // Status badge helper
+                const docStatusBadge = (status) => {
+                    if (status === 'Generated') return 'bg-green-50 text-green-700 border-green-200';
+                    if (status === 'Update Required') return 'bg-amber-50 text-amber-700 border-amber-200';
+                    return 'bg-gray-50 text-gray-500 border-gray-200';
+                };
+
+                return (
                 <div className="fixed inset-0 bg-maroon/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-[200]">
                     <div className="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full border border-maroon/10 shadow-2xl relative overflow-hidden max-h-[95vh] flex flex-col">
                         {/* Header Band */}
                         <div className="bg-maroon px-5 sm:px-8 pt-6 sm:pt-8 pb-12 sm:pb-16 relative overflow-hidden shrink-0">
                             <div className="absolute top-0 right-0 w-48 h-48 bg-gold/10 rounded-full -mr-24 -mt-24"></div>
                             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full -ml-16 -mb-16"></div>
-                            <button onClick={() => setShowProfileModal(null)} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10">
+                            <button onClick={() => { setShowProfileModal(null); setProfileStudentData(null); }} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10">
                                 <X className="w-5 h-5 text-white" />
                             </button>
                             <div className="relative z-10 flex items-end gap-5">
                                 <div className="w-20 h-20 rounded-2xl bg-white/10 border-2 border-gold/40 flex items-center justify-center text-gold text-2xl font-black overflow-hidden shadow-2xl shrink-0">
-                                    {showProfileModal.photo
-                                        ? <img src={showProfileModal.photo} alt={showProfileModal.name} className="w-full h-full object-cover" />
-                                        : <span>{showProfileModal.name?.[0]?.toUpperCase()}</span>
+                                    {student.photo
+                                        ? <img src={student.photo} alt={student.name} className="w-full h-full object-cover" />
+                                        : <span>{student.name?.[0]?.toUpperCase()}</span>
                                     }
                                 </div>
                                 <div className="pb-1">
-                                    <h2 className="text-xl font-black text-white tracking-tight">{showProfileModal.name}</h2>
+                                    <h2 className="text-xl font-black text-white tracking-tight">{student.name}</h2>
                                     <p className="text-gold text-[10px] font-black uppercase tracking-widest mt-1">
-                                        BT{showProfileModal.id?.toString().padStart(7, '0')} · {Array.isArray(showProfileModal.course) ? showProfileModal.course.join(', ') : showProfileModal.course}
+                                        BT{student.id?.toString().padStart(7, '0')} · {Array.isArray(student.course) ? student.course.join(', ') : student.course}
                                     </p>
-                                    <span className={`inline-block mt-2 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border ${showProfileModal.status === 'Active' ? 'bg-green-500/20 text-green-200 border-green-400/30' : 'bg-white/10 text-white border-white/20'}`}>
-                                        {showProfileModal.status || 'Active'}
+                                    <span className={`inline-block mt-2 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border ${student.status === 'Active' ? 'bg-green-500/20 text-green-200 border-green-400/30' : 'bg-white/10 text-white border-white/20'}`}>
+                                        {student.status || 'Active'}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Details */}
+                        {/* Scrollable Details */}
                         <div className="px-4 sm:px-8 py-5 sm:py-6 -mt-6 relative z-10 overflow-y-auto custom-scrollbar">
                             <div className="bg-white rounded-2xl border border-maroon/8 shadow-lg p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 mb-5">
                                 {[
-                                    { icon: Mail, label: 'Email Address', value: showProfileModal.email },
-                                    { icon: Phone, label: 'Contact Number', value: showProfileModal.contact || 'Not listed' },
-                                    { icon: BookOpen, label: 'Course / Programme', value: Array.isArray(showProfileModal.course) ? showProfileModal.course.join(', ') : showProfileModal.course },
-                                    { icon: Calendar, label: 'Intake / Semester', value: showProfileModal.intake || showProfileModal.semester || 'N/A' },
-                                    { icon: User, label: 'Date of Birth', value: showProfileModal.dob ? new Date(showProfileModal.dob).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
-                                    { icon: Shield, label: 'Cumulative GPA', value: showProfileModal.gpa ?? 'N/A' },
-                                    { icon: MapPin, label: 'Address', value: showProfileModal.address || 'Not provided' },
-                                    { icon: Calendar, label: 'Enrollment Date', value: showProfileModal.enrolled_date ? new Date(showProfileModal.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
-                                    { icon: Calendar, label: 'Completion Date', value: showProfileModal.completion_date ? new Date(showProfileModal.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
-                                    { 
-                                        icon: Clock, 
-                                        label: 'Time to Completion', 
-                                        value: calculateRemainingTime(showProfileModal.completion_date).formatted,
+                                    { icon: Mail, label: 'Email Address', value: student.email },
+                                    { icon: Phone, label: 'Contact Number', value: student.contact || 'Not listed' },
+                                    { icon: BookOpen, label: 'Course / Programme', value: Array.isArray(student.course) ? student.course.join(', ') : student.course },
+                                    { icon: Calendar, label: 'Intake / Semester', value: student.intake || student.semester || 'N/A' },
+                                    { icon: User, label: 'Date of Birth', value: student.dob ? new Date(student.dob).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
+                                    { icon: Shield, label: 'Cumulative GPA', value: student.gpa ?? 'N/A' },
+                                    { icon: MapPin, label: 'Address', value: student.address || 'Not provided' },
+                                    { icon: Calendar, label: 'Enrollment Date', value: student.enrolled_date ? new Date(student.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
+                                    { icon: Calendar, label: 'Completion Date', value: student.completion_date ? new Date(student.completion_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A' },
+                                    {
+                                        icon: Clock,
+                                        label: 'Time to Completion',
+                                        value: calculateRemainingTime(student.completion_date).formatted,
                                         isSpecial: true
                                     },
                                 ].map(({ icon: Icon, label, value, isSpecial }) => (
@@ -875,6 +959,97 @@ export default function Students() {
                                 ))}
                             </div>
 
+                            {/* ── STUDENT DOCUMENTS SECTION ── */}
+                            {isAdmin && (
+                                <div className="bg-white rounded-2xl border border-maroon/10 shadow-lg mb-5 overflow-hidden">
+                                    <div className="bg-maroon px-5 py-3 flex items-center gap-2">
+                                        <CreditCard className="w-4 h-4 text-gold" />
+                                        <h3 className="text-[10px] font-black text-gold uppercase tracking-widest">Student Documents</h3>
+                                    </div>
+
+                                    {/* Missing photo warning */}
+                                    {!hasPhoto && (
+                                        <div className="mx-4 mt-4 flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+                                            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Photo Required</p>
+                                                <p className="text-[10px] text-amber-600 mt-0.5">No photo on file. Please edit the student profile and upload a passport-size photo before printing documents.</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="p-4 space-y-3">
+                                        {/* School ID Row */}
+                                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-lg bg-maroon/10 flex items-center justify-center">
+                                                    <CreditCard className="w-4 h-4 text-maroon" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-black text-gray-800">School ID Card</p>
+                                                    <span className={`inline-block mt-0.5 px-2 py-0.5 text-[8px] font-black uppercase rounded border ${docStatusBadge(student.id_status)}`}>
+                                                        {student.id_status || 'Not Generated'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    title="Print ID Card"
+                                                    onClick={() => handlePrintID(student)}
+                                                    className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-maroon hover:border-maroon/30 transition-all"
+                                                >
+                                                    <Printer className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    title={student.id_status === 'Generated' ? 'Re-download ID PDF' : 'Generate & Download ID PDF'}
+                                                    onClick={() => handleDownloadID(student)}
+                                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-maroon text-gold text-[9px] font-black uppercase tracking-widest hover:bg-maroon/90 transition-all"
+                                                >
+                                                    {student.id_status === 'Generated'
+                                                        ? <><RefreshCw className="w-3 h-3" /> Regenerate</>
+                                                        : <><Download className="w-3 h-3" /> Generate PDF</>
+                                                    }
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Passport Row */}
+                                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+                                                    <FileText className="w-4 h-4 text-blue-600" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-black text-gray-800">Student Passport</p>
+                                                    <span className={`inline-block mt-0.5 px-2 py-0.5 text-[8px] font-black uppercase rounded border ${docStatusBadge(student.passport_status)}`}>
+                                                        {student.passport_status || 'Not Generated'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    title="Print Student Passport"
+                                                    onClick={() => handlePrintPassport(student)}
+                                                    className="p-2 rounded-lg border border-gray-200 bg-white text-gray-500 hover:text-blue-600 hover:border-blue-300 transition-all"
+                                                >
+                                                    <Printer className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    title={student.passport_status === 'Generated' ? 'Re-download Passport PDF' : 'Generate & Download Passport PDF'}
+                                                    onClick={() => handleDownloadPassport(student)}
+                                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all"
+                                                >
+                                                    {student.passport_status === 'Generated'
+                                                        ? <><RefreshCw className="w-3 h-3" /> Regenerate</>
+                                                        : <><Download className="w-3 h-3" /> Generate PDF</>
+                                                    }
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Attendance Summary */}
                             <div className="bg-maroon/3 rounded-2xl p-5 border border-maroon/8 mb-5">
                                 <div className="flex justify-between items-center mb-3">
@@ -882,7 +1057,8 @@ export default function Students() {
                                     <button
                                         onClick={() => {
                                             setShowProfileModal(null);
-                                            navigate(`/monthly-attendance?student_id=${showProfileModal.id}`);
+                                            setProfileStudentData(null);
+                                            navigate(`/monthly-attendance?student_id=${student.id}`);
                                         }}
                                         className="text-[9px] font-black text-maroon hover:underline uppercase tracking-widest"
                                     >
@@ -901,17 +1077,17 @@ export default function Students() {
                             </div>
 
                             {/* Guardian Info */}
-                            {(showProfileModal.guardian_name || showProfileModal.guardian_contact) && (
+                            {(student.guardian_name || student.guardian_contact) && (
                                 <div className="bg-maroon/3 rounded-2xl p-5 border border-maroon/8 mb-5">
                                     <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-3">Guardian Information</p>
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <p className="text-[9px] text-maroon/30 uppercase tracking-widest font-bold">Name</p>
-                                            <p className="text-sm font-bold text-maroon mt-0.5">{showProfileModal.guardian_name || 'N/A'}</p>
+                                            <p className="text-sm font-bold text-maroon mt-0.5">{student.guardian_name || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <p className="text-[9px] text-maroon/30 uppercase tracking-widest font-bold">Contact</p>
-                                            <p className="text-sm font-bold text-maroon mt-0.5">{showProfileModal.guardian_contact || 'N/A'}</p>
+                                            <p className="text-sm font-bold text-maroon mt-0.5">{student.guardian_contact || 'N/A'}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -921,7 +1097,7 @@ export default function Students() {
                             <div className="flex gap-3">
                                 {isAdmin && (
                                     <button
-                                        onClick={() => { setShowProfileModal(null); handleEdit(showProfileModal); }}
+                                        onClick={() => { setShowProfileModal(null); setProfileStudentData(null); handleEdit(student); }}
                                         className="flex-1 py-3 bg-maroon text-gold rounded-xl font-black text-xs uppercase tracking-widest hover:bg-maroon/90 transition-all flex items-center justify-center gap-2"
                                     >
                                         <Edit className="w-4 h-4" /> Edit Profile
@@ -929,7 +1105,7 @@ export default function Students() {
                                 )}
                                 {canResetPassword && (
                                     <button
-                                        onClick={() => handleResetPassword(showProfileModal)}
+                                        onClick={() => handleResetPassword(student)}
                                         disabled={resetLoading}
                                         className="flex-1 py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-amber-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                                     >
@@ -938,7 +1114,7 @@ export default function Students() {
                                     </button>
                                 )}
                                 <button
-                                    onClick={() => { setShowProfileModal(null); navigate(`/reports?studentId=${showProfileModal.id}`); }}
+                                    onClick={() => { setShowProfileModal(null); setProfileStudentData(null); navigate(`/reports?studentId=${student.id}`); }}
                                     className="py-3 px-4 bg-gray-50 text-gray-600 border border-gray-200 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center justify-center gap-2"
                                 >
                                     <FileBarChart className="w-4 h-4" />
@@ -947,9 +1123,8 @@ export default function Students() {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {/* Add/Edit Modal */}
+                );
+            })()}
             {showModal && (
                 <div className="fixed inset-0 bg-maroon-950/60 backdrop-blur-xl flex items-center justify-center p-3 sm:p-4 z-[100]">
                     <div className="bg-white rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-2xl w-full shadow-3xl border border-maroon/10 overflow-hidden relative max-h-[95vh] flex flex-col">
@@ -1226,11 +1401,16 @@ export default function Students() {
                 </div>
             )}
 
-            {/* Capturable and Printable Container */}
+            {/* Capturable and Printable Containers */}
             <div className={`fixed z-[9999] ${printingStudent ? 'block' : 'hidden'} 
                 left-[-9999px] top-0 bg-white
                 print:left-0 print:right-0 print:top-0 print:bottom-0 print:bg-white`}>
                 {printingStudent && <IDCard data={printingStudent} role="student" />}
+            </div>
+            <div className={`fixed z-[9999] ${printingPassport ? 'block' : 'hidden'} 
+                left-[-9999px] top-0 bg-white
+                print:left-0 print:right-0 print:top-0 print:bottom-0 print:bg-white`}>
+                {printingPassport && <StudentPassport data={printingPassport} role="student" />}
             </div>
         </div>
     );

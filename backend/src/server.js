@@ -25,9 +25,9 @@ const PORT = process.env.PORT || 5000;
 // causing everyone to share one rate-limit counter and be blocked together.
 app.set('trust proxy', 1);
 
-// Initial parsers at start (Security: Reduced limits to prevent DoS)
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb', parameterLimit: 1000 }));
+// Initial parsers at start (Security: Increased limit to handle photo uploads safely)
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb', parameterLimit: 2000 }));
 
 // Global XSS Sanitization
 app.use(sanitizeMiddleware);

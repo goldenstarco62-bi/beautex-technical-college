@@ -1,6 +1,7 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { sendWelcomeEmail, sendAdminResetPasswordEmail } from '../services/emailService.js';
 import { sendLoginCredentials } from '../services/smsService.js';
+import { logActivity } from '../services/auditService.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { parseCoursesField } from '../utils/courseParser.js';
@@ -414,7 +415,8 @@ export async function updateStudent(req, res) {
         const allowedFields = [
             'name', 'email', 'course', 'intake', 'gpa', 'status', 'contact',
             'photo', 'dob', 'address', 'guardian_name', 'guardian_contact', 'blood_group',
-            'completion_date', 'enrolled_date'
+            'completion_date', 'enrolled_date',
+            'id_status', 'passport_status'
         ];
         const fields = Object.keys(req.body).filter(k => allowedFields.includes(k));
         if (fields.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
@@ -570,5 +572,67 @@ export async function bulkUpdateStatus(req, res) {
     } catch (error) {
         console.error('Bulk update status error:', error);
         res.status(500).json({ error: 'Failed to update students' });
+    }
+}
+
+/**
+ * POST /students/:id/document-log
+ * Records a document generation event (School ID or Passport) and updates the
+ * student's id_status / passport_status field.
+ *
+ * Body: { docType: 'id' | 'passport', action: 'generate' | 'regenerate' }
+ */
+export async function logDocumentGeneration(req, res) {
+    try {
+        const studentId = req.params.id;
+        const { docType, action } = req.body;
+
+        if (!['id', 'passport'].includes(docType)) {
+            return res.status(400).json({ error: 'Invalid docType. Must be "id" or "passport".' });
+        }
+        if (!['generate', 'regenerate'].includes(action)) {
+            return res.status(400).json({ error: 'Invalid action. Must be "generate" or "regenerate".' });
+        }
+
+        const statusField = docType === 'id' ? 'id_status' : 'passport_status';
+        const newStatus = 'Generated';
+        const eventLabel = docType === 'id'
+            ? (action === 'regenerate' ? 'School ID Regenerated' : 'School ID Generated')
+            : (action === 'regenerate' ? 'Student Passport Regenerated' : 'Student Passport Generated');
+
+        const mongo = await isMongo();
+        if (mongo) {
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const student = await Student.findOne({ id: studentId });
+            if (!student) return res.status(404).json({ error: 'Student not found' });
+
+            await Student.findOneAndUpdate(
+                { id: studentId },
+                { $set: { [statusField]: newStatus, updated_at: new Date() } }
+            );
+        } else {
+            const existing = await import('../config/database.js').then(m => m.queryOne('SELECT id FROM students WHERE id = ?', [studentId]));
+            if (!existing) return res.status(404).json({ error: 'Student not found' });
+
+            await run(`UPDATE students SET ${statusField} = ?, updated_at = ? WHERE id = ?`, [
+                newStatus,
+                new Date().toISOString(),
+                studentId
+            ]);
+        }
+
+        // Write audit log
+        await logActivity({
+            action: eventLabel,
+            entity: 'students',
+            entityId: studentId,
+            userId: req.user?.id || req.user?.email,
+            details: `${eventLabel} for student ${studentId} by ${req.user?.email}`
+        });
+
+        return res.json({ message: eventLabel, status: newStatus });
+    } catch (error) {
+        console.error('logDocumentGeneration error:', error);
+        res.status(500).json({ error: 'Failed to log document generation.' });
     }
 }

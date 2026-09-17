@@ -43,6 +43,16 @@ const studentSchema = new mongoose.Schema({
         type: Date,
         default: Date.now
     },
+    id_status: {
+        type: String,
+        enum: ['Not Generated', 'Generated', 'Update Required'],
+        default: 'Not Generated'
+    },
+    passport_status: {
+        type: String,
+        enum: ['Not Generated', 'Generated', 'Update Required'],
+        default: 'Not Generated'
+    },
     completion_date: Date,
     bio: String,
     phone: String

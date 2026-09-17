@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import IDCard from '../components/shared/IDCard';
 import { useAuth } from '../context/AuthContext';
+import { compressImage } from '../utils/imageCompressor';
 
 export default function Faculty() {
     const { user: currentUser } = useAuth();
@@ -130,14 +131,16 @@ export default function Faculty() {
         setSelectedCourses([]);
     };
 
-    const handlePhotoUpload = (e) => {
+    const handlePhotoUpload = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setFormData(prev => ({ ...prev, photo: reader.result }));
-            };
-            reader.readAsDataURL(file);
+            try {
+                const compressedPhoto = await compressImage(file, 600, 0.75);
+                setFormData(prev => ({ ...prev, photo: compressedPhoto }));
+            } catch (err) {
+                console.error('Error compressing photo:', err);
+                alert('Failed to process uploaded photo. Please try a different image.');
+            }
         }
     };
 

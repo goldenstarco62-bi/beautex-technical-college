@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS students (
   blood_group TEXT,
   enrolled_date DATE DEFAULT CURRENT_DATE,
   completion_date DATE,
+  id_status TEXT DEFAULT 'Not Generated',
+  passport_status TEXT DEFAULT 'Not Generated',
   bio TEXT,
   phone TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

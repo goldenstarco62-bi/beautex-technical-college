@@ -22,6 +22,7 @@ router.get('/students/:id', authenticateToken, studentController.getStudent);
 router.post('/students', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('CREATE_STUDENT', 'students'), studentController.createStudent);
 router.put('/students/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('UPDATE_STUDENT', 'students'), studentController.updateStudent);
 router.delete('/students/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), logAudit('DELETE_STUDENT', 'students'), studentController.deleteStudent);
+router.post('/students/:id/document-log', authenticateToken, authorizeRoles('admin', 'superadmin'), studentController.logDocumentGeneration);
 
 // ── Courses ───────────────────────────────────────────────────────────────────
 router.get('/courses', authenticateToken, courseController.getAllCourses);
