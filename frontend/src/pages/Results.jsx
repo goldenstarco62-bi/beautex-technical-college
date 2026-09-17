@@ -71,9 +71,12 @@ export default function Results() {
     const [loading, setLoading] = useState(true);
     const [auditLogs, setAuditLogs] = useState([]);
 
-    // Filters
+    // Filters & Pagination
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 20;
+
 
     // Modals
     const [showSingleModal, setShowSingleModal] = useState(false);
@@ -421,7 +424,7 @@ export default function Results() {
         }
     };
 
-    // ── Filtered Results List ─────────────────────────────────────────────────
+    // ── Filtered & Paginated Results List ─────────────────────────────────────
     const filteredResults = useMemo(() => {
         return results.filter(r => {
             const search = searchTerm.toLowerCase().trim();
@@ -435,11 +438,24 @@ export default function Results() {
         });
     }, [results, searchTerm]);
 
+    // Reset pagination to page 1 whenever search or filter options change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, selectedPeriod, selectedCourse, selectedUnit, statusFilter]);
+
+    const totalPages = useMemo(() => Math.ceil(filteredResults.length / ITEMS_PER_PAGE) || 1, [filteredResults.length, ITEMS_PER_PAGE]);
+
+    const paginatedResults = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredResults.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredResults, currentPage, ITEMS_PER_PAGE]);
+
     // Student Grouped View
     const ownStudentResults = useMemo(() => {
         if (!isStudent) return [];
         return results.filter(r => r.workflow_status === 'Published');
     }, [isStudent, results]);
+
 
     if (loading) {
         return (
@@ -748,140 +764,172 @@ export default function Results() {
                     {/* Results Table */}
                     <div className="overflow-x-auto">
                         {filteredResults.length === 0 ? (
-                            <div className="p-16 text-center text-black/40 font-black uppercase text-xs">
+                            <div className="p-12 text-center text-black/40 font-black uppercase text-[11px]">
                                 No CAT results found matching the criteria.
                             </div>
                         ) : (
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="bg-black/[0.02] border-b border-black/5">
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Student</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Course & Unit</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Marks</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Status</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Workflow</th>
-                                        <th className="px-6 py-4 text-right text-[10px] font-black text-black/40 uppercase tracking-widest">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-black/5">
-                                    {filteredResults.map(r => (
-                                        <tr key={r.id} className="hover:bg-black/[0.005]">
-                                            <td className="px-6 py-4">
-                                                <p className="text-xs font-black text-black uppercase">{r.student_name}</p>
-                                                <p className="text-[10px] font-bold text-black/40 uppercase">{r.student_reg_id}</p>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <p className="text-xs font-black text-maroon uppercase">{r.unit_name}</p>
-                                                <p className="text-[10px] text-black/50 font-bold uppercase">{r.course_name}</p>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {r.marks !== null ? (
-                                                    <div>
-                                                        <span className="text-xs font-black text-black">{r.marks}</span>
-                                                        <span className="text-[10px] text-black/40"> / {r.period_max_marks || 100}</span>
-                                                        <p className="text-[10px] font-bold text-maroon">{r.percentage}%</p>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400 font-bold">—</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <GradeChip grade={r.grade} percentage={r.percentage} />
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full border ${
-                                                    r.status === 'Present' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                    r.status === 'Absent' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200'
-                                                }`}>
-                                                    {r.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <WorkflowChip status={r.workflow_status} />
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-1.5">
-                                                    {/* Workflow transitions */}
-                                                    {r.workflow_status === 'Draft' && (
-                                                        <button
-                                                            onClick={() => handleWorkflowAction(r.id, 'submit')}
-                                                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                                            title="Submit for Approval"
-                                                        >
-                                                            <Send className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {isAdmin && r.workflow_status === 'Submitted' && (
-                                                        <button
-                                                            onClick={() => handleWorkflowAction(r.id, 'approve')}
-                                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                                                            title="Approve Result"
-                                                        >
-                                                            <ShieldCheck className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                    {isAdmin && r.workflow_status === 'Approved' && (
-                                                        <button
-                                                            onClick={() => handleWorkflowAction(r.id, 'publish')}
-                                                            className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                                                            title="Publish Result to Student"
-                                                        >
-                                                            <Sparkles className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-
-                                                    {/* Printable Result Slip */}
-                                                    <button
-                                                        onClick={() => handlePrintResultSlip(r.student_id)}
-                                                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
-                                                        title="Print Result Slip"
-                                                    >
-                                                        <Printer className="w-4 h-4" />
-                                                    </button>
-
-                                                    {/* Edit */}
-                                                    {(!['Approved', 'Published'].includes(r.workflow_status) || isAdmin) && (
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingResult(r);
-                                                                setSingleForm({
-                                                                    student_id: r.student_id,
-                                                                    course_id: r.course_id,
-                                                                    unit_id: r.unit_id || '',
-                                                                    unit_name: r.unit_name,
-                                                                    cat_period_id: r.cat_period_id,
-                                                                    marks: r.marks !== null ? String(r.marks) : '',
-                                                                    status: r.status || 'Present',
-                                                                    remarks: r.remarks || ''
-                                                                });
-                                                                setShowSingleModal(true);
-                                                            }}
-                                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                                                            title="Edit Result"
-                                                        >
-                                                            <Edit className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-
-                                                    {/* Delete */}
-                                                    {(r.workflow_status !== 'Published' || isSuperAdmin) && (
-                                                        <button
-                                                            onClick={() => handleDeleteResult(r.id)}
-                                                            className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                            title="Delete Result"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
+                            <>
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="bg-black/[0.02] border-b border-black/5">
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Student</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Course & Unit</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Marks</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Grade</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Status</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Workflow</th>
+                                            <th className="px-4 py-3 text-right text-[9px] font-black text-black/50 uppercase tracking-widest">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="divide-y divide-black/5">
+                                        {paginatedResults.map(r => (
+                                            <tr key={r.id} className="hover:bg-black/[0.005] transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <p className="text-[11px] font-black text-black uppercase">{r.student_name}</p>
+                                                    <p className="text-[9px] font-bold text-black/40 uppercase">{r.student_reg_id}</p>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <p className="text-[11px] font-black text-maroon uppercase">{r.unit_name}</p>
+                                                    <p className="text-[9px] text-black/50 font-bold uppercase">{r.course_name}</p>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {r.marks !== null ? (
+                                                        <div>
+                                                            <span className="text-[11px] font-black text-black">{r.marks}</span>
+                                                            <span className="text-[9px] text-black/40"> / {r.period_max_marks || 100}</span>
+                                                            <p className="text-[9px] font-bold text-maroon">{r.percentage}%</p>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[11px] text-gray-400 font-bold">—</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <GradeChip grade={r.grade} percentage={r.percentage} />
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                                                        r.status === 'Present' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                        r.status === 'Absent' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200'
+                                                    }`}>
+                                                        {r.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <WorkflowChip status={r.workflow_status} />
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        {/* Workflow transitions */}
+                                                        {r.workflow_status === 'Draft' && (
+                                                            <button
+                                                                onClick={() => handleWorkflowAction(r.id, 'submit')}
+                                                                className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                                                                title="Submit for Approval"
+                                                            >
+                                                                <Send className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                        {isAdmin && r.workflow_status === 'Submitted' && (
+                                                            <button
+                                                                onClick={() => handleWorkflowAction(r.id, 'approve')}
+                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                                title="Approve Result"
+                                                            >
+                                                                <ShieldCheck className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                        {isAdmin && r.workflow_status === 'Approved' && (
+                                                            <button
+                                                                onClick={() => handleWorkflowAction(r.id, 'publish')}
+                                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                                                title="Publish Result to Student"
+                                                            >
+                                                                <Sparkles className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+
+                                                        {/* Printable Result Slip */}
+                                                        <button
+                                                            onClick={() => handlePrintResultSlip(r.student_id)}
+                                                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
+                                                            title="Print Result Slip"
+                                                        >
+                                                            <Printer className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        {/* Edit */}
+                                                        {(!['Approved', 'Published'].includes(r.workflow_status) || isAdmin) && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingResult(r);
+                                                                    setSingleForm({
+                                                                        student_id: r.student_id,
+                                                                        course_id: r.course_id,
+                                                                        unit_id: r.unit_id || '',
+                                                                        unit_name: r.unit_name,
+                                                                        cat_period_id: r.cat_period_id,
+                                                                        marks: r.marks !== null ? String(r.marks) : '',
+                                                                        status: r.status || 'Present',
+                                                                        remarks: r.remarks || ''
+                                                                    });
+                                                                    setShowSingleModal(true);
+                                                                }}
+                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                                title="Edit Result"
+                                                            >
+                                                                <Edit className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+
+                                                        {/* Delete */}
+                                                        {(r.workflow_status !== 'Published' || isSuperAdmin) && (
+                                                            <button
+                                                                onClick={() => handleDeleteResult(r.id)}
+                                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                                title="Delete Result"
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+
+                                {/* ── 20 Per Page Pagination Bar ──────────────────────────── */}
+                                <div className="px-6 py-3.5 border-t border-black/5 bg-black/[0.01] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                                    <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider">
+                                        Showing <span className="font-black text-maroon">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filteredResults.length)}</span> to <span className="font-black text-maroon">{Math.min(currentPage * ITEMS_PER_PAGE, filteredResults.length)}</span> of <span className="font-black text-black">{filteredResults.length}</span> results
+                                    </p>
+
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                            disabled={currentPage === 1}
+                                            className="px-3 py-1 bg-white border border-black/10 rounded-xl text-[10px] font-black uppercase text-black disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5 transition-all shadow-sm"
+                                        >
+                                            Prev
+                                        </button>
+
+                                        <span className="text-[10px] font-black text-maroon px-3 py-1 bg-maroon/5 rounded-xl border border-maroon/10">
+                                            Page {currentPage} of {totalPages}
+                                        </span>
+
+                                        <button
+                                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                            disabled={currentPage >= totalPages}
+                                            className="px-3 py-1 bg-white border border-black/10 rounded-xl text-[10px] font-black uppercase text-black disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black/5 transition-all shadow-sm"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
                         )}
                     </div>
+
                 </div>
             )}
 
