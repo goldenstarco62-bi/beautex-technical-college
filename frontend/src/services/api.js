@@ -452,5 +452,30 @@ export const unitCoverageAPI = {
     updateUnit: (unitId, data) => api.put(`unit-coverage/units/${encodeURIComponent(unitId)}`, data),
 };
 
+// ── CAT Periods API ───────────────────────────────────────────────────────────
+export const catPeriodsAPI = {
+    getAll: (params) => api.get('cat-periods', { params }),
+    create: (data) => api.post('cat-periods', data),
+    update: (id, data) => api.put(`cat-periods/${encodeURIComponent(id)}`, data),
+    delete: (id) => api.delete(`cat-periods/${encodeURIComponent(id)}`),
+};
+
+// ── CAT Results Workflow API ──────────────────────────────────────────────────
+export const catResultsAPI = {
+    getResults: (params) => api.get('cat-results', { params }),
+    createResult: (data) => api.post('cat-results', data),
+    batchCreate: (data) => api.post('cat-results/batch', data),
+    updateResult: (id, data) => api.put(`cat-results/${encodeURIComponent(id)}`, data),
+    deleteResult: (id) => api.delete(`cat-results/${encodeURIComponent(id)}`),
+    submitResult: (id) => api.post(`cat-results/${encodeURIComponent(id)}/submit`),
+    approveResult: (id) => api.post(`cat-results/${encodeURIComponent(id)}/approve`),
+    publishResult: (id) => api.post(`cat-results/${encodeURIComponent(id)}/publish`),
+    bulkSubmit: (data) => api.post('cat-results/bulk-submit', data),
+    bulkApprove: (data) => api.post('cat-results/bulk-approve', data),
+    bulkPublish: (data) => api.post('cat-results/bulk-publish', data),
+    getStats: (params) => api.get('cat-results/stats', { params }),
+    getAuditLogs: (params) => api.get('cat-results/audit-log', { params }),
+};
+
 export default api;
 

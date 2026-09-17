@@ -8,37 +8,62 @@ import ErrorBoundary from './components/ErrorBoundary';
 import SplashLoader from './components/shared/SplashLoader';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 
-// Lazy load page components for code splitting & faster bundle loading
-const Login = lazy(() => import('./pages/Login'));
-const ResetPassword = lazy(() => import('./pages/ResetPassword'));
-const ChangePassword = lazy(() => import('./pages/ChangePassword'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const Students = lazy(() => import('./pages/Students'));
-const Faculty = lazy(() => import('./pages/Faculty'));
-const Courses = lazy(() => import('./pages/Courses'));
-const Settings = lazy(() => import('./pages/Settings'));
-const Users = lazy(() => import('./pages/Users'));
-const Attendance = lazy(() => import('./pages/Attendance'));
-const UnitsCovered = lazy(() => import('./pages/UnitsCovered'));
-const UnitCoverage = lazy(() => import('./pages/UnitCoverage'));
-const Schedule = lazy(() => import('./pages/Schedule'));
-const Announcements = lazy(() => import('./pages/Announcements'));
-const AcademicReports = lazy(() => import('./pages/AcademicReports'));
-const ActivityReports = lazy(() => import('./pages/ActivityReports'));
-const AuditLogs = lazy(() => import('./pages/AuditLogs'));
-const Finance = lazy(() => import('./pages/Finance'));
-const AcademicMaster = lazy(() => import('./pages/AcademicMaster'));
-const Materials = lazy(() => import('./pages/Materials'));
-const Profile = lazy(() => import('./pages/Profile'));
-const TrainerReports = lazy(() => import('./pages/TrainerReports'));
-const StudentDailyReportEntry = lazy(() => import('./pages/StudentDailyReportEntry'));
-const DailyStudentLogs = lazy(() => import('./pages/DailyStudentLogs'));
-const Inventory = lazy(() => import('./pages/Inventory'));
-const AcademicSummaryReport = lazy(() => import('./pages/AcademicSummaryReport'));
-const MonthlyFeeTracker = lazy(() => import('./pages/MonthlyFeeTracker'));
-const AttendanceSummary = lazy(() => import('./pages/AttendanceSummary'));
-const MonthlyAttendanceSummary = lazy(() => import('./pages/MonthlyAttendanceSummary'));
-const NotFound = lazy(() => import('./pages/NotFound'));
+// Helper to safely import lazy components and recover from chunk loading errors (e.g. after production deployments)
+const safeLazy = (importFn) => lazy(async () => {
+    try {
+        const component = await importFn();
+        sessionStorage.removeItem('chunk_reload_attempt');
+        return component;
+    } catch (error) {
+        const errorMsg = error?.message || '';
+        const isChunkError = error?.name === 'ChunkLoadError' || 
+            errorMsg.includes('Failed to fetch dynamically imported module') ||
+            errorMsg.includes('Importing a module script failed') ||
+            errorMsg.includes('Loading chunk');
+        
+        const hasReloaded = sessionStorage.getItem('chunk_reload_attempt');
+        if (isChunkError && !hasReloaded) {
+            sessionStorage.setItem('chunk_reload_attempt', 'true');
+            window.location.reload();
+        }
+        throw error;
+    }
+});
+
+// Safe lazy load page components for code splitting & faster bundle loading
+const Login = safeLazy(() => import('./pages/Login'));
+const ResetPassword = safeLazy(() => import('./pages/ResetPassword'));
+const ChangePassword = safeLazy(() => import('./pages/ChangePassword'));
+const Dashboard = safeLazy(() => import('./pages/Dashboard'));
+const Students = safeLazy(() => import('./pages/Students'));
+const Faculty = safeLazy(() => import('./pages/Faculty'));
+const Courses = safeLazy(() => import('./pages/Courses'));
+const Settings = safeLazy(() => import('./pages/Settings'));
+const Users = safeLazy(() => import('./pages/Users'));
+const Attendance = safeLazy(() => import('./pages/Attendance'));
+const UnitsCovered = safeLazy(() => import('./pages/UnitsCovered'));
+const UnitCoverage = safeLazy(() => import('./pages/UnitCoverage'));
+const Results = safeLazy(() => import('./pages/Results'));
+const AcademicsHub = safeLazy(() => import('./pages/AcademicsHub'));
+const Schedule = safeLazy(() => import('./pages/Schedule'));
+const Announcements = safeLazy(() => import('./pages/Announcements'));
+const AcademicReports = safeLazy(() => import('./pages/AcademicReports'));
+const ActivityReports = safeLazy(() => import('./pages/ActivityReports'));
+const AuditLogs = safeLazy(() => import('./pages/AuditLogs'));
+const Finance = safeLazy(() => import('./pages/Finance'));
+const AcademicMaster = safeLazy(() => import('./pages/AcademicMaster'));
+const Materials = safeLazy(() => import('./pages/Materials'));
+const Profile = safeLazy(() => import('./pages/Profile'));
+const TrainerReports = safeLazy(() => import('./pages/TrainerReports'));
+const StudentDailyReportEntry = safeLazy(() => import('./pages/StudentDailyReportEntry'));
+const DailyStudentLogs = safeLazy(() => import('./pages/DailyStudentLogs'));
+const Inventory = safeLazy(() => import('./pages/Inventory'));
+const AcademicSummaryReport = safeLazy(() => import('./pages/AcademicSummaryReport'));
+const MonthlyFeeTracker = safeLazy(() => import('./pages/MonthlyFeeTracker'));
+const AttendanceSummary = safeLazy(() => import('./pages/AttendanceSummary'));
+const MonthlyAttendanceSummary = safeLazy(() => import('./pages/MonthlyAttendanceSummary'));
+const NotFound = safeLazy(() => import('./pages/NotFound'));
+
 
 function ProtectedRoute({ children, allowedRoles }) {
     const { user, loading } = useAuth();
@@ -110,9 +135,11 @@ function App() {
                                 <Route path="/students" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><Students /></Layout></ProtectedRoute>} />
                                 <Route path="/faculty" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Faculty /></Layout></ProtectedRoute>} />
                                 <Route path="/courses" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Courses /></Layout></ProtectedRoute>} />
+                                <Route path="/academics" element={<ProtectedRoute><Layout><AcademicsHub /></Layout></ProtectedRoute>} />
                                 <Route path="/attendance" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Attendance /></Layout></ProtectedRoute>} />
                                 <Route path="/grades" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitsCovered /></Layout></ProtectedRoute>} />
                                 <Route path="/unit-coverage" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitCoverage /></Layout></ProtectedRoute>} />
+                                <Route path="/results" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Results /></Layout></ProtectedRoute>} />
                                 <Route path="/schedule" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Schedule /></Layout></ProtectedRoute>} />
                                 <Route path="/announcements" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Announcements /></Layout></ProtectedRoute>} />
 

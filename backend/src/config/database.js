@@ -908,6 +908,89 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ unit_coverage_logs student_id migration warning (PostgreSQL):', e.message);
     }
+
+    // ── CAT Results Module Tables (PostgreSQL) ────────────────────────────────
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS cat_periods (
+                id SERIAL PRIMARY KEY,
+                academic_year TEXT NOT NULL,
+                term_name TEXT NOT NULL,
+                cat_name TEXT NOT NULL,
+                month TEXT,
+                max_marks REAL DEFAULT 100,
+                start_date DATE,
+                end_date DATE,
+                status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Closed', 'Draft')),
+                created_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ cat_periods table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ cat_periods migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS cat_results (
+                id SERIAL PRIMARY KEY,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER,
+                unit_name TEXT NOT NULL,
+                cat_period_id INTEGER NOT NULL,
+                marks REAL,
+                percentage REAL,
+                grade TEXT CHECK(grade IN ('Distinction','Credit','Pass','Fail')),
+                status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending','Present','Absent','Exempted')),
+                workflow_status TEXT DEFAULT 'Draft' CHECK(workflow_status IN ('Draft','Submitted','Approved','Published')),
+                entered_by TEXT,
+                trainer_name TEXT,
+                remarks TEXT,
+                submitted_at TIMESTAMP,
+                approved_at TIMESTAMP,
+                approved_by TEXT,
+                published_at TIMESTAMP,
+                published_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, unit_id, cat_period_id)
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_cat_results_student ON cat_results(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_cat_results_course ON cat_results(course_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_cat_results_period ON cat_results(cat_period_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_cat_results_workflow ON cat_results(workflow_status)');
+        console.log('✅ cat_results table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ cat_results migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS result_audit_logs (
+                id SERIAL PRIMARY KEY,
+                result_id INTEGER,
+                student_id TEXT,
+                unit_name TEXT,
+                cat_period_id INTEGER,
+                action TEXT NOT NULL,
+                previous_marks REAL,
+                new_marks REAL,
+                previous_status TEXT,
+                new_status TEXT,
+                changed_by TEXT NOT NULL,
+                changed_by_name TEXT,
+                reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ result_audit_logs table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ result_audit_logs migration warning (PostgreSQL):', e.message);
+    }
 }
 
 
@@ -1450,6 +1533,89 @@ async function runSqliteMigrations(database) {
         }
     } catch (e) {
         console.warn('⚠️ unit_coverage_logs student_id migration warning (SQLite):', e.message);
+    }
+
+    // ── CAT Results Module Tables (SQLite) ────────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS cat_periods (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                academic_year TEXT NOT NULL,
+                term_name TEXT NOT NULL,
+                cat_name TEXT NOT NULL,
+                month TEXT,
+                max_marks REAL DEFAULT 100,
+                start_date DATE,
+                end_date DATE,
+                status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Closed', 'Draft')),
+                created_by TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ cat_periods table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ cat_periods migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS cat_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER,
+                unit_name TEXT NOT NULL,
+                cat_period_id INTEGER NOT NULL,
+                marks REAL,
+                percentage REAL,
+                grade TEXT CHECK(grade IN ('Distinction','Credit','Pass','Fail')),
+                status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending','Present','Absent','Exempted')),
+                workflow_status TEXT DEFAULT 'Draft' CHECK(workflow_status IN ('Draft','Submitted','Approved','Published')),
+                entered_by TEXT,
+                trainer_name TEXT,
+                remarks TEXT,
+                submitted_at DATETIME,
+                approved_at DATETIME,
+                approved_by TEXT,
+                published_at DATETIME,
+                published_by TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, unit_id, cat_period_id)
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_cat_results_student ON cat_results(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_cat_results_course ON cat_results(course_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_cat_results_period ON cat_results(cat_period_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_cat_results_workflow ON cat_results(workflow_status)');
+        console.log('✅ cat_results table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ cat_results migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS result_audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                result_id INTEGER,
+                student_id TEXT,
+                unit_name TEXT,
+                cat_period_id INTEGER,
+                action TEXT NOT NULL,
+                previous_marks REAL,
+                new_marks REAL,
+                previous_status TEXT,
+                new_status TEXT,
+                changed_by TEXT NOT NULL,
+                changed_by_name TEXT,
+                reason TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ result_audit_logs table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ result_audit_logs migration warning (SQLite):', e.message);
     }
 
     // ── Inventory Requisition System (SQLite) ─────────────────────────────────

@@ -18,6 +18,8 @@ import * as interactionController from '../controllers/interactionController.js'
 import * as courseUnitController from '../controllers/courseUnitController.js';
 import * as studentUnitMarksController from '../controllers/studentUnitMarksController.js';
 import * as unitCoverageController from '../controllers/unitCoverageController.js';
+import * as catController from '../controllers/catController.js';
+import * as catResultsController from '../controllers/catResultsController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -154,7 +156,31 @@ router.delete('/unit-coverage/logs/:logId', authenticateToken, authorizeRoles('t
 router.get('/unit-coverage/logs', authenticateToken, unitCoverageController.getCoverageLogs);
 router.get('/unit-coverage/analytics', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.getCoverageAnalytics);
 router.get('/unit-coverage/admin', authenticateToken, authorizeRoles('admin', 'superadmin'), unitCoverageController.getAdminOverview);
+// FIX: Register previously missing student-progress route (called by UnitCoverage.jsx for students)
+router.get('/unit-coverage/student-progress', authenticateToken, authorizeRoles('student'), unitCoverageController.getStudentProgress);
 router.post('/unit-coverage/confirmations', authenticateToken, authorizeRoles('student'), unitCoverageController.submitConfirmation);
 router.get('/unit-coverage/confirmations', authenticateToken, unitCoverageController.getConfirmations);
-router.get('/unit-coverage/student-progress', authenticateToken, unitCoverageController.getStudentProgress);
+// FIX: Register previously missing unit update route (called by UnitCoverage.jsx manage units UI)
+router.put('/unit-coverage/units/:unitId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.updateUnit);
+// ── CAT Periods Management ───────────────────────────────────────────────────
+router.get('/cat-periods', authenticateToken, catController.getCatPeriods);
+router.post('/cat-periods', authenticateToken, authorizeRoles('admin', 'superadmin'), catController.createCatPeriod);
+router.put('/cat-periods/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), catController.updateCatPeriod);
+router.delete('/cat-periods/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), catController.deleteCatPeriod);
+
+// ── CAT Results Workflow ─────────────────────────────────────────────────────
+router.get('/cat-results/stats', authenticateToken, catResultsController.getResultStats);
+router.get('/cat-results/audit-log', authenticateToken, authorizeRoles('admin', 'superadmin'), catResultsController.getResultAuditLog);
+router.get('/cat-results', authenticateToken, catResultsController.getResults);
+router.post('/cat-results/batch', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.batchCreateResults);
+router.post('/cat-results/bulk-submit', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.bulkSubmitResults);
+router.post('/cat-results/bulk-approve', authenticateToken, authorizeRoles('admin', 'superadmin'), catResultsController.bulkApproveResults);
+router.post('/cat-results/bulk-publish', authenticateToken, authorizeRoles('admin', 'superadmin'), catResultsController.bulkPublishResults);
+router.post('/cat-results/:id/submit', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.submitResult);
+router.post('/cat-results/:id/approve', authenticateToken, authorizeRoles('admin', 'superadmin'), catResultsController.approveResult);
+router.post('/cat-results/:id/publish', authenticateToken, authorizeRoles('admin', 'superadmin'), catResultsController.publishResult);
+router.post('/cat-results', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.createResult);
+router.put('/cat-results/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.updateResult);
+router.delete('/cat-results/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.deleteResult);
+
 export default router;

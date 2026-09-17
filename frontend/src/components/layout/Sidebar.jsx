@@ -26,6 +26,8 @@ import {
     PieChart,
     BookMarked,
     CheckSquare,
+    Award,
+    Layers,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { academicAPI } from '../../services/api';
@@ -40,12 +42,14 @@ const navSections = [
     {
         label: 'ACADEMICS',
         items: [
+            { name: 'Academics Hub', path: '/academics', icon: Layers, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
+            { name: 'Unit Coverage', path: '/unit-coverage', icon: CheckSquare, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
+            { name: 'Results', path: '/results', icon: Award, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin', 'teacher'] },
             { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
             { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-            { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'] },
-            { name: 'Unit Coverage', path: '/unit-coverage', icon: CheckSquare, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Timetable', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Daily Ledger', path: '/daily-student-logs', icon: History, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Journal Entry', path: '/student-daily-reports', icon: FileText, roles: ['admin', 'superadmin', 'teacher'] },
@@ -197,9 +201,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                                                         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full" style={{ background: 'linear-gradient(to bottom, #FFD700, #E6C200)' }} />
                                                     )}
                                                     <Icon className={`w-4 h-4 shrink-0 transition-all duration-200 ${isActive ? 'text-yellow-300' : 'text-white/40 group-hover:text-white/70'}`} />
-                                                    <span className={`text-[11px] font-semibold truncate tracking-wide ${isActive ? 'text-white font-bold' : ''}`}>
-                                                        {item.name}
-                                                    </span>
+                                                     <span className={`text-[11px] font-semibold truncate tracking-wide flex-1 ${isActive ? 'text-white font-bold' : ''}`}>
+                                                         {item.name}
+                                                     </span>
+                                                     {item.highlight && (
+                                                         <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                                             {item.highlight}
+                                                         </span>
+                                                     )}
                                                 </Link>
                                             </li>
                                         );

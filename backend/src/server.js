@@ -267,10 +267,21 @@ app.get('/', async (req, res) => {
 
 
 
-// 404 handler
+// Serve static frontend assets if build directory exists
+const frontendDistPath = path.join(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDistPath)) {
+    app.use(express.static(frontendDistPath));
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(path.join(frontendDistPath, 'index.html'));
+    });
+}
+
+// 404 handler for API routes
 app.use((req, res) => {
     res.status(404).json({ error: 'Route not found' });
 });
+
 
 // Error handler
 app.use((err, req, res, next) => {
