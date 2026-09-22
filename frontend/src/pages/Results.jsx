@@ -75,8 +75,8 @@ export default function Results() {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
+    const [studentViewMode, setStudentViewMode] = useState('cards');
     const ITEMS_PER_PAGE = 20;
-
 
     // Modals
     const [showSingleModal, setShowSingleModal] = useState(false);
@@ -456,6 +456,36 @@ export default function Results() {
         return results.filter(r => r.workflow_status === 'Published');
     }, [isStudent, results]);
 
+    const studentMetrics = useMemo(() => {
+        if (!ownStudentResults || ownStudentResults.length === 0) {
+            return { avgPct: 0, overallGrade: 'N/A', topUnit: null, distinctionCount: 0, creditCount: 0, passCount: 0, failCount: 0 };
+        }
+        const valid = ownStudentResults.filter(r => r.percentage !== null && r.percentage !== undefined);
+        const avgPct = valid.length > 0
+            ? Math.round((valid.reduce((acc, r) => acc + parseFloat(r.percentage), 0) / valid.length) * 10) / 10
+            : 0;
+
+        let overallGrade = 'Fail';
+        if (avgPct >= 70) overallGrade = 'Distinction';
+        else if (avgPct >= 60) overallGrade = 'Credit';
+        else if (avgPct >= 50) overallGrade = 'Pass';
+
+        let topUnit = null;
+        let maxP = -1;
+        let dist = 0, cred = 0, pass = 0, fail = 0;
+
+        ownStudentResults.forEach(r => {
+            const p = parseFloat(r.percentage || 0);
+            if (p > maxP) { maxP = p; topUnit = r; }
+            if (r.grade === 'Distinction') dist++;
+            else if (r.grade === 'Credit') cred++;
+            else if (r.grade === 'Pass') pass++;
+            else if (r.grade === 'Fail') fail++;
+        });
+
+        return { avgPct, overallGrade, topUnit, distinctionCount: dist, creditCount: cred, passCount: pass, failCount: fail };
+    }, [ownStudentResults]);
+
 
     if (loading) {
         return (
@@ -660,36 +690,189 @@ export default function Results() {
             {/* ── STUDENT VIEW ────────────────────────────────────────────────── */}
             {/* ══════════════════════════════════════════════════════════════════ */}
             {isStudent ? (
-                <div className="space-y-6">
-                    {ownStudentResults.length === 0 ? (
-                        <div className="bg-white p-16 rounded-[2.5rem] border border-black/5 shadow-2xl text-center space-y-3">
-                            <Award className="w-12 h-12 text-maroon/20 mx-auto" />
-                            <p className="text-sm font-black text-black/60 uppercase">No published CAT results available for this period yet.</p>
-                            <p className="text-[10px] text-black/40 uppercase tracking-widest">Results will appear here once your trainers submit and admins publish them.</p>
-                        </div>
-                    ) : (
-                        <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl overflow-hidden p-8 space-y-6">
-                            <div className="flex justify-between items-center border-b pb-6">
-                                <div>
-                                    <h3 className="text-2xl font-black text-black uppercase">Published CAT Statement</h3>
-                                    <p className="text-xs font-bold text-black/40 uppercase tracking-widest">Results recorded for selected period</p>
+                <div className="space-y-8">
+                    {/* Student Performance Summary Cards */}
+                    {ownStudentResults.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                            {/* Average Performance */}
+                            <div className="bg-gradient-to-br from-maroon via-maroon/95 to-maroon/80 text-white p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 -mr-4 -mt-4 w-24 h-24 bg-gold/10 rounded-full blur-xl group-hover:scale-150 transition-all duration-700" />
+                                <div className="relative z-10 flex flex-col justify-between h-full space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-gold/90">Average Performance</span>
+                                        <div className="p-2 bg-gold/20 text-gold rounded-xl border border-gold/30">
+                                            <TrendingUp className="w-4 h-4" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-4xl font-black text-white tracking-tight">{studentMetrics.avgPct}%</div>
+                                        <p className="text-[10px] font-black uppercase text-gold/80 tracking-widest mt-1">Overall Grade: {studentMetrics.overallGrade}</p>
+                                    </div>
                                 </div>
+                            </div>
+
+                            {/* Units Evaluated */}
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-black/5 shadow-xl flex flex-col justify-between space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">Units Evaluated</span>
+                                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                                        <BookOpen className="w-4 h-4" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-3xl font-black text-black tracking-tight">{ownStudentResults.length} Units</div>
+                                    <p className="text-[10px] font-bold text-black/40 uppercase tracking-widest mt-1">Published CAT Assessment</p>
+                                </div>
+                            </div>
+
+                            {/* Top Unit */}
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-black/5 shadow-xl flex flex-col justify-between space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">Top Achievement</span>
+                                    <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100">
+                                        <Award className="w-4 h-4" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-lg font-black text-black truncate uppercase">{studentMetrics.topUnit ? studentMetrics.topUnit.unit_name : 'N/A'}</div>
+                                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-1">
+                                        {studentMetrics.topUnit ? `${studentMetrics.topUnit.percentage}% — ${studentMetrics.topUnit.grade}` : '—'}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Academic Standing */}
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-black/5 shadow-xl flex flex-col justify-between space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-black/40">Academic Standing</span>
+                                    <div className="p-2 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
+                                        <GraduationCap className="w-4 h-4" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xl font-black text-emerald-600 uppercase">
+                                        {studentMetrics.failCount === 0 ? 'Good Standing' : `${studentMetrics.failCount} Re-take Needed`}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-black/40 uppercase tracking-widest mt-1">
+                                        {studentMetrics.distinctionCount} Dist. | {studentMetrics.creditCount} Credit | {studentMetrics.passCount} Pass
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* View Switcher Bar */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-[2rem] border border-black/5 shadow-xl">
+                        <div>
+                            <h3 className="text-xl font-black text-black uppercase tracking-tight">Continuous Assessment Statement</h3>
+                            <p className="text-[10px] font-bold text-black/40 uppercase tracking-widest">
+                                {currentPeriodObj ? `${currentPeriodObj.academic_year} ${currentPeriodObj.term_name} — ${currentPeriodObj.cat_name}` : 'Published CAT Marks'}
+                            </p>
+                        </div>
+
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                            <div className="flex bg-gray-100 p-1 rounded-2xl border border-black/5">
                                 <button
-                                    onClick={() => handlePrintResultSlip(user.student_id || user.id)}
-                                    className="bg-gradient-to-r from-maroon to-maroon/90 text-gold px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center gap-2 hover:scale-[1.02] transition-all"
+                                    onClick={() => setStudentViewMode('cards')}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                                        studentViewMode === 'cards' ? 'bg-maroon text-gold shadow-md' : 'text-black/60 hover:text-black'
+                                    }`}
                                 >
-                                    <Printer className="w-4 h-4" /> Download CAT Result Slip
+                                    Cards View
+                                </button>
+                                <button
+                                    onClick={() => setStudentViewMode('table')}
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                                        studentViewMode === 'table' ? 'bg-maroon text-gold shadow-md' : 'text-black/60 hover:text-black'
+                                    }`}
+                                >
+                                    Table View
                                 </button>
                             </div>
 
+                            <button
+                                onClick={() => handlePrintResultSlip(user.student_id || user.id)}
+                                className="flex-1 sm:flex-none bg-gradient-to-r from-maroon to-maroon/90 text-gold px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg flex items-center justify-center gap-2 hover:scale-[1.02] transition-all border border-gold/20"
+                            >
+                                <Printer className="w-4 h-4" /> CAT Result Slip
+                            </button>
+                        </div>
+                    </div>
+
+                    {ownStudentResults.length === 0 ? (
+                        <div className="bg-white p-16 rounded-[2.5rem] border border-black/5 shadow-2xl text-center space-y-4">
+                            <div className="w-16 h-16 bg-maroon/10 text-maroon rounded-3xl flex items-center justify-center mx-auto">
+                                <Award className="w-8 h-8" />
+                            </div>
+                            <div>
+                                <p className="text-base font-black text-black uppercase">No published CAT results available yet</p>
+                                <p className="text-xs text-black/50 uppercase tracking-widest mt-1">Your assessment marks will be visible here once verified by trainers and published by administration.</p>
+                            </div>
+                        </div>
+                    ) : studentViewMode === 'cards' ? (
+                        /* Card Grid View */
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {ownStudentResults.map(r => (
+                                <div key={r.id} className="bg-white rounded-[2.5rem] border border-black/5 p-6 shadow-xl hover:shadow-2xl transition-all space-y-5 flex flex-col justify-between group">
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-start gap-2">
+                                            <div>
+                                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-maroon/70 block">{r.course_name}</span>
+                                                <h4 className="text-base font-black text-black uppercase tracking-tight group-hover:text-maroon transition-colors">{r.unit_name}</h4>
+                                            </div>
+                                            <GradeChip grade={r.grade} percentage={r.percentage} />
+                                        </div>
+
+                                        <div className="bg-gray-50 rounded-2xl p-4 border border-black/5 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[10px] font-black uppercase text-black/40">Marks Score</span>
+                                                <span className="text-sm font-black text-black">
+                                                    {r.marks !== null ? `${r.marks} / ${r.period_max_marks || 100}` : '—'}
+                                                </span>
+                                            </div>
+
+                                            {/* Score Progress Bar */}
+                                            {r.percentage !== null && (
+                                                <div className="space-y-1">
+                                                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full transition-all duration-1000 ${
+                                                                r.percentage >= 70 ? 'bg-emerald-500' :
+                                                                r.percentage >= 60 ? 'bg-blue-500' :
+                                                                r.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                                            }`}
+                                                            style={{ width: `${Math.min(r.percentage, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-between text-[9px] font-black uppercase text-black/50">
+                                                        <span>Percentage</span>
+                                                        <span className="text-maroon">{r.percentage}%</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-3 border-t border-black/5 flex justify-between items-center text-[10px] font-bold text-black/40 uppercase">
+                                        <span>Trainer: {r.trainer_name || 'Department'}</span>
+                                        <span className="text-emerald-600 font-black flex items-center gap-1">
+                                            <CheckCircle className="w-3 h-3" /> Published
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        /* Table View */
+                        <div className="bg-white rounded-[2.5rem] border border-black/5 shadow-2xl overflow-hidden p-6">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead>
                                         <tr className="bg-black/[0.02] border-b border-black/5">
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Unit Name</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Unit Title</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Course</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Marks (Max)</th>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Score %</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Percentage</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Remarks</th>
                                         </tr>
@@ -1382,8 +1565,17 @@ export default function Results() {
                             </table>
 
 
+                            {/* Grading Scale Key */}
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-[9px] font-bold text-gray-600 flex flex-wrap justify-between items-center gap-2">
+                                <span className="font-black uppercase text-maroon">Grade Key:</span>
+                                <span>Distinction: 70–100%</span>
+                                <span>Credit: 60–69%</span>
+                                <span>Pass: 50–59%</span>
+                                <span className="text-red-600">Fail: 0–49%</span>
+                            </div>
+
                             {/* Footer Signatures */}
-                            <div className="pt-8 border-t flex justify-between items-end text-[10px] font-black uppercase text-gray-500">
+                            <div className="pt-6 border-t flex justify-between items-end text-[10px] font-black uppercase text-gray-500">
                                 <div>
                                     <div className="w-32 border-b border-black mb-1"></div>
                                     <span>Head of Academics</span>

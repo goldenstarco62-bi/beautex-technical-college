@@ -72,26 +72,26 @@ function StudentFinanceView({ studentFee, payments }) {
     const offset = circumference - (progress / 100) * circumference;
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-700">
+        <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-700">
             {/* Page Title & Quick Action */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-6">
                 <div>
-                    <p className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.4em] mb-2">Accounts Management</p>
-                    <h1 className="text-3xl sm:text-4xl font-black text-maroon uppercase tracking-tight flex items-center gap-3">
-                        <Wallet className="w-8 h-8 text-gold" />
+                    <p className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.4em] mb-1 sm:mb-2">Accounts Management</p>
+                    <h1 className="text-2xl sm:text-4xl font-black text-maroon uppercase tracking-tight flex items-center gap-2 sm:gap-3">
+                        <Wallet className="w-6 h-6 sm:w-8 sm:h-8 text-gold" />
                         Finance Hub
                     </h1>
                 </div>
-                <div className="flex gap-3 w-full md:w-auto">
+                <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
                     <button
                         onClick={handlePrint}
-                        className="flex-1 md:flex-none px-5 py-3.5 bg-white border border-gray-100 rounded-[1.5rem] shadow-sm hover:bg-gray-50 transition-all font-black text-[10px] uppercase tracking-widest text-maroon flex items-center justify-center gap-2"
+                        className="flex-1 sm:flex-none px-3 sm:px-5 py-2.5 sm:py-3.5 bg-white border border-gray-100 rounded-2xl shadow-sm hover:bg-gray-50 transition-all font-black text-[9px] sm:text-[10px] uppercase tracking-widest text-maroon flex items-center justify-center gap-2"
                     >
                         <Printer className="w-4 h-4" /> Print Statement
                     </button>
                     <button
                         onClick={() => alert('Official Payment Instructions:\n1. Visit the College Registry/Finance Office\n2. Pay via Cash, Cheque or Bank Transfer\n3. Collect an official receipt\n\nEnsure ALL fee balances are cleared on time.')}
-                        className="flex-1 md:flex-none bg-maroon text-gold px-8 py-3.5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-2xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[10px] uppercase tracking-widest"
+                        className="flex-1 sm:flex-none bg-maroon text-gold px-4 sm:px-8 py-2.5 sm:py-3.5 rounded-2xl flex items-center justify-center gap-2 sm:gap-3 shadow-xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[9px] sm:text-[10px] uppercase tracking-widest"
                     >
                         <CreditCard className="w-4 h-4" /> Payment Info
                     </button>
@@ -99,15 +99,15 @@ function StudentFinanceView({ studentFee, payments }) {
             </div>
 
             {/* Main Stats with Radial Progress */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sticky top-0 md:relative">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-8">
                 {/* Visual Overview Card */}
-                <div className="lg:col-span-8 bg-white rounded-[3rem] border border-maroon/5 shadow-2xl p-8 sm:p-12 flex flex-col md:flex-row items-center gap-12 relative overflow-hidden group">
+                <div className="lg:col-span-8 bg-white rounded-2xl sm:rounded-[3rem] border border-maroon/5 shadow-2xl p-5 sm:p-12 flex flex-col sm:flex-row items-center gap-6 sm:gap-12 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-maroon/5 rounded-full -mr-32 -mt-32 blur-3xl" />
                     <div className="absolute bottom-0 left-0 w-48 h-48 bg-gold/5 rounded-full -ml-24 -mb-24 blur-2xl" />
 
-                    {/* Radial Progress */}
-                    <div className="relative w-48 h-48 shrink-0 flex items-center justify-center">
-                        <svg className="w-full h-full -rotate-90">
+                    {/* Radial Progress — smaller on mobile */}
+                    <div className="relative w-32 h-32 sm:w-48 sm:h-48 shrink-0 flex items-center justify-center">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 192 192">
                             <circle cx="96" cy="96" r={radius} className="fill-none stroke-gray-100 stroke-[16px]" />
                             <circle cx="96" cy="96" r={radius}
                                 className={`fill-none stroke-[16px] transition-all duration-[1.5s] ease-in-out ${progress >= 100 ? 'stroke-emerald-500' : progress > 50 ? 'stroke-gold' : 'stroke-maroon'}`}
@@ -117,7 +117,7 @@ function StudentFinanceView({ studentFee, payments }) {
                             />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                            <span className="text-4xl font-black text-maroon tracking-tighter">{progress.toFixed(0)}%</span>
+                            <span className="text-2xl sm:text-4xl font-black text-maroon tracking-tighter">{progress.toFixed(0)}%</span>
                             <span className="text-[8px] font-black text-maroon/40 uppercase tracking-widest">Completed</span>
                         </div>
                     </div>
@@ -155,18 +155,18 @@ function StudentFinanceView({ studentFee, payments }) {
                 </div>
 
                 {/* Strategic Allocation Sidebar */}
-                <div className="lg:col-span-4 bg-maroon rounded-[3.5rem] p-10 text-white shadow-[0_24px_48px_-12px_rgba(0,0,0,0.3)] relative overflow-hidden group">
+                <div className="lg:col-span-4 bg-maroon rounded-2xl sm:rounded-[3.5rem] p-5 sm:p-10 text-white shadow-[0_24px_48px_-12px_rgba(0,0,0,0.3)] relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none bg-[radial-gradient(circle_at_50%_0%,#daa520_0%,transparent_70%)]" />
                     <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-maroon/20 rounded-full blur-3xl group-hover:bg-maroon/30 transition-all duration-1000" />
 
                     <div className="relative z-10">
-                        <div className="flex justify-between items-center mb-10">
+                        <div className="flex justify-between items-center mb-5 sm:mb-10">
                             <div>
                                 <h4 className="text-[10px] font-black uppercase tracking-[0.4em] text-gold/60">Registry Breakdown</h4>
-                                <h3 className="text-lg font-black uppercase tracking-tight text-white mt-1">Official Allocations</h3>
+                                <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-white mt-1">Official Allocations</h3>
                             </div>
-                            <div className="w-10 h-10 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10">
-                                <Activity className="w-5 h-5 text-gold" />
+                            <div className="w-9 h-9 sm:w-10 sm:h-10 bg-white/5 rounded-2xl flex items-center justify-center border border-white/10">
+                                <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-gold" />
                             </div>
                         </div>
 
@@ -380,40 +380,40 @@ function AdminFinanceView({
         : 0;
 
     return (
-        <div className="space-y-10 animate-in fade-in duration-700">
+        <div className="space-y-6 sm:space-y-10 animate-in fade-in duration-700">
             {/* Command Header */}
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6">
                 <div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1 sm:mb-2">
                         <ShieldCheck className="w-4 h-4 text-gold" />
                         <p className="text-[10px] font-black text-maroon/40 uppercase tracking-[0.4em]">Administrative Finance Portal</p>
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-black text-maroon uppercase tracking-tight">Finance Command</h1>
+                    <h1 className="text-2xl sm:text-4xl font-black text-maroon uppercase tracking-tight">Finance Command</h1>
                 </div>
-                <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+                <div className="flex flex-wrap gap-2 sm:gap-3 w-full sm:w-auto">
                     <button
                         onClick={() => window.print()}
-                        className="flex-1 lg:flex-none px-6 py-4 bg-white border border-gray-100 rounded-[1.5rem] shadow-sm hover:bg-gray-50 transition-all font-black text-[10px] uppercase tracking-widest text-maroon flex items-center justify-center gap-2"
+                        className="flex-1 sm:flex-none px-4 sm:px-6 py-3 sm:py-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:bg-gray-50 transition-all font-black text-[9px] sm:text-[10px] uppercase tracking-widest text-maroon flex items-center justify-center gap-2"
                     >
                         <Printer className="w-4 h-4" /> Global Export
                     </button>
                     {canRecordFinance ? (
                         <button
                             onClick={onRecord}
-                            className="flex-1 lg:flex-none bg-maroon text-gold px-8 py-4 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-2xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[10px] uppercase tracking-widest"
+                            className="flex-1 sm:flex-none bg-maroon text-gold px-5 sm:px-8 py-3 sm:py-4 rounded-2xl flex items-center justify-center gap-2 sm:gap-3 shadow-xl hover:bg-maroon/90 hover:scale-[1.02] transition-all border border-gold/10 font-black text-[9px] sm:text-[10px] uppercase tracking-widest"
                         >
                             <Plus className="w-4 h-4" /> Record Payment
                         </button>
                     ) : (
-                        <div className="flex-1 lg:flex-none px-8 py-4 rounded-[1.5rem] flex items-center justify-center gap-3 border-2 border-dashed border-amber-300 bg-amber-50 font-black text-[10px] uppercase tracking-widest text-amber-500">
+                        <div className="flex-1 sm:flex-none px-5 py-3 rounded-2xl flex items-center justify-center gap-2 border-2 border-dashed border-amber-300 bg-amber-50 font-black text-[9px] sm:text-[10px] uppercase tracking-widest text-amber-500">
                             <ShieldCheck className="w-4 h-4" /> View Only
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex flex-wrap gap-2 p-1.5 bg-gray-100/50 rounded-[2rem] w-fit">
+            {/* Navigation Tabs — scrollable on mobile */}
+            <div className="tab-bar-mobile p-1 sm:p-1.5 bg-gray-100/50 rounded-[2rem] w-full sm:w-fit">
                 {[
                     { id: 'overview', label: 'Overview', icon: BarChart3 },
                     { id: 'payments', label: 'Payment Registry', icon: Receipt },
@@ -422,7 +422,7 @@ function AdminFinanceView({
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`px-6 py-3 rounded-[1.5rem] flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.id
+                        className={`shrink-0 px-4 sm:px-6 py-2.5 sm:py-3 rounded-[1.5rem] flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab.id
                             ? 'bg-white text-maroon shadow-sm border border-maroon/5 scale-105'
                             : 'text-gray-400 hover:text-maroon hover:bg-white/50'
                             }`}
@@ -434,25 +434,25 @@ function AdminFinanceView({
             </div>
 
             {activeTab === 'overview' && (
-                <div className="space-y-8 animate-in slide-in-from-bottom-5 duration-700">
+                <div className="space-y-6 sm:space-y-8 animate-in slide-in-from-bottom-5 duration-700">
                     {/* Key Metrics */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                         {[
                             { label: 'Total Fee Required', value: summary.total_revenue_expected, sub: 'Global Obligations', icon: TrendingUp, color: 'text-blue-600', bg: 'bg-blue-50' },
                             { label: 'Fee Paid So Far', value: summary.total_revenue_collected, sub: `${collectionRate}% Success Rate`, icon: Banknote, color: 'text-emerald-600', bg: 'bg-emerald-50' },
                             { label: 'Total Fee Balance', value: summary.total_outstanding, sub: 'Outstanding Receivables', icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
                             { label: 'Active Students', value: summary.pending_accounts || 0, sub: 'Total Registry Entries', icon: Users, color: 'text-amber-600', bg: 'bg-amber-50', noFmt: true },
                         ].map((stat, i) => (
-                            <div key={i} className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-xl relative overflow-hidden group">
+                            <div key={i} className="bg-white rounded-2xl sm:rounded-[2.5rem] p-4 sm:p-8 border border-gray-100 shadow-xl relative overflow-hidden group">
                                 <div className={`absolute top-0 right-0 w-24 h-24 ${stat.bg} opacity-20 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150 duration-700`} />
-                                <div className={`w-12 h-12 ${stat.bg} rounded-2xl flex items-center justify-center mb-6`}>
-                                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                                <div className={`w-8 h-8 sm:w-12 sm:h-12 ${stat.bg} rounded-xl sm:rounded-2xl flex items-center justify-center mb-3 sm:mb-6`}>
+                                    <stat.icon className={`w-4 h-4 sm:w-6 sm:h-6 ${stat.color}`} />
                                 </div>
-                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">{stat.label}</p>
-                                <p className={`text-2xl font-black tracking-tight ${stat.color}`}>
+                                <p className="text-[8px] sm:text-[9px] font-black text-gray-400 uppercase tracking-[0.15em] sm:tracking-[0.2em] mb-1 leading-tight">{stat.label}</p>
+                                <p className={`text-base sm:text-2xl font-black tracking-tight ${stat.color} leading-tight`}>
                                     {stat.noFmt ? stat.value : `KSh ${fmt(stat.value)}`}
                                 </p>
-                                <p className="text-[10px] text-gray-400 font-bold mt-1">{stat.sub}</p>
+                                <p className="text-[9px] text-gray-400 font-bold mt-1 hidden sm:block">{stat.sub}</p>
                             </div>
                         ))}
                     </div>

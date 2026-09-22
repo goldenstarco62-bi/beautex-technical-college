@@ -28,13 +28,88 @@ async function writeAuditLog({ result_id, student_id, unit_name, cat_period_id, 
     }
 }
 
+// Helper to resolve student ID for a logged in student
+async function resolveStudentId(req) {
+    let studentId = req.user?.student_id;
+    if (!studentId && req.user?.email) {
+        const studentRec = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))', [req.user.email]);
+        if (studentRec) studentId = studentRec.id;
+    }
+    if (!studentId) studentId = req.user?.id;
+    return String(studentId || '').trim();
+}
+
+// Helper to get allowed courses & registered students for a teacher
+async function getTeacherAllowedCoursesAndStudents(req) {
+    const userRole = (req.user?.role || '').toLowerCase().trim();
+    if (userRole !== 'teacher') return null;
+
+    const userEmail = String(req.user?.email || '').toLowerCase().trim();
+    const userName = String(req.user?.name || '').toLowerCase().trim();
+
+    const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+    let tutorName = userName;
+    let facultyCoursesList = [];
+
+    if (faculty) {
+        tutorName = String(faculty.name || userName).toLowerCase().trim();
+        if (typeof faculty.courses === 'string') {
+            if (faculty.courses.startsWith('[')) {
+                try { facultyCoursesList = JSON.parse(faculty.courses); } catch (e) {}
+            } else {
+                facultyCoursesList = faculty.courses.split(',').map(s => s.trim()).filter(Boolean);
+            }
+        } else if (Array.isArray(faculty.courses)) {
+            facultyCoursesList = faculty.courses;
+        }
+    }
+
+    const allCourses = await query('SELECT id, name, instructor FROM courses');
+    const teacherCourseObjs = allCourses.filter(c => {
+        const isInstructor = c.instructor && c.instructor.toLowerCase().trim() === tutorName;
+        const isAssigned = facultyCoursesList.some(fn => fn.toLowerCase().trim() === (c.name || '').toLowerCase().trim());
+        return isInstructor || isAssigned;
+    });
+
+    const allowedCourseIds = teacherCourseObjs.map(c => String(c.id));
+    const allowedCourseNames = teacherCourseObjs.map(c => String(c.name).toLowerCase().trim());
+
+    // Get all students enrolled in these courses
+    const allStudents = await query('SELECT id, name, course FROM students');
+    const parseStudentCourses = (raw) => {
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw.map(x => String(x).toLowerCase().trim());
+        const s = String(raw).trim();
+        if (s.startsWith('{') && s.endsWith('}')) {
+            return s.slice(1, -1).split(',').map(c => c.replace(/"/g, '').toLowerCase().trim()).filter(Boolean);
+        }
+        if (s.startsWith('[')) {
+            try { return JSON.parse(s).map(c => String(c).toLowerCase().trim()); } catch (e) {}
+        }
+        return s.split(',').map(c => c.toLowerCase().trim()).filter(Boolean);
+    };
+
+    const enrolledStudentIds = new Set(
+        allStudents.filter(s => {
+            const sc = parseStudentCourses(s.course);
+            return sc.some(cn => allowedCourseNames.includes(cn));
+        }).map(s => String(s.id).trim())
+    );
+
+    return {
+        allowedCourseIds,
+        allowedCourseNames,
+        enrolledStudentIds
+    };
+}
+
 /**
  * GET /cat-results — List results with role-based filtering
  * Query params: period_id, course_id, unit_id, student_id, workflow_status
  */
 export async function getResults(req, res) {
     try {
-        const userRole = (req.user?.role || '').toLowerCase();
+        const userRole = (req.user?.role || '').toLowerCase().trim();
         const { period_id, course_id, unit_id, student_id, workflow_status } = req.query;
 
         let sql = `
@@ -50,13 +125,37 @@ export async function getResults(req, res) {
         `;
         const params = [];
 
-        // Students can only see their own PUBLISHED results
         if (userRole === 'student') {
-            const studentId = req.user?.student_id || req.user?.id;
-            sql += ' AND cr.student_id = ? AND cr.workflow_status = ?';
-            params.push(studentId, 'Published');
+            const sId = await resolveStudentId(req);
+            if (!sId) return res.json([]);
+            sql += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND cr.workflow_status = ?';
+            params.push(sId, sId, 'Published');
+        } else if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess || teacherAccess.allowedCourseIds.length === 0) {
+                return res.json([]);
+            }
+
+            const courseIds = teacherAccess.allowedCourseIds;
+            const courseNames = teacherAccess.allowedCourseNames;
+            const enrolledIdsArr = Array.from(teacherAccess.enrolledStudentIds);
+
+            if (enrolledIdsArr.length === 0) return res.json([]);
+
+            const coursePlaceholders = courseIds.map(() => '?').join(',');
+            const namePlaceholders = courseNames.map(() => '?').join(',');
+
+            sql += ` AND (cr.course_id IN (${coursePlaceholders}) OR LOWER(TRIM(c.name)) IN (${namePlaceholders}))`;
+            params.push(...courseIds, ...courseNames);
+
+            const studentPlaceholders = enrolledIdsArr.map(() => '?').join(',');
+            sql += ` AND LOWER(TRIM(cr.student_id)) IN (${studentPlaceholders})`;
+            params.push(...enrolledIdsArr.map(id => id.toLowerCase()));
+
+            if (student_id) { sql += ' AND cr.student_id = ?'; params.push(student_id); }
+            if (workflow_status) { sql += ' AND cr.workflow_status = ?'; params.push(workflow_status); }
         } else {
-            // Admins/teachers see all; teachers may be further filtered by their courses
+            // Admins/superadmins see all
             if (student_id) { sql += ' AND cr.student_id = ?'; params.push(student_id); }
             if (workflow_status) { sql += ' AND cr.workflow_status = ?'; params.push(workflow_status); }
         }
@@ -80,6 +179,11 @@ export async function getResults(req, res) {
  */
 export async function createResult(req, res) {
     try {
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+        if (userRole === 'student') {
+            return res.status(403).json({ error: 'Students are not authorized to create results.' });
+        }
+
         const {
             student_id, course_id, unit_id, unit_name,
             cat_period_id, marks, status, remarks
@@ -87,6 +191,20 @@ export async function createResult(req, res) {
 
         if (!student_id || !course_id || !cat_period_id || !unit_name) {
             return res.status(400).json({ error: 'student_id, course_id, cat_period_id and unit_name are required.' });
+        }
+
+        if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess) {
+                return res.status(403).json({ error: 'Teacher profile not found or unauthorized.' });
+            }
+            const courseIdStr = String(course_id).trim();
+            const studentIdStr = String(student_id).trim();
+            const courseAllowed = teacherAccess.allowedCourseIds.includes(courseIdStr);
+            const studentAllowed = teacherAccess.enrolledStudentIds.has(studentIdStr);
+            if (!courseAllowed || !studentAllowed) {
+                return res.status(403).json({ error: 'You are only authorized to enter results for your registered students and assigned courses.' });
+            }
         }
 
         // Get period to calculate max_marks
@@ -187,10 +305,23 @@ export async function createResult(req, res) {
  */
 export async function batchCreateResults(req, res) {
     try {
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+        if (userRole === 'student') {
+            return res.status(403).json({ error: 'Students are not authorized to create results.' });
+        }
+
         const { cat_period_id, course_id, unit_id, unit_name, entries } = req.body;
 
         if (!cat_period_id || !course_id || !unit_name || !Array.isArray(entries)) {
             return res.status(400).json({ error: 'cat_period_id, course_id, unit_name and entries[] are required.' });
+        }
+
+        let teacherAccess = null;
+        if (userRole === 'teacher') {
+            teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess || !teacherAccess.allowedCourseIds.includes(String(course_id).trim())) {
+                return res.status(403).json({ error: 'You are only authorized to enter results for your assigned courses.' });
+            }
         }
 
         const period = await queryOne('SELECT * FROM cat_periods WHERE id = ?', [cat_period_id]);
@@ -206,6 +337,12 @@ export async function batchCreateResults(req, res) {
         for (const entry of entries) {
             const { student_id, marks, status, remarks } = entry;
             if (!student_id) continue;
+
+            if (teacherAccess && !teacherAccess.enrolledStudentIds.has(String(student_id).trim())) {
+                const st = await queryOne('SELECT name FROM students WHERE id = ?', [student_id]);
+                errors.push({ student_id, student_name: st?.name || student_id, error: 'Student is not registered in your assigned course.' });
+                continue;
+            }
 
             let percentage = null;
             let grade = null;
@@ -296,7 +433,20 @@ export async function updateResult(req, res) {
         const existing = await queryOne('SELECT * FROM cat_results WHERE id = ?', [id]);
         if (!existing) return res.status(404).json({ error: 'Result not found.' });
 
-        const userRole = (req.user?.role || '').toLowerCase();
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+        if (userRole === 'student') {
+            return res.status(403).json({ error: 'Students are not authorized to edit results.' });
+        }
+
+        if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess) return res.status(403).json({ error: 'Unauthorized.' });
+            const courseAllowed = teacherAccess.allowedCourseIds.includes(String(existing.course_id).trim());
+            const studentAllowed = teacherAccess.enrolledStudentIds.has(String(existing.student_id).trim());
+            if (!courseAllowed || !studentAllowed) {
+                return res.status(403).json({ error: 'You are only authorized to edit results for your registered students and assigned courses.' });
+            }
+        }
 
         // Block editing approved/published results unless admin/superadmin
         if (['Approved', 'Published'].includes(existing.workflow_status) &&
@@ -375,6 +525,21 @@ async function updateWorkflowStatus(req, res, fromStatus, toStatus, actionName) 
         const existing = await queryOne('SELECT * FROM cat_results WHERE id = ?', [id]);
         if (!existing) return res.status(404).json({ error: 'Result not found.' });
 
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+        if (userRole === 'student') {
+            return res.status(403).json({ error: 'Students are not authorized to change result status.' });
+        }
+
+        if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess) return res.status(403).json({ error: 'Unauthorized.' });
+            const courseAllowed = teacherAccess.allowedCourseIds.includes(String(existing.course_id).trim());
+            const studentAllowed = teacherAccess.enrolledStudentIds.has(String(existing.student_id).trim());
+            if (!courseAllowed || !studentAllowed) {
+                return res.status(403).json({ error: 'You are only authorized to manage results for your registered students and assigned courses.' });
+            }
+        }
+
         if (existing.workflow_status !== fromStatus) {
             return res.status(400).json({
                 error: `Result must be in "${fromStatus}" status to ${actionName}. Current status: ${existing.workflow_status}.`
@@ -423,6 +588,9 @@ async function updateWorkflowStatus(req, res, fromStatus, toStatus, actionName) 
  */
 export async function bulkSubmitResults(req, res) {
     try {
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+        if (userRole === 'student') return res.status(403).json({ error: 'Students cannot submit results.' });
+
         const { cat_period_id, course_id, unit_id } = req.body;
         if (!cat_period_id) return res.status(400).json({ error: 'cat_period_id is required.' });
 
@@ -431,6 +599,22 @@ export async function bulkSubmitResults(req, res) {
         const params = [cat_period_id];
         if (course_id) { sql += ' AND course_id=?'; params.push(course_id); }
         if (unit_id)   { sql += ' AND unit_id=?';   params.push(unit_id); }
+
+        if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess || teacherAccess.allowedCourseIds.length === 0) {
+                return res.json({ message: '0 result(s) submitted.', changes: 0 });
+            }
+            const coursePlaceholders = teacherAccess.allowedCourseIds.map(() => '?').join(',');
+            sql += ` AND course_id IN (${coursePlaceholders})`;
+            params.push(...teacherAccess.allowedCourseIds);
+
+            const enrolledArr = Array.from(teacherAccess.enrolledStudentIds);
+            if (enrolledArr.length === 0) return res.json({ message: '0 result(s) submitted.', changes: 0 });
+            const studentPlaceholders = enrolledArr.map(() => '?').join(',');
+            sql += ` AND LOWER(TRIM(student_id)) IN (${studentPlaceholders})`;
+            params.push(...enrolledArr.map(id => id.toLowerCase()));
+        }
 
         const result = await run(sql, params);
         return res.json({ message: `${result.changes || 0} result(s) submitted.`, changes: result.changes });
@@ -490,10 +674,21 @@ export async function bulkPublishResults(req, res) {
 export async function deleteResult(req, res) {
     try {
         const { id } = req.params;
-        const userRole = (req.user?.role || '').toLowerCase();
+        const userRole = (req.user?.role || '').toLowerCase().trim();
+        if (userRole === 'student') return res.status(403).json({ error: 'Students cannot delete results.' });
 
         const existing = await queryOne('SELECT * FROM cat_results WHERE id = ?', [id]);
         if (!existing) return res.status(404).json({ error: 'Result not found.' });
+
+        if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess) return res.status(403).json({ error: 'Unauthorized.' });
+            const courseAllowed = teacherAccess.allowedCourseIds.includes(String(existing.course_id).trim());
+            const studentAllowed = teacherAccess.enrolledStudentIds.has(String(existing.student_id).trim());
+            if (!courseAllowed || !studentAllowed) {
+                return res.status(403).json({ error: 'You are only authorized to delete results for your registered students and assigned courses.' });
+            }
+        }
 
         // Only superadmin can delete published results
         if (existing.workflow_status === 'Published' && userRole !== 'superadmin') {
@@ -521,9 +716,41 @@ export async function deleteResult(req, res) {
  */
 export async function getResultStats(req, res) {
     try {
+        const userRole = (req.user?.role || '').toLowerCase().trim();
         const { cat_period_id, course_id } = req.query;
         let baseCondition = 'WHERE 1=1';
         const params = [];
+
+        if (userRole === 'student') {
+            const sId = await resolveStudentId(req);
+            if (!sId) {
+                return res.json({
+                    total: 0, gradeBreakdown: [], workflowBreakdown: [], avgPercentage: 0, passRate: { passed: 0, failed: 0, total: 0 }
+                });
+            }
+            baseCondition += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND cr.workflow_status = ?';
+            params.push(sId, sId, 'Published');
+        } else if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            if (!teacherAccess || teacherAccess.allowedCourseIds.length === 0) {
+                return res.json({
+                    total: 0, gradeBreakdown: [], workflowBreakdown: [], avgPercentage: 0, passRate: { passed: 0, failed: 0, total: 0 }
+                });
+            }
+            const coursePlaceholders = teacherAccess.allowedCourseIds.map(() => '?').join(',');
+            baseCondition += ` AND cr.course_id IN (${coursePlaceholders})`;
+            params.push(...teacherAccess.allowedCourseIds);
+
+            const enrolledArr = Array.from(teacherAccess.enrolledStudentIds);
+            if (enrolledArr.length === 0) {
+                return res.json({
+                    total: 0, gradeBreakdown: [], workflowBreakdown: [], avgPercentage: 0, passRate: { passed: 0, failed: 0, total: 0 }
+                });
+            }
+            const studentPlaceholders = enrolledArr.map(() => '?').join(',');
+            baseCondition += ` AND LOWER(TRIM(cr.student_id)) IN (${studentPlaceholders})`;
+            params.push(...enrolledArr.map(id => id.toLowerCase()));
+        }
 
         if (cat_period_id) { baseCondition += ' AND cr.cat_period_id = ?'; params.push(cat_period_id); }
         if (course_id)     { baseCondition += ' AND cr.course_id = ?';     params.push(course_id); }
@@ -570,11 +797,25 @@ export async function getResultStats(req, res) {
  */
 export async function getResultAuditLog(req, res) {
     try {
+        const userRole = (req.user?.role || '').toLowerCase().trim();
         const { student_id, cat_period_id, limit = 100 } = req.query;
         let sql = 'SELECT * FROM result_audit_logs WHERE 1=1';
         const params = [];
 
-        if (student_id)    { sql += ' AND student_id = ?';    params.push(student_id); }
+        if (userRole === 'student') {
+            const sId = await resolveStudentId(req);
+            sql += ' AND (LOWER(TRIM(student_id)) = LOWER(TRIM(?)) OR student_id = ?)';
+            params.push(sId, sId);
+        } else if (userRole === 'teacher') {
+            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+            const enrolledArr = teacherAccess ? Array.from(teacherAccess.enrolledStudentIds) : [];
+            if (enrolledArr.length === 0) return res.json([]);
+            const placeholders = enrolledArr.map(() => '?').join(',');
+            sql += ` AND LOWER(TRIM(student_id)) IN (${placeholders})`;
+            params.push(...enrolledArr.map(id => id.toLowerCase()));
+        }
+
+        if (student_id && userRole !== 'student') { sql += ' AND student_id = ?'; params.push(student_id); }
         if (cat_period_id) { sql += ' AND cat_period_id = ?'; params.push(cat_period_id); }
 
         sql += ` ORDER BY created_at DESC LIMIT ${parseInt(limit) || 100}`;

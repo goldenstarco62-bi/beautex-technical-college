@@ -520,14 +520,12 @@ export default function Students() {
         <div className="space-y-6">
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 {/* Header Section */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 sm:gap-4 mb-4 sm:mb-6">
                     <div>
                         <h1 className="text-2xl font-black text-gray-800 uppercase tracking-tighter">Students</h1>
                         <p className="text-sm text-gray-400 font-medium">Manage and view all student information</p>
                     </div>
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                        {/* FIX: Export generates a CSV instead of calling window.print() */}
-                        {/* FIX: Using correct Download icon instead of Plus icon */}
+                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
                         {isAdmin && (
                             <>
                                 <button
@@ -545,13 +543,13 @@ export default function Students() {
                                         a.href = url; a.download = 'students.csv'; a.click();
                                         URL.revokeObjectURL(url);
                                     }}
-                                    className="flex-1 sm:flex-none justify-center bg-gold text-maroon px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-gold-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
+                                    className="flex-1 sm:flex-none justify-center bg-gold text-maroon px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:bg-gold-dark transition-all font-bold text-[9px] sm:text-[10px] uppercase tracking-widest shadow-sm"
                                 >
                                     <Download className="w-4 h-4" /> Export
                                 </button>
                                 <button
                                     onClick={() => { resetForm(); setShowModal(true); }}
-                                    className="flex-1 sm:flex-none justify-center bg-maroon text-white px-4 py-3 rounded-xl flex items-center gap-2 hover:bg-maroon-dark transition-all font-bold text-[10px] uppercase tracking-widest shadow-sm"
+                                    className="flex-1 sm:flex-none justify-center bg-maroon text-white px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl flex items-center gap-1.5 sm:gap-2 hover:bg-maroon-dark transition-all font-bold text-[9px] sm:text-[10px] uppercase tracking-widest shadow-sm"
                                 >
                                     <Plus className="w-4 h-4" /> Add Student
                                 </button>
@@ -560,14 +558,13 @@ export default function Students() {
                     </div>
                 </div>
 
-                {/* Statistics Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {/* Statistics Row — always 3 cols, compact on mobile */}
+                <div className="grid grid-cols-3 gap-3 sm:gap-6">
                     {[
                         { label: 'Total Students', value: students.length, color: 'text-gray-800' },
                         { label: 'Active', value: students.filter(s => s.status === 'Active').length, color: 'text-gray-800' },
                         {
-                            label: 'Average GPA',
-                            // FIX: Calculate dynamically from real student data instead of hardcoded '3.70'
+                            label: 'Avg GPA',
                             value: (() => {
                                 const withGpa = students.filter(s => s.gpa > 0);
                                 if (withGpa.length === 0) return '—';
@@ -576,9 +573,9 @@ export default function Students() {
                             color: 'text-gray-800'
                         },
                     ].map((stat, i) => (
-                        <div key={i} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm transition-transform hover:-translate-y-1">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{stat.label}</p>
-                            <p className={`text-2xl font-black ${stat.color}`}>{stat.value}</p>
+                        <div key={i} className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border border-gray-100 shadow-sm transition-transform hover:-translate-y-1">
+                            <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 leading-tight">{stat.label}</p>
+                            <p className={`text-xl sm:text-2xl font-black ${stat.color}`}>{stat.value}</p>
                         </div>
                     ))}
                 </div>
@@ -691,8 +688,9 @@ export default function Students() {
                     </div>
                 )}
 
-                {/* Table wrapper for horizontal scroll */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-xl overflow-x-auto custom-scrollbar">
+                {/* Table wrapper for horizontal scroll with right-edge affordance */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden scroll-table-wrapper">
+                    <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-[1000px]">
                         <thead>
                             <tr className="bg-gray-50/50 border-b border-gray-100">
@@ -798,23 +796,24 @@ export default function Students() {
                             ))}
                         </tbody>
                     </table>
-                </div>
+                    </div>{/* /overflow-x-auto */}
+                </div>{/* /scroll-table-wrapper */}
 
                 {/* Pagination Controls */}
                 {students.length > PAGE_SIZE && (
-                    <div className="flex items-center justify-between bg-white border border-gray-100 rounded-2xl px-6 py-4 shadow-sm">
-                        <p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
-                            Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, students.length)}–{Math.min(currentPage * PAGE_SIZE, students.length)} of {students.length} students
+                    <div className="flex flex-col sm:flex-row items-center justify-between bg-white border border-gray-100 rounded-2xl px-4 sm:px-6 py-3 sm:py-4 shadow-sm gap-2">
+                        <p className="text-[10px] sm:text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                            Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, students.length)}–{Math.min(currentPage * PAGE_SIZE, students.length)} of {students.length}
                         </p>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                 disabled={currentPage === 1}
-                                className="px-5 py-2.5 rounded-xl bg-gray-50 border border-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-maroon hover:text-white hover:border-maroon disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                                className="px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gray-50 border border-gray-100 text-[9px] sm:text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-maroon hover:text-white hover:border-maroon disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                             >
                                 ← Prev
                             </button>
-                            <div className="flex items-center gap-1">
+                            <div className="pagination-pages flex items-center gap-1">
                                 {Array.from({ length: Math.ceil(students.length / PAGE_SIZE) }, (_, i) => i + 1).map(page => (
                                     <button
                                         key={page}

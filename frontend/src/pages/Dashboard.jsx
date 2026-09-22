@@ -319,13 +319,13 @@ function AdminDashboard() {
     }
 
     return (
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 text-gray-800 dark:text-gray-100">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 text-gray-800 dark:text-gray-100">
             
             {/* Left/Main Column: 75% wide on desktop */}
             <div className="xl:col-span-3 space-y-6">
                 
                 {/* Curved Premium Maroon Banner with glass cards inside */}
-                <div className="relative overflow-hidden rounded-3xl p-6 md:p-8 text-white shadow-2xl" style={{ background: 'linear-gradient(135deg, var(--portal-theme, #800000) 0%, color-mix(in srgb, var(--portal-theme, #800000) 50%, #000) 100%)' }}>
+                <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 text-white shadow-2xl" style={{ background: 'linear-gradient(135deg, var(--portal-theme, #800000) 0%, color-mix(in srgb, var(--portal-theme, #800000) 50%, #000) 100%)' }}>
                     <div className="absolute top-0 right-0 w-96 h-96 bg-[#ffd700]/5 rounded-full translate-x-1/3 -translate-y-1/3 blur-3xl pointer-events-none" />
                     <div className="absolute bottom-0 left-1/4 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                     
@@ -334,7 +334,7 @@ function AdminDashboard() {
                         {/* Left welcome text */}
                         <div className="max-w-md">
                             <span className="text-[10px] font-black text-yellow-300 uppercase tracking-[0.25em]">{greeting}</span>
-                            <h1 className="text-2xl md:text-3xl font-black mt-1 leading-tight flex items-center gap-2">
+                            <h1 className="text-xl sm:text-2xl md:text-3xl font-black mt-1 leading-tight flex items-center gap-2">
                                 {user?.name || 'Administrator'} <span className="animate-bounce">👋</span>
                             </h1>
                             <p className="text-[11px] text-white/70 font-medium mt-2 leading-relaxed">
@@ -353,52 +353,53 @@ function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Top Banner Right Sub-cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto shrink-0">
+                        {/* Top Banner Right Sub-cards — always 3 columns, compact on mobile */}
+                        <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full lg:w-auto shrink-0">
                             
                             {/* Card 1: Current Term */}
-                            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 min-w-[150px]">
-                                <div className="flex items-center gap-1.5 text-white/60 mb-2">
-                                    <GraduationCap className="w-3.5 h-3.5 text-yellow-300" />
-                                    <span className="text-[8px] font-black uppercase tracking-widest">Current Term</span>
+                            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1 sm:gap-1.5 text-white/60 mb-1.5 sm:mb-2">
+                                    <GraduationCap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-yellow-300 shrink-0" />
+                                    <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest truncate">Current Term</span>
                                 </div>
-                                <p className="text-[11px] font-black leading-none">{termLabel}</p>
-                                <div className="mt-3">
+                                <p className="text-[9px] sm:text-[11px] font-black leading-none truncate">{termLabel}</p>
+                                <div className="mt-2 sm:mt-3">
                                     <div className="h-1 bg-white/10 rounded-full overflow-hidden">
                                         <div className="h-full bg-gradient-to-r from-yellow-300 to-yellow-500 rounded-full" style={{ width: `${termProgress}%` }} />
                                     </div>
-                                    <span className="text-[8px] font-bold text-white/50 mt-1 block">{termProgress}% Complete</span>
+                                    <span className="text-[7px] sm:text-[8px] font-bold text-white/50 mt-1 block">{termProgress}% Complete</span>
                                 </div>
                             </div>
 
                             {/* Card 2: Date & Time */}
-                            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 min-w-[150px]">
-                                <div className="flex items-center gap-1.5 text-white/60 mb-2">
-                                    <Calendar className="w-3.5 h-3.5 text-yellow-300" />
-                                    <span className="text-[8px] font-black uppercase tracking-widest">Today is</span>
+                            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4">
+                                <div className="flex items-center gap-1 sm:gap-1.5 text-white/60 mb-1.5 sm:mb-2">
+                                    <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-yellow-300 shrink-0" />
+                                    <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest">Today</span>
                                 </div>
-                                <p className="text-[11px] font-black leading-tight">{todayDayStr}, {now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                                <div className="mt-2 flex items-center gap-1 text-[9px] font-bold text-white/60">
-                                    <Clock className="w-3 h-3 text-yellow-300/80" />
+                                <p className="text-[9px] sm:text-[11px] font-black leading-tight">{todayDayStr}</p>
+                                <p className="text-[7px] sm:text-[8px] font-bold text-white/50 leading-tight">{now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                <div className="mt-1.5 sm:mt-2 flex items-center gap-1 text-[8px] sm:text-[9px] font-bold text-white/60">
+                                    <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-yellow-300/80" />
                                     {todayTimeStr}
                                 </div>
                             </div>
 
                             {/* Card 3: Fee Defaulters */}
-                            <div className="bg-amber-950/40 backdrop-blur-md border border-amber-500/25 rounded-2xl p-4 min-w-[150px] flex flex-col justify-between">
+                            <div className="bg-amber-950/40 backdrop-blur-md border border-amber-500/25 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between">
                                 <div>
-                                    <div className="flex items-center gap-1.5 text-amber-300 mb-1.5">
-                                        <AlertCircle className="w-3.5 h-3.5" />
-                                        <span className="text-[8px] font-black uppercase tracking-widest">Fee Defaulters</span>
+                                    <div className="flex items-center gap-1 sm:gap-1.5 text-amber-300 mb-1 sm:mb-1.5">
+                                        <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                                        <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest leading-tight">Defaulters</span>
                                     </div>
-                                    <p className="text-xs font-black text-white leading-tight">{feeAlerts.defaulterCount} Students</p>
-                                    <p className="text-[9px] font-semibold text-amber-200/80">KSh {feeAlerts.totalPending.toLocaleString()} Pending</p>
+                                    <p className="text-[10px] sm:text-xs font-black text-white leading-tight">{feeAlerts.defaulterCount} Students</p>
+                                    <p className="text-[7px] sm:text-[9px] font-semibold text-amber-200/80 leading-tight">KSh {feeAlerts.totalPending.toLocaleString()}</p>
                                 </div>
                                 <button
                                     onClick={() => navigate('/monthly-fee-tracker')}
-                                    className="mt-3 block text-center py-1.5 bg-yellow-400 hover:bg-yellow-500 text-maroon font-black text-[8px] uppercase tracking-widest rounded-xl transition-all shadow-md"
+                                    className="mt-2 sm:mt-3 block text-center py-1 sm:py-1.5 bg-yellow-400 hover:bg-yellow-500 text-maroon font-black text-[7px] sm:text-[8px] uppercase tracking-widest rounded-lg sm:rounded-xl transition-all shadow-md"
                                 >
-                                    View Details
+                                    View
                                 </button>
                             </div>
 
@@ -406,8 +407,8 @@ function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* 5 Stats Cards Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {/* 5 Stats Cards Row — 2 cols on mobile, 3 on sm, 5 on lg */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
                     {statsDisplay.map((stat, idx) => {
                         const Icon = stat.icon;
                         const isUp = stat.trend === 'up';

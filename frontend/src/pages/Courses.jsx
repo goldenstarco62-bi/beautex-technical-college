@@ -144,13 +144,13 @@ export default function Courses() {
             </div>
 
             {/* Courses Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
                 {courses.length > 0 ? (
                     courses.map((course) => (
-                        <div key={course.id} className="card-light p-8 hover:shadow-2xl hover:scale-[1.02] transition-all group border-b-4 border-b-maroon/10 hover:border-b-gold">
-                            <div className="flex justify-between items-start mb-6">
-                                <div className={`p-4 rounded-2xl bg-maroon/5 group-hover:bg-maroon transition-colors`}>
-                                    <BookOpen className="w-6 h-6 text-maroon group-hover:text-gold transition-colors" />
+                        <div key={course.id} className="card-light p-4 sm:p-8 hover:shadow-2xl hover:scale-[1.02] transition-all group border-b-4 border-b-maroon/10 hover:border-b-gold">
+                            <div className="flex justify-between items-start mb-4 sm:mb-6">
+                                <div className={`p-3 sm:p-4 rounded-2xl bg-maroon/5 group-hover:bg-maroon transition-colors`}>
+                                    <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-maroon group-hover:text-gold transition-colors" />
                                 </div>
                                 <div className="flex gap-2">
                                     <button
@@ -177,8 +177,8 @@ export default function Courses() {
                                 </div>
                             </div>
 
-                            <h3 className="text-xl font-black text-maroon tracking-tight mb-2 uppercase">{course.name}</h3>
-                            <p className="text-xs font-black text-maroon/40 uppercase tracking-widest mb-6">{course.department}</p>
+                            <h3 className="text-lg sm:text-xl font-black text-maroon tracking-tight mb-1 sm:mb-2 uppercase">{course.name}</h3>
+                            <p className="text-xs font-black text-maroon/40 uppercase tracking-widest mb-4 sm:mb-6">{course.department}</p>
 
                             <div className="mt-4 flex flex-col gap-2">
                                 <div className="flex items-center gap-2 text-[10px] text-maroon/40 font-bold uppercase tracking-widest">
@@ -191,7 +191,7 @@ export default function Courses() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2 mt-6">
+                            <div className="space-y-2 mt-4 sm:mt-6">
                                 <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
                                     <span className="text-maroon/40">Enrollment</span>
                                     <span className="text-maroon">
@@ -346,14 +346,14 @@ export default function Courses() {
             {discussionEntity && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-end">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-500" onClick={() => setDiscussionEntity(null)}></div>
-                    <div className="relative w-full max-w-xl h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 overflow-y-auto p-8 sm:p-12 custom-scrollbar">
-                        <div className="flex justify-between items-start mb-8">
+                    <div className="relative w-full max-w-xl h-full bg-white shadow-2xl animate-in slide-in-from-right duration-500 overflow-y-auto p-4 sm:p-12 custom-scrollbar">
+                        <div className="flex justify-between items-start mb-6 sm:mb-8">
                             <div>
-                                <h2 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight leading-none">{discussionEntity.title}</h2>
-                                <p className="text-[10px] text-maroon/40 font-bold uppercase tracking-[0.3em] mt-3 italic">Curriculum Discourse Module</p>
+                                <h2 className="text-xl sm:text-3xl font-black text-maroon uppercase tracking-tight leading-none">{discussionEntity.title}</h2>
+                                <p className="text-[9px] sm:text-[10px] text-maroon/40 font-bold uppercase tracking-[0.3em] mt-2 sm:mt-3 italic">Curriculum Discourse Module</p>
                             </div>
-                            <button onClick={() => setDiscussionEntity(null)} className="p-3 bg-gray-50 hover:bg-black hover:text-white rounded-2xl transition-all shadow-sm">
-                                <X className="w-5 h-5" />
+                            <button onClick={() => setDiscussionEntity(null)} className="p-2 sm:p-3 bg-gray-50 hover:bg-black hover:text-white rounded-xl sm:rounded-2xl transition-all shadow-sm">
+                                <X className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                         </div>
 

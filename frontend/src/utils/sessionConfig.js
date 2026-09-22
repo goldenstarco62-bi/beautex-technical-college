@@ -4,10 +4,10 @@
  * The timeout is driven by the VITE_SESSION_TIMEOUT_MINUTES env variable so it
  * can be changed per-environment without touching source code.
  *
- * Default: 2 minutes (120 000 ms)
+ * Default: 5 minutes (300 000 ms)
  */
 
-const TIMEOUT_MINUTES = Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES) || 2;
+const TIMEOUT_MINUTES = Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES) || 5;
 
 /** Total inactivity window before forced logout (ms). */
 export const SESSION_TIMEOUT_MS = TIMEOUT_MINUTES * 60 * 1000;
