@@ -180,7 +180,7 @@ export default function Students() {
 
     const validateForm = () => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!formData.id) return 'Enrollment ID is required';
+        if (!formData.id) return 'Admission Number is required';
         if (!formData.name) return 'Full Name is required';
         if (!emailRegex.test(formData.email)) return 'Invalid email format';
         if (!formData.course || (Array.isArray(formData.course) && formData.course.length === 0)) return 'Please select at least one specialization course';
@@ -309,7 +309,7 @@ export default function Students() {
 
     const resetForm = () => {
         setFormData({
-            id: generateNextId(),
+            id: '',
             name: '',
             email: '',
             course: [],
@@ -530,7 +530,7 @@ export default function Students() {
                             <>
                                 <button
                                     onClick={() => {
-                                        const rows = [['Student ID', 'Name', 'Email', 'Course', 'GPA', 'Status', 'Contact']];
+                                        const rows = [['Admission Number', 'Name', 'Email', 'Course', 'GPA', 'Status', 'Contact']];
                                         students.forEach(s => rows.push([
                                             s.id, s.name, s.email,
                                             Array.isArray(s.course) ? s.course.join(' | ') : s.course,
@@ -591,7 +591,7 @@ export default function Students() {
                             onChange={(e) => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
                             onFocus={() => setShowSuggestions(true)}
                             onKeyDown={handleSuggestionKeyDown}
-                            placeholder="Search by name, ID, email, course, department..."
+                            placeholder="Search by name, Admission No., email, course, department..."
                             className="w-full pl-12 pr-10 py-3 bg-gray-50/50 border border-gray-100 rounded-xl text-sm font-medium text-gray-700 placeholder-gray-300 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all"
                         />
                         {searchQuery ? (
@@ -702,7 +702,7 @@ export default function Students() {
                                         onChange={toggleSelectAll}
                                     />
                                 </th>
-                                {['Student ID', 'Name', 'Course', 'Intake', 'Enrolled Date', 'Remaining', 'Status', 'Contact', 'Actions'].map(h => (
+                                {['Admission Number', 'Name', 'Course', 'Intake', 'Enrolled Date', 'Remaining', 'Status', 'Contact', 'Actions'].map(h => (
                                     <th key={h} className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
                                 ))}
                             </tr>
@@ -1167,14 +1167,13 @@ export default function Students() {
                                     <div className="flex-1 space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div className="space-y-1">
-                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment ID</label>
+                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Admission Number</label>
                                                 <input
                                                     type="text"
                                                     value={formData.id}
                                                     onChange={(e) => setFormData({ ...formData, id: e.target.value })}
                                                     className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/10"
                                                     placeholder="BT/2024/001"
-                                                    disabled={!!editingStudent}
                                                     required
                                                 />
                                             </div>
