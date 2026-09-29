@@ -94,6 +94,12 @@ export default function UnitsCovered() {
     const [printTarget, setPrintTarget]   = useState(null); // { student, marks }
     const [viewTarget, setViewTarget]     = useState(null);
 
+    // Inline transcript editing state (for canManage users)
+    const [editingTranscriptMark, setEditingTranscriptMark] = useState(null); // { unit_id, student_id, course_id }
+    const [transcriptEditValue, setTranscriptEditValue]     = useState('');
+    const [transcriptEditUnitName, setTranscriptEditUnitName] = useState('');
+    const [savingTranscriptMark, setSavingTranscriptMark]   = useState(false);
+
     // Manage units state
     const [showManageUnitsModal, setShowManageUnitsModal] = useState(false);
     const [newUnitName, setNewUnitName]                   = useState('');
@@ -113,6 +119,7 @@ export default function UnitsCovered() {
 
     const handleAddUnit = async (e) => {
         e.preventDefault();
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         if (!newUnitName.trim() || !selectedCourse) return;
         try {
             await courseUnitsAPI.createUnit(selectedCourse, { name: newUnitName.trim() });
@@ -126,6 +133,7 @@ export default function UnitsCovered() {
     };
 
     const handleUpdateUnit = async (unitId) => {
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         if (!editingUnitName.trim() || !selectedCourse) return;
         try {
             await courseUnitsAPI.updateUnit(selectedCourse, unitId, { name: editingUnitName.trim() });
@@ -140,6 +148,7 @@ export default function UnitsCovered() {
     };
 
     const handleDeleteUnit = async (unitId) => {
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         openConfirm('Delete this unit? This will also remove all student marks recorded for it.', async () => {
             try {
                 await courseUnitsAPI.deleteUnit(selectedCourse, unitId);
@@ -153,7 +162,7 @@ export default function UnitsCovered() {
     };
 
     const handleMoveUnit = async (index, direction) => {
-        if (!selectedCourse) return;
+        if (!canManage || !selectedCourse) return;
         const newUnits = [...units];
         const swapWith = direction === 'up' ? index - 1 : index + 1;
         if (swapWith < 0 || swapWith >= newUnits.length) return;
@@ -262,6 +271,7 @@ export default function UnitsCovered() {
 
     // ── Batch submit ───────────────────────────────────────────────────────────
     const handleBatchSubmit = async () => {
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         if (!selectedCourse || !batchUnit) return showToast('Select a course and unit first.', 'error');
 
         // Validate all entered marks before submitting
@@ -297,6 +307,7 @@ export default function UnitsCovered() {
     // ── Single mark submit ─────────────────────────────────────────────────────
     const handleSingleSubmit = async (e) => {
         e.preventDefault();
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         // Client-side marks validation
         const marksNum = Number(singleForm.marks);
         if (singleForm.marks === '' || singleForm.marks === undefined) {
@@ -319,12 +330,14 @@ export default function UnitsCovered() {
     };
 
     const handleEditMark = (mark) => {
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         setEditingMark(mark);
         setSingleForm({ student_id: mark.student_id, course_id: mark.course_id, unit_id: mark.unit_id, marks: mark.marks });
         setShowModal(true);
     };
 
     const handleDeleteMark = async (id) => {
+        if (!canManage) return showToast('Unauthorized action.', 'error');
         openConfirm('Delete this mark record? This action cannot be undone.', async () => {
             try {
                 await studentUnitMarksAPI.deleteMark(id);
@@ -336,6 +349,61 @@ export default function UnitsCovered() {
             }
         });
     };
+
+    // ── Inline transcript mark + unit-name edit ───────────────────────────────
+    const handleSaveTranscriptMark = async () => {
+        if (!canManage || !editingTranscriptMark) return;
+        const marksNum = Number(transcriptEditValue);
+        if (transcriptEditValue === '' || isNaN(marksNum) || marksNum < 0 || marksNum > 100) {
+            return showToast('Marks must be a number between 0 and 100.', 'error');
+        }
+        if (!transcriptEditUnitName.trim()) {
+            return showToast('Module / Unit name cannot be empty.', 'error');
+        }
+        try {
+            setSavingTranscriptMark(true);
+            // Save the marks
+            await studentUnitMarksAPI.saveMark({
+                student_id: editingTranscriptMark.student_id,
+                course_id:  editingTranscriptMark.course_id,
+                unit_id:    editingTranscriptMark.unit_id,
+                marks:      marksNum,
+            });
+            // Save the unit name if it changed
+            if (transcriptEditUnitName.trim() !== editingTranscriptMark.original_unit_name) {
+                await courseUnitsAPI.updateUnit(
+                    editingTranscriptMark.course_id,
+                    editingTranscriptMark.unit_id,
+                    { name: transcriptEditUnitName.trim() }
+                );
+            }
+            // Refresh all marks then rebuild viewTarget with fresh data
+            await loadAll();
+            refreshUnits();
+            showToast('Record updated successfully.', 'success');
+            setEditingTranscriptMark(null);
+            setTranscriptEditValue('');
+            setTranscriptEditUnitName('');
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to update record.', 'error');
+        } finally {
+            setSavingTranscriptMark(false);
+        }
+    };
+
+    // Keep viewTarget.marks in sync when global marks refresh (e.g. after inline edit)
+    useEffect(() => {
+        if (!viewTarget) return;
+        const fresh = marks.filter(
+            m => String(m.student_id) === String(viewTarget.student.id) &&
+                 String(m.course_id)  === String(viewTarget.courseId)
+        );
+        if (fresh.length > 0) {
+            setViewTarget(prev => prev ? { ...prev, marks: fresh } : prev);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [marks]);
 
     // ── Transcript generation ──────────────────────────────────────────────────
     const handleViewTranscript = (studentId, courseId) => {
@@ -1137,13 +1205,19 @@ export default function UnitsCovered() {
                                 <p className="text-[10px] font-black uppercase tracking-widest mt-1 text-black/30">Units Covered — Official Academic Registry</p>
                             </div>
                             <div className="flex items-center gap-2">
+                                {canManage && (
+                                    <span className="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 bg-maroon/5 text-maroon rounded-full border border-maroon/10">
+                                        Click <Edit className="w-2.5 h-2.5 inline-block" /> to edit marks or module name
+                                    </span>
+                                )}
                                 <button
                                     onClick={() => handleDownloadTranscript(viewTarget.student.id, viewTarget.courseId)}
                                     className="p-2 transition-all shadow-sm bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl text-maroon"
+                                    title="Download Transcript PDF"
                                 >
                                     <FileDown className="w-5 h-5" />
                                 </button>
-                                <button onClick={() => setViewTarget(null)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                                <button onClick={() => { setViewTarget(null); setEditingTranscriptMark(null); setTranscriptEditValue(''); setTranscriptEditUnitName(''); }} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
                                     <X className="w-6 h-6 text-black/30" />
                                 </button>
                             </div>
@@ -1192,17 +1266,99 @@ export default function UnitsCovered() {
                                                         <th className="px-5 py-3 text-center text-[10px] font-black uppercase tracking-widest text-black/40">Marks (%)</th>
                                                         <th className="px-5 py-3 text-center text-[10px] font-black uppercase tracking-widest text-black/40">Grade</th>
                                                         <th className="px-5 py-3 text-left text-[10px] font-black uppercase tracking-widest text-black/40">Lecturer</th>
+                                                        {canManage && (
+                                                            <th className="px-5 py-3 text-center text-[10px] font-black uppercase tracking-widest text-black/40">Edit</th>
+                                                        )}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-black/5">
-                                                    {cu.map((u, i) => (
-                                                        <tr key={i} className="hover:bg-maroon/[0.012] transition-colors">
-                                                            <td className="px-5 py-4"><p className="text-xs font-black uppercase text-black">{u.unit_name}</p></td>
-                                                            <td className="px-5 py-4 text-center"><span className="text-xs font-black text-black">{parseFloat(u.marks).toFixed(1)}%</span></td>
-                                                            <td className="px-5 py-4 text-center"><GradeChip marks={parseFloat(u.marks).toFixed(0)} grade={u.grade} /></td>
-                                                            <td className="px-5 py-4"><p className="text-[11px] font-bold text-black/50 uppercase">{u.lecturer || '—'}</p></td>
-                                                        </tr>
-                                                    ))}
+                                                    {cu.map((u, i) => {
+                                                        const isEditingThis =
+                                                            canManage &&
+                                                            editingTranscriptMark &&
+                                                            String(editingTranscriptMark.unit_id)    === String(u.unit_id) &&
+                                                            String(editingTranscriptMark.student_id) === String(u.student_id) &&
+                                                            String(editingTranscriptMark.course_id)  === String(u.course_id);
+                                                        return (
+                                                            <tr key={i} className="hover:bg-maroon/[0.012] transition-colors">
+                                                                <td className="px-5 py-4">
+                                                                    {isEditingThis ? (
+                                                                        <input
+                                                                            type="text"
+                                                                            value={transcriptEditUnitName}
+                                                                            onChange={e => setTranscriptEditUnitName(e.target.value)}
+                                                                            className="w-full min-w-[140px] border border-maroon/40 rounded-xl px-2.5 py-1.5 text-xs font-black text-black uppercase focus:outline-none focus:ring-1 focus:ring-maroon"
+                                                                            placeholder="Module / Unit Name"
+                                                                        />
+                                                                    ) : (
+                                                                        <p className="text-xs font-black uppercase text-black">{u.unit_name}</p>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-5 py-4 text-center">
+                                                                    {isEditingThis ? (
+                                                                        <input
+                                                                            type="number"
+                                                                            min="0"
+                                                                            max="100"
+                                                                            value={transcriptEditValue}
+                                                                            onChange={e => setTranscriptEditValue(e.target.value)}
+                                                                            className="w-20 border border-maroon/40 rounded-xl px-2 py-1.5 text-center text-xs font-black text-black focus:outline-none focus:ring-1 focus:ring-maroon"
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="text-xs font-black text-black">{parseFloat(u.marks).toFixed(1)}%</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-5 py-4 text-center">
+                                                                    <GradeChip
+                                                                        marks={isEditingThis ? Number(transcriptEditValue) || 0 : parseFloat(u.marks).toFixed(0)}
+                                                                        grade={isEditingThis
+                                                                            ? calcGradeLabel(Number(transcriptEditValue) || 0, thresholds)
+                                                                            : (u.grade || calcGradeLabel(parseFloat(u.marks), thresholds))}
+                                                                    />
+                                                                </td>
+                                                                <td className="px-5 py-4"><p className="text-[11px] font-bold text-black/50 uppercase">{u.lecturer || '—'}</p></td>
+                                                                {canManage && (
+                                                                    <td className="px-5 py-4 text-center">
+                                                                        {isEditingThis ? (
+                                                                            <div className="flex items-center justify-center gap-1.5">
+                                                                                <button
+                                                                                    onClick={handleSaveTranscriptMark}
+                                                                                    disabled={savingTranscriptMark}
+                                                                                    className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-green-700 disabled:opacity-50 transition-all"
+                                                                                >
+                                                                                    {savingTranscriptMark ? '…' : 'Save'}
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => { setEditingTranscriptMark(null); setTranscriptEditValue(''); setTranscriptEditUnitName(''); }}
+                                                                                    disabled={savingTranscriptMark}
+                                                                                    className="px-3 py-1.5 bg-black/5 text-black/50 rounded-xl text-[9px] font-black uppercase tracking-wider hover:bg-black/10 disabled:opacity-50 transition-all"
+                                                                                >
+                                                                                    Cancel
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditingTranscriptMark({
+                                                                                        unit_id:            u.unit_id,
+                                                                                        student_id:         u.student_id,
+                                                                                        course_id:          u.course_id,
+                                                                                        original_unit_name: u.unit_name,
+                                                                                    });
+                                                                                    setTranscriptEditValue(String(u.marks));
+                                                                                    setTranscriptEditUnitName(u.unit_name || '');
+                                                                                }}
+                                                                                className="p-1.5 rounded-xl border border-maroon/10 text-maroon/50 hover:bg-maroon/5 hover:text-maroon transition-all"
+                                                                                title="Edit Mark"
+                                                                            >
+                                                                                <Edit className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        )}
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                                 <tfoot>
                                                     <tr className="bg-black/[0.02] border-t-2 border-maroon/20">
@@ -1210,6 +1366,7 @@ export default function UnitsCovered() {
                                                         <td className="px-5 py-3 text-center"><span className="text-xs font-black text-maroon">{avg}%</span></td>
                                                         <td className="px-5 py-3 text-center"><GradeChip marks={avg} grade={calcGradeLabel(avg, thresholds)} /></td>
                                                         <td />
+                                                        {canManage && <td />}
                                                     </tr>
                                                 </tfoot>
                                             </table>
