@@ -63,6 +63,7 @@ const MonthlyFeeTracker = safeLazy(() => import('./pages/MonthlyFeeTracker'));
 const AttendanceSummary = safeLazy(() => import('./pages/AttendanceSummary'));
 const MonthlyAttendanceSummary = safeLazy(() => import('./pages/MonthlyAttendanceSummary'));
 const NotFound = safeLazy(() => import('./pages/NotFound'));
+const UnitManagement = safeLazy(() => import('./pages/UnitManagement'));
 
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -148,6 +149,8 @@ function App() {
                                 <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
                                 <Route path="/reports" element={<ProtectedRoute allowedRoles={['teacher', 'admin', 'superadmin']}><Layout><AcademicReports /></Layout></ProtectedRoute>} />
                                 <Route path="/academic-master" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><AcademicMaster /></Layout></ProtectedRoute>} />
+                                <Route path="/units" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><UnitManagement /></Layout></ProtectedRoute>} />
+                                <Route path="/unit-management" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><UnitManagement /></Layout></ProtectedRoute>} />
                                 <Route path="/finance" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'student']}><Layout><Finance /></Layout></ProtectedRoute>} />
                                 <Route path="/monthly-fee-tracker" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><MonthlyFeeTracker /></Layout></ProtectedRoute>} />
                                 <Route path="/inventory" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><Inventory /></Layout></ProtectedRoute>} />

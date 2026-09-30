@@ -423,13 +423,28 @@ export const inventoryAPI = {
     getReport: (type) => api.get(`inventory/reports/${type}`),
 };
 
-// ── Course Units API ──────────────────────────────────────────────────────────
+// ── Course Units API (per-course, legacy) ─────────────────────────────────────
 export const courseUnitsAPI = {
     getUnits: (courseId) => api.get(`courses/${courseId}/units`),
     createUnit: (courseId, data) => api.post(`courses/${courseId}/units`, data),
     updateUnit: (courseId, unitId, data) => api.put(`courses/${courseId}/units/${unitId}`, data),
     deleteUnit: (courseId, unitId) => api.delete(`courses/${courseId}/units/${unitId}`),
     reorderUnits: (courseId, order) => api.post(`courses/${courseId}/units/reorder`, { order }),
+};
+
+// ── Master Units API (independent unit library, admin-managed) ────────────────
+export const masterUnitsAPI = {
+    // Core CRUD
+    getAll: (params) => api.get('units', { params }),
+    create: (data) => api.post('units', data),
+    update: (unitId, data) => api.put(`units/${unitId}`, data),
+    updateStatus: (unitId, status) => api.patch(`units/${unitId}/status`, { status }),
+    delete: (unitId) => api.delete(`units/${unitId}`),
+    // Course assignments
+    getUnitCourses: (unitId) => api.get(`units/${unitId}/courses`),
+    assignToCourse: (unitId, course_id) => api.post(`units/${unitId}/courses`, { course_id }),
+    removeFromCourse: (unitId, courseId) => api.delete(`units/${unitId}/courses/${courseId}`),
+    setCourseAssignments: (courseId, unit_ids) => api.put(`courses/${courseId}/units/assignments`, { unit_ids }),
 };
 
 // ── Student Unit Marks API ────────────────────────────────────────────────────

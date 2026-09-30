@@ -119,14 +119,14 @@ export default function AcademicsHub() {
                 </div>
             </div>
 
-            {/* ── 3 Primary Subsections Grid ─────────────────────────────────── */}
+            {/* ── Primary Subsections Grid ─────────────────────────────────── */}
             <div className="space-y-4">
                 <div className="flex items-center gap-3">
                     <h2 className="text-xl font-black text-black uppercase tracking-tight">Academics Primary Modules</h2>
                     <div className="h-px flex-1 bg-black/10" />
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {/* 1. Units Covered Card */}
                     <div className="bg-white rounded-[2.5rem] p-8 border border-black/5 shadow-2xl flex flex-col justify-between group hover:border-maroon/30 transition-all duration-300 relative overflow-hidden">
                         <div className="space-y-4">
@@ -135,23 +135,22 @@ export default function AcademicsHub() {
                             </div>
                             <div>
                                 <span className="text-[9px] font-black text-gold uppercase tracking-[0.25em] bg-maroon px-3 py-1 rounded-full">Module 1</span>
-                                <h3 className="text-2xl font-black text-black uppercase tracking-tight mt-3">Units Covered</h3>
+                                <h3 className="text-xl font-black text-black uppercase tracking-tight mt-3">Units Covered</h3>
                                 <p className="text-xs text-black/60 font-medium leading-relaxed mt-2">
-                                    Competency-based module assessment matrix. Record individual and batch unit marks, evaluate student performance thresholds, and generate official academic transcripts.
+                                    Competency-based mark matrix & performance evaluation.
                                 </p>
                             </div>
                             <ul className="space-y-2 text-xs font-bold text-black/70 pt-2 border-t border-black/5">
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Per-Unit Competency Marks</li>
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Batch Class Grading</li>
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Printable Official Transcripts</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Competency Marks</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Class Batch Grading</li>
                             </ul>
                         </div>
-                        <div className="pt-8">
+                        <div className="pt-6">
                             <Link
                                 to="/grades"
-                                className="w-full bg-maroon text-gold py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
+                                className="w-full bg-maroon text-gold py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
                             >
-                                <span>Go to Units Covered</span>
+                                <span>Units Covered</span>
                                 <ArrowRight className="w-4 h-4" />
                             </Link>
                         </div>
@@ -165,23 +164,22 @@ export default function AcademicsHub() {
                             </div>
                             <div>
                                 <span className="text-[9px] font-black text-gold uppercase tracking-[0.25em] bg-maroon px-3 py-1 rounded-full">Module 2</span>
-                                <h3 className="text-2xl font-black text-black uppercase tracking-tight mt-3">Unit Coverage</h3>
+                                <h3 className="text-xl font-black text-black uppercase tracking-tight mt-3">Unit Coverage</h3>
                                 <p className="text-xs text-black/60 font-medium leading-relaxed mt-2">
-                                    Real-time per-student curriculum delivery tracker. Teachers log covered topics and study materials, while students verify and submit confirmation feedback.
+                                    Topic delivery log & student verification analytics.
                                 </p>
                             </div>
                             <ul className="space-y-2 text-xs font-bold text-black/70 pt-2 border-t border-black/5">
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Topic Delivery Tracking</li>
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Student Verification System</li>
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Completion Rate Analytics</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Topic Log Tracking</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Student Feedback</li>
                             </ul>
                         </div>
-                        <div className="pt-8">
+                        <div className="pt-6">
                             <Link
                                 to="/unit-coverage"
-                                className="w-full bg-maroon text-gold py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
+                                className="w-full bg-maroon text-gold py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
                             >
-                                <span>Go to Unit Coverage</span>
+                                <span>Unit Coverage</span>
                                 <ArrowRight className="w-4 h-4" />
                             </Link>
                         </div>
@@ -195,23 +193,51 @@ export default function AcademicsHub() {
                             </div>
                             <div>
                                 <span className="text-[9px] font-black text-gold uppercase tracking-[0.25em] bg-maroon px-3 py-1 rounded-full">Module 3</span>
-                                <h3 className="text-2xl font-black text-black uppercase tracking-tight mt-3">Results Workflow</h3>
+                                <h3 className="text-xl font-black text-black uppercase tracking-tight mt-3">CAT Results</h3>
                                 <p className="text-xs text-black/60 font-medium leading-relaxed mt-2">
-                                    Continuous Assessment Test (CAT) results management. Formal 4-step governance workflow: Draft → Submit → Approve → Publish, plus audit logging & printable result slips.
+                                    Governance workflow: Draft → Submit → Approve → Publish.
                                 </p>
                             </div>
                             <ul className="space-y-2 text-xs font-bold text-black/70 pt-2 border-t border-black/5">
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Multi-Step Governance Workflow</li>
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> CAT Assessment Period Control</li>
-                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Printable CAT Result Slips</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Results Governance</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Result Slips & Audits</li>
                             </ul>
                         </div>
-                        <div className="pt-8">
+                        <div className="pt-6">
                             <Link
                                 to="/results"
-                                className="w-full bg-maroon text-gold py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
+                                className="w-full bg-maroon text-gold py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
                             >
-                                <span>Go to CAT Results</span>
+                                <span>CAT Results</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
+                        </div>
+                    </div>
+
+                    {/* 4. Units Card */}
+                    <div className="bg-white rounded-[2.5rem] p-8 border border-black/5 shadow-2xl flex flex-col justify-between group hover:border-maroon/30 transition-all duration-300 relative overflow-hidden">
+                        <div className="space-y-4">
+                            <div className="w-14 h-14 bg-maroon/5 rounded-2xl flex items-center justify-center text-maroon group-hover:bg-maroon group-hover:text-gold transition-all duration-300 shadow-md">
+                                <BookOpen className="w-7 h-7" />
+                            </div>
+                            <div>
+                                <span className="text-[9px] font-black text-gold uppercase tracking-[0.25em] bg-maroon px-3 py-1 rounded-full">Module 4</span>
+                                <h3 className="text-xl font-black text-black uppercase tracking-tight mt-3">Units</h3>
+                                <p className="text-xs text-black/60 font-medium leading-relaxed mt-2">
+                                    Manage units, edit names/codes/status, and organize units by course.
+                                </p>
+                            </div>
+                            <ul className="space-y-2 text-xs font-bold text-black/70 pt-2 border-t border-black/5">
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Edit & Create Units</li>
+                                <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Organize Units by Course</li>
+                            </ul>
+                        </div>
+                        <div className="pt-6">
+                            <Link
+                                to="/units"
+                                className="w-full bg-maroon text-gold py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-maroon/90 transition-all group-hover:gap-3"
+                            >
+                                <span>Manage Units</span>
                                 <ArrowRight className="w-4 h-4" />
                             </Link>
                         </div>

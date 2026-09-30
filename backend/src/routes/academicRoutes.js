@@ -45,7 +45,19 @@ router.post('/grades', authenticateToken, authorizeRoles('teacher', 'admin', 'su
 router.put('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.updateGrade);
 router.delete('/grades/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), gradeController.deleteGrade);
 
-// ── Course Units (competency-based grading) ───────────────────────────────────
+// ── Master Units (admin-managed independent unit library) ─────────────────────
+router.get('/units', authenticateToken, courseUnitController.getAllUnits);
+router.post('/units', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.createUnit);
+router.put('/units/:unitId', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.updateUnit);
+router.patch('/units/:unitId/status', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.toggleUnitStatus);
+router.delete('/units/:unitId', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.deleteUnit);
+// Course–Unit assignment (many-to-many)
+router.get('/units/:unitId/courses', authenticateToken, courseUnitController.getUnitCourses);
+router.post('/units/:unitId/courses', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.assignUnitToCourse);
+router.delete('/units/:unitId/courses/:courseId', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.unassignUnitFromCourse);
+router.put('/courses/:courseId/units/assignments', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.setCourseUnitAssignments);
+
+// ── Course Units (competency-based grading, per-course) ───────────────────────
 router.get('/courses/:courseId/units', authenticateToken, courseUnitController.getCourseUnits);
 router.post('/courses/:courseId/units/reorder', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), courseUnitController.reorderCourseUnits);
 router.post('/courses/:courseId/units', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), courseUnitController.createCourseUnit);

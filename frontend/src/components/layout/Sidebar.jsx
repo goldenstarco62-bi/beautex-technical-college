@@ -28,6 +28,7 @@ import {
     CheckSquare,
     Award,
     Layers,
+    Library,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { academicAPI } from '../../services/api';
@@ -43,6 +44,7 @@ const navSections = [
         label: 'ACADEMICS',
         items: [
             { name: 'Academics Hub', path: '/academics', icon: Layers, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Units', path: '/units', icon: Library, roles: ['admin', 'superadmin'], highlight: 'Core' },
             { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Unit Coverage', path: '/unit-coverage', icon: CheckSquare, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Results', path: '/results', icon: Award, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },

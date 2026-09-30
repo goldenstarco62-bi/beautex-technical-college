@@ -121,12 +121,20 @@ export default function Courses() {
                     <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">Academic Programs & Curriculum</p>
                 </div>
                 {(user?.role === 'admin' || user?.role === 'superadmin') && (
-                    <button
-                        onClick={() => { resetForm(); setShowModal(true); }}
-                        className="w-full sm:w-auto bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-elite-maroon shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
-                    >
-                        <Plus className="w-5 h-5" /> Add New Course
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                        <a
+                            href="/units"
+                            className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-maroon px-5 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all font-black text-xs uppercase tracking-widest border border-maroon/10"
+                        >
+                            <BookOpen className="w-4 h-4 text-maroon" /> Manage Units
+                        </a>
+                        <button
+                            onClick={() => { resetForm(); setShowModal(true); }}
+                            className="w-full sm:w-auto bg-maroon text-gold px-6 py-3 rounded-2xl flex items-center justify-center gap-2 hover:bg-elite-maroon shadow-lg transition-all border border-gold/20 font-black text-xs uppercase tracking-widest"
+                        >
+                            <Plus className="w-5 h-5" /> Add New Course
+                        </button>
+                    </div>
                 )}
             </div>
 

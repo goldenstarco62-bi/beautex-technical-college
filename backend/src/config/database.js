@@ -827,13 +827,27 @@ async function runPostgresMigrations(database) {
         console.warn('⚠️ course_units migration warning (PostgreSQL):', e.message);
     }
 
-    // Migration: Extend course_units for Unit Coverage Tracking (PostgreSQL)
+    // Migration: Extend course_units for Unit Coverage Tracking & Master Units (PostgreSQL)
     try {
+        await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS code TEXT');
         await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS description TEXT');
         await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS expected_duration TEXT');
         await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS unit_remarks TEXT');
+        await database.query("ALTER TABLE course_units ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Active'");
         await database.query('ALTER TABLE course_units ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE');
-        console.log('✅ course_units extended for coverage tracking (PostgreSQL)');
+        await database.query('ALTER TABLE course_units ALTER COLUMN course_id DROP NOT NULL');
+
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS course_unit_assignments (
+                id SERIAL PRIMARY KEY,
+                course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                unit_id INTEGER NOT NULL REFERENCES course_units(id) ON DELETE CASCADE,
+                sort_order INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(course_id, unit_id)
+            )
+        `);
+        console.log('✅ course_units extended & course_unit_assignments table ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ course_units extension migration warning (PostgreSQL):', e.message);
     }
@@ -1156,6 +1170,39 @@ async function runSqliteMigrations(database) {
             )
         `);
         console.log('✅ notifications table ensured (SQLite)');
+
+        // --- Course Units & Course Unit Assignments (SQLite) ---
+        try {
+            const cuInfo = await database.all("PRAGMA table_info('course_units')");
+            const existingCuCols = cuInfo.map(c => c.name);
+            if (!existingCuCols.includes('code')) {
+                await database.run("ALTER TABLE course_units ADD COLUMN code TEXT");
+            }
+            if (!existingCuCols.includes('description')) {
+                await database.run("ALTER TABLE course_units ADD COLUMN description TEXT");
+            }
+            if (!existingCuCols.includes('status')) {
+                await database.run("ALTER TABLE course_units ADD COLUMN status TEXT DEFAULT 'Active'");
+                await database.run("UPDATE course_units SET status = 'Active' WHERE status IS NULL");
+            }
+            if (!existingCuCols.includes('updated_at')) {
+                await database.run("ALTER TABLE course_units ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP");
+            }
+
+            await database.run(`
+                CREATE TABLE IF NOT EXISTS course_unit_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    course_id TEXT NOT NULL,
+                    unit_id INTEGER NOT NULL,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(course_id, unit_id)
+                )
+            `);
+            console.log('✅ course_units & course_unit_assignments ensured (SQLite)');
+        } catch (e) {
+            console.warn('⚠️ course_units SQLite migration warning:', e.message);
+        }
 
         if (!existingDailySQLite.includes('facilities_issues')) {
             await database.run('ALTER TABLE daily_activity_reports ADD COLUMN facilities_issues TEXT');

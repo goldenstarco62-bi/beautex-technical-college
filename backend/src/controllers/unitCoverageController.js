@@ -33,7 +33,7 @@ function isSimilarName(a, b) {
 
 async function getActivePeriodLabel() {
     try {
-        const p = await queryOne(`SELECT name FROM academic_periods WHERE is_active = true LIMIT 1`, []);
+        const p = await queryOne(`SELECT name FROM academic_periods WHERE is_active = true OR is_active = 1 LIMIT 1`, []);
         return p?.name || null;
     } catch {
         return null;
@@ -577,7 +577,7 @@ export async function submitConfirmation(req, res) {
         );
         if (!log) return res.status(404).json({ error: 'Coverage log not found or does not belong to you' });
 
-        const activePeriod = await queryOne(`SELECT id FROM academic_periods WHERE is_active = true LIMIT 1`, []);
+        const activePeriod = await queryOne(`SELECT id FROM academic_periods WHERE is_active = true OR is_active = 1 LIMIT 1`, []);
 
         const existing = await queryOne(
             `SELECT * FROM unit_coverage_confirmations WHERE coverage_log_id = ? AND student_id = ?`,
