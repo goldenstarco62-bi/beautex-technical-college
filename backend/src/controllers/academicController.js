@@ -1,4 +1,5 @@
 import { query, queryOne, run } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 const isMongo = () => !!process.env.MONGODB_URI;
 
@@ -13,7 +14,8 @@ export async function getDepartments(req, res) {
         const depts = await query('SELECT * FROM departments ORDER BY name');
         res.json(depts);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getDepartments: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -32,7 +34,8 @@ export async function createDepartment(req, res) {
         );
         res.status(201).json({ message: 'Department created' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'createDepartment: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -51,7 +54,8 @@ export async function updateDepartment(req, res) {
         );
         res.json({ message: 'Department updated' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'updateDepartment: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -66,7 +70,8 @@ export async function deleteDepartment(req, res) {
         await run('DELETE FROM departments WHERE id = ?', [id]);
         res.json({ message: 'Department deleted' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'deleteDepartment: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -81,7 +86,8 @@ export async function getAcademicPeriods(req, res) {
         const periods = await query('SELECT * FROM academic_periods ORDER BY start_date DESC');
         res.json(periods);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getAcademicPeriods: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -100,7 +106,8 @@ export async function createAcademicPeriod(req, res) {
         );
         res.status(201).json({ message: 'Academic period created' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'createAcademicPeriod: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -121,7 +128,8 @@ export async function setActivePeriod(req, res) {
         await run('UPDATE academic_periods SET is_active = true, status = ? WHERE id = ?', ['Ongoing', id]);
         res.json({ message: 'Active period updated' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'setActivePeriod: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -136,7 +144,8 @@ export async function deleteAcademicPeriod(req, res) {
         await run('DELETE FROM academic_periods WHERE id = ?', [id]);
         res.json({ message: 'Academic period deleted' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'deleteAcademicPeriod: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -157,6 +166,7 @@ export async function promoteStudents(req, res) {
 
         res.json({ message: `${studentIds.length} students promoted to ${targetStatus}` });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'promoteStudents: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }

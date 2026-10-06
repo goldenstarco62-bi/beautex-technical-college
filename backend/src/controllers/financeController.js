@@ -2,6 +2,7 @@ import { query, queryOne, run, withTransaction, getProcessedDatabaseUrl, getCurr
 import notificationService from '../services/notificationService.js';
 import { syncStudentMonthlyFeeTracking } from './monthlyFeeController.js';
 import crypto from 'crypto';
+import logger from '../utils/logger.js';
 
 
 const isMongo = () => !!process.env.MONGODB_URI;
@@ -163,7 +164,8 @@ export async function getFeeStructures(req, res) {
         const fees = await query('SELECT fs.*, c.name as course_name FROM fee_structures fs JOIN courses c ON fs.course_id = c.id');
         res.json(fees);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getFeeStructures: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -182,7 +184,8 @@ export async function createFeeStructure(req, res) {
         );
         res.status(201).json({ message: 'Fee structure created' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'createFeeStructure: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -291,7 +294,8 @@ export async function getStudentFees(req, res) {
 
         res.json(fee);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getStudentFees: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -319,7 +323,8 @@ export async function getAllStudentFees(req, res) {
         `);
         res.json(fees);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getAllStudentFees: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -475,7 +480,7 @@ export async function syncAllFees(req, res) {
         res.json({ message: 'Ledger synchronized successfully' });
     } catch (error) {
         console.error('[finance] Sync Failed:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 export async function recordPayment(req, res) {
@@ -662,7 +667,8 @@ export async function recordPayment(req, res) {
         if (isDuplicateRef) {
             return res.status(409).json({ error: 'A payment with this transaction reference already exists. Please use a unique transaction reference.' });
         }
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'recordPayment: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -744,7 +750,8 @@ export async function getPayments(req, res) {
         }
         res.json(payments);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getPayments: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -878,7 +885,8 @@ export async function getFinanceAnalytics(req, res) {
             recentPayments
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'getFinanceAnalytics: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1047,7 +1055,8 @@ export async function updatePayment(req, res) {
 
         res.json({ message: 'Payment updated successfully' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'updatePayment: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1084,7 +1093,8 @@ export async function deletePayment(req, res) {
 
         res.json({ message: 'Payment deleted successfully' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'deletePayment: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1146,7 +1156,8 @@ export async function updateStudentFee(req, res) {
         }
         res.json({ message: 'Fee record synchronized successfully' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'updateStudentFee: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1173,7 +1184,8 @@ export async function updateFeeStructure(req, res) {
         );
         res.json({ message: 'Fee structure updated successfully' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'updateFeeStructure: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -1194,6 +1206,7 @@ export async function deleteFeeStructure(req, res) {
         await run('DELETE FROM fee_structures WHERE id = ?', [id]);
         res.json({ message: 'Fee structure deleted successfully' });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        logger.error({ err: error }, 'deleteFeeStructure: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }

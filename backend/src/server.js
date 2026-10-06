@@ -217,8 +217,7 @@ const ensureServices = async (req, res, next) => {
     } catch (error) {
         logger.error({ err: error }, '❌ Service initialization failed');
         res.status(500).json({
-            error: 'Service initialization failed. Website is partially offline.',
-            details: error.message
+            error: 'Service initialization failed. Website is partially offline.'
         });
     }
 };

@@ -316,7 +316,7 @@ export async function initializeMonthlyRecords(req, res) {
         return res.json({ message: 'Monthly fee records initialized successfully' });
     } catch (err) {
         console.error('Error in initializeMonthlyRecords:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -370,7 +370,7 @@ export async function getCurrentMonthStatus(req, res) {
         return res.json(summary);
     } catch (err) {
         console.error('Error in getCurrentMonthStatus:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -411,7 +411,7 @@ export async function getAdminAlerts(req, res) {
         });
     } catch (err) {
         console.error('Error in getAdminAlerts:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -469,7 +469,7 @@ export async function getAllMonthlyTracking(req, res) {
         return res.json(formattedRecords);
     } catch (err) {
         console.error('Error in getAllMonthlyTracking:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -505,7 +505,7 @@ export async function getStudentMonthlyTracking(req, res) {
         return res.json(formattedRecords);
     } catch (err) {
         console.error('Error in getStudentMonthlyTracking:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -595,7 +595,7 @@ export async function recordMonthlyPayment(req, res) {
         return res.json({ message: 'Monthly payment recorded and synced successfully' });
     } catch (err) {
         console.error('Error in recordMonthlyPayment:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -680,7 +680,7 @@ export async function getMonthlyReport(req, res) {
         });
     } catch (err) {
         console.error('Error in getMonthlyReport:', err);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -912,7 +912,7 @@ export async function exportReport(req, res) {
     } catch (err) {
         console.error('Error in exportReport:', err);
         if (!res.headersSent) {
-            return res.status(500).json({ error: err.message });
+            return res.status(500).json({ error: 'Internal server error' });
         }
     }
 }

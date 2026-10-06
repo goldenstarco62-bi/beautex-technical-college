@@ -126,7 +126,7 @@ export const requisitionController = {
             });
         } catch (error) {
             console.error('❌ Fetch requisitions failed:', error);
-            res.status(500).json({ error: 'Failed to fetch requisitions', details: error.message });
+            res.status(500).json({ error: 'Failed to fetch requisitions' });
         }
     },
 
@@ -195,7 +195,7 @@ export const requisitionController = {
             });
         } catch (error) {
             console.error('❌ Fetch requisition detail failed:', error);
-            res.status(500).json({ error: 'Failed to fetch requisition details', details: error.message });
+            res.status(500).json({ error: 'Failed to fetch requisition details' });
         }
     },
 
@@ -286,7 +286,7 @@ export const requisitionController = {
             });
         } catch (error) {
             console.error('❌ Create requisition failed:', error);
-            res.status(500).json({ error: 'Failed to create requisition', details: error.message });
+            res.status(500).json({ error: 'Failed to create requisition' });
         }
     },
 
@@ -335,7 +335,7 @@ export const requisitionController = {
             res.json({ message: 'Requisition submitted for approval', status: 'PENDING' });
         } catch (error) {
             console.error('❌ Submit requisition failed:', error);
-            res.status(500).json({ error: 'Failed to submit requisition', details: error.message });
+            res.status(500).json({ error: 'Failed to submit requisition' });
         }
     },
 
@@ -444,7 +444,7 @@ export const requisitionController = {
             res.json({ message: `Requisition ${reqHeader.requisition_number} approved successfully`, status: 'APPROVED' });
         } catch (error) {
             console.error('❌ Approve requisition failed:', error);
-            res.status(500).json({ error: 'Failed to approve requisition', details: error.message });
+            res.status(500).json({ error: 'Failed to approve requisition' });
         }
     },
 
@@ -504,7 +504,7 @@ export const requisitionController = {
             res.json({ message: `Requisition ${reqHeader.requisition_number} rejected`, status: 'REJECTED' });
         } catch (error) {
             console.error('❌ Reject requisition failed:', error);
-            res.status(500).json({ error: 'Failed to reject requisition', details: error.message });
+            res.status(500).json({ error: 'Failed to reject requisition' });
         }
     },
 
@@ -559,7 +559,7 @@ export const requisitionController = {
             res.json({ message: 'Modification request sent to trainer', status: 'MODIFICATION_REQUIRED' });
         } catch (error) {
             console.error('❌ Request modification failed:', error);
-            res.status(500).json({ error: 'Failed to request modification', details: error.message });
+            res.status(500).json({ error: 'Failed to request modification' });
         }
     },
 
@@ -636,7 +636,7 @@ export const requisitionController = {
             res.json({ message: 'Requisition resubmitted successfully', status: 'PENDING' });
         } catch (error) {
             console.error('❌ Resubmit requisition failed:', error);
-            res.status(500).json({ error: 'Failed to resubmit requisition', details: error.message });
+            res.status(500).json({ error: 'Failed to resubmit requisition' });
         }
     },
 
@@ -791,7 +791,7 @@ export const requisitionController = {
             });
         } catch (error) {
             console.error('❌ Issue items failed:', error);
-            res.status(500).json({ error: 'Failed to issue items', details: error.message });
+            res.status(500).json({ error: 'Failed to issue items' });
         }
     },
 
@@ -840,7 +840,7 @@ export const requisitionController = {
             res.json({ message: 'Collection confirmed. Requisition is now COMPLETED.', status: 'COMPLETED' });
         } catch (error) {
             console.error('❌ Confirm collection failed:', error);
-            res.status(500).json({ error: 'Failed to confirm collection', details: error.message });
+            res.status(500).json({ error: 'Failed to confirm collection' });
         }
     },
 
@@ -885,7 +885,7 @@ export const requisitionController = {
             res.json({ message: 'Requisition cancelled and stock reservations released', status: 'CANCELLED' });
         } catch (error) {
             console.error('❌ Cancel requisition failed:', error);
-            res.status(500).json({ error: 'Failed to cancel requisition', details: error.message });
+            res.status(500).json({ error: 'Failed to cancel requisition' });
         }
     },
 
@@ -956,7 +956,7 @@ export const requisitionController = {
             });
         } catch (error) {
             console.error('❌ Get stock summary failed:', error);
-            res.status(500).json({ error: 'Failed to fetch stock summary', details: error.message });
+            res.status(500).json({ error: 'Failed to fetch stock summary' });
         }
     }
 };

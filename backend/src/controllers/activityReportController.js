@@ -1,4 +1,5 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -48,7 +49,7 @@ export const getAllDailyReports = async (req, res) => {
         res.json({ success: true, data: reports });
     } catch (error) {
         console.error('Error fetching daily reports:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -67,7 +68,7 @@ export const getDailyReport = async (req, res) => {
         res.json({ success: true, data: report });
     } catch (error) {
         console.error('Error fetching daily report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -86,7 +87,7 @@ export const getDailyReportById = async (req, res) => {
         res.json({ success: true, data: report });
     } catch (error) {
         console.error('Error fetching daily report by ID:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -195,7 +196,8 @@ export const createDailyReport = async (req, res) => {
                 error: `A report for ${dateStr} in ${deptStr} already exists. Edit the existing record instead.`
             });
         }
-        res.status(500).json({ success: false, error: error.message, detail: error.stack });
+        logger.error({ err: error }, 'createDailyReport: unhandled error');
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -243,7 +245,8 @@ export const updateDailyReport = async (req, res) => {
         
         res.json({ success: true, message: 'Report updated successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        logger.error({ err: error }, 'updateDailyReport: unhandled error');
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -260,7 +263,7 @@ export const deleteDailyReport = async (req, res) => {
         res.json({ success: true, message: 'Report deleted successfully' });
     } catch (error) {
         console.error('Error deleting daily report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -283,7 +286,7 @@ export const getAllWeeklyReports = async (req, res) => {
         res.json({ success: true, data: reports });
     } catch (error) {
         console.error('Error fetching weekly reports:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -302,7 +305,7 @@ export const getWeeklyReport = async (req, res) => {
         res.json({ success: true, data: report });
     } catch (error) {
         console.error('Error fetching weekly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -354,7 +357,7 @@ export const createWeeklyReport = async (req, res) => {
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
         console.error('Error creating weekly report:', error);
-        res.status(500).json({ success: false, error: error.message, detail: error.stack });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -377,7 +380,7 @@ export const updateWeeklyReport = async (req, res) => {
         res.json({ success: true, message: 'Report updated successfully' });
     } catch (error) {
         console.error('Error updating weekly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -394,7 +397,7 @@ export const deleteWeeklyReport = async (req, res) => {
         res.json({ success: true, message: 'Report deleted successfully' });
     } catch (error) {
         console.error('Error deleting weekly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -417,7 +420,7 @@ export const getAllMonthlyReports = async (req, res) => {
         res.json({ success: true, data: reports });
     } catch (error) {
         console.error('Error fetching monthly reports:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -436,7 +439,7 @@ export const getMonthlyReport = async (req, res) => {
         res.json({ success: true, data: report });
     } catch (error) {
         console.error('Error fetching monthly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -481,7 +484,7 @@ export const createMonthlyReport = async (req, res) => {
         res.status(201).json({ success: true, data: { id: result.lastID } });
     } catch (error) {
         console.error('Error creating monthly report:', error);
-        res.status(500).json({ success: false, error: error.message, detail: error.stack });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -504,7 +507,7 @@ export const updateMonthlyReport = async (req, res) => {
         res.json({ success: true, message: 'Report updated successfully' });
     } catch (error) {
         console.error('Error updating monthly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -521,7 +524,7 @@ export const deleteMonthlyReport = async (req, res) => {
         res.json({ success: true, message: 'Report deleted successfully' });
     } catch (error) {
         console.error('Error deleting monthly report:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -641,7 +644,7 @@ export const getAutoCaptureStats = async (req, res) => {
         res.json({ success: true, data: stats });
     } catch (error) {
         console.error('Error auto-capturing stats:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -677,7 +680,7 @@ export const getReportsSummary = async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching reports summary:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -826,7 +829,7 @@ export const getConsolidatedReport = async (req, res) => {
         res.json({ success: true, data: consolidated });
     } catch (error) {
         console.error('Error consolidating reports:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -996,7 +999,8 @@ export const getDepartmentalConsolidatedReport = async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        logger.error({ err: error }, 'getDepartmentalConsolidatedReport: unhandled error');
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };
 
@@ -1219,6 +1223,6 @@ export const getAcademicSummary = async (req, res) => {
 
     } catch (error) {
         console.error('Error generating academic summary:', error);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 };

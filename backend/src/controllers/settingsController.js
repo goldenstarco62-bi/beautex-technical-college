@@ -232,7 +232,7 @@ export async function restoreFullBackup(req, res) {
         res.json({ message: 'Database backup restored successfully!' });
     } catch (error) {
         logger.error('Restore backup error:', error);
-        res.status(500).json({ error: 'Failed to restore database backup: ' + error.message });
+        res.status(500).json({ error: 'Failed to restore database backup' });
     }
 }
 

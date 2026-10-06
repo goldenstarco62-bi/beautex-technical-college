@@ -193,7 +193,7 @@ export async function getMaterials(req, res) {
         return res.json(enriched);
     } catch (error) {
         console.error('getMaterials error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -243,7 +243,7 @@ export async function downloadMaterial(req, res) {
         return res.redirect(302, fileUrl);
     } catch (error) {
         console.error('downloadMaterial error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -348,7 +348,7 @@ export async function uploadMaterial(req, res) {
         });
     } catch (error) {
         console.error('uploadMaterial error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 
@@ -386,6 +386,6 @@ export async function deleteMaterial(req, res) {
         res.json({ message: 'Material deleted' });
     } catch (error) {
         console.error('deleteMaterial error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 }

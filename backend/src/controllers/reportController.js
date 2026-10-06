@@ -300,7 +300,7 @@ export const updateReport = async (req, res) => {
         res.json(updatedReport);
     } catch (error) {
         console.error('Error updating report:', error);
-        res.status(500).json({ error: 'Internal server error', detail: error.message });
+        res.status(500).json({ error: 'Internal server error' });
     }
 };
 
@@ -318,7 +318,7 @@ export const generateDailyAttendanceReport = async (req, res) => {
         });
     } catch (error) {
         console.error('Error in generateDailyAttendanceReport controller:', error);
-        res.status(500).json({ error: 'Failed to generate attendance reports', detail: error.message });
+        res.status(500).json({ error: 'Failed to generate attendance reports' });
     }
 };
 

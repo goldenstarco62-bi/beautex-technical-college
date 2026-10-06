@@ -5,6 +5,7 @@ import { logActivity } from '../services/auditService.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { parseCoursesField } from '../utils/courseParser.js';
+import logger from '../utils/logger.js';
 
 // Generate random password
 function generatePassword(length = 12) {
@@ -326,7 +327,8 @@ export async function createStudent(req, res) {
         if (isDuplicate) {
             return res.status(400).json({ error: 'A student with this ID or email already exists. Please verify the credentials.' });
         }
-        res.status(500).json({ error: `Server Error: ${error.message}` });
+        logger.error({ err: error }, 'createStudent: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 

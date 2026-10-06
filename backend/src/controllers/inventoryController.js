@@ -1,5 +1,6 @@
 import { query, queryOne, run, getCurrentDateSQL, getDateIntervalSQL } from '../config/database.js';
 import notificationService from '../services/notificationService.js';
+import logger from '../utils/logger.js';
 
 
 const generateCode = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -102,7 +103,8 @@ export const getDashboardStats = async (req, res) => {
             stack: err.stack,
             code: err.code
         });
-        res.status(500).json({ error: 'Failed to fetch inventory dashboard metrics', details: err.message });
+        logger.error({ err: err }, 'getDashboardStats: unhandled error');
+        res.status(500).json({ error: 'Failed to fetch inventory dashboard metrics' });
     }
 };
 
@@ -292,7 +294,7 @@ export const createItem = async (req, res) => {
         res.json({ id: result.lastID, item_code, message: 'Item created successfully' });
     } catch (err) {
         console.error('Create item error:', err);
-        res.status(500).json({ error: 'Failed to create item', details: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
+        res.status(500).json({ error: 'Failed to create item' });
     }
 };
 

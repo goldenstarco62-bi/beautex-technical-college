@@ -4,6 +4,7 @@ import { sendLoginCredentials } from '../services/smsService.js';
 import bcrypt from 'bcryptjs';
 
 import crypto from 'crypto';
+import logger from '../utils/logger.js';
 
 // Generate random password
 function generatePassword(length = 12) {
@@ -164,7 +165,8 @@ export async function createFaculty(req, res) {
         if (isDuplicate) {
             return res.status(400).json({ error: 'A faculty member with this ID or email already exists.' });
         }
-        res.status(500).json({ error: `Server Error: ${error.message}` });
+        logger.error({ err: error }, 'createFaculty: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 }
 

@@ -1,4 +1,5 @@
 import { query, queryOne } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -50,7 +51,7 @@ const notificationController = {
             res.json(notifications);
         } catch (error) {
             console.error('Notification fetch error:', error);
-            res.status(500).json({ message: error.message });
+            res.status(500).json({ message: 'Internal server error' });
         }
     },
 
@@ -69,7 +70,8 @@ const notificationController = {
             }
             res.json({ success: true, id });
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            logger.error({ err: error }, 'isMongo: unhandled error');
+            res.status(500).json({ message: 'Internal server error' });
         }
     },
 
@@ -88,7 +90,8 @@ const notificationController = {
             }
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            logger.error({ err: error }, 'isMongo: unhandled error');
+            res.status(500).json({ message: 'Internal server error' });
         }
     },
 
@@ -112,7 +115,8 @@ const notificationController = {
             }
             res.json({ unreadCount: count });
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            logger.error({ err: error }, 'isMongo: unhandled error');
+            res.status(500).json({ message: 'Internal server error' });
         }
     }
 };

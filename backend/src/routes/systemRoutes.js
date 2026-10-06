@@ -6,6 +6,7 @@ import * as userController from '../controllers/userController.js';
 import * as settingsController from '../controllers/settingsController.js';
 import { authenticateToken, authorizeRoles, authorizeStudentEdit } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
+import logger from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -22,7 +23,8 @@ router.get('/debug/schema/:table', authenticateToken, authorizeRoles('superadmin
             return res.json({ type: 'sqlite', table, columns: cols });
         }
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        logger.error({ err: e }, 'systemRoutes: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
