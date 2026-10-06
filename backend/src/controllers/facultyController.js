@@ -156,7 +156,12 @@ export async function createFaculty(req, res) {
         }
     } catch (error) {
         console.error('Create faculty error:', error);
-        if (error.code === 'SQLITE_CONSTRAINT' || error.code === 23505 || error.code === 11000) {
+        const isDuplicate =
+            error.code === 'SQLITE_CONSTRAINT' ||
+            error.code === '23505' || error.code === 23505 ||
+            error.code === '11000' || error.code === 11000 ||
+            (error.message && error.message.includes('unique constraint'));
+        if (isDuplicate) {
             return res.status(400).json({ error: 'A faculty member with this ID or email already exists.' });
         }
         res.status(500).json({ error: `Server Error: ${error.message}` });

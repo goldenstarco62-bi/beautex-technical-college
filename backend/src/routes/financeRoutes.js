@@ -48,7 +48,10 @@ router.put('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, fin
 router.delete('/finance/payments/:id', authenticateToken, authorizeFinanceEdit, financeController.deletePayment);
 
 // ── M-Pesa ────────────────────────────────────────────────────────────────────
-// TODO: Add Safaricom IP whitelist / signature validation for production security
+// Public webhook (Safaricom cannot send our JWT). Authenticated inside the
+// controller via a shared secret: set MPESA_CALLBACK_TOKEN and configure the
+// Safaricom CallbackURL as  https://<host>/api/finance/mpesa-callback?token=<MPESA_CALLBACK_TOKEN>
+// Receipt-based idempotency + atomic ledger update are enforced in the handler.
 router.post('/finance/mpesa-callback', financeController.mpesaCallback);
 
 // ── Analytics ────────────────────────────────────────────────────────────────

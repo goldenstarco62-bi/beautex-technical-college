@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Bold, Underline, ListOrdered, Type } from 'lucide-react';
+import sanitizeHtml from '../../utils/sanitizeHtml';
 
 /**
  * A premium Rich Text Editor component for reporting.
@@ -13,16 +14,16 @@ const RichTextEditor = ({ value, onChange, placeholder, className, minHeight = '
     // Sync external value to editor only if it changed externally
     useEffect(() => {
         if (editorRef.current && value !== lastValueRef.current) {
-            editorRef.current.innerHTML = value || '';
+            editorRef.current.innerHTML = sanitizeHtml(value);
             lastValueRef.current = value;
         }
     }, [value]);
 
     const handleInput = () => {
         if (editorRef.current) {
-            const newValue = editorRef.current.innerHTML;
-            lastValueRef.current = newValue;
-            onChange(newValue);
+            const cleaned = sanitizeHtml(editorRef.current.innerHTML);
+            lastValueRef.current = cleaned;
+            onChange(cleaned);
         }
     };
 

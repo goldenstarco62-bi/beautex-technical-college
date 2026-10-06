@@ -1,3 +1,4 @@
+import sanitizeHtml from '../utils/sanitizeHtml';
 /**
  * ReportPDFTemplate.jsx
  * Professional Institutional Activity Report PDF Template
@@ -86,7 +87,7 @@ function FieldRow({ label, value, highlight = false }) {
             <div 
                 style={{ fontSize: 10, fontWeight: highlight ? 700 : 500, color: highlight ? '#111827' : '#374151', flex: 1, lineHeight: 1.5 }}
                 className="rich-text-content-pdf"
-                dangerouslySetInnerHTML={{ __html: value }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(value) }}
             />
         </div>
     );
@@ -422,7 +423,7 @@ function WeeklyTemplate({ r, user }) {
                     <div 
                         style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                         className="rich-text-content-pdf"
-                        dangerouslySetInnerHTML={{ __html: VAL(r.key_achievements, 'No achievements recorded for this week.') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.key_achievements, 'No achievements recorded for this week.')) }}
                     />
                 </Section>
 
@@ -431,7 +432,7 @@ function WeeklyTemplate({ r, user }) {
                     <div 
                         style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                         className="rich-text-content-pdf"
-                        dangerouslySetInnerHTML={{ __html: VAL(r.challenges_faced, 'No significant challenges reported.') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.challenges_faced, 'No significant challenges reported.')) }}
                     />
                 </Section>
 
@@ -440,7 +441,7 @@ function WeeklyTemplate({ r, user }) {
                     <div 
                         style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                         className="rich-text-content-pdf"
-                        dangerouslySetInnerHTML={{ __html: VAL(r.action_items, 'No action items pending.') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.action_items, 'No action items pending.')) }}
                     />
                 </Section>
 
@@ -456,7 +457,7 @@ function WeeklyTemplate({ r, user }) {
                         <div 
                             style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                             className="rich-text-content-pdf"
-                            dangerouslySetInnerHTML={{ __html: VAL(r.notes, 'No additional notes for this reporting period.') }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.notes, 'No additional notes for this reporting period.')) }}
                         />
                     </Section>
                 </div>
@@ -571,7 +572,7 @@ function MonthlyTemplate({ r, user }) {
                     <div 
                         style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                         className="rich-text-content-pdf"
-                        dangerouslySetInnerHTML={{ __html: VAL(r.strategic_initiatives, 'No strategic initiatives reported this month.') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.strategic_initiatives, 'No strategic initiatives reported this month.')) }}
                     />
                 </Section>
 
@@ -580,7 +581,7 @@ function MonthlyTemplate({ r, user }) {
                     <div 
                         style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                         className="rich-text-content-pdf"
-                        dangerouslySetInnerHTML={{ __html: VAL(r.major_achievements, 'No major achievements logged.') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.major_achievements, 'No major achievements logged.')) }}
                     />
                 </Section>
 
@@ -589,7 +590,7 @@ function MonthlyTemplate({ r, user }) {
                     <div 
                         style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                         className="rich-text-content-pdf"
-                        dangerouslySetInnerHTML={{ __html: VAL(r.challenges, 'Operational challenges were managed effectively.') }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.challenges, 'Operational challenges were managed effectively.')) }}
                     />
                 </Section>
 
@@ -599,7 +600,7 @@ function MonthlyTemplate({ r, user }) {
                         <div 
                             style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                             className="rich-text-content-pdf"
-                            dangerouslySetInnerHTML={{ __html: VAL(r.goals_next_month, 'Quality enhancement & institutional capacity scaling.') }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.goals_next_month, 'Quality enhancement & institutional capacity scaling.')) }}
                         />
                     </Section>
                 </div>
@@ -610,7 +611,7 @@ function MonthlyTemplate({ r, user }) {
                         <div 
                             style={{ fontSize: 10, color: '#374151', lineHeight: 1.6, margin: 0 }}
                             className="rich-text-content-pdf"
-                            dangerouslySetInnerHTML={{ __html: VAL(r.additional_notes, 'Standard institutional operations maintained per academic calendar.') }}
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(VAL(r.additional_notes, 'Standard institutional operations maintained per academic calendar.')) }}
                         />
                     </Section>
                 </div>
@@ -654,7 +655,7 @@ function InstitutionalTemplate({ r, user }) {
         return (
             <div className="rich-text-content-pdf">
                 {arr.map((item, i) => (
-                    <div key={i} style={{ marginBottom: 6, borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none', paddingBottom: 4 }} dangerouslySetInnerHTML={{ __html: item }} />
+                    <div key={i} style={{ marginBottom: 6, borderBottom: i < arr.length - 1 ? '1px solid #f3f4f6' : 'none', paddingBottom: 4 }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(item) }} />
                 ))}
             </div>
         );

@@ -3,10 +3,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Create transporter
-// For development, we use Ethereal if no real SMTP credentials are provided
+// SMTP credentials come exclusively from the environment (no hardcoded fallback).
 const getSmtpCredentials = () => {
-    const user = (process.env.SMTP_USER || 'beautexcollege01@gmail.com').trim();
-    const pass = (process.env.SMTP_PASS || 'tyly zhcc racc aqxv').trim();
+    const user = (process.env.SMTP_USER || '').trim();
+    const pass = (process.env.SMTP_PASS || '').trim();
+    if (!user || !pass) {
+        throw new Error('SMTP credentials missing: set SMTP_USER and SMTP_PASS environment variables.');
+    }
     return { user, pass };
 };
 
@@ -20,7 +23,7 @@ const createTransporter = async () => {
         connectionTimeout: 10000, // 10s
         greetingTimeout: 10000,   // 10s
         auth: { user, pass },
-        tls: { rejectUnauthorized: false }
+        tls: { rejectUnauthorized: true }
     };
 
     console.log(`📡 Initializing Secure SMTP Transporter for: ${user}`);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import {
     FileText,
     Search,
@@ -509,13 +510,13 @@ export default function DailyStudentLogs() {
                                 <div className="space-y-4">
                                     <div className="p-6 bg-gray-50 rounded-[2rem] border border-gray-100">
                                         <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-3">Today's Topics & Coverage</p>
-                                        <div className="text-sm text-gray-700 font-medium leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: `&ldquo;${viewingLog.topics_covered}&rdquo;` }} />
+                                        <div className="text-sm text-gray-700 font-medium leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(`&ldquo;${viewingLog.topics_covered}&rdquo;`) }} />
                                     </div>
 
                                     {viewingLog.trainer_remarks && (
                                         <div className="p-6 bg-gold/5 rounded-[2rem] border border-gold/10">
                                             <p className="text-[10px] font-black text-maroon/40 uppercase tracking-widest mb-3">Trainer's Insight & Observations</p>
-                                            <div className="text-sm text-gray-600 font-medium leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: `&ldquo;${viewingLog.trainer_remarks}&rdquo;` }} />
+                                            <div className="text-sm text-gray-600 font-medium leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(`&ldquo;${viewingLog.trainer_remarks}&rdquo;`) }} />
                                         </div>
                                     )}
                                 </div>
@@ -644,7 +645,7 @@ export default function DailyStudentLogs() {
                                             <History className="w-5 h-5 text-maroon" />
                                             <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Daily Academic Coverage</h3>
                                         </div>
-                                        <div className="text-sm text-gray-800 leading-relaxed font-serif min-h-[100px] rich-text-content" dangerouslySetInnerHTML={{ __html: printingLog.topics_covered }} />
+                                        <div className="text-sm text-gray-800 leading-relaxed font-serif min-h-[100px] rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(printingLog.topics_covered) }} />
                                     </div>
 
                                     {/* Trainer remarks */}
@@ -654,7 +655,7 @@ export default function DailyStudentLogs() {
                                                 <Shield className="w-5 h-5 text-maroon" />
                                                 <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Professional Remarks & Assessment</h3>
                                             </div>
-                                            <div className="text-sm text-gray-700 italic leading-relaxed font-serif rich-text-content" dangerouslySetInnerHTML={{ __html: printingLog.trainer_remarks }} />
+                                            <div className="text-sm text-gray-700 italic leading-relaxed font-serif rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(printingLog.trainer_remarks) }} />
                                         </div>
                                     )}
 

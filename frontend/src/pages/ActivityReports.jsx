@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import {
     Calendar, TrendingUp, BarChart3, FileText, Plus, RefreshCw, Download, Info, Users, BookOpen, Building2, Heart,
     X, Eye, Edit, Trash2, Zap, AlertCircle, User, Clock, FileDown, ChevronRight, ChevronLeft, Printer, CheckCircle, Check, Briefcase, Minus, QrCode, Fingerprint
@@ -1155,7 +1156,7 @@ export default function ActivityReports() {
                                                     <div className="flex flex-col items-center">
                                                         <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-0.5">Classes</span>
                                                         <div className="text-xl font-black text-gray-800"
-                                                            dangerouslySetInnerHTML={{ __html: report.classes_conducted || '—' }} />
+                                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(report.classes_conducted || '—') }} />
                                                     </div>
                                                 </div>
 
@@ -2564,15 +2565,15 @@ export default function ActivityReports() {
                                                 <div className="space-y-4">
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Classes Conducted</p>
-                                                        <p className="text-sm font-bold text-gray-700" dangerouslySetInnerHTML={{ __html: viewingReport.classes_conducted || 'None reported' }} />
+                                                        <p className="text-sm font-bold text-gray-700" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.classes_conducted || 'None reported') }} />
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Topics Covered</p>
-                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.topics_covered }} />
+                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.topics_covered) }} />
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-purple-300 uppercase tracking-widest mb-1">Practical Sessions</p>
-                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.practical_sessions }} />
+                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.practical_sessions) }} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -2584,11 +2585,11 @@ export default function ActivityReports() {
                                                 <div className="space-y-4">
                                                     <div>
                                                         <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Meetings Held</p>
-                                                        <p className="text-sm font-bold text-gray-700" dangerouslySetInnerHTML={{ __html: viewingReport.meetings_held || 'No meetings reported' }} />
+                                                        <p className="text-sm font-bold text-gray-700" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.meetings_held || 'No meetings reported') }} />
                                                     </div>
                                                     <div>
                                                         <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Admissions & Growth</p>
-                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.admissions_registrations }} />
+                                                        <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.admissions_registrations) }} />
                                                     </div>
                                                     <div className="flex gap-4">
                                                         <div>
@@ -2613,16 +2614,16 @@ export default function ActivityReports() {
                                                 {viewingReport.discipline_issues && (
                                                     <div>
                                                         <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Discipline Issues</p>
-                                                        <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.discipline_issues }} />
+                                                        <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.discipline_issues) }} />
                                                     </div>
                                                 )}
                                                 <div>
                                                     <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">Feedback & Concerns</p>
-                                                    <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.student_feedback || 'No concerns recorded' }} />
+                                                    <div className="text-sm text-gray-600 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.student_feedback || 'No concerns recorded') }} />
                                                 </div>
                                                 <div>
                                                     <p className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">Support Provided</p>
-                                                    <div className="text-sm text-gray-600 leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.counseling_support || 'Standard support' }} />
+                                                    <div className="text-sm text-gray-600 leading-relaxed italic rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.counseling_support || 'Standard support') }} />
                                                 </div>
                                             </div>
                                         </div>
@@ -2632,11 +2633,11 @@ export default function ActivityReports() {
                                             <div className="grid grid-cols-1 gap-4">
                                                 <div>
                                                     <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Classroom / Lab Condition</p>
-                                                    <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.facilities_issues || 'Optimal' }} />
+                                                    <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.facilities_issues || 'Optimal') }} />
                                                 </div>
                                                 <div>
                                                     <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest mb-1">Equipment Status</p>
-                                                    <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.equipment_maintenance || 'Operational' }} />
+                                                    <div className="text-sm text-gray-700 font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.equipment_maintenance || 'Operational') }} />
                                                 </div>
                                                 <div className="flex gap-4">
                                                     <div className="flex-1">
@@ -2674,15 +2675,15 @@ export default function ActivityReports() {
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 <div className="p-5 bg-red-50/50 rounded-2xl border border-red-50">
                                                     <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2">Challenges Faced</p>
-                                                    <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.challenges_faced || 'No major challenges reported' }} />
+                                                    <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.challenges_faced || 'No major challenges reported') }} />
                                                 </div>
                                                 <div className="p-5 bg-green-50/50 rounded-2xl border border-green-50">
                                                     <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-2">Actions Taken</p>
-                                                    <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.actions_taken || 'Routine operations' }} />
+                                                    <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.actions_taken || 'Routine operations') }} />
                                                 </div>
                                                 <div className="md:col-span-2 p-5 bg-blue-50/50 rounded-2xl border border-blue-50">
                                                     <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2">Plans for Next Day</p>
-                                                    <div className="text-sm text-gray-700 leading-relaxed font-bold rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.plans_for_next_day || 'Continue standard curriculum' }} />
+                                                    <div className="text-sm text-gray-700 leading-relaxed font-bold rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.plans_for_next_day || 'Continue standard curriculum') }} />
                                                 </div>
                                             </div>
                                         </div>
@@ -2690,7 +2691,7 @@ export default function ActivityReports() {
                                         {viewingReport.additional_notes && (
                                             <div className="p-6 bg-gray-50 rounded-2xl border-l-4 border-maroon">
                                                 <p className="text-[10px] font-black text-maroon uppercase tracking-widest mb-2">Final Remarks</p>
-                                                <div className="text-sm text-gray-600 italic leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.additional_notes }} />
+                                                <div className="text-sm text-gray-600 italic leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.additional_notes) }} />
                                             </div>
                                         )}
                                     </div>
@@ -2757,19 +2758,19 @@ export default function ActivityReports() {
                                         {viewingReport.key_achievements && (
                                             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
                                                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Key Achievements</p>
-                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.key_achievements }} />
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.key_achievements) }} />
                                             </div>
                                         )}
                                         {viewingReport.challenges_faced && (
                                             <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
                                                 <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Challenges Faced</p>
-                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.challenges_faced }} />
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.challenges_faced) }} />
                                             </div>
                                         )}
                                         {viewingReport.action_items && (
                                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Action Items (Next Week)</p>
-                                                <div className="text-sm text-gray-700 font-bold leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.action_items }} />
+                                                <div className="text-sm text-gray-700 font-bold leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.action_items) }} />
                                             </div>
                                         )}
                                         {viewingReport.notes && (
@@ -2862,25 +2863,25 @@ export default function ActivityReports() {
                                         {viewingReport.major_achievements && (
                                             <div className="p-4 bg-green-50 rounded-2xl border border-green-100">
                                                 <p className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1">Major Achievements</p>
-                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.major_achievements }} />
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.major_achievements) }} />
                                             </div>
                                         )}
                                         {viewingReport.challenges && (
                                             <div className="p-4 bg-red-50 rounded-2xl border border-red-100">
                                                 <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Critical Challenges</p>
-                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.challenges }} />
+                                                <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.challenges) }} />
                                             </div>
                                         )}
                                         {viewingReport.strategic_initiatives && (
                                             <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
                                                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Strategic Initiatives</p>
-                                                <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.strategic_initiatives }} />
+                                                <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.strategic_initiatives) }} />
                                             </div>
                                         )}
                                         {viewingReport.goals_next_month && (
                                             <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
                                                 <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Goals for Next Month</p>
-                                                <div className="text-sm text-gray-700 font-bold rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.goals_next_month }} />
+                                                <div className="text-sm text-gray-700 font-bold rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.goals_next_month) }} />
                                             </div>
                                         )}
                                     </div>

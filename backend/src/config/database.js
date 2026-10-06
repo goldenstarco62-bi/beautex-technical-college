@@ -1,6 +1,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { AsyncLocalStorage } from 'async_hooks';
 import pg from 'pg';
 import mongoose from 'mongoose';
 
@@ -15,6 +16,12 @@ const { Pool } = pg;
 let db;
 let pgPool;
 let mongoConnection;
+
+// Holds the dedicated Postgres client for the currently-running transaction (if any).
+// AsyncLocalStorage scopes it to the async call tree, so nested query/run/queryOne
+// calls inside withTransaction() transparently reuse the SAME connection instead of
+// checking out random pool connections (which would break atomicity).
+const txStore = new AsyncLocalStorage();
 
 /**
  * Determine the active SQL engine for query portability.
@@ -1863,10 +1870,21 @@ const translateSqlForPostgres = (sql) => {
 };
 
 /**
+ * Resolve the SQL executor for the current call. Inside an active Postgres
+ * transaction this returns the transaction's dedicated client so every statement
+ * shares one connection (real atomicity); otherwise the normal pool/connection.
+ */
+async function getExecutor() {
+    const tx = txStore.getStore();
+    if (tx?.client) return tx.client;
+    return getDb();
+}
+
+/**
  * Generic query function
  */
 export async function query(sql, params = []) {
-    const database = await getDb();
+    const database = await getExecutor();
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
@@ -1888,7 +1906,7 @@ export async function query(sql, params = []) {
  * Generic query one function
  */
 export async function queryOne(sql, params = []) {
-    const database = await getDb();
+    const database = await getExecutor();
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
@@ -1909,7 +1927,7 @@ export async function queryOne(sql, params = []) {
  * Generic run function for write operations
  */
 export async function run(sql, params = []) {
-    const database = await getDb();
+    const database = await getExecutor();
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
@@ -1917,15 +1935,12 @@ export async function run(sql, params = []) {
 
         pgSql = pgSql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT INTO');
 
-        if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.toLowerCase().includes('on conflict')) {
-            const lowerPgSql = pgSql.toLowerCase();
-            const insertTableMatch = lowerPgSql.match(/insert\s+into\s+([\w.]+)/);
-            const targetTable = insertTableMatch ? insertTableMatch[1].replace(/['"`]/g, '') : '';
-
-            if (targetTable === 'users' || targetTable.endsWith('.users')) {
-                pgSql += ' ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password, must_change_password = EXCLUDED.must_change_password, status = EXCLUDED.status';
-            }
-        }
+        // NOTE: Do NOT add implicit ON CONFLICT rewrites here. A previous rewrite
+        // turned every `INSERT INTO users` into an upsert that overwrote the
+        // password/status of any existing account with the same email — an
+        // account-takeover primitive and a divergence from SQLite behavior.
+        // Conflicts must surface as unique-violation errors; callers that want
+        // upsert semantics write an explicit ON CONFLICT clause.
 
         // Add RETURNING id if it's an INSERT statement and doesn't have one
         // Skip for tables known to not have an 'id' column (e.g. student_fees)
@@ -1982,14 +1997,20 @@ export async function withTransaction(fn) {
     }
 
     if (isPostgres) {
-        await database.query('BEGIN');
+        // Check out ONE dedicated client so BEGIN, every inner statement, and
+        // COMMIT all run on the same connection. Inner query/run/queryOne calls
+        // pick this up via txStore (see getExecutor).
+        const client = await database.connect();
         try {
-            const result = await fn();
-            await database.query('COMMIT');
+            await client.query('BEGIN');
+            const result = await txStore.run({ client }, () => fn(client));
+            await client.query('COMMIT');
             return result;
         } catch (err) {
-            await database.query('ROLLBACK').catch(() => {});
+            await client.query('ROLLBACK').catch(() => {});
             throw err;
+        } finally {
+            client.release();
         }
     } else {
         await database.run('BEGIN IMMEDIATE');

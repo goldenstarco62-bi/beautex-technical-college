@@ -1,9 +1,21 @@
 import { query, queryOne, run, withTransaction, getProcessedDatabaseUrl, getCurrentDateSQL, getDateIntervalSQL, getActiveDbEngine } from '../config/database.js';
 import notificationService from '../services/notificationService.js';
 import { syncStudentMonthlyFeeTracking } from './monthlyFeeController.js';
+import crypto from 'crypto';
 
 
 const isMongo = () => !!process.env.MONGODB_URI;
+
+/**
+ * Length-safe, constant-time string comparison to prevent timing attacks
+ * when verifying the M-Pesa webhook shared secret.
+ */
+function safeEqual(a, b) {
+    const bufA = Buffer.from(String(a ?? ''));
+    const bufB = Buffer.from(String(b ?? ''));
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Safely parses student course JSON arrays or strings into a clean single course name.
@@ -842,88 +854,132 @@ export async function getFinanceAnalytics(req, res) {
 }
 
 /**
- * Handle M-Pesa Daraja Callback (Webhook)
- * This endpoint receives the transaction result from Safaricom.
- */
-/**
- * Handle M-Pesa Daraja Callback (Webhook)
+ * Handle M-Pesa Daraja Callback (Webhook).
+ *
+ * Security model (Safaricom does NOT sign the STK callback body):
+ *  - Authenticate the caller with a shared secret token appended to the
+ *    CallbackURL as a query param (?token=...) and compared in constant time.
+ *  - Fail closed in production if the secret is not configured.
+ *  - Idempotency: MpesaReceiptNumber maps to payments.transaction_ref (UNIQUE),
+ *    so replays / concurrent duplicates never double-credit.
+ *  - The fee ledger is updated in a single atomic statement (no lost updates).
  */
 export async function mpesaCallback(req, res) {
+    // ── 1. Authenticate the caller via shared secret ──────────────────────────
+    const expectedToken = (process.env.MPESA_CALLBACK_TOKEN || '').trim();
+    const providedToken = String(req.query?.token || req.headers['x-mpesa-verification'] || '').trim();
+
+    if (!expectedToken) {
+        if (process.env.NODE_ENV === 'production') {
+            console.error('[mpesa] MPESA_CALLBACK_TOKEN is not configured — rejecting callback.');
+            return res.status(503).json({ ResultCode: 1, ResultDesc: 'Webhook not configured' });
+        }
+        console.warn('[mpesa] MPESA_CALLBACK_TOKEN not set — skipping verification (non-production only).');
+    } else if (!providedToken || !safeEqual(providedToken, expectedToken)) {
+        console.warn(`[mpesa] Rejected untrusted callback (invalid/missing token) from ${req.ip}`);
+        return res.status(401).json({ ResultCode: 1, ResultDesc: 'Unauthorized' });
+    }
+
     try {
-        // SECURITY: Basic verification of source (Header-based)
-        // In production, this should check Safaricom's specific authentication headers or certificates.
-        const authHeader = req.headers['x-mpesa-verification'];
-        // For now, we allow it to proceed but log an audit trail if the header is missing
-        if (!authHeader && process.env.NODE_ENV === 'production') {
-            console.warn('[mpesa] Untrusted M-Pesa Callback received (missing verification header)');
-            // return res.status(401).end(); // Uncomment this when headers are configured in Safaricom Portal
+        // ── 2. Validate payload shape ─────────────────────────────────────────
+        const body = req.body?.Body?.stkCallback;
+        if (!body || typeof body !== 'object') {
+            return res.status(400).json({ ResultCode: 1, ResultDesc: 'Malformed callback' });
         }
 
-        const body = req.body.Body.stkCallback;
-        console.log('[mpesa] M-Pesa Callback Received:', JSON.stringify(body, null, 2));
+        // Failed/cancelled transactions carry no money — acknowledge and stop.
+        if (body.ResultCode !== 0) {
+            console.warn(`[mpesa] Transaction not successful (${body.ResultCode}): ${body.ResultDesc}`);
+            return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
+        }
 
-        if (body.ResultCode === 0) {
-            console.log('[mpesa] M-Pesa Transaction Successful!');
-            const metadata = body.CallbackMetadata.Item;
-            const amount = metadata.find(i => i.Name === 'Amount')?.Value;
-            const receipt = metadata.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
-            const phone = metadata.find(i => i.Name === 'PhoneNumber')?.Value;
+        const metadata = body.CallbackMetadata?.Item || [];
+        const getMeta = (name) => metadata.find(i => i.Name === name)?.Value;
+        const rawAmount = getMeta('Amount');
+        const receipt = getMeta('MpesaReceiptNumber');
+        const phone = getMeta('PhoneNumber');
+        const amount = Number(rawAmount);
 
-            // Extract Student ID from the 'Remarks' or 'AccountReference' passed during STK initiation
-            // In a real flow, this is usually retrieved via a CheckoutRequestID mapping.
-            // For now, we attempt to find the student by phone number if ID is missing.
+        // Receipt number is the idempotency key — refuse to auto-credit without it.
+        if (!receipt) {
+            console.error('[mpesa] Successful callback missing MpesaReceiptNumber — flagged for manual review.');
+            return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
+        }
+        if (!Number.isFinite(amount) || amount <= 0) {
+            console.error(`[mpesa] Invalid amount on receipt ${receipt}: ${rawAmount}`);
+            return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
+        }
 
-            const CheckoutRequestID = body.CheckoutRequestID;
-            console.log(`[mpesa] Received KSh ${amount} from ${phone}. Receipt: ${receipt}, ID: ${CheckoutRequestID}`);
+        // ── 3. Idempotency guard (transaction_ref is UNIQUE) ───────────────────
+        const existing = await queryOne('SELECT id FROM payments WHERE transaction_ref = ?', [receipt]);
+        if (existing) {
+            console.log(`[mpesa] Duplicate callback for receipt ${receipt} — already processed. Skipping.`);
+            return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
+        }
 
-            // FIX: PERSIST TO DATABASE
-            // 1. Find student by phone (Fallback) or specific metadata if you passed it
-            const student = await queryOne('SELECT id, name FROM students WHERE TRIM(phone) LIKE ? OR contact LIKE ?', [`%${phone.slice(-9)}%`, `%${phone.slice(-9)}%`]);
+        console.log(`[mpesa] Processing KSh ${amount} from ${phone}. Receipt: ${receipt}`);
 
+        // ── 4. Resolve student by phone (last 9 digits) ────────────────────────
+        const phoneTail = phone ? String(phone).replace(/\D/g, '').slice(-9) : '';
+        let student = null;
+        if (phoneTail) {
+            student = await queryOne(
+                'SELECT id, name FROM students WHERE TRIM(phone) LIKE ? OR contact LIKE ?',
+                [`%${phoneTail}%`, `%${phoneTail}%`]
+            );
+        }
+
+        // ── 5. Record the payment (UNIQUE receipt = race-safe backstop) ────────
+        try {
             if (student) {
-                const student_id = student.id;
-                const recorded_by = 'M-Pesa Automation';
-
-                // Record the Receipt (Source of Truth)
                 await run(
                     'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, status, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                    [student_id, amount, 'M-Pesa', receipt, recorded_by, 'Tuition Fee', 'Completed']
+                    [student.id, amount, 'M-Pesa', receipt, 'M-Pesa Automation', 'Tuition Fee', 'Completed']
                 );
-
-                // Update the Summary Cache
-                let fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [student_id]);
-                if (fee) {
-                    const newPaid = (Number(fee.total_paid) || 0) + Number(amount);
-                    const newBalance = Math.max(0, (Number(fee.total_due) || 0) - newPaid);
-                    const newStatus = newBalance <= 0 && (Number(fee.total_due) || 0) > 0 ? 'Paid' : 'Partial';
-                    await run(
-                        'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = CURRENT_TIMESTAMP WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                        [newPaid, newBalance, newStatus, student_id]
-                    );
-                } else {
-                    // Create summary if missing — balance is 0 because total_due has not been set yet
-                    await run(
-                        'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                        [student_id, 0, amount, 0, 'Partial']
-                    );
-                }
-                console.log(`[mpesa] Ledger updated for ${student.name} (${student_id})`);
             } else {
-                console.warn(`[mpesa] Payment received but student with phone ${phone} not found in database.`);
-                // We should still record the payment with an 'Unassigned' status for manual matching
                 await run(
                     'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, status, remarks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                    ['PENDING_ASSIGNMENT', amount, 'M-Pesa', receipt, 'M-Pesa Automation', 'Tuition Fee', 'Completed', `From phone: ${phone}`]
+                    ['PENDING_ASSIGNMENT', amount, 'M-Pesa', receipt, 'M-Pesa Automation', 'Tuition Fee', 'Completed', `From phone: ${phone || 'unknown'}`]
                 );
             }
-        } else {
-            console.warn(`[mpesa] M-Pesa Transaction Failed/Cancelled: ${body.ResultDesc}`);
+        } catch (insertErr) {
+            // UNIQUE(transaction_ref) violation => a concurrent duplicate already recorded it.
+            if (/unique|duplicate/i.test(insertErr.message || '')) {
+                console.log(`[mpesa] Concurrent duplicate for receipt ${receipt} — skipping.`);
+                return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
+            }
+            throw insertErr;
         }
 
-        res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
+        // ── 6. Atomically update the fee ledger (single statement) ─────────────
+        // All RHS references use the pre-update row values, so this is race-safe
+        // and avoids the previous read-modify-write lost-update bug.
+        if (student) {
+            const upd = await run(
+                `UPDATE student_fees
+                 SET total_paid = COALESCE(total_paid, 0) + ?,
+                     balance = CASE WHEN COALESCE(total_due,0) - (COALESCE(total_paid,0) + ?) < 0 THEN 0 ELSE COALESCE(total_due,0) - (COALESCE(total_paid,0) + ?) END,
+                     status = CASE WHEN COALESCE(total_due,0) > 0 AND COALESCE(total_due,0) - (COALESCE(total_paid,0) + ?) <= 0 THEN 'Paid' ELSE 'Partial' END,
+                     last_payment_date = CURRENT_TIMESTAMP
+                 WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))`,
+                [amount, amount, amount, amount, student.id]
+            );
+            if (!upd || upd.changes === 0) {
+                await run(
+                    'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                    [student.id, 0, amount, 0, 'Partial']
+                );
+            }
+            console.log(`[mpesa] Ledger updated for ${student.name} (${student.id})`);
+        } else {
+            console.warn(`[mpesa] Payment recorded as PENDING_ASSIGNMENT (no student matched phone ${phone}).`);
+        }
+
+        return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
     } catch (error) {
-        console.error('[mpesa] M-Pesa Callback Processing Error:', error.message);
-        res.status(200).json({ ResultCode: 0, ResultDesc: "Success" });
+        // Acknowledge to Safaricom to stop retry storms, but log loudly for review.
+        console.error('[mpesa] Callback processing error:', error.message);
+        return res.status(200).json({ ResultCode: 0, ResultDesc: 'Success' });
     }
 }
 /**

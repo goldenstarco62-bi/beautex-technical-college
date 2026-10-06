@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import { reportsAPI, coursesAPI, facultyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -618,7 +619,7 @@ export default function AcademicReports() {
                                     {report.trainer_observations && (
                                         <div className="bg-maroon/3 rounded-xl p-4 border border-maroon/5 mb-4">
                                             <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-1">Trainer Observations</p>
-                                            <div className="text-xs text-maroon/70 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: report.trainer_observations }} />
+                                            <div className="text-xs text-maroon/70 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(report.trainer_observations) }} />
                                         </div>
                                     )}
                                     <div className="flex items-center justify-between border-t border-maroon/5 pt-4 mt-auto">
@@ -972,11 +973,11 @@ export default function AcademicReports() {
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Observations</p>
-                                    <div className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.trainer_observations }} />
+                                    <div className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.trainer_observations) }} />
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Progress Summary</p>
-                                    <div className="text-sm text-gray-700 leading-relaxed bg-maroon/[0.02] p-6 rounded-[2rem] border border-maroon/5 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.progress_summary }} />
+                                    <div className="text-sm text-gray-700 leading-relaxed bg-maroon/[0.02] p-6 rounded-[2rem] border border-maroon/5 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.progress_summary) }} />
                                 </div>
                                 <div className="grid grid-cols-2 gap-6">
                                     <div>
@@ -1072,13 +1073,13 @@ export default function AcademicReports() {
                                 {printingReport.trainer_observations && (
                                     <div className="mt-4 p-4 border border-gray-200 rounded-xl">
                                         <p className="text-xs font-black text-gray-400 uppercase mb-2">Trainer Observations</p>
-                                        <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: printingReport.trainer_observations }} />
+                                        <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(printingReport.trainer_observations) }} />
                                     </div>
                                 )}
                                 {printingReport.progress_summary && (
                                     <div className="mt-4 p-4 border border-gray-200 rounded-xl">
                                         <p className="text-xs font-black text-gray-400 uppercase mb-2">Progress Summary</p>
-                                        <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: printingReport.progress_summary }} />
+                                        <div className="text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(printingReport.progress_summary) }} />
                                     </div>
                                 )}
                             </div>

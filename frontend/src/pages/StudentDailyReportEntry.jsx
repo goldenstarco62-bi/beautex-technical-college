@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import {
     Users,
     BookOpen,
@@ -769,12 +770,12 @@ const HistoryCard = ({ report, students, setSelectedStudent, setReportForm, setV
         <div className="space-y-3 font-left">
             <div className="p-4 bg-white/50 rounded-xl border border-gray-100">
                 <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2">Coverage Detail</p>
-                <div className="text-xs text-gray-600 leading-relaxed font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: report.topics_covered }} />
+                <div className="text-xs text-gray-600 leading-relaxed font-medium rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(report.topics_covered) }} />
             </div>
             {report.trainer_remarks && (
                 <div className="flex gap-3 items-start opacity-70 group-hover:opacity-100 transition-opacity">
                     <History className="w-3 h-3 text-maroon mt-1 shrink-0" />
-                    <div className="text-[11px] text-gray-700 font-bold italic line-clamp-2 rich-text-content" dangerouslySetInnerHTML={{ __html: report.trainer_remarks }} />
+                    <div className="text-[11px] text-gray-700 font-bold italic line-clamp-2 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(report.trainer_remarks) }} />
                 </div>
             )}
         </div>

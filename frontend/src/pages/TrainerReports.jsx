@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import { trainerReportsAPI, coursesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ClipboardList, Plus, Search, Trash2, Calendar, User, BookOpen, Send, X, FileText, LayoutList, Printer, FileDown, Eye, ChevronDown } from 'lucide-react';
@@ -734,7 +735,7 @@ export default function TrainerReports() {
                             <div className="pt-6 border-t border-maroon/5 space-y-6 text-left text-gray-700">
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Daily Operations Report</p>
-                                    <div className="text-sm leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 rich-text-content" dangerouslySetInnerHTML={{ __html: viewingReport.daily_report }} />
+                                    <div className="text-sm leading-relaxed bg-gray-50 p-6 rounded-[2rem] border border-gray-100 rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(viewingReport.daily_report) }} />
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Record of Work</p>
@@ -827,7 +828,7 @@ export default function TrainerReports() {
                                             <FileText className="w-4 h-4 text-maroon opacity-40" />
                                             <h3 className="text-xs font-black text-maroon uppercase tracking-widest">Daily Operations Report</h3>
                                         </div>
-                                        <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: printingReport.daily_report }} />
+                                        <div className="text-sm text-gray-700 leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(printingReport.daily_report) }} />
                                     </div>
 
                                     <div className="bg-maroon/[0.02] p-6 rounded-2xl border border-maroon/5">
@@ -936,7 +937,7 @@ const TrainerReportCard = ({ report, user, isAdmin, onView, onDownload, onPrint,
                         <FileText className="w-4 h-4 text-maroon opacity-40" />
                         <h3 className="text-[10px] font-black text-maroon uppercase tracking-[0.2em]">Daily Operations Report</h3>
                     </div>
-                    <div className="text-sm text-gray-700 font-medium leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: report.daily_report }} />
+                    <div className="text-sm text-gray-700 font-medium leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(report.daily_report) }} />
                 </div>
                 <div className="bg-gold/5 rounded-3xl p-6 border border-gold/20 flex flex-col">
                     <div className="flex items-center gap-2 mb-4 shrink-0">

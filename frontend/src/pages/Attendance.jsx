@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import { studentsAPI, coursesAPI, attendanceAPI, studentDailyReportsAPI, facultyAPI, activityReportsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Calendar, CheckCircle2, XCircle, AlertTriangle, UserPlus, Users, BookOpen, Fingerprint, Clock, RefreshCw } from 'lucide-react';
@@ -603,7 +604,7 @@ export default function Attendance() {
                                                 <td className="px-4 py-3.5 sm:px-8 sm:py-6 max-w-xs">
                                                     <div 
                                                         className="text-[10px] font-bold text-gray-400 line-clamp-2 italic prose prose-sm"
-                                                        dangerouslySetInnerHTML={{ __html: student.report?.topics_covered || '—' }}
+                                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(student.report?.topics_covered || '—') }}
                                                     />
                                                 </td>
                                                 <td className="px-4 py-3.5 sm:px-8 sm:py-6 whitespace-nowrap">

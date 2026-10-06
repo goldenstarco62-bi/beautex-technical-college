@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import { getDb, initializeDatabase, query, queryOne, run } from '../config/database.js';
 import bcrypt from 'bcryptjs';
 
@@ -20,12 +21,23 @@ async function seed() {
 
         if (userCount === 0) {
             console.log('🌱 Seeding superadmin account...');
-            const hashedPassword = await bcrypt.hash('Beautex@2026', 10);
+            const adminEmail = (process.env.SEED_ADMIN_EMAIL || '').trim();
+            if (!adminEmail) {
+                throw new Error('SEED_ADMIN_EMAIL is not set — provide the superadmin email before seeding.');
+            }
+            const usingEnvPassword = !!process.env.SEED_ADMIN_PASSWORD;
+            const plainPassword = usingEnvPassword
+                ? process.env.SEED_ADMIN_PASSWORD
+                : crypto.randomBytes(12).toString('base64url');
+            const hashedPassword = await bcrypt.hash(plainPassword, 12);
             await run(
                 'INSERT INTO users (email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?)',
-                ['beautexcollege01@gmail.com', hashedPassword, 'superadmin', 'Active', false]
+                [adminEmail, hashedPassword, 'superadmin', 'Active', true]
             );
-            console.log('✅ Base superadmin account created: beautexcollege01@gmail.com');
+            console.log(`✅ Base superadmin account created: ${adminEmail} (password change required on first login)`);
+            if (!usingEnvPassword) {
+                console.log(`🔑 Temporary password (shown once): ${plainPassword}`);
+            }
         } else {
             console.log(`ℹ️ skipping user seed: ${userCount} users already exist.`);
         }

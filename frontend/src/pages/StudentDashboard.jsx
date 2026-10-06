@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import sanitizeHtml from '../utils/sanitizeHtml';
 import { Link } from 'react-router-dom';
 import {
     BookOpen,
@@ -878,12 +879,12 @@ export default function StudentDashboard() {
                                             <div className="space-y-2">
                                                 <div className="bg-white dark:bg-[#111] p-3 rounded-lg border border-gray-100 dark:border-white/5">
                                                     <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Coverage</p>
-                                                    <div className="text-[11px] text-gray-600 dark:text-gray-300 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: report.topics_covered }} />
+                                                    <div className="text-[11px] text-gray-600 dark:text-gray-300 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: sanitizeHtml(report.topics_covered) }} />
                                                 </div>
                                                 {report.trainer_remarks && (
                                                     <div className="flex gap-2 items-start">
                                                         <MessageSquare className="w-3 h-3 text-maroon dark:text-gold mt-0.5 shrink-0" />
-                                                        <div className="text-[10px] text-gray-400 font-bold italic" dangerouslySetInnerHTML={{ __html: `&ldquo;${report.trainer_remarks}&rdquo;` }} />
+                                                        <div className="text-[10px] text-gray-400 font-bold italic" dangerouslySetInnerHTML={{ __html: sanitizeHtml(`&ldquo;${report.trainer_remarks}&rdquo;`) }} />
                                                     </div>
                                                 )}
                                                 {report.student_comment && (
