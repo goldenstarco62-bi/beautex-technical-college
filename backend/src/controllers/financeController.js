@@ -1,4 +1,4 @@
-import { query, queryOne, run, getProcessedDatabaseUrl, getCurrentDateSQL, getDateIntervalSQL, getActiveDbEngine } from '../config/database.js';
+import { query, queryOne, run, withTransaction, getProcessedDatabaseUrl, getCurrentDateSQL, getDateIntervalSQL, getActiveDbEngine } from '../config/database.js';
 import notificationService from '../services/notificationService.js';
 import { syncStudentMonthlyFeeTracking } from './monthlyFeeController.js';
 
@@ -543,62 +543,63 @@ export async function recordPayment(req, res) {
             return res.status(201).json({ message: 'Payment recorded successfully' });
         }
 
-        // SQLite / PG path
-        const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [student_id]);
-        const canonicalId = student ? student.id : student_id;
+        // SQLite / PG path wrapped in database transaction for atomicity
+        let canonicalId = student_id;
+        await withTransaction(async () => {
+            const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [student_id]);
+            canonicalId = student ? student.id : student_id;
 
-        await run(
-            'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [canonicalId, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
-        );
-
-        // If manual overrides are provided
-        if (manual_total_due !== undefined && manual_total_due !== '') {
-            const finalTotalDue = parseFloat(manual_total_due);
-            const finalTotalPaid = (manual_total_paid !== undefined && manual_total_paid !== '') ? parseFloat(manual_total_paid) : 0;
-            const finalBalance = (manual_balance !== undefined && manual_balance !== '') ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
-            const newStatus = (finalBalance <= 0 && finalTotalDue > 0) ? 'Paid' : (finalTotalPaid > 0 ? 'Partial' : 'Pending');
-
-            const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
-            if (existing) {
-                await run(
-                    'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                    [finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
-                );
-            } else {
-                await run(
-                    'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
-                    [canonicalId, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
-                );
-            }
-            if (!isMongo()) {
-                await syncStudentMonthlyFeeTracking(canonicalId, finalTotalDue);
-            }
-        } else {
-            // Incremental update: add the new payment amount to the existing total_paid.
-            // This preserves any manual adjustments made via "Adjust Totals" without
-            // recalculating from SUM(payments), which would swallow phantom ADJ entries.
-            const feeRow = await queryOne(
-                'SELECT total_due, total_paid FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                [canonicalId]
+            await run(
+                'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [canonicalId, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
             );
-            if (feeRow) {
-                const existingDue = parseFloat(feeRow.total_due || 0);
-                const newTotalPaid = parseFloat(feeRow.total_paid || 0) + parseFloat(amount);
-                const newBalance = existingDue > 0 ? Math.max(0, existingDue - newTotalPaid) : 0;
-                const newStatus = (newBalance <= 0 && existingDue > 0) ? 'Paid' : (newTotalPaid > 0 ? 'Partial' : 'Pending');
-                await run(
-                    'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                    [newTotalPaid, newBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
-                );
+
+            // If manual overrides are provided
+            if (manual_total_due !== undefined && manual_total_due !== '') {
+                const finalTotalDue = parseFloat(manual_total_due);
+                const finalTotalPaid = (manual_total_paid !== undefined && manual_total_paid !== '') ? parseFloat(manual_total_paid) : 0;
+                const finalBalance = (manual_balance !== undefined && manual_balance !== '') ? parseFloat(manual_balance) : (finalTotalDue - finalTotalPaid);
+                const newStatus = (finalBalance <= 0 && finalTotalDue > 0) ? 'Paid' : (finalTotalPaid > 0 ? 'Partial' : 'Pending');
+
+                const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
+                if (existing) {
+                    await run(
+                        'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                        [finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
+                    );
+                } else {
+                    await run(
+                        'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
+                        [canonicalId, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
+                    );
+                }
                 if (!isMongo()) {
-                    await syncStudentMonthlyFeeTracking(canonicalId, existingDue);
+                    await syncStudentMonthlyFeeTracking(canonicalId, finalTotalDue);
                 }
             } else {
-                // No student_fees row yet — fall back to full sync to initialize it
-                await internalSyncStudentFee(canonicalId);
+                // Incremental update: add the new payment amount to the existing total_paid.
+                const feeRow = await queryOne(
+                    'SELECT total_due, total_paid FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                    [canonicalId]
+                );
+                if (feeRow) {
+                    const existingDue = parseFloat(feeRow.total_due || 0);
+                    const newTotalPaid = parseFloat(feeRow.total_paid || 0) + parseFloat(amount);
+                    const newBalance = existingDue > 0 ? Math.max(0, existingDue - newTotalPaid) : 0;
+                    const newStatus = (newBalance <= 0 && existingDue > 0) ? 'Paid' : (newTotalPaid > 0 ? 'Partial' : 'Pending');
+                    await run(
+                        'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                        [newTotalPaid, newBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
+                    );
+                    if (!isMongo()) {
+                        await syncStudentMonthlyFeeTracking(canonicalId, existingDue);
+                    }
+                } else {
+                    // No student_fees row yet — fall back to full sync to initialize it
+                    await internalSyncStudentFee(canonicalId);
+                }
             }
-        }
+        });
 
         // --- Notify Student ---
         await notificationService.notifyStudent(

@@ -412,31 +412,55 @@ export async function updateStudent(req, res) {
             }
         }
 
+        // 'id' (admission number) is handled separately below to allow PK renames
         const allowedFields = [
             'name', 'email', 'course', 'intake', 'gpa', 'status', 'contact',
             'photo', 'dob', 'address', 'guardian_name', 'guardian_contact', 'blood_group',
             'completion_date', 'enrolled_date',
             'id_status', 'passport_status'
         ];
+
+        // Detect if the admission number itself is being changed
+        const newStudentId = req.body.id ? String(req.body.id).trim() : null;
+        const isIdChanged = Boolean(newStudentId && newStudentId !== studentId);
+
+        // Check the new ID is not already taken by another student
+        if (isIdChanged) {
+            const conflict = await queryOne('SELECT id FROM students WHERE id = ?', [newStudentId]);
+            if (conflict) {
+                return res.status(400).json({ error: `Admission number "${newStudentId}" is already assigned to another student.` });
+            }
+        }
+
         const fields = Object.keys(req.body).filter(k => allowedFields.includes(k));
-        if (fields.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
-
-        const setClause = fields.map(f => `${f} = ?`).join(', ');
         const updatedAt = new Date().toISOString();
-        const values = fields.map(f => {
-            if (f === 'course' && Array.isArray(req.body[f])) {
-                return JSON.stringify(req.body[f]);
-            }
-            if (f === 'email') {
-                return newEmail;
-            }
-            return req.body[f];
-        });
-        values.push(updatedAt); // updated_at
-        values.push(studentId);
 
-        const result = await run(`UPDATE students SET ${setClause}, updated_at = ? WHERE id = ?`, values);
-        if (result.changes === 0) return res.status(404).json({ error: 'Student not found' });
+        // Phase 1: Update the non-PK fields (if any)
+        if (fields.length > 0) {
+            const setClause = fields.map(f => `${f} = ?`).join(', ');
+            const values = fields.map(f => {
+                if (f === 'course' && Array.isArray(req.body[f])) {
+                    return JSON.stringify(req.body[f]);
+                }
+                if (f === 'email') {
+                    return newEmail;
+                }
+                return req.body[f];
+            });
+            values.push(updatedAt); // updated_at
+            values.push(studentId); // WHERE id = ?
+
+            const result = await run(`UPDATE students SET ${setClause}, updated_at = ? WHERE id = ?`, values);
+            if (result.changes === 0) return res.status(404).json({ error: 'Student not found' });
+        }
+
+        // Phase 2: Rename the primary key if the admission number changed
+        if (isIdChanged) {
+            await run('UPDATE students SET id = ? WHERE id = ?', [newStudentId, studentId]);
+        }
+
+        // The effective student ID going forward
+        const effectiveId = isIdChanged ? newStudentId : studentId;
 
         let passwordResetSent = false;
         if (isEmailChanged) {
@@ -466,12 +490,18 @@ export async function updateStudent(req, res) {
             updatedFields[f] = f === 'course' ? courseArr : (f === 'email' ? newEmail : req.body[f]);
         });
 
+        const messageStr = [
+            isIdChanged ? `Admission number updated to "${newStudentId}".` : null,
+            isEmailChanged ? 'Password reset email sent to new address.' : null,
+            'Student details updated successfully.'
+        ].filter(Boolean).join(' ');
+
         res.json({
-            id: studentId,
+            id: effectiveId,
             ...updatedFields,
             updated_at: updatedAt,
             password_reset_sent: passwordResetSent,
-            message: isEmailChanged ? 'Student details updated and password reset email sent to new address.' : 'Student details updated successfully.'
+            message: messageStr
         });
     } catch (error) {
         console.error('Update student error:', error);

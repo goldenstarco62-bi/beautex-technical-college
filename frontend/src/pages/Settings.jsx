@@ -347,19 +347,44 @@ export default function Settings() {
 
     const handleBackup = async () => {
         try {
-            const r = await settingsAPI.downloadBackup();
-            const url = window.URL.createObjectURL(new Blob([r.data]));
-            const a = document.createElement('a'); a.href = url;
-            a.setAttribute('download', `beautex_backup_${new Date().toISOString().split('T')[0]}.sqlite`);
-            document.body.appendChild(a); a.click(); a.remove();
-            showToast('Backup downloaded successfully!');
-        } catch { showToast('Backup failed.', 'error'); }
+            const r = await settingsAPI.exportBackup();
+            const url = window.URL.createObjectURL(new Blob([r.data], { type: 'application/json' }));
+            const a = document.createElement('a'); 
+            a.href = url;
+            a.setAttribute('download', `beautex_cms_backup_${new Date().toISOString().split('T')[0]}.json`);
+            document.body.appendChild(a); 
+            a.click(); 
+            a.remove();
+            showToast('JSON Database backup downloaded successfully!');
+        } catch (e) { 
+            showToast('Backup export failed: ' + (e.response?.data?.error || e.message), 'error'); 
+        }
     };
 
     const handleRestore = () => {
-        if (!window.confirm('Restore database to last snapshot? This overwrites current data.')) return;
-        setRestoring(true);
-        setTimeout(() => { setRestoring(false); showToast('Database restored successfully!'); }, 3000);
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!window.confirm(`Are you sure you want to restore database records from "${file.name}"?\nThis will update existing student and system records.`)) return;
+
+            setRestoring(true);
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const { data } = await settingsAPI.restoreBackup(formData);
+                showToast(data.message || 'Database restored successfully!');
+                fetchSettings();
+            } catch (err) {
+                showToast('Restore failed: ' + (err.response?.data?.error || err.message), 'error');
+            } finally {
+                setRestoring(false);
+            }
+        };
+        input.click();
     };
 
     const openNewDept = () => { setEditingDept(null); setDeptForm({ name: '', head_of_department: '', description: '' }); setShowDeptModal(true); };

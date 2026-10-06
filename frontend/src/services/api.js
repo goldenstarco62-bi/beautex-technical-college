@@ -330,6 +330,10 @@ export const settingsAPI = {
     uploadSettingFile: (formData) => api.post('settings/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     backup: () => api.get('settings/backup', { responseType: 'blob' }),
     downloadBackup: () => api.get('settings/backup', { responseType: 'blob' }),
+    exportBackup: () => api.get('settings/backup/export', { responseType: 'blob' }),
+    restoreBackup: (formData) => api.post('settings/backup/restore', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    }),
 };
 
 // Interactions
@@ -495,4 +499,3 @@ export const catResultsAPI = {
 };
 
 export default api;
-

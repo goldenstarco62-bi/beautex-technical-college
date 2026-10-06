@@ -1,4 +1,5 @@
 import { getDb, query } from '../config/database.js';
+import memoryCache from '../utils/cache.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import logger from '../utils/logger.js';
@@ -9,6 +10,11 @@ const dbPath = path.join(__dirname, '../../database.sqlite');
 
 export async function getSettings(req, res) {
     try {
+        const cached = memoryCache.get('system_settings');
+        if (cached) {
+            return res.json(cached);
+        }
+
         const settings = await query('SELECT * FROM system_settings');
 
         // Convert array to object
@@ -21,6 +27,7 @@ export async function getSettings(req, res) {
             return acc;
         }, {});
 
+        memoryCache.set('system_settings', settingsObj, 60000);
         res.json(settingsObj);
     } catch (error) {
         logger.error('Error fetching settings:', error);
@@ -82,6 +89,7 @@ export async function updateSettings(req, res) {
             await db.run('COMMIT');
         }
 
+        memoryCache.del('system_settings');
         res.json({ message: 'Settings updated successfully' });
     } catch (error) {
         logger.error('Error updating settings:', error);
@@ -121,6 +129,7 @@ export async function uploadFileSetting(req, res) {
         }
 
         logger.info(`File uploaded successfully for setting key: ${key}`);
+        memoryCache.del('system_settings');
         res.json({ message: 'File uploaded successfully', key, value: file_url });
     } catch (error) {
         logger.error('Error uploading setting file:', error);
@@ -136,3 +145,94 @@ export async function downloadBackup(req, res) {
         res.status(500).json({ error: 'Failed to download backup' });
     }
 }
+
+export async function exportFullBackup(req, res) {
+    try {
+        const tables = [
+            'users', 'students', 'courses', 'faculty', 'attendance',
+            'cat_results', 'cat_periods', 'course_units', 'payments',
+            'student_fees', 'system_settings'
+        ];
+
+        const backupData = {
+            version: '1.0.0',
+            exported_at: new Date().toISOString(),
+            exported_by: req.user?.email || req.user?.id,
+            data: {}
+        };
+
+        for (const table of tables) {
+            try {
+                const rows = await query(`SELECT * FROM ${table}`);
+                backupData.data[table] = rows || [];
+            } catch (err) {
+                backupData.data[table] = [];
+            }
+        }
+
+        const fileName = `beautex_cms_backup_${new Date().toISOString().split('T')[0]}.json`;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.status(200).send(JSON.stringify(backupData, null, 2));
+    } catch (error) {
+        logger.error('Export backup error:', error);
+        res.status(500).json({ error: 'Failed to generate database backup' });
+    }
+}
+
+export async function restoreFullBackup(req, res) {
+    try {
+        let backupData;
+        if (req.file) {
+            backupData = JSON.parse(req.file.buffer.toString('utf-8'));
+        } else if (req.body?.data) {
+            backupData = req.body;
+        } else {
+            return res.status(400).json({ error: 'Backup data file or payload is required.' });
+        }
+
+        if (!backupData.data || typeof backupData.data !== 'object') {
+            return res.status(400).json({ error: 'Invalid backup file format.' });
+        }
+
+        const { withTransaction, run } = await import('../config/database.js');
+        const data = backupData.data;
+
+        await withTransaction(async () => {
+            // Restore system settings
+            if (Array.isArray(data.system_settings)) {
+                for (const row of data.system_settings) {
+                    if (row.key && row.value !== undefined) {
+                        await run(
+                            'INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value',
+                            [row.key, String(row.value)]
+                        ).catch(() => {});
+                    }
+                }
+            }
+
+            // Restore students
+            if (Array.isArray(data.students)) {
+                for (const s of data.students) {
+                    if (s.id && s.name && s.email) {
+                        await run(
+                            `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, dob, address, guardian_name, guardian_contact, blood_group, id_status, passport_status)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                             ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, course=EXCLUDED.course, status=EXCLUDED.status`,
+                            [s.id, s.name, s.email, typeof s.course === 'object' ? JSON.stringify(s.course) : (s.course || 'General'), s.intake || null, s.gpa || 0, s.status || 'Active', s.contact || null, s.photo || null, s.dob || null, s.address || null, s.guardian_name || null, s.guardian_contact || null, s.blood_group || null, s.id_status || 'Not Generated', s.passport_status || 'Not Generated']
+                        ).catch(() => {});
+                    }
+                }
+            }
+
+            const memoryCache = (await import('../utils/cache.js')).default;
+            memoryCache.flush();
+        });
+
+        res.json({ message: 'Database backup restored successfully!' });
+    } catch (error) {
+        logger.error('Restore backup error:', error);
+        res.status(500).json({ error: 'Failed to restore database backup: ' + error.message });
+    }
+}
+

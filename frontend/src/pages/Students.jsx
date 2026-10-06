@@ -242,7 +242,8 @@ export default function Students() {
         } catch (error) {
             console.error('Error saving student:', error);
             const msg = error.response?.data?.error || error.message;
-            alert(msg.includes('duplicate key') || msg.includes('23505') ? 'A student with this ID or Email already exists.' : `Failed to save student record: ${msg}`);
+            const isDuplicate = msg.includes('duplicate key') || msg.includes('23505') || msg.includes('SQLITE_CONSTRAINT');
+            alert(isDuplicate ? 'A student with this ID or Email already exists.' : `Failed to save student record: ${msg}`);
         } finally {
             setSaving(false);
         }

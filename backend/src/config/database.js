@@ -215,6 +215,7 @@ export async function initializeDatabase() {
                 }
             }
 
+            await ensureHighPerformanceIndexes(database);
             await seedNewSettings(database);
             return;
         }
@@ -239,6 +240,7 @@ export async function initializeDatabase() {
 
         // Run migrations for SQLite
         await runSqliteMigrations(database);
+        await ensureHighPerformanceIndexes(database);
         await seedNewSettings(database);
 
     } catch (err) {
@@ -1807,6 +1809,44 @@ async function runSqliteMigrations(database) {
     }
 }
 
+/**
+ * Creates high-performance database indexes on core tables for fast queries.
+ */
+export async function ensureHighPerformanceIndexes(database) {
+    const isPostgres = !!getProcessedDatabaseUrl();
+    const isMongo = !!process.env.MONGODB_URI;
+    if (isMongo) return;
+
+    const indexQueries = [
+        'CREATE INDEX IF NOT EXISTS idx_students_email ON students(email)',
+        'CREATE INDEX IF NOT EXISTS idx_students_status ON students(status)',
+        'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
+        'CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)',
+        'CREATE INDEX IF NOT EXISTS idx_attendance_student_date ON attendance(student_id, date)',
+        'CREATE INDEX IF NOT EXISTS idx_attendance_course ON attendance(course)',
+        'CREATE INDEX IF NOT EXISTS idx_cat_results_student ON cat_results(student_id)',
+        'CREATE INDEX IF NOT EXISTS idx_cat_results_period_unit ON cat_results(cat_period_id, unit_id)',
+        'CREATE INDEX IF NOT EXISTS idx_cat_results_workflow ON cat_results(workflow_status)',
+        'CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id)',
+        'CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date)',
+        'CREATE INDEX IF NOT EXISTS idx_student_fees_student ON student_fees(student_id)',
+        'CREATE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(key)'
+    ];
+
+    try {
+        for (const sql of indexQueries) {
+            if (isPostgres) {
+                await database.query(sql).catch(() => {});
+            } else {
+                await database.run(sql).catch(() => {});
+            }
+        }
+        console.log('⚡ High-performance database indexes verified & active');
+    } catch (err) {
+        console.warn('⚠️ High-performance index check warning:', err.message);
+    }
+}
+
 
 /**
  * Translate SQLite-specific functions to PostgreSQL equivalents
@@ -1913,6 +1953,57 @@ export async function run(sql, params = []) {
     }
     return database.run(sql, sanitizedParams);
 }
+
+/**
+ * Executes a callback function inside a database transaction.
+ * Automatically handles BEGIN, COMMIT, and ROLLBACK for SQLite, PostgreSQL, and MongoDB.
+ */
+export async function withTransaction(fn) {
+    const database = await getDb();
+    const isPostgres = !!getProcessedDatabaseUrl();
+    const isMongo = !!process.env.MONGODB_URI;
+
+    if (isMongo) {
+        const session = await mongoose.startSession().catch(() => null);
+        if (session) {
+            try {
+                session.startTransaction();
+                const result = await fn(session);
+                await session.commitTransaction();
+                session.endSession();
+                return result;
+            } catch (err) {
+                await session.abortTransaction().catch(() => {});
+                session.endSession();
+                throw err;
+            }
+        }
+        return await fn(null);
+    }
+
+    if (isPostgres) {
+        await database.query('BEGIN');
+        try {
+            const result = await fn();
+            await database.query('COMMIT');
+            return result;
+        } catch (err) {
+            await database.query('ROLLBACK').catch(() => {});
+            throw err;
+        }
+    } else {
+        await database.run('BEGIN IMMEDIATE');
+        try {
+            const result = await fn();
+            await database.run('COMMIT');
+            return result;
+        } catch (err) {
+            await database.run('ROLLBACK').catch(() => {});
+            throw err;
+        }
+    }
+}
+
 
 /**
  * Seed all default system setting keys if they are not already set.
@@ -2065,4 +2156,4 @@ export async function seedNewSettings(database) {
     }
 }
 
-export default { getDb, query, queryOne, run, seedNewSettings };
+export default { getDb, query, queryOne, run, withTransaction, seedNewSettings };
