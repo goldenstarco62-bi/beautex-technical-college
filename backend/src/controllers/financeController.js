@@ -17,6 +17,11 @@ function safeEqual(a, b) {
     return crypto.timingSafeEqual(bufA, bufB);
 }
 
+/** Escape regex metacharacters before interpolating user input into a RegExp. */
+function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Safely parses student course JSON arrays or strings into a clean single course name.
  */
@@ -53,10 +58,10 @@ async function internalSyncStudentFee(studentId) {
             const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
             const Course = (await import('../models/mongo/Course.js')).default;
 
-            const student = await Student.findOne({ id: { $regex: new RegExp(`^${studentId.trim()}$`, 'i') } });
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(studentId).trim())}$`, 'i') } });
             const canonicalId = student ? student.id : studentId;
 
-            const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${canonicalId}$`, 'i') } });
+            const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${escapeRegExp(String(canonicalId).trim())}$`, 'i') } });
             const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
             let lastPaymentDate = null;
@@ -72,7 +77,7 @@ async function internalSyncStudentFee(studentId) {
                 let totalDue = 0;
                 if (student?.course) {
                     const primaryCourseName = getPrimaryCourseName(student.course);
-                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${primaryCourseName}$`, 'i') } });
+                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${escapeRegExp(primaryCourseName)}$`, 'i') } });
                     if (courseObj) {
                         const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
                         if (structure) totalDue = structure.amount;
@@ -185,10 +190,20 @@ export async function createFeeStructure(req, res) {
 export async function getStudentFees(req, res) {
     try {
         const { studentId } = req.params;
+        const role = String(req.user.role || '').toLowerCase().trim();
 
-        // IDOR Protection: Students can only view their own fees
-        if (req.user.role === 'student' && String(req.user.student_id).trim().toLowerCase() !== String(studentId).trim().toLowerCase()) {
-            return res.status(403).json({ error: 'Access denied. You can only view your own fee records.' });
+        // IDOR protection: fee records are finance-admin data.
+        //  - admin/superadmin: any student
+        //  - student: strictly their own record, scoped from the TOKEN (an unlinked
+        //    account with a null student_id is denied instead of matching "null")
+        //  - any other role (e.g. teacher): denied
+        if (role === 'student') {
+            const ownId = req.user.student_id ? String(req.user.student_id).trim() : null;
+            if (!ownId || ownId.toLowerCase() !== String(studentId).trim().toLowerCase()) {
+                return res.status(403).json({ error: 'Access denied. You can only view your own fee records.' });
+            }
+        } else if (role !== 'admin' && role !== 'superadmin') {
+            return res.status(403).json({ error: 'Access denied. Fee records are restricted to finance administrators.' });
         }
 
         if (isMongo()) {
@@ -198,7 +213,7 @@ export async function getStudentFees(req, res) {
             const Course = (await import('../models/mongo/Course.js')).default;
             const Payment = (await import('../models/mongo/Payment.js')).default;
 
-            const student = await Student.findOne({ id: { $regex: new RegExp(`^${studentId.trim()}$`, 'i') } });
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(studentId).trim())}$`, 'i') } });
             const canonicalId = student ? student.id : studentId;
 
             let fee = await StudentFee.findOne({ student_id: canonicalId });
@@ -209,14 +224,14 @@ export async function getStudentFees(req, res) {
 
                 if (student?.course) {
                     const primaryCourseName = getPrimaryCourseName(student.course);
-                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${primaryCourseName}$`, 'i') } });
+                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${escapeRegExp(primaryCourseName)}$`, 'i') } });
                     if (courseObj) {
                         const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
                         if (structure) totalDue = structure.amount;
                     }
                 }
 
-                const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${canonicalId}$`, 'i') } });
+                const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${escapeRegExp(String(canonicalId).trim())}$`, 'i') } });
                 const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
                 const balance = Math.max(0, totalDue - totalPaid);
                 const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
@@ -653,16 +668,27 @@ export async function recordPayment(req, res) {
 
 export async function getPayments(req, res) {
     try {
-        const { studentId } = req.query;
+        const role = String(req.user.role || '').toLowerCase().trim();
+        const studentIdParam = req.query.studentId ? String(req.query.studentId).trim() : null;
         const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
-        // IDOR Protection: Students can only view their own payments
-        let effectiveId = studentId;
-        if (req.user.role === 'student') {
-            effectiveId = req.user.student_id;
-            if (studentId && String(studentId).trim().toLowerCase() !== String(req.user.student_id).trim().toLowerCase()) {
+        // IDOR protection: the full payments ledger is finance-admin data.
+        //  - admin/superadmin: full list, optional studentId filter
+        //  - student: strictly their own records, scoped from the TOKEN (never the query)
+        //  - any other role (e.g. teacher): denied
+        let effectiveId = studentIdParam;
+        if (role === 'student') {
+            const ownId = req.user.student_id ? String(req.user.student_id).trim() : null;
+            if (studentIdParam && ownId && studentIdParam.toLowerCase() !== ownId.toLowerCase()) {
                 return res.status(403).json({ error: 'Access denied. You can only view your own payment records.' });
             }
+            if (!ownId) {
+                // Account not linked to a student record — must never fall through to the full list.
+                return res.json([]);
+            }
+            effectiveId = ownId;
+        } else if (role !== 'admin' && role !== 'superadmin') {
+            return res.status(403).json({ error: 'Access denied. Payment records are restricted to finance administrators.' });
         }
 
         if (isMongo()) {
@@ -671,7 +697,7 @@ export async function getPayments(req, res) {
 
             let paymentQuery = {};
             if (effectiveId) {
-                paymentQuery.student_id = { $regex: new RegExp(`^${effectiveId.trim()}$`, 'i') };
+                paymentQuery.student_id = { $regex: new RegExp(`^${escapeRegExp(effectiveId.trim())}$`, 'i') };
             }
 
             let q = Payment.find(paymentQuery).sort({ payment_date: -1 });
@@ -681,7 +707,10 @@ export async function getPayments(req, res) {
             const enriched = await Promise.all(payments.map(async (p) => {
                 const obj = p.toObject();
                 if (!effectiveId) {
-                    const student = await Student.findOne({ id: { $regex: new RegExp(`^${obj.student_id.trim()}$`, 'i') } }).select('name').catch(() => null);
+                    const sid = String(obj.student_id || '').trim();
+                    const student = sid
+                        ? await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(sid)}$`, 'i') } }).select('name').catch(() => null)
+                        : null;
                     obj.student_name = student?.name || 'Unknown Student';
                 }
                 return obj;
