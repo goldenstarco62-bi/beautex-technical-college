@@ -111,6 +111,24 @@ export default function Results() {
     const [confirmDialog, setConfirmDialog] = useState(null);
     const openConfirm = (message, onConfirm) => setConfirmDialog({ message, onConfirm });
 
+    // Logo base64 state for html2canvas PDF rendering
+    const [logoBase64, setLogoBase64] = useState('');
+
+    useEffect(() => {
+        let isMounted = true;
+        fetch('/app-icon-v2.png')
+            .then(res => res.blob())
+            .then(blob => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    if (isMounted) setLogoBase64(reader.result);
+                };
+                reader.readAsDataURL(blob);
+            })
+            .catch(err => console.error('Failed to load logo for PDF:', err));
+        return () => { isMounted = false; };
+    }, []);
+
     useEffect(() => {
         if (!toast) return;
         const t = setTimeout(() => setToast(null), 4000);
@@ -1488,57 +1506,59 @@ export default function Results() {
                         </div>
 
                         {/* Printable Area */}
-                        <div id="cat-result-slip-printable" className="p-8 border border-black/10 rounded-2xl space-y-6 bg-white">
+                        <div id="cat-result-slip-printable" className="p-6 border border-gray-200 rounded-xl space-y-4 bg-white max-w-[190mm] mx-auto text-black">
                             {/* Header */}
-                            <div className="flex justify-between items-center border-b-2 border-maroon pb-6">
+                            <div className="flex justify-between items-center border-b-2 border-maroon pb-4">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 bg-maroon rounded-xl flex items-center justify-center text-white font-black text-xl">
-                                        B
-                                    </div>
+                                    <img
+                                        src={logoBase64 || '/app-icon-v2.png'}
+                                        alt="Beautex College Logo"
+                                        className="w-12 h-12 object-contain"
+                                    />
                                     <div>
-                                        <h2 className="text-lg font-black text-maroon uppercase tracking-tight">BEAUTEX TECHNICAL COLLEGE</h2>
-                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Official Continuous Assessment Statement</p>
+                                        <h2 className="text-base font-extrabold text-maroon uppercase tracking-tight">BEAUTEX TECHNICAL COLLEGE</h2>
+                                        <p className="text-[9px] font-semibold text-gray-500 uppercase tracking-wider">Official Continuous Assessment Statement</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="text-xs font-black text-black uppercase">{currentPeriodObj?.cat_name || 'CAT Result'}</p>
-                                    <p className="text-[10px] font-bold text-gray-500">{currentPeriodObj?.academic_year} {currentPeriodObj?.term_name}</p>
+                                    <p className="text-xs font-bold text-black uppercase">{currentPeriodObj?.cat_name || 'CAT Result'}</p>
+                                    <p className="text-[9px] font-semibold text-gray-500">{currentPeriodObj?.academic_year} {currentPeriodObj?.term_name}</p>
                                 </div>
                             </div>
 
                             {/* Student Meta */}
-                            <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-xl text-xs font-bold border border-gray-100">
+                            <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg text-[10px] border border-gray-200/70">
                                 <div>
-                                    <span className="text-[10px] font-black text-gray-400 uppercase block">Student Name</span>
-                                    <span className="text-black font-black uppercase">{slipStudentTarget.student.name}</span>
+                                    <span className="text-[8px] font-bold text-gray-500 uppercase block tracking-wider mb-0.5">Student Name</span>
+                                    <span className="text-gray-900 font-extrabold uppercase">{slipStudentTarget.student.name}</span>
                                 </div>
                                 <div>
-                                    <span className="text-[10px] font-black text-gray-400 uppercase block">Reg ID</span>
-                                    <span className="text-black font-black uppercase">{slipStudentTarget.student.reg_id}</span>
+                                    <span className="text-[8px] font-bold text-gray-500 uppercase block tracking-wider mb-0.5">Reg ID</span>
+                                    <span className="text-gray-900 font-extrabold uppercase">{slipStudentTarget.student.reg_id}</span>
                                 </div>
                                 <div className="col-span-2">
-                                    <span className="text-[10px] font-black text-gray-400 uppercase block">Enrolled Course</span>
-                                    <span className="text-black font-black uppercase">{slipStudentTarget.student.course_name}</span>
+                                    <span className="text-[8px] font-bold text-gray-500 uppercase block tracking-wider mb-0.5">Enrolled Course</span>
+                                    <span className="text-gray-900 font-extrabold uppercase">{slipStudentTarget.student.course_name}</span>
                                 </div>
                             </div>
 
                             {/* Marks Table */}
                             <table className="w-full border-collapse">
                                 <thead>
-                                    <tr className="border-b-2 border-black text-[10px] font-black uppercase text-black/60">
-                                        <th className="py-2 text-left">Unit Title</th>
-                                        <th className="py-2 text-center">Score / {currentPeriodObj?.max_marks || 100}</th>
-                                        <th className="py-2 text-center">%</th>
-                                        <th className="py-2 text-right">Grade</th>
+                                    <tr className="border-b-2 border-gray-800 text-[8.5px] font-bold uppercase text-gray-700 tracking-wider">
+                                        <th className="py-1.5 px-2 text-left">Unit Title</th>
+                                        <th className="py-1.5 px-2 text-center">Score / {currentPeriodObj?.max_marks || 100}</th>
+                                        <th className="py-1.5 px-2 text-center">%</th>
+                                        <th className="py-1.5 px-2 text-right">Grade</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-gray-200 text-xs font-bold">
+                                <tbody className="divide-y divide-gray-200 text-[10px] font-semibold">
                                     {slipStudentTarget.results.map(r => (
                                         <tr key={r.id}>
-                                            <td className="py-2.5 text-left uppercase">{r.unit_name}</td>
-                                            <td className="py-2.5 text-center font-black">{r.marks !== null ? r.marks : '—'}</td>
-                                            <td className="py-2.5 text-center text-maroon font-black">{r.percentage !== null ? `${r.percentage}%` : '—'}</td>
-                                            <td className="py-2.5 text-right font-black uppercase">{r.grade || '—'}</td>
+                                            <td className="py-1.5 px-2 text-left uppercase text-gray-800">{r.unit_name}</td>
+                                            <td className="py-1.5 px-2 text-center font-bold text-gray-900">{r.marks !== null ? r.marks : '—'}</td>
+                                            <td className="py-1.5 px-2 text-center text-maroon font-bold">{r.percentage !== null ? `${r.percentage}%` : '—'}</td>
+                                            <td className="py-1.5 px-2 text-right font-bold uppercase text-gray-800">{r.grade || '—'}</td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -1553,21 +1573,20 @@ export default function Results() {
                                         else if (avgPct >= 50) overallGrade = 'Pass';
 
                                         return (
-                                            <tr className="border-t-2 border-maroon bg-maroon/5 text-xs font-black">
-                                                <td className="py-3.5 text-left uppercase text-maroon">CUMULATIVE OVERALL TOTAL SUMMARY</td>
-                                                <td className="py-3.5 text-center text-maroon font-black">{validScores.length} Units Evaluated</td>
-                                                <td className="py-3.5 text-center text-maroon font-black text-sm">{avgPct}%</td>
-                                                <td className="py-3.5 text-right uppercase text-maroon font-black text-sm">{overallGrade}</td>
+                                            <tr className="border-t-2 border-maroon bg-maroon/5 text-[10px] font-bold">
+                                                <td className="py-2 px-2 text-left uppercase text-maroon font-extrabold">CUMULATIVE OVERALL TOTAL SUMMARY</td>
+                                                <td className="py-2 px-2 text-center text-maroon font-bold">{validScores.length} Units Evaluated</td>
+                                                <td className="py-2 px-2 text-center text-maroon font-extrabold text-xs">{avgPct}%</td>
+                                                <td className="py-2 px-2 text-right uppercase text-maroon font-extrabold text-xs">{overallGrade}</td>
                                             </tr>
                                         );
                                     })()}
                                 </tfoot>
                             </table>
 
-
                             {/* Grading Scale Key */}
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-[9px] font-bold text-gray-600 flex flex-wrap justify-between items-center gap-2">
-                                <span className="font-black uppercase text-maroon">Grade Key:</span>
+                            <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-[8px] font-medium text-gray-600 flex flex-wrap justify-between items-center gap-1.5">
+                                <span className="font-bold uppercase text-maroon">Grade Key:</span>
                                 <span>Distinction: 70–100%</span>
                                 <span>Credit: 60–69%</span>
                                 <span>Pass: 50–59%</span>
@@ -1575,13 +1594,13 @@ export default function Results() {
                             </div>
 
                             {/* Footer Signatures */}
-                            <div className="pt-6 border-t flex justify-between items-end text-[10px] font-black uppercase text-gray-500">
+                            <div className="pt-4 border-t border-gray-200 flex justify-between items-end text-[8.5px] font-bold uppercase text-gray-500">
                                 <div>
-                                    <div className="w-32 border-b border-black mb-1"></div>
+                                    <div className="w-28 border-b border-gray-400 mb-1"></div>
                                     <span>Head of Academics</span>
                                 </div>
                                 <div className="text-right">
-                                    <div className="w-32 border-b border-black mb-1 ml-auto"></div>
+                                    <div className="w-28 border-b border-gray-400 mb-1 ml-auto"></div>
                                     <span>College Registrar</span>
                                 </div>
                             </div>
