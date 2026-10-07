@@ -115,11 +115,12 @@ export async function getResults(req, res) {
         let sql = `
             SELECT cr.*, cp.cat_name, cp.academic_year, cp.term_name, cp.max_marks as period_max_marks,
                    s.name as student_name, s.id as student_reg_id,
-                   c.name as course_name, cu.name as unit_display_name
+                   c.name as course_name, COALESCE(gu.unit_name, cu.name, cr.unit_name) as unit_display_name
             FROM cat_results cr
             LEFT JOIN cat_periods cp ON cr.cat_period_id = cp.id
             LEFT JOIN students s ON cr.student_id = s.id
             LEFT JOIN courses c ON cr.course_id = c.id
+            LEFT JOIN global_units gu ON cr.unit_id = gu.id
             LEFT JOIN course_units cu ON cr.unit_id = cu.id
             WHERE 1=1
         `;

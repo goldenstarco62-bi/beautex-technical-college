@@ -1,32 +1,37 @@
 /**
- * Course Unit Controller
- * Manages global master units and their course assignments.
- * Units exist independently of courses; they can be assigned/unassigned.
- * Historical records (marks, coverage) remain intact when units are renamed or deactivated.
+ * Course Unit Controller — Refactored for new academic structure.
+ *
+ * NEW ARCHITECTURE:
+ *   - global_units:    Stand-alone unit library (unit_code, unit_name, description, status)
+ *   - program_units:   Junction table mapping global_units <-> courses  (course_id, unit_id)
+ *
+ * LEGACY BACKWARD-COMPATIBILITY:
+ *   - Reads from course_units (old table) are attempted as fallback so nothing breaks
+ *     while the migration settles.
+ *
+ * All new data is written exclusively to global_units / program_units.
  */
 import { query, run, queryOne, getActiveDbEngine } from '../config/database.js';
 
 // Predefined units for Computer Packages courses
 const COMPUTER_PACKAGES_UNITS = [
-    'Introduction to Computers',
-    'Microsoft Windows',
-    'Keyboarding & Typing Skills',
-    'Microsoft Word',
-    'Microsoft Excel',
-    'Microsoft PowerPoint',
-    'Microsoft Access',
-    'Microsoft Outlook',
-    'Microsoft Publisher',
-    'Internet & Digital Literacy',
+    { unit_name: 'Introduction to Computers',    unit_code: 'CP-101' },
+    { unit_name: 'Microsoft Windows',            unit_code: 'CP-102' },
+    { unit_name: 'Keyboarding & Typing Skills',  unit_code: 'CP-103' },
+    { unit_name: 'Microsoft Word',               unit_code: 'CP-104' },
+    { unit_name: 'Microsoft Excel',              unit_code: 'CP-105' },
+    { unit_name: 'Microsoft PowerPoint',         unit_code: 'CP-106' },
+    { unit_name: 'Microsoft Access',             unit_code: 'CP-107' },
+    { unit_name: 'Microsoft Outlook',            unit_code: 'CP-108' },
+    { unit_name: 'Microsoft Publisher',          unit_code: 'CP-109' },
+    { unit_name: 'Internet & Digital Literacy',  unit_code: 'CP-110' },
 ];
 
-// Helper: Check if course name matches Computer Packages
 function isComputerPackagesCourse(name = '') {
     return name.toLowerCase().includes('computer package');
 }
 
-// Helper: placeholder for DB engine-aware queries
-function placeholder(i) {
+function ph(i) {
     return getActiveDbEngine() === 'postgres' ? `$${i}` : '?';
 }
 
@@ -34,62 +39,69 @@ function placeholder(i) {
 
 /**
  * GET /api/units
- * Returns all master units (optionally filtered by status or search).
+ * Returns all global units, optionally filtered by status or search term.
+ * Each unit includes the list of courses it is assigned to.
  */
 export async function getAllUnits(req, res) {
     try {
         const { status, search, course_id } = req.query;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
+        const isPg = getActiveDbEngine() === 'postgres';
 
-        let sql = 'SELECT * FROM course_units WHERE (course_id IS NULL OR course_id = \'\'  OR course_id IS NOT NULL)';
-        // Return all master units regardless of course_id assignment
-        sql = 'SELECT cu.* FROM course_units cu WHERE 1=1';
+        let sql = 'SELECT * FROM global_units WHERE 1=1';
         const params = [];
 
         if (status) {
-            sql += isPg ? ` AND cu.status = $${params.length + 1}` : ' AND cu.status = ?';
+            sql += isPg ? ` AND status = $${params.length + 1}` : ' AND status = ?';
             params.push(status);
         }
         if (search) {
             const term = `%${search}%`;
             if (isPg) {
-                sql += ` AND (cu.name ILIKE $${params.length + 1} OR cu.code ILIKE $${params.length + 2})`;
+                sql += ` AND (unit_name ILIKE $${params.length + 1} OR unit_code ILIKE $${params.length + 2})`;
                 params.push(term, term);
             } else {
-                sql += ' AND (cu.name LIKE ? OR cu.code LIKE ?)';
+                sql += ' AND (unit_name LIKE ? OR unit_code LIKE ?)';
                 params.push(term, term);
             }
         }
+        sql += ' ORDER BY unit_name ASC';
 
-        sql += ' ORDER BY cu.name ASC';
+        let units = await query(sql, params);
 
-        const units = await query(sql, params);
+        // Fallback: if global_units is empty, try old course_units table
+        if (!units || units.length === 0) {
+            try {
+                let legacySql = 'SELECT id, name AS unit_name, code AS unit_code, description, status FROM course_units WHERE 1=1';
+                const legacyParams = [];
+                if (status) { legacySql += isPg ? ` AND status = $1` : ' AND status = ?'; legacyParams.push(status); }
+                legacySql += ' ORDER BY name ASC';
+                units = await query(legacySql, legacyParams);
+            } catch (_) { units = []; }
+        }
 
-        // For each unit, attach the list of courses it is assigned to
-        const enriched = await Promise.all(units.map(async (u) => {
+        // Attach assigned courses to each unit
+        const enriched = await Promise.all((units || []).map(async (u) => {
             let assignedCourses = [];
             try {
-                const assignments = await query(
-                    `SELECT cua.course_id, c.name AS course_name
-                     FROM course_unit_assignments cua
-                     LEFT JOIN courses c ON c.id = cua.course_id
-                     WHERE cua.unit_id = ${isPg ? '$1' : '?'}
+                assignedCourses = await query(
+                    `SELECT pu.course_id, c.name AS course_name
+                     FROM program_units pu
+                     LEFT JOIN courses c ON c.id = pu.course_id
+                     WHERE pu.unit_id = ${ph(1)}
                      ORDER BY c.name ASC`,
                     [u.id]
                 );
-                assignedCourses = assignments;
-
-                // Also include courses where unit was added the old way (course_id on course_units)
-                if (u.course_id) {
-                    const alreadyListed = assignedCourses.some(a => a.course_id === u.course_id);
-                    if (!alreadyListed) {
-                        const c = await queryOne(`SELECT id, name FROM courses WHERE id = ${isPg ? '$1' : '?'}`, [u.course_id]);
-                        if (c) assignedCourses.push({ course_id: c.id, course_name: c.name });
-                    }
-                }
-            } catch (_) { /* table may not exist yet */ }
-            return { ...u, assigned_courses: assignedCourses };
+            } catch (_) { /* program_units may not exist yet */ }
+            const nameVal = u.unit_name || u.name || '';
+            const codeVal = u.unit_code || u.code || '';
+            return {
+                ...u,
+                name: nameVal,
+                code: codeVal,
+                unit_name: nameVal,
+                unit_code: codeVal,
+                assigned_courses: assignedCourses
+            };
         }));
 
         res.json(enriched);
@@ -101,39 +113,43 @@ export async function getAllUnits(req, res) {
 
 /**
  * POST /api/units
- * Creates a new master unit (not yet assigned to any course).
+ * Creates a new global unit.
  */
 export async function createUnit(req, res) {
     try {
-        const { name, code, description, status = 'Active' } = req.body;
+        const { name, unit_name, code, unit_code, description, status = 'Active' } = req.body;
+        const finalName = (unit_name || name || '').trim();
+        const finalCode = (unit_code || code || '').trim();
 
-        if (!name?.trim()) return res.status(400).json({ error: 'Unit name is required' });
+        if (!finalName) return res.status(400).json({ error: 'Unit name is required' });
 
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
+        const isPg = getActiveDbEngine() === 'postgres';
 
-        // Check for duplicate name
+        // Check duplicate
         const existing = await queryOne(
             isPg
-                ? 'SELECT id FROM course_units WHERE LOWER(name) = LOWER($1)'
-                : 'SELECT id FROM course_units WHERE LOWER(name) = LOWER(?)',
-            [name.trim()]
+                ? 'SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER($1)'
+                : 'SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(?)',
+            [finalName]
         );
-        if (existing) return res.status(409).json({ error: 'A unit with this name already exists. Please choose a different name.' });
+        if (existing) return res.status(409).json({ error: 'A unit with this name already exists.' });
+
+        // Auto-generate code if missing
+        const autoCode = finalCode || finalName.substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 900 + 100);
 
         let result;
         if (isPg) {
             result = await query(
-                'INSERT INTO course_units (name, code, description, status, sort_order, course_id) VALUES ($1, $2, $3, $4, 0, NULL) RETURNING *',
-                [name.trim(), code?.trim() || null, description?.trim() || null, status]
+                'INSERT INTO global_units (unit_code, unit_name, description, status) VALUES ($1, $2, $3, $4) RETURNING *',
+                [autoCode, finalName, description?.trim() || null, status]
             );
             res.status(201).json(result[0]);
         } else {
             result = await run(
-                "INSERT INTO course_units (name, code, description, status, sort_order) VALUES (?, ?, ?, ?, 0)",
-                [name.trim(), code?.trim() || null, description?.trim() || null, status]
+                'INSERT INTO global_units (unit_code, unit_name, description, status) VALUES (?, ?, ?, ?)',
+                [autoCode, finalName, description?.trim() || null, status]
             );
-            const unit = await queryOne('SELECT * FROM course_units WHERE id = ?', [result.lastID]);
+            const unit = await queryOne('SELECT * FROM global_units WHERE id = ?', [result.lastID]);
             res.status(201).json(unit);
         }
     } catch (error) {
@@ -144,41 +160,38 @@ export async function createUnit(req, res) {
 
 /**
  * PUT /api/units/:unitId
- * Updates unit name, code, description, or status.
- * Existing student records stay connected via unit_id (safe rename).
+ * Updates a global unit's fields.
  */
 export async function updateUnit(req, res) {
     try {
         const { unitId } = req.params;
-        const { name, code, description, status } = req.body;
-
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
+        const { name, unit_name, code, unit_code, description, status } = req.body;
+        const isPg = getActiveDbEngine() === 'postgres';
 
         const unit = await queryOne(
-            isPg ? 'SELECT * FROM course_units WHERE id = $1' : 'SELECT * FROM course_units WHERE id = ?',
+            isPg ? 'SELECT * FROM global_units WHERE id = $1' : 'SELECT * FROM global_units WHERE id = ?',
             [unitId]
         );
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
-        const updatedName = name?.trim() ?? unit.name;
-        const updatedCode = code !== undefined ? (code?.trim() || null) : unit.code;
-        const updatedDesc = description !== undefined ? (description?.trim() || null) : unit.description;
+        const updatedName   = (unit_name || name)?.trim() ?? unit.unit_name;
+        const updatedCode   = (unit_code || code)?.trim() ?? unit.unit_code;
+        const updatedDesc   = description !== undefined ? (description?.trim() || null) : unit.description;
         const updatedStatus = status ?? unit.status ?? 'Active';
 
         if (isPg) {
             await query(
-                'UPDATE course_units SET name = $1, code = $2, description = $3, status = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
+                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5',
                 [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
             );
-            const updated = await queryOne('SELECT * FROM course_units WHERE id = $1', [unitId]);
+            const updated = await queryOne('SELECT * FROM global_units WHERE id=$1', [unitId]);
             res.json(updated);
         } else {
             await run(
-                'UPDATE course_units SET name = ?, code = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
                 [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
             );
-            const updated = await queryOne('SELECT * FROM course_units WHERE id = ?', [unitId]);
+            const updated = await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]);
             res.json(updated);
         }
     } catch (error) {
@@ -189,47 +202,40 @@ export async function updateUnit(req, res) {
 
 /**
  * DELETE /api/units/:unitId
- * Deletes a unit only if it has no associated student records or coverage.
- * Otherwise returns 409 and suggests deactivating instead.
+ * Deletes a global unit only if it has no associated assessment results.
  */
 export async function deleteUnit(req, res) {
     try {
         const { unitId } = req.params;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const isPg = getActiveDbEngine() === 'postgres';
 
-        const unit = await queryOne(
-            `SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]
-        );
+        const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
         // Check for historical records
-        const markCount = await queryOne(
-            `SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]
-        );
-        const coverageCount = await queryOne(
-            `SELECT COUNT(*) AS cnt FROM unit_coverage_logs WHERE unit_id = ${ph(1)}`, [unitId]
-        );
-        const catCount = await queryOne(
-            `SELECT COUNT(*) AS cnt FROM cat_results WHERE unit_id = ${ph(1)}`, [unitId]
-        );
+        let total = 0;
+        try {
+            const markCount = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]);
+            total += parseInt(markCount?.cnt) || 0;
+        } catch (_) {}
+        try {
+            const catCount = await queryOne(`SELECT COUNT(*) AS cnt FROM cat_results WHERE unit_id = ${ph(1)}`, [unitId]);
+            total += parseInt(catCount?.cnt) || 0;
+        } catch (_) {}
+        try {
+            const resultCount = await queryOne(`SELECT COUNT(*) AS cnt FROM assessment_results WHERE unit_id = ${ph(1)}`, [unitId]);
+            total += parseInt(resultCount?.cnt) || 0;
+        } catch (_) {}
 
-        const total = (parseInt(markCount?.cnt) || 0) + (parseInt(coverageCount?.cnt) || 0) + (parseInt(catCount?.cnt) || 0);
         if (total > 0) {
             return res.status(409).json({
-                error: `Cannot delete: this unit has ${total} associated student record(s). Deactivate it instead to preserve historical data.`,
-                hasData: true,
-                counts: {
-                    marks: parseInt(markCount?.cnt) || 0,
-                    coverage: parseInt(coverageCount?.cnt) || 0,
-                    cat: parseInt(catCount?.cnt) || 0,
-                }
+                error: `Cannot delete: this unit has ${total} associated record(s). Deactivate it instead to preserve historical data.`,
+                hasData: true
             });
         }
 
-        await run(`DELETE FROM course_unit_assignments WHERE unit_id = ${ph(1)}`, [unitId]);
-        await run(`DELETE FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+        await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)}`, [unitId]);
+        await run(`DELETE FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         res.json({ message: 'Unit deleted successfully' });
     } catch (error) {
         console.error('deleteUnit error:', error);
@@ -239,36 +245,28 @@ export async function deleteUnit(req, res) {
 
 /**
  * PATCH /api/units/:unitId/status
- * Toggle unit Active/Inactive status.
+ * Toggle unit Active/Inactive.
  */
 export async function toggleUnitStatus(req, res) {
     try {
         const { unitId } = req.params;
-        const { status } = req.body; // 'Active' or 'Inactive'
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const { status } = req.body;
 
         if (!['Active', 'Inactive'].includes(status)) {
             return res.status(400).json({ error: 'Status must be Active or Inactive' });
         }
 
-        const unit = await queryOne(`SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+        const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
+        const isPg = getActiveDbEngine() === 'postgres';
         if (isPg) {
-            await query(
-                `UPDATE course_units SET status = ${ph(1)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${ph(2)}`,
-                [status, unitId]
-            );
-            const updated = await queryOne(`SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+            await query(`UPDATE global_units SET status=$1, updated_at=CURRENT_TIMESTAMP WHERE id=$2`, [status, unitId]);
+            const updated = await queryOne('SELECT * FROM global_units WHERE id=$1', [unitId]);
             res.json(updated);
         } else {
-            await run(
-                `UPDATE course_units SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [status, unitId]
-            );
-            const updated = await queryOne('SELECT * FROM course_units WHERE id = ?', [unitId]);
+            await run(`UPDATE global_units SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`, [status, unitId]);
+            const updated = await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]);
             res.json(updated);
         }
     } catch (error) {
@@ -281,24 +279,20 @@ export async function toggleUnitStatus(req, res) {
 
 /**
  * GET /api/units/:unitId/courses
- * List all courses a unit is assigned to.
+ * List all courses a unit is assigned to via program_units.
  */
 export async function getUnitCourses(req, res) {
     try {
         const { unitId } = req.params;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
-
         const assignments = await query(
-            `SELECT cua.*, c.name AS course_name, c.department, c.status AS course_status
-             FROM course_unit_assignments cua
-             LEFT JOIN courses c ON c.id = cua.course_id
-             WHERE cua.unit_id = ${ph(1)}
+            `SELECT pu.*, c.name AS course_name, c.department, c.status AS course_status
+             FROM program_units pu
+             LEFT JOIN courses c ON c.id = pu.course_id
+             WHERE pu.unit_id = ${ph(1)}
              ORDER BY c.name ASC`,
             [unitId]
         );
-        res.json(assignments);
+        res.json(assignments || []);
     } catch (error) {
         console.error('getUnitCourses error:', error);
         res.status(500).json({ error: 'Failed to fetch unit course assignments' });
@@ -307,7 +301,7 @@ export async function getUnitCourses(req, res) {
 
 /**
  * POST /api/units/:unitId/courses
- * Assign a unit to a course.
+ * Assign a global unit to a course via program_units.
  * Body: { course_id }
  */
 export async function assignUnitToCourse(req, res) {
@@ -316,42 +310,32 @@ export async function assignUnitToCourse(req, res) {
         const { course_id } = req.body;
         if (!course_id) return res.status(400).json({ error: 'course_id is required' });
 
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const uId = parseInt(unitId, 10);
+        const cId = String(course_id).trim();
 
-        const unit = await queryOne(`SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+        if (isNaN(uId)) return res.status(400).json({ error: 'Invalid unitId' });
+
+        const isPg = getActiveDbEngine() === 'postgres';
+
+        const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [uId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
-        const course = await queryOne(`SELECT * FROM courses WHERE id = ${ph(1)}`, [course_id]);
+        const course = await queryOne(`SELECT * FROM courses WHERE id = ${ph(1)}`, [cId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
         const existing = await queryOne(
-            `SELECT id FROM course_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`,
-            [unitId, course_id]
+            `SELECT id FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`,
+            [uId, cId]
         );
         if (existing) return res.status(409).json({ error: 'Unit is already assigned to this course' });
 
-        // Determine next sort_order for this course
-        const maxOrder = await queryOne(
-            `SELECT MAX(sort_order) AS max_order FROM course_unit_assignments WHERE course_id = ${ph(1)}`,
-            [course_id]
-        );
-        const nextOrder = (parseInt(maxOrder?.max_order) ?? -1) + 1;
-
         if (isPg) {
-            await query(
-                `INSERT INTO course_unit_assignments (unit_id, course_id, sort_order) VALUES (${ph(1)}, ${ph(2)}, ${ph(3)})`,
-                [unitId, course_id, nextOrder]
-            );
+            await query(`INSERT INTO program_units (unit_id, course_id) VALUES ($1, $2)`, [uId, cId]);
         } else {
-            await run(
-                'INSERT INTO course_unit_assignments (unit_id, course_id, sort_order) VALUES (?, ?, ?)',
-                [unitId, course_id, nextOrder]
-            );
+            await run('INSERT INTO program_units (unit_id, course_id) VALUES (?, ?)', [uId, cId]);
         }
 
-        res.status(201).json({ message: `Unit "${unit.name}" assigned to "${course.name}"` });
+        res.status(201).json({ message: `Unit "${unit.unit_name}" assigned to "${course.name}"` });
     } catch (error) {
         console.error('assignUnitToCourse error:', error);
         res.status(500).json({ error: 'Failed to assign unit to course' });
@@ -360,24 +344,20 @@ export async function assignUnitToCourse(req, res) {
 
 /**
  * DELETE /api/units/:unitId/courses/:courseId
- * Remove a unit from a course. Does NOT delete the unit or historical records.
+ * Remove a unit from a course. Does NOT delete the unit or its historical records.
  */
 export async function unassignUnitFromCourse(req, res) {
     try {
         const { unitId, courseId } = req.params;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const uId = parseInt(unitId, 10);
+        const cId = String(courseId).trim();
 
-        const unit = await queryOne(`SELECT name FROM course_units WHERE id = ${ph(1)}`, [unitId]);
-        const course = await queryOne(`SELECT name FROM courses WHERE id = ${ph(1)}`, [courseId]);
+        const unit   = await queryOne(`SELECT unit_name FROM global_units WHERE id = ${ph(1)}`, [uId]);
+        const course = await queryOne(`SELECT name FROM courses WHERE id = ${ph(1)}`, [cId]);
 
-        await run(
-            `DELETE FROM course_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`,
-            [unitId, courseId]
-        );
+        await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [uId, cId]);
 
-        res.json({ message: `Unit "${unit?.name || unitId}" removed from course "${course?.name || courseId}". Historical records are preserved.` });
+        res.json({ message: `Unit "${unit?.unit_name || unitId}" removed from course "${course?.name || courseId}". Historical records preserved.` });
     } catch (error) {
         console.error('unassignUnitFromCourse error:', error);
         res.status(500).json({ error: 'Failed to remove unit from course' });
@@ -386,7 +366,7 @@ export async function unassignUnitFromCourse(req, res) {
 
 /**
  * PUT /api/courses/:courseId/units/assignments
- * Bulk-set all unit assignments for a course (replaces existing set).
+ * Bulk-set all unit assignments for a course (replaces existing).
  * Body: { unit_ids: number[] }
  */
 export async function setCourseUnitAssignments(req, res) {
@@ -398,38 +378,33 @@ export async function setCourseUnitAssignments(req, res) {
             return res.status(400).json({ error: 'unit_ids must be an array' });
         }
 
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const isPg = getActiveDbEngine() === 'postgres';
 
         const course = await queryOne(`SELECT * FROM courses WHERE id = ${ph(1)}`, [courseId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
         // Remove all existing assignments for this course
-        await run(`DELETE FROM course_unit_assignments WHERE course_id = ${ph(1)}`, [courseId]);
+        await run(`DELETE FROM program_units WHERE course_id = ${ph(1)}`, [courseId]);
 
         // Re-insert in order
         for (let i = 0; i < unit_ids.length; i++) {
             const uid = unit_ids[i];
             if (isPg) {
                 await query(
-                    `INSERT INTO course_unit_assignments (unit_id, course_id, sort_order) VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}) ON CONFLICT (course_id, unit_id) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
-                    [uid, courseId, i]
+                    `INSERT INTO program_units (unit_id, course_id) VALUES ($1, $2) ON CONFLICT (course_id, unit_id) DO NOTHING`,
+                    [uid, courseId]
                 );
             } else {
-                await run(
-                    'INSERT OR REPLACE INTO course_unit_assignments (unit_id, course_id, sort_order) VALUES (?, ?, ?)',
-                    [uid, courseId, i]
-                );
+                await run('INSERT OR IGNORE INTO program_units (unit_id, course_id) VALUES (?, ?)', [uid, courseId]);
             }
         }
 
         const assignments = await query(
-            `SELECT cua.unit_id, cu.name, cu.code, cu.status, cua.sort_order
-             FROM course_unit_assignments cua
-             LEFT JOIN course_units cu ON cu.id = cua.unit_id
-             WHERE cua.course_id = ${ph(1)}
-             ORDER BY cua.sort_order ASC`,
+            `SELECT pu.unit_id, gu.unit_name AS name, gu.unit_code AS code, gu.status
+             FROM program_units pu
+             LEFT JOIN global_units gu ON gu.id = pu.unit_id
+             WHERE pu.course_id = ${ph(1)}
+             ORDER BY gu.unit_name ASC`,
             [courseId]
         );
 
@@ -440,72 +415,80 @@ export async function setCourseUnitAssignments(req, res) {
     }
 }
 
-// ── LEGACY COURSE-SCOPED ENDPOINTS (kept for backward compatibility) ───────────
+// ── COURSE-SCOPED UNIT ENDPOINTS ──────────────────────────────────────────────
 
 /**
  * GET /api/courses/:courseId/units
- * Returns all units for a given course (legacy + assignment-based).
+ * Returns all active units assigned to a course via program_units.
+ * Falls back to old course_units table for backward compatibility.
  */
 export async function getCourseUnits(req, res) {
     try {
         const { courseId } = req.params;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const isPg = getActiveDbEngine() === 'postgres';
 
         const course = await queryOne(`SELECT * FROM courses WHERE id = ${ph(1)}`, [courseId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
-        // Get units via assignment table
-        let assignedUnits = [];
-        try {
-            assignedUnits = await query(
-                `SELECT cu.*, cua.sort_order AS assignment_order
-                 FROM course_unit_assignments cua
-                 LEFT JOIN course_units cu ON cu.id = cua.unit_id
-                 WHERE cua.course_id = ${ph(1)} AND (cu.status IS NULL OR cu.status = 'Active')
-                 ORDER BY cua.sort_order ASC, cu.name ASC`,
-                [courseId]
-            );
-        } catch (_) { /* assignment table may not exist yet */ }
-
-        // Also get legacy units (course_id directly on course_units)
-        const legacyUnits = await query(
-            `SELECT * FROM course_units WHERE course_id = ${ph(1)} AND (status IS NULL OR status = 'Active') ORDER BY sort_order ASC, id ASC`,
+        // Primary: new program_units -> global_units
+        let units = await query(
+            `SELECT gu.id, gu.unit_code AS code, gu.unit_name AS name, gu.description, gu.status,
+                    pu.id AS assignment_id
+             FROM program_units pu
+             LEFT JOIN global_units gu ON gu.id = pu.unit_id
+             WHERE pu.course_id = ${ph(1)} AND (gu.status IS NULL OR gu.status = 'Active')
+             ORDER BY gu.unit_name ASC`,
             [courseId]
         );
 
-        // Merge: prefer assignment-based, de-duplicate by id
-        const seen = new Set();
-        const merged = [];
-        for (const u of [...assignedUnits, ...legacyUnits]) {
-            if (!seen.has(u.id)) { seen.add(u.id); merged.push(u); }
+        // Fallback: old course_units table
+        if (!units || units.length === 0) {
+            try {
+                units = await query(
+                    `SELECT id, course_id, name, code, description, status, sort_order FROM course_units
+                     WHERE course_id = ${ph(1)} AND (status IS NULL OR status = 'Active')
+                     ORDER BY sort_order ASC, id ASC`,
+                    [courseId]
+                );
+            } catch (_) {}
         }
 
         // Auto-populate Computer Packages units on first access
-        if (merged.length === 0 && isComputerPackagesCourse(course.name)) {
-            for (let i = 0; i < COMPUTER_PACKAGES_UNITS.length; i++) {
-                const uName = COMPUTER_PACKAGES_UNITS[i];
-                let newId;
-                if (isPg) {
-                    const r = await query(
-                        `INSERT INTO course_units (course_id, name, sort_order, status) VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}, 'Active') RETURNING id`,
-                        [courseId, uName, i]
-                    );
-                    newId = r[0].id;
-                } else {
-                    const r = await run(
-                        "INSERT INTO course_units (course_id, name, sort_order, status) VALUES (?, ?, ?, 'Active')",
-                        [courseId, uName, i]
-                    );
-                    newId = r.lastID;
+        if ((!units || units.length === 0) && isComputerPackagesCourse(course.name)) {
+            for (const u of COMPUTER_PACKAGES_UNITS) {
+                // Upsert into global_units
+                let unitRow = await queryOne(`SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(${ph(1)})`, [u.unit_name]);
+                if (!unitRow) {
+                    if (isPg) {
+                        const r = await query(
+                            `INSERT INTO global_units (unit_code, unit_name, status) VALUES ($1, $2, 'Active') RETURNING id`,
+                            [u.unit_code, u.unit_name]
+                        );
+                        unitRow = r[0];
+                    } else {
+                        const r = await run(`INSERT INTO global_units (unit_code, unit_name, status) VALUES (?, ?, 'Active')`, [u.unit_code, u.unit_name]);
+                        unitRow = { id: r.lastID };
+                    }
                 }
-                merged.push({ id: newId, course_id: courseId, name: uName, sort_order: i, status: 'Active' });
+                // Link to course
+                if (isPg) {
+                    await query(`INSERT INTO program_units (unit_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [unitRow.id, courseId]);
+                } else {
+                    await run(`INSERT OR IGNORE INTO program_units (unit_id, course_id) VALUES (?, ?)`, [unitRow.id, courseId]);
+                }
             }
-            console.log(`✅ Auto-populated ${merged.length} Computer Packages units for course ${courseId}`);
+            // Re-fetch
+            units = await query(
+                `SELECT gu.id, gu.unit_code AS code, gu.unit_name AS name, gu.description, gu.status
+                 FROM program_units pu
+                 LEFT JOIN global_units gu ON gu.id = pu.unit_id
+                 WHERE pu.course_id = ${ph(1)} ORDER BY gu.unit_name ASC`,
+                [courseId]
+            );
+            console.log(`✅ Auto-populated ${units.length} Computer Packages units for course ${courseId}`);
         }
 
-        res.json(merged);
+        res.json(units || []);
     } catch (error) {
         console.error('getCourseUnits error:', error);
         res.status(500).json({ error: 'Failed to fetch course units' });
@@ -514,40 +497,38 @@ export async function getCourseUnits(req, res) {
 
 /**
  * POST /api/courses/:courseId/units
- * Creates a new unit (legacy) or adds existing unit to a course.
+ * Creates a new global unit AND assigns it to the course.
  */
 export async function createCourseUnit(req, res) {
     try {
         const { courseId } = req.params;
-        const { name, sort_order, code, description } = req.body;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const { name, unit_name, code, unit_code, description } = req.body;
+        const finalName = (unit_name || name || '').trim();
+        const finalCode = (unit_code || code || '').trim();
+        const isPg = getActiveDbEngine() === 'postgres';
 
-        if (!name?.trim()) return res.status(400).json({ error: 'Unit name is required' });
+        if (!finalName) return res.status(400).json({ error: 'Unit name is required' });
 
         const course = await queryOne(`SELECT id FROM courses WHERE id = ${ph(1)}`, [courseId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
-        const existingMax = await queryOne(
-            `SELECT MAX(sort_order) AS max_order FROM course_units WHERE course_id = ${ph(1)}`,
-            [courseId]
-        );
-        const nextOrder = sort_order !== undefined ? sort_order : ((parseInt(existingMax?.max_order) ?? -1) + 1);
+        const autoCode = finalCode || finalName.substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 900 + 100);
 
         let unit;
         if (isPg) {
             const r = await query(
-                `INSERT INTO course_units (course_id, name, code, description, sort_order, status) VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}, ${ph(4)}, ${ph(5)}, 'Active') RETURNING *`,
-                [courseId, name.trim(), code?.trim() || null, description?.trim() || null, nextOrder]
+                `INSERT INTO global_units (unit_code, unit_name, description, status) VALUES ($1, $2, $3, 'Active') RETURNING *`,
+                [autoCode, finalName, description?.trim() || null]
             );
             unit = r[0];
+            await query(`INSERT INTO program_units (unit_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [unit.id, courseId]);
         } else {
             const r = await run(
-                "INSERT INTO course_units (course_id, name, code, description, sort_order, status) VALUES (?, ?, ?, ?, ?, 'Active')",
-                [courseId, name.trim(), code?.trim() || null, description?.trim() || null, nextOrder]
+                `INSERT INTO global_units (unit_code, unit_name, description, status) VALUES (?, ?, ?, 'Active')`,
+                [autoCode, finalName, description?.trim() || null]
             );
-            unit = await queryOne('SELECT * FROM course_units WHERE id = ?', [r.lastID]);
+            unit = await queryOne('SELECT * FROM global_units WHERE id=?', [r.lastID]);
+            await run(`INSERT OR IGNORE INTO program_units (unit_id, course_id) VALUES (?, ?)`, [unit.id, courseId]);
         }
 
         res.status(201).json(unit);
@@ -559,123 +540,78 @@ export async function createCourseUnit(req, res) {
 
 /**
  * PUT /api/courses/:courseId/units/:unitId
- * Updates a unit's name, code, description, or sort_order.
+ * Updates a unit's name, code, description (globally, since units are shared).
  */
 export async function updateCourseUnit(req, res) {
     try {
-        const { courseId, unitId } = req.params;
-        const { name, sort_order, code, description, status } = req.body;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
+        const { unitId } = req.params;
+        const { name, unit_name, code, unit_code, description, status } = req.body;
+        const isPg = getActiveDbEngine() === 'postgres';
 
-        // Look up by id (unit may be assigned via assignment table or legacy course_id)
-        const unit = await queryOne(`SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+        const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
-        const updatedName = name !== undefined ? name.trim() : unit.name;
-        const updatedOrder = sort_order !== undefined ? sort_order : unit.sort_order;
-        const updatedCode = code !== undefined ? (code?.trim() || null) : unit.code;
-        const updatedDesc = description !== undefined ? (description?.trim() || null) : unit.description;
+        const updatedName   = (unit_name || name)?.trim() ?? unit.unit_name;
+        const updatedCode   = (unit_code || code)?.trim() ?? unit.unit_code;
+        const updatedDesc   = description !== undefined ? (description?.trim() || null) : unit.description;
         const updatedStatus = status ?? unit.status ?? 'Active';
 
         if (isPg) {
             await query(
-                `UPDATE course_units SET name = ${ph(1)}, sort_order = ${ph(2)}, code = ${ph(3)}, description = ${ph(4)}, status = ${ph(5)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${ph(6)}`,
-                [updatedName, updatedOrder, updatedCode, updatedDesc, updatedStatus, unitId]
+                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5',
+                [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
             );
-            const updated = await queryOne(`SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+            const updated = await queryOne('SELECT * FROM global_units WHERE id=$1', [unitId]);
             res.json(updated);
         } else {
             await run(
-                'UPDATE course_units SET name = ?, sort_order = ?, code = ?, description = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                [updatedName, updatedOrder, updatedCode, updatedDesc, updatedStatus, unitId]
+                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
             );
-            const updated = await queryOne('SELECT * FROM course_units WHERE id = ?', [unitId]);
+            const updated = await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]);
             res.json(updated);
         }
     } catch (error) {
         console.error('updateCourseUnit error:', error);
-        res.status(500).json({ error: 'Failed to update course unit' });
+        res.status(500).json({ error: 'Failed to update unit' });
     }
 }
 
 /**
  * DELETE /api/courses/:courseId/units/:unitId
- * Removes the unit from the course. If it has records, deactivates instead of deleting.
+ * Removes a unit from a course (unlinks from program_units).
+ * If the unit has student records, deactivates it instead.
  */
 export async function deleteCourseUnit(req, res) {
     try {
         const { courseId, unitId } = req.params;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
 
-        const unit = await queryOne(`SELECT * FROM course_units WHERE id = ${ph(1)}`, [unitId]);
+        const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
-        // Check for associated records
-        const markCount = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]);
-        const total = parseInt(markCount?.cnt) || 0;
+        let total = 0;
+        try { const c = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]); total += parseInt(c?.cnt) || 0; } catch (_) {}
+        try { const c = await queryOne(`SELECT COUNT(*) AS cnt FROM assessment_results WHERE unit_id = ${ph(1)}`, [unitId]); total += parseInt(c?.cnt) || 0; } catch (_) {}
 
         if (total > 0) {
-            // Remove from assignment table only – keep the unit with Inactive status
-            await run(`DELETE FROM course_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
-            await run(`UPDATE course_units SET status = 'Inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ${ph(1)}`, [unitId]);
+            await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
+            await run(`UPDATE global_units SET status='Inactive', updated_at=CURRENT_TIMESTAMP WHERE id = ${ph(1)}`, [unitId]);
             return res.json({ message: `Unit has ${total} student record(s). It has been deactivated and removed from this course to preserve historical data.`, deactivated: true });
         }
 
-        // Remove from assignment table
-        await run(`DELETE FROM course_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
-        // Remove legacy course_id link if it was the owning course
-        if (String(unit.course_id) === String(courseId)) {
-            await run(`DELETE FROM course_units WHERE id = ${ph(1)}`, [unitId]);
-        }
-
-        res.json({ message: 'Unit removed successfully' });
+        await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
+        res.json({ message: 'Unit removed from course successfully' });
     } catch (error) {
         console.error('deleteCourseUnit error:', error);
-        res.status(500).json({ error: 'Failed to delete course unit' });
+        res.status(500).json({ error: 'Failed to remove unit from course' });
     }
 }
 
 /**
  * POST /api/courses/:courseId/units/reorder
- * Bulk-update sort_order for units.
+ * No-op for new architecture (units are ordered alphabetically from global_units).
+ * Kept for backward compatibility.
  */
 export async function reorderCourseUnits(req, res) {
-    try {
-        const { courseId } = req.params;
-        const { order } = req.body;
-        const engine = getActiveDbEngine();
-        const isPg = engine === 'postgres';
-        const ph = (i) => isPg ? `$${i}` : '?';
-
-        if (!Array.isArray(order)) return res.status(400).json({ error: 'order must be an array' });
-
-        for (const item of order) {
-            // Update assignment table first
-            try {
-                await run(
-                    `UPDATE course_unit_assignments SET sort_order = ${ph(1)} WHERE id = ${ph(2)} AND course_id = ${ph(3)}`,
-                    [item.sort_order, item.id, courseId]
-                );
-            } catch (_) { /* assignment table may not exist */ }
-
-            // Also update legacy sort_order on course_units
-            await run(
-                `UPDATE course_units SET sort_order = ${ph(1)}, updated_at = CURRENT_TIMESTAMP WHERE id = ${ph(2)} AND course_id = ${ph(3)}`,
-                [item.sort_order, item.id, courseId]
-            );
-        }
-
-        const units = await query(
-            `SELECT * FROM course_units WHERE course_id = ${ph(1)} ORDER BY sort_order ASC, id ASC`,
-            [courseId]
-        );
-        res.json(units);
-    } catch (error) {
-        console.error('reorderCourseUnits error:', error);
-        res.status(500).json({ error: 'Failed to reorder units' });
-    }
+    res.json({ message: 'Units are ordered globally. Reorder is not required in the new architecture.' });
 }

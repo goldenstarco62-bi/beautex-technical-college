@@ -26,10 +26,13 @@ export async function getTrainerUnitAssignments(req, res) {
 
         let sql = `
             SELECT tua.id, tua.faculty_id, tua.unit_id, tua.course_id, tua.assigned_by, tua.assigned_at,
-                   cu.name AS unit_name, cu.code AS unit_code, cu.status AS unit_status,
+                   COALESCE(gu.unit_name, cu.name) AS unit_name,
+                   COALESCE(gu.unit_code, cu.code) AS unit_code,
+                   COALESCE(gu.status, cu.status) AS unit_status,
                    c.name AS course_name,
                    f.name AS faculty_name, f.email AS faculty_email, f.department AS faculty_department
             FROM trainer_unit_assignments tua
+            LEFT JOIN global_units gu ON gu.id = tua.unit_id
             LEFT JOIN course_units cu ON cu.id = tua.unit_id
             LEFT JOIN courses c ON c.id = tua.course_id
             LEFT JOIN faculty f ON f.id = tua.faculty_id
@@ -78,13 +81,17 @@ export async function getMyUnits(req, res) {
 
         const rows = await query(
             `SELECT tua.id AS assignment_id, tua.unit_id, tua.course_id, tua.assigned_at,
-                    cu.name AS unit_name, cu.code AS unit_code, cu.status AS unit_status,
+                    COALESCE(gu.unit_name, cu.name) AS unit_name,
+                    COALESCE(gu.unit_code, cu.code) AS unit_code,
+                    COALESCE(gu.status, cu.status) AS unit_status,
                     c.name AS course_name
              FROM trainer_unit_assignments tua
+             LEFT JOIN global_units gu ON gu.id = tua.unit_id
              LEFT JOIN course_units cu ON cu.id = tua.unit_id
              LEFT JOIN courses c ON c.id = tua.course_id
              WHERE tua.faculty_id = ${ph(1)}
-             ORDER BY c.name ASC, cu.name ASC`,
+             ORDER BY c.name ASC, COALESCE(gu.unit_name, cu.name) ASC`,
+
             [faculty.id]
         );
         res.json(rows || []);
@@ -112,7 +119,8 @@ export async function assignTrainerUnit(req, res) {
         const faculty = await queryOne(`SELECT id, name FROM faculty WHERE id = ${ph(1)}`, [faculty_id]);
         if (!faculty) return res.status(404).json({ error: 'Faculty member not found' });
 
-        const unit = await queryOne(`SELECT id, name FROM course_units WHERE id = ${ph(1)}`, [unit_id]);
+        const unit = await queryOne(`SELECT id, COALESCE(unit_name, name) AS name FROM global_units WHERE id = ${ph(1)}`, [unit_id])
+            || await queryOne(`SELECT id, name FROM course_units WHERE id = ${ph(1)}`, [unit_id]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
         const course = await queryOne(`SELECT id, name FROM courses WHERE id = ${ph(1)}`, [course_id]);
@@ -198,11 +206,14 @@ export async function bulkSetTrainerUnits(req, res) {
 
         // Return the updated assignments for this trainer+course
         const updated = await query(
-            `SELECT tua.id, tua.unit_id, cu.name AS unit_name, cu.code AS unit_code
+            `SELECT tua.id, tua.unit_id,
+                    COALESCE(gu.unit_name, cu.name) AS unit_name,
+                    COALESCE(gu.unit_code, cu.code) AS unit_code
              FROM trainer_unit_assignments tua
+             LEFT JOIN global_units gu ON gu.id = tua.unit_id
              LEFT JOIN course_units cu ON cu.id = tua.unit_id
              WHERE tua.faculty_id = ${ph(1)} AND tua.course_id = ${ph(2)}
-             ORDER BY cu.name ASC`,
+             ORDER BY COALESCE(gu.unit_name, cu.name) ASC`,
             [faculty_id, course_id]
         );
 
@@ -226,12 +237,16 @@ export async function removeTrainerUnit(req, res) {
         const { id } = req.params;
 
         const existing = await queryOne(
-            `SELECT tua.id, f.name AS faculty_name, cu.name AS unit_name, c.name AS course_name
+            `SELECT tua.id, f.name AS faculty_name,
+                    COALESCE(gu.unit_name, cu.name) AS unit_name,
+                    c.name AS course_name
              FROM trainer_unit_assignments tua
              LEFT JOIN faculty f ON f.id = tua.faculty_id
+             LEFT JOIN global_units gu ON gu.id = tua.unit_id
              LEFT JOIN course_units cu ON cu.id = tua.unit_id
              LEFT JOIN courses c ON c.id = tua.course_id
              WHERE tua.id = ${ph(1)}`,
+
             [id]
         );
         if (!existing) return res.status(404).json({ error: 'Assignment not found' });

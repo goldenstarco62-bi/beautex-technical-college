@@ -56,6 +56,36 @@ api.interceptors.response.use(
     }
 );
 
+// ─── Unit field normalizer ─────────────────────────────────────────────────
+// The new global_units table uses unit_name/unit_code column names.
+// All existing frontend pages use .name and .code.
+// This interceptor transparently maps the new column names → old names so
+// every existing component continues to work without modification.
+function normalizeUnit(obj) {
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        if ('unit_name' in obj && !('name' in obj)) obj.name = obj.unit_name;
+        if ('unit_code' in obj && !('code' in obj)) obj.code = obj.unit_code;
+    }
+    return obj;
+}
+function deepNormalizeUnits(data) {
+    if (Array.isArray(data)) return data.map(deepNormalizeUnits);
+    if (data && typeof data === 'object') {
+        normalizeUnit(data);
+        Object.values(data).forEach(v => { if (typeof v === 'object') deepNormalizeUnits(v); });
+    }
+    return data;
+}
+
+api.interceptors.response.use((response) => {
+    const url = response.config?.url || '';
+    // Apply normalization to unit-related endpoints
+    if (url.includes('unit') || url.includes('course')) {
+        response.data = deepNormalizeUnits(response.data);
+    }
+    return response;
+}, null);
+
 
 // Auth
 export const authAPI = {

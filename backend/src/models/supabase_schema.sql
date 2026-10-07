@@ -449,3 +449,69 @@ CREATE TABLE IF NOT EXISTS student_daily_reports (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Global Units (Stand-alone units)
+CREATE TABLE IF NOT EXISTS global_units (
+    id SERIAL PRIMARY KEY,
+    unit_code TEXT UNIQUE NOT NULL,
+    unit_name TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Program Units (Junction mapping units to courses)
+CREATE TABLE IF NOT EXISTS program_units (
+    id SERIAL PRIMARY KEY,
+    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    unit_id INTEGER NOT NULL REFERENCES global_units(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(course_id, unit_id)
+);
+
+-- Assessments Configuration
+CREATE TABLE IF NOT EXISTS assessments (
+    id SERIAL PRIMARY KEY,
+    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    unit_id INTEGER NOT NULL REFERENCES global_units(id) ON DELETE CASCADE,
+    assessment_name TEXT NOT NULL,
+    assessment_type TEXT NOT NULL,
+    max_marks DECIMAL NOT NULL,
+    weight DECIMAL NOT NULL,
+    term TEXT,
+    academic_year TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Assessment Results
+CREATE TABLE IF NOT EXISTS assessment_results (
+    id SERIAL PRIMARY KEY,
+    student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    unit_id INTEGER NOT NULL REFERENCES global_units(id) ON DELETE CASCADE,
+    assessment_id INTEGER NOT NULL REFERENCES assessments(id) ON DELETE CASCADE,
+    marks DECIMAL NOT NULL,
+    grade TEXT,
+    entered_by TEXT,
+    status TEXT DEFAULT 'Submitted',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, course_id, unit_id, assessment_id)
+);
+
+-- Trainer Unit Assignments
+CREATE TABLE IF NOT EXISTS trainer_unit_assignments (
+    id SERIAL PRIMARY KEY,
+    trainer_id TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    unit_id INTEGER NOT NULL REFERENCES global_units(id) ON DELETE CASCADE,
+    class_id TEXT,
+    academic_year TEXT,
+    term TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(trainer_id, course_id, unit_id)
+);

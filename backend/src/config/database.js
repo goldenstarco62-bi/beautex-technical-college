@@ -1042,6 +1042,82 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ trainer_unit_assignments migration warning (PostgreSQL):', e.message);
     }
+
+    // ── New Academic Structure Tables ─────────────────────────────────────────
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS global_units (
+                id SERIAL PRIMARY KEY,
+                unit_code TEXT UNIQUE NOT NULL,
+                unit_name TEXT NOT NULL,
+                description TEXT,
+                status TEXT DEFAULT 'Active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ global_units table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ global_units migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS program_units (
+                id SERIAL PRIMARY KEY,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(course_id, unit_id)
+            )
+        `);
+        console.log('✅ program_units table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ program_units migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS assessments (
+                id SERIAL PRIMARY KEY,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                assessment_name TEXT NOT NULL,
+                assessment_type TEXT NOT NULL,
+                max_marks DECIMAL NOT NULL,
+                weight DECIMAL NOT NULL,
+                term TEXT,
+                academic_year TEXT,
+                status TEXT DEFAULT 'Active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ assessments table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ assessments migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS assessment_results (
+                id SERIAL PRIMARY KEY,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                assessment_id INTEGER NOT NULL,
+                marks DECIMAL NOT NULL,
+                grade TEXT,
+                entered_by TEXT,
+                status TEXT DEFAULT 'Submitted',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, course_id, unit_id, assessment_id)
+            )
+        `);
+        console.log('✅ assessment_results table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ assessment_results migration warning (PostgreSQL):', e.message);
+    }
 }
 
 
@@ -1711,6 +1787,82 @@ async function runSqliteMigrations(database) {
         console.log('✅ result_audit_logs table ensured (SQLite)');
     } catch (e) {
         console.warn('⚠️ result_audit_logs migration warning (SQLite):', e.message);
+    }
+
+    // ── New Academic Structure Tables (SQLite) ────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS global_units (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                unit_code TEXT UNIQUE NOT NULL,
+                unit_name TEXT NOT NULL,
+                description TEXT,
+                status TEXT DEFAULT 'Active',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ global_units table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ global_units migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS program_units (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(course_id, unit_id)
+            )
+        `);
+        console.log('✅ program_units table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ program_units migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS assessments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                assessment_name TEXT NOT NULL,
+                assessment_type TEXT NOT NULL,
+                max_marks REAL NOT NULL,
+                weight REAL NOT NULL,
+                term TEXT,
+                academic_year TEXT,
+                status TEXT DEFAULT 'Active',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ assessments table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ assessments migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS assessment_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                assessment_id INTEGER NOT NULL,
+                marks REAL NOT NULL,
+                grade TEXT,
+                entered_by TEXT,
+                status TEXT DEFAULT 'Submitted',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(student_id, course_id, unit_id, assessment_id)
+            )
+        `);
+        console.log('✅ assessment_results table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ assessment_results migration warning (SQLite):', e.message);
     }
 
     // ── Inventory Requisition System (SQLite) ─────────────────────────────────

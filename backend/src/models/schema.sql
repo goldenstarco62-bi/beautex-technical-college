@@ -501,3 +501,78 @@ CREATE TABLE IF NOT EXISTS student_daily_reports (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
+
+-- Global Units (Stand-alone units)
+CREATE TABLE IF NOT EXISTS global_units (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    unit_code TEXT UNIQUE NOT NULL,
+    unit_name TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Program Units (Junction mapping units to courses)
+CREATE TABLE IF NOT EXISTS program_units (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    unit_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+    FOREIGN KEY (unit_id) REFERENCES global_units(id) ON DELETE CASCADE,
+    UNIQUE(course_id, unit_id)
+);
+
+-- Assessments Configuration
+CREATE TABLE IF NOT EXISTS assessments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id TEXT NOT NULL,
+    unit_id INTEGER NOT NULL,
+    assessment_name TEXT NOT NULL,
+    assessment_type TEXT NOT NULL,
+    max_marks REAL NOT NULL,
+    weight REAL NOT NULL,
+    term TEXT,
+    academic_year TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+    FOREIGN KEY (unit_id) REFERENCES global_units(id) ON DELETE CASCADE
+);
+
+-- Assessment Results
+CREATE TABLE IF NOT EXISTS assessment_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    unit_id INTEGER NOT NULL,
+    assessment_id INTEGER NOT NULL,
+    marks REAL NOT NULL,
+    grade TEXT,
+    entered_by TEXT,
+    status TEXT DEFAULT 'Submitted',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+    FOREIGN KEY (unit_id) REFERENCES global_units(id) ON DELETE CASCADE,
+    FOREIGN KEY (assessment_id) REFERENCES assessments(id) ON DELETE CASCADE,
+    UNIQUE(student_id, course_id, unit_id, assessment_id)
+);
+
+-- Trainer Unit Assignments
+CREATE TABLE IF NOT EXISTS trainer_unit_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    trainer_id TEXT NOT NULL,
+    course_id TEXT NOT NULL,
+    unit_id INTEGER NOT NULL,
+    class_id TEXT,
+    academic_year TEXT,
+    term TEXT,
+    status TEXT DEFAULT 'Active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (unit_id) REFERENCES global_units(id) ON DELETE CASCADE,
+    UNIQUE(trainer_id, course_id, unit_id)
+);

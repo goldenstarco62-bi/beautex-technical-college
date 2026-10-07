@@ -59,8 +59,8 @@ function Toast({ message, type = 'success', onClose }) {
 // ─── Unit Form Modal ──────────────────────────────────────────────────────────
 function UnitFormModal({ unit, onClose, onSave }) {
     const [form, setForm] = useState({
-        name: unit?.name || '',
-        code: unit?.code || '',
+        name: unit?.name || unit?.unit_name || '',
+        code: unit?.code || unit?.unit_code || '',
         description: unit?.description || '',
         status: unit?.status || 'Active',
     });
@@ -190,11 +190,24 @@ function AssignCoursesModal({ unit, allCourses, onClose, onDone }) {
             const toAdd = [...assigned].filter(id => !currentSet.has(id));
             const toRemove = [...currentSet].filter(id => !assigned.has(id));
 
+            let failedErr = null;
             for (const courseId of toAdd) {
-                try { await masterUnitsAPI.assignToCourse(unit.id, courseId); } catch (_) { }
+                try {
+                    await masterUnitsAPI.assignToCourse(unit.id, courseId);
+                } catch (err) {
+                    failedErr = err.response?.data?.error || err.message;
+                }
             }
             for (const courseId of toRemove) {
-                try { await masterUnitsAPI.removeFromCourse(unit.id, courseId); } catch (_) { }
+                try {
+                    await masterUnitsAPI.removeFromCourse(unit.id, courseId);
+                } catch (err) {
+                    failedErr = err.response?.data?.error || err.message;
+                }
+            }
+            if (failedErr) {
+                setError(failedErr);
+                return;
             }
 
             onDone();
@@ -214,7 +227,7 @@ function AssignCoursesModal({ unit, allCourses, onClose, onDone }) {
                             <Link2 size={18} color="#60a5fa" />
                             <span style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Assign Unit to Courses</span>
                         </div>
-                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 }}>{unit.name}</p>
+                        <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 }}>{unit.name || unit.unit_name}</p>
                     </div>
                     <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 10, padding: '6px 8px', cursor: 'pointer', color: '#fff' }}>
                         <X size={16} />
@@ -297,10 +310,11 @@ function QuickAttachUnitsModal({ course, allUnits, onClose, onDone }) {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
-    const filtered = allUnits.filter(u =>
-        u.name.toLowerCase().includes(search.toLowerCase()) ||
-        (u.code || '').toLowerCase().includes(search.toLowerCase())
-    );
+    const filtered = allUnits.filter(u => {
+        const uName = String(u.name || u.unit_name || '').toLowerCase();
+        const uCode = String(u.code || u.unit_code || '').toLowerCase();
+        return uName.includes(search.toLowerCase()) || uCode.includes(search.toLowerCase());
+    });
 
     const toggle = (unitId) => {
         setSelectedUnits(prev => {
@@ -318,11 +332,24 @@ function QuickAttachUnitsModal({ course, allUnits, onClose, onDone }) {
             const toAdd = [...selectedUnits].filter(id => !initiallyAttached.has(id));
             const toRemove = [...initiallyAttached].filter(id => !selectedUnits.has(id));
 
+            let failedErr = null;
             for (const unitId of toAdd) {
-                try { await masterUnitsAPI.assignToCourse(unitId, course.id); } catch (_) { }
+                try {
+                    await masterUnitsAPI.assignToCourse(unitId, course.id);
+                } catch (err) {
+                    failedErr = err.response?.data?.error || err.message;
+                }
             }
             for (const unitId of toRemove) {
-                try { await masterUnitsAPI.removeFromCourse(unitId, course.id); } catch (_) { }
+                try {
+                    await masterUnitsAPI.removeFromCourse(unitId, course.id);
+                } catch (err) {
+                    failedErr = err.response?.data?.error || err.message;
+                }
+            }
+            if (failedErr) {
+                setError(failedErr);
+                return;
             }
 
             onDone();
@@ -390,9 +417,9 @@ function QuickAttachUnitsModal({ course, allUnits, onClose, onDone }) {
                                         {isSelected && <CheckCircle2 size={13} color="#FFD700" />}
                                     </div>
                                     <div>
-                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{unit.name}</div>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{unit.name || unit.unit_name}</div>
                                         <div style={{ fontSize: 11, color: '#64748b' }}>
-                                            {unit.code ? <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, marginRight: 6 }}>{unit.code}</span> : null}
+                                            {(unit.code || unit.unit_code) ? <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, marginRight: 6 }}>{unit.code || unit.unit_code}</span> : null}
                                             {unit.status}
                                         </div>
                                     </div>
@@ -456,7 +483,7 @@ function DeleteModal({ unit, onClose, onDeleted }) {
                         </div>
                     ) : (
                         <p style={{ color: '#374151', fontSize: 14, marginBottom: 16 }}>
-                            Are you sure you want to permanently delete <strong>"{unit.name}"</strong>?
+                            Are you sure you want to permanently delete <strong>"{unit.name || unit.unit_name}"</strong>?
                             This action cannot be undone. Units with student records cannot be deleted — deactivate them instead.
                         </p>
                     )}
@@ -545,7 +572,7 @@ export default function UnitManagement() {
             setUnits(prev => prev.map(u => u.id === savedUnit.id ? { ...u, ...savedUnit } : u));
         }
         setModal(null);
-        showToast(`Unit "${savedUnit.name}" ${action} successfully`);
+        showToast(`Unit "${savedUnit.name || savedUnit.unit_name}" ${action} successfully`);
     };
 
     const handleToggleStatus = async (unit) => {
@@ -553,7 +580,7 @@ export default function UnitManagement() {
         try {
             const res = await masterUnitsAPI.updateStatus(unit.id, newStatus);
             setUnits(prev => prev.map(u => u.id === unit.id ? { ...u, ...res.data } : u));
-            showToast(`Unit "${unit.name}" set to ${newStatus}`);
+            showToast(`Unit "${unit.name || unit.unit_name}" set to ${newStatus}`);
         } catch (err) {
             showToast(err.response?.data?.error || 'Failed to update status', 'error');
         }
@@ -572,7 +599,7 @@ export default function UnitManagement() {
     const handleDeleted = (deletedUnit) => {
         setUnits(prev => prev.filter(u => u.id !== deletedUnit.id));
         setModal(null);
-        showToast(`Unit "${deletedUnit.name}" deleted`);
+        showToast(`Unit "${deletedUnit.name || deletedUnit.unit_name}" deleted`);
     };
 
     const handleAssignDone = () => {
@@ -587,7 +614,9 @@ export default function UnitManagement() {
         
         // Filter units first based on search & status
         const matchingUnits = units.filter(u => {
-            const matchSearch = !q || u.name.toLowerCase().includes(q) || (u.code || '').toLowerCase().includes(q);
+            const uName = String(u.name || u.unit_name || '').toLowerCase();
+            const uCode = String(u.code || u.unit_code || '').toLowerCase();
+            const matchSearch = !q || uName.includes(q) || uCode.includes(q);
             const matchStatus = !filterStatus || u.status === filterStatus;
             return matchSearch && matchStatus;
         });
@@ -821,9 +850,9 @@ export default function UnitManagement() {
                                     {courseGroupedData.unassigned.map(unit => (
                                         <div key={unit.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #f1f5f9' }}>
                                             <div>
-                                                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{unit.name}</div>
+                                                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{unit.name || unit.unit_name}</div>
                                                 <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                                                    {unit.code ? <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#f1f5f9', padding: '1px 6px', borderRadius: 4, marginRight: 6 }}>{unit.code}</span> : null}
+                                                    {(unit.code || unit.unit_code) ? <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#f1f5f9', padding: '1px 6px', borderRadius: 4, marginRight: 6 }}>{unit.code || unit.unit_code}</span> : null}
                                                     {unit.description}
                                                 </div>
                                             </div>
@@ -904,12 +933,12 @@ export default function UnitManagement() {
                                                     {courseUnits.map(unit => (
                                                         <tr key={unit.id} className="unit-row" style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                             <td style={tdStyle}>
-                                                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{unit.name}</div>
+                                                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{unit.name || unit.unit_name}</div>
                                                                 {unit.description && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{unit.description}</div>}
                                                             </td>
                                                             <td style={tdStyle}>
-                                                                {unit.code ? (
-                                                                    <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, color: '#475569', fontWeight: 700 }}>{unit.code}</span>
+                                                                {(unit.code || unit.unit_code) ? (
+                                                                    <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, color: '#475569', fontWeight: 700 }}>{unit.code || unit.unit_code}</span>
                                                                 ) : <span style={{ color: '#cbd5e1' }}>—</span>}
                                                             </td>
                                                             <td style={tdStyle}><Badge status={unit.status || 'Active'} /></td>
@@ -983,14 +1012,14 @@ export default function UnitManagement() {
                                                 <BookMarked size={16} color="#92400e" />
                                             </div>
                                             <div>
-                                                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{unit.name}</div>
+                                                <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{unit.name || unit.unit_name}</div>
                                                 {unit.description && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{unit.description}</div>}
                                             </div>
                                         </div>
 
                                         <div>
-                                            {unit.code ? (
-                                                <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, color: '#475569', fontWeight: 700 }}>{unit.code}</span>
+                                            {(unit.code || unit.unit_code) ? (
+                                                <span style={{ fontFamily: 'monospace', fontSize: 12, background: '#f1f5f9', padding: '2px 8px', borderRadius: 6, color: '#475569', fontWeight: 700 }}>{unit.code || unit.unit_code}</span>
                                             ) : <span style={{ color: '#cbd5e1' }}>—</span>}
                                         </div>
 
