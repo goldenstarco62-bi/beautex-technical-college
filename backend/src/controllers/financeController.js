@@ -501,7 +501,7 @@ export async function recordPayment(req, res) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
 
-            const student = await Student.findOne({ id: { $regex: new RegExp(`^${student_id.trim()}$`, 'i') } });
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(student_id).trim())}$`, 'i') } });
             const canonicalId = student ? student.id : student_id;
 
             const newPayment = new Payment({
@@ -1118,7 +1118,7 @@ export async function updateStudentFee(req, res) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
             
-            const student = await Student.findOne({ id: { $regex: new RegExp(`^${id.trim()}$`, 'i') } });
+            const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(id).trim())}$`, 'i') } });
             const canonicalId = student ? student.id : id;
 
             // Directly update student_fees — no phantom ADJ payment entries created.
