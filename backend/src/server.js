@@ -171,8 +171,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // Utility to catch errors during request handling
+// After an uncaught exception the process state is undefined (leaked handles,
+// half-finished requests, possibly corrupt in-memory state) — the only safe
+// path is to log and exit, letting the supervisor (Vercel/pm2/systemd) restart.
 process.on('uncaughtException', (err) => {
-    logger.fatal({ err }, '🔥 CRITICAL UNCAUGHT EXCEPTION');
+    logger.fatal({ err }, '🔥 CRITICAL UNCAUGHT EXCEPTION — shutting down');
+    // Small delay so pino's async transport (dev pretty-printer) can flush.
+    setTimeout(() => process.exit(1), 100);
 });
 
 process.on('unhandledRejection', (reason) => {
