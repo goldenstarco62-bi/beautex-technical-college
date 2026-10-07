@@ -20,6 +20,7 @@ import * as studentUnitMarksController from '../controllers/studentUnitMarksCont
 import * as unitCoverageController from '../controllers/unitCoverageController.js';
 import * as catController from '../controllers/catController.js';
 import * as catResultsController from '../controllers/catResultsController.js';
+import * as trainerUnitController from '../controllers/trainerUnitController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -56,6 +57,13 @@ router.get('/units/:unitId/courses', authenticateToken, courseUnitController.get
 router.post('/units/:unitId/courses', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.assignUnitToCourse);
 router.delete('/units/:unitId/courses/:courseId', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.unassignUnitFromCourse);
 router.put('/courses/:courseId/units/assignments', authenticateToken, authorizeRoles('admin', 'superadmin'), courseUnitController.setCourseUnitAssignments);
+
+// ── Trainer Unit Assignments (Trainer X teaches Unit Y in Course Z) ───────────
+router.get('/trainer-units/my-units', authenticateToken, authorizeRoles('teacher'), trainerUnitController.getMyUnits);
+router.get('/trainer-units', authenticateToken, trainerUnitController.getTrainerUnitAssignments);
+router.post('/trainer-units', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerUnitController.assignTrainerUnit);
+router.post('/trainer-units/bulk-set', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerUnitController.bulkSetTrainerUnits);
+router.delete('/trainer-units/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerUnitController.removeTrainerUnit);
 
 // ── Course Units (competency-based grading, per-course) ───────────────────────
 router.get('/courses/:courseId/units', authenticateToken, courseUnitController.getCourseUnits);

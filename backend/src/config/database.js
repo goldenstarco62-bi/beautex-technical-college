@@ -1022,6 +1022,26 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ result_audit_logs migration warning (PostgreSQL):', e.message);
     }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS trainer_unit_assignments (
+                id SERIAL PRIMARY KEY,
+                faculty_id TEXT NOT NULL,
+                course_id TEXT NOT NULL,
+                unit_id INTEGER NOT NULL,
+                assigned_by TEXT,
+                assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(faculty_id, course_id, unit_id)
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_tua_faculty ON trainer_unit_assignments(faculty_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_tua_course ON trainer_unit_assignments(course_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_tua_unit ON trainer_unit_assignments(unit_id)');
+        console.log('✅ trainer_unit_assignments table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ trainer_unit_assignments migration warning (PostgreSQL):', e.message);
+    }
 }
 
 
@@ -1208,7 +1228,18 @@ async function runSqliteMigrations(database) {
                     UNIQUE(course_id, unit_id)
                 )
             `);
-            console.log('✅ course_units & course_unit_assignments ensured (SQLite)');
+            await database.run(`
+                CREATE TABLE IF NOT EXISTS trainer_unit_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    faculty_id TEXT NOT NULL,
+                    course_id TEXT NOT NULL,
+                    unit_id INTEGER NOT NULL,
+                    assigned_by TEXT,
+                    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(faculty_id, course_id, unit_id)
+                )
+            `);
+            console.log('✅ course_units, course_unit_assignments & trainer_unit_assignments ensured (SQLite)');
         } catch (e) {
             console.warn('⚠️ course_units SQLite migration warning:', e.message);
         }

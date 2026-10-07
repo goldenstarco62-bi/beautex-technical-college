@@ -75,7 +75,7 @@ export default function StudentPassport({ data, role }) {
                         <div className="passport-id-chip">
                             <span className="passport-chip-label">Admission No.</span>
                             <span className="passport-chip-value">
-                                {data.id?.toString().startsWith('BT') ? data.id : `BT${data.id}`}
+                                {data.id}
                             </span>
                         </div>
                         <div className="passport-status-chip">

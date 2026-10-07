@@ -127,7 +127,7 @@ export async function createUnit(req, res) {
                 'INSERT INTO course_units (name, code, description, status, sort_order, course_id) VALUES ($1, $2, $3, $4, 0, NULL) RETURNING *',
                 [name.trim(), code?.trim() || null, description?.trim() || null, status]
             );
-            res.status(201).json(result.rows[0]);
+            res.status(201).json(result[0]);
         } else {
             result = await run(
                 "INSERT INTO course_units (name, code, description, status, sort_order) VALUES (?, ?, ?, ?, 0)",
@@ -492,7 +492,7 @@ export async function getCourseUnits(req, res) {
                         `INSERT INTO course_units (course_id, name, sort_order, status) VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}, 'Active') RETURNING id`,
                         [courseId, uName, i]
                     );
-                    newId = r.rows[0].id;
+                    newId = r[0].id;
                 } else {
                     const r = await run(
                         "INSERT INTO course_units (course_id, name, sort_order, status) VALUES (?, ?, ?, 'Active')",
@@ -541,7 +541,7 @@ export async function createCourseUnit(req, res) {
                 `INSERT INTO course_units (course_id, name, code, description, sort_order, status) VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}, ${ph(4)}, ${ph(5)}, 'Active') RETURNING *`,
                 [courseId, name.trim(), code?.trim() || null, description?.trim() || null, nextOrder]
             );
-            unit = r.rows[0];
+            unit = r[0];
         } else {
             const r = await run(
                 "INSERT INTO course_units (course_id, name, code, description, sort_order, status) VALUES (?, ?, ?, ?, ?, 'Active')",

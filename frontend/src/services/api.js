@@ -498,4 +498,13 @@ export const catResultsAPI = {
     getAuditLogs: (params) => api.get('cat-results/audit-log', { params }),
 };
 
+// ── Trainer Unit Assignments API ─────────────────────────────────────────────
+export const trainerUnitsAPI = {
+    getAssignments: (params) => api.get('trainer-units', { params }),
+    getMyUnits: () => api.get('trainer-units/my-units'),
+    createAssignment: (data) => api.post('trainer-units', data),
+    bulkSetAssignments: (data) => api.post('trainer-units/bulk-set', data),
+    deleteAssignment: (id) => api.delete(`trainer-units/${id}`),
+};
+
 export default api;

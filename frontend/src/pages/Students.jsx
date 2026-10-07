@@ -645,7 +645,7 @@ export default function Students() {
                                                 )}
                                             </p>
                                             <p className="text-[9px] text-gray-400 font-mono mt-0.5 truncate">
-                                                {s.id?.toString().startsWith('BT') ? s.id : `BT${s.id}`} · {Array.isArray(s.course) ? s.course[0] : s.course}
+                                                {s.id} · {Array.isArray(s.course) ? s.course[0] : s.course}
                                             </p>
                                         </div>
                                         {/* Status */}
@@ -723,7 +723,7 @@ export default function Students() {
 
                                     <td className="px-6 py-5">
                                                                                 <span className="text-xs font-bold text-gray-500">
-                                            {student.id?.toString().startsWith('BT') ? student.id : `BT${student.id}`}
+                                            {student.id}
                                         </span>
 
                                     </td>
@@ -918,7 +918,7 @@ export default function Students() {
                                 <div className="pb-1">
                                     <h2 className="text-xl font-black text-white tracking-tight">{student.name}</h2>
                                     <p className="text-gold text-[10px] font-black uppercase tracking-widest mt-1">
-                                        BT{student.id?.toString().padStart(7, '0')} · {Array.isArray(student.course) ? student.course.join(', ') : student.course}
+                                        {student.id} · {Array.isArray(student.course) ? student.course.join(', ') : student.course}
                                     </p>
                                     <span className={`inline-block mt-2 px-3 py-1 text-[9px] font-black uppercase tracking-widest rounded-lg border ${student.status === 'Active' ? 'bg-green-500/20 text-green-200 border-green-400/30' : 'bg-white/10 text-white border-white/20'}`}>
                                         {student.status || 'Active'}

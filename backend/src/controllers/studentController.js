@@ -1,4 +1,4 @@
-import { getDb, query, queryOne, run } from '../config/database.js';
+import { getDb, query, queryOne, run, withTransaction } from '../config/database.js';
 import { sendWelcomeEmail, sendAdminResetPasswordEmail } from '../services/emailService.js';
 import { sendLoginCredentials } from '../services/smsService.js';
 import { logActivity } from '../services/auditService.js';
@@ -19,6 +19,29 @@ function generatePassword(length = 12) {
 
 // Helper to check if using MongoDB
 const isMongo = async () => !!process.env.MONGODB_URI;
+
+// Tables/collections that store a student's admission number in a `student_id`
+// column. When an admission number is renamed, every one of these must be
+// updated in the same transaction or the student's payments, fees, grades and
+// attendance get orphaned under the old ID. Verified against the live schema.
+const STUDENT_ID_REFERENCES = [
+    'academic_reports',
+    'attendance',
+    'cat_results',
+    'grades',
+    'monthly_fee_notifications',
+    'monthly_fee_tracking',
+    'payments',
+    'result_audit_logs',
+    'student_daily_reports',
+    'student_fees',
+    'student_unit_marks',
+    'unit_coverage_confirmations',
+    'unit_coverage_logs',
+];
+
+// Escape user input before embedding in a RegExp (Mongo $regex injection guard).
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Helper to parse faculty courses list robustly
 function parseFacultyCourses(coursesField) {
@@ -344,6 +367,16 @@ export async function updateStudent(req, res) {
             const oldStudent = await Student.findOne({ id: studentId });
             if (!oldStudent) return res.status(404).json({ error: 'Student not found' });
 
+            // Detect admission-number rename and guard against collisions
+            const newStudentId = req.body.id ? String(req.body.id).trim() : null;
+            const isIdChanged = Boolean(newStudentId && newStudentId !== studentId);
+            if (isIdChanged) {
+                const conflict = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(newStudentId)}$`, 'i') } });
+                if (conflict) {
+                    return res.status(400).json({ error: `Admission number "${newStudentId}" is already assigned to another student.` });
+                }
+            }
+
             const oldEmail = oldStudent.email ? String(oldStudent.email).toLowerCase().trim() : null;
             const isEmailChanged = Boolean(newEmail && oldEmail && newEmail !== oldEmail);
 
@@ -362,6 +395,33 @@ export async function updateStudent(req, res) {
                 { $set: updatePayload },
                 { new: true, runValidators: true }
             );
+
+            // Cascade the rename to every collection referencing the old ID.
+            // Includes both SQL-style and mongoose-pluralized collection names;
+            // updateMany on a non-existent collection is a harmless no-op.
+            if (isIdChanged) {
+                const db = Student.collection.db;
+                const idFilter = { $regex: new RegExp(`^${escapeRegExp(String(studentId).trim())}$`, 'i') };
+                const mongoCollections = [
+                    'academicreports', 'academic_reports',
+                    'attendances', 'attendance',
+                    'catresults', 'cat_results',
+                    'grades',
+                    'monthlyfeenotifications', 'monthly_fee_notifications',
+                    'monthlyfeetracking', 'monthly_fee_tracking',
+                    'payments',
+                    'resultauditlogs', 'result_audit_logs',
+                    'studentdailyreports', 'student_daily_reports',
+                    'studentfees', 'student_fees',
+                    'studentunitmarks', 'student_unit_marks',
+                    'unitcoverageconfirmations', 'unit_coverage_confirmations',
+                    'unitcoveragelogs', 'unit_coverage_logs',
+                ];
+                for (const name of mongoCollections) {
+                    await db.collection(name).updateMany({ student_id: idFilter }, { $set: { student_id: newStudentId } });
+                }
+                logger.info({ oldId: studentId, newId: newStudentId }, 'Student admission number renamed with cascading references (Mongo)');
+            }
 
             let passwordResetSent = false;
             if (isEmailChanged) {
@@ -456,9 +516,27 @@ export async function updateStudent(req, res) {
             if (result.changes === 0) return res.status(404).json({ error: 'Student not found' });
         }
 
-        // Phase 2: Rename the primary key if the admission number changed
+        // Phase 2: Rename the primary key if the admission number changed,
+        // cascading to every table that references the old ID — atomically,
+        // so a failure anywhere rolls the whole rename back.
         if (isIdChanged) {
-            await run('UPDATE students SET id = ? WHERE id = ?', [newStudentId, studentId]);
+            const isPostgres = !!process.env.DATABASE_URL?.trim();
+            await withTransaction(async () => {
+                await run('UPDATE students SET id = ? WHERE id = ?', [newStudentId, studentId]);
+                for (const table of STUDENT_ID_REFERENCES) {
+                    // Not all tables exist in every engine/deployment (SQLite
+                    // fallback ships a subset) — skip missing ones.
+                    const exists = isPostgres
+                        ? await queryOne(`SELECT 1 AS ok FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?`, [table])
+                        : await queryOne(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`, [table]);
+                    if (!exists) continue;
+                    await run(
+                        `UPDATE ${table} SET student_id = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))`,
+                        [newStudentId, studentId]
+                    );
+                }
+            });
+            logger.info({ oldId: studentId, newId: newStudentId }, 'Student admission number renamed with cascading references');
         }
 
         // The effective student ID going forward

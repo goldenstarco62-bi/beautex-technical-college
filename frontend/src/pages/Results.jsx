@@ -93,6 +93,8 @@ export default function Results() {
         cat_period_id: '', marks: '', status: 'Present', remarks: ''
     });
 
+    const [singleUnits, setSingleUnits] = useState([]);
+    const [batchUnits, setBatchUnits] = useState([]);
     const [batchUnit, setBatchUnit] = useState('');
     const [batchCourse, setBatchCourse] = useState('');
     const [batchStudents, setBatchStudents] = useState([]);
@@ -254,11 +256,11 @@ export default function Results() {
         if (!singleForm.cat_period_id || !singleForm.course_id || !singleForm.student_id) {
             return showToast('Please select period, course, and student.', 'error');
         }
+        if (!singleForm.unit_name) {
+            return showToast('Please select a unit for this assessment.', 'error');
+        }
 
-        const courseObj = courses.find(c => String(c.id) === String(singleForm.course_id));
-        const unitName = courseObj?.name || 'General Assessment';
-
-        const payload = { ...singleForm, unit_name: unitName };
+        const payload = { ...singleForm };
 
         try {
             if (editingResult) {
@@ -304,15 +306,28 @@ export default function Results() {
         }
         const initialCourse = selectedCourse || (courses.length > 0 ? String(courses[0].id) : '');
         setBatchCourse(initialCourse);
+        setBatchUnit('');
         loadBatchStudentsForCourse(initialCourse);
+        if (initialCourse) {
+            courseUnitsAPI.getUnits(initialCourse)
+                .then(res => {
+                    const uList = res.data || [];
+                    setBatchUnits(uList);
+                    if (uList.length > 0) setBatchUnit(String(uList[0].id));
+                })
+                .catch(() => setBatchUnits([]));
+        } else {
+            setBatchUnits([]);
+        }
         setShowBatchModal(true);
     };
 
     const handleSaveBatch = async () => {
         if (!batchCourse) return showToast('Please select a course for batch entry.', 'error');
+        if (!batchUnit) return showToast('Please select a unit for batch entry.', 'error');
 
-        const courseObj = courses.find(c => String(c.id) === String(batchCourse));
-        const unitName = courseObj?.name || 'General Assessment';
+        const selectedUnitObj = batchUnits.find(u => String(u.id) === String(batchUnit));
+        const unitName = selectedUnitObj?.unit_name || selectedUnitObj?.name || 'General Assessment';
 
         const entriesArr = Object.entries(batchEntries)
             .filter(([, val]) => {
@@ -335,7 +350,7 @@ export default function Results() {
             const res = await catResultsAPI.batchCreate({
                 cat_period_id: selectedPeriod,
                 course_id: batchCourse,
-                unit_id: null,
+                unit_id: selectedUnitObj?.id || batchUnit,
                 unit_name: unitName,
                 entries: entriesArr
             });
@@ -923,11 +938,28 @@ export default function Results() {
                             {/* Course filter */}
                             <select
                                 value={selectedCourse}
-                                onChange={e => setSelectedCourse(e.target.value)}
+                                onChange={e => {
+                                    setSelectedCourse(e.target.value);
+                                    setSelectedUnit('');
+                                }}
                                 className="px-4 py-2.5 bg-white border border-black/10 rounded-2xl text-xs font-black uppercase text-black outline-none"
                             >
                                 <option value="">All Courses</option>
                                 {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+
+                            {/* Unit filter */}
+                            <select
+                                value={selectedUnit}
+                                onChange={e => setSelectedUnit(e.target.value)}
+                                className="px-4 py-2.5 bg-white border border-black/10 rounded-2xl text-xs font-black uppercase text-black outline-none"
+                            >
+                                <option value="">All Units</option>
+                                {units.map(u => (
+                                    <option key={u.id} value={u.id}>
+                                        {u.unit_code ? `${u.unit_code} - ${u.unit_name || u.name}` : (u.unit_name || u.name)}
+                                    </option>
+                                ))}
                             </select>
 
                             {/* Status filter */}
@@ -1171,13 +1203,56 @@ export default function Results() {
                                 <label className="text-[10px] font-black uppercase text-black/60">Course</label>
                                 <select
                                     value={singleForm.course_id}
-                                    onChange={e => setSingleForm({ ...singleForm, course_id: e.target.value })}
+                                    onChange={e => {
+                                        const cId = e.target.value;
+                                        setSingleForm(prev => ({ ...prev, course_id: cId, unit_id: '', unit_name: '' }));
+                                        if (cId) {
+                                            courseUnitsAPI.getUnits(cId).then(res => {
+                                                const uList = res.data || [];
+                                                setSingleUnits(uList);
+                                                if (uList.length > 0) {
+                                                    setSingleForm(prev => ({
+                                                        ...prev,
+                                                        unit_id: uList[0].id,
+                                                        unit_name: uList[0].unit_name || uList[0].name
+                                                    }));
+                                                }
+                                            }).catch(() => setSingleUnits([]));
+                                        } else {
+                                            setSingleUnits([]);
+                                        }
+                                    }}
                                     className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none"
                                     required
                                 >
                                     <option value="">Select Course</option>
                                     {courses.map(c => (
                                         <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-black/60">Unit / Subject</label>
+                                <select
+                                    value={singleForm.unit_id}
+                                    onChange={e => {
+                                        const uId = e.target.value;
+                                        const uObj = singleUnits.find(u => String(u.id) === String(uId));
+                                        setSingleForm(prev => ({
+                                            ...prev,
+                                            unit_id: uId,
+                                            unit_name: uObj?.unit_name || uObj?.name || ''
+                                        }));
+                                    }}
+                                    className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
+                                    required
+                                >
+                                    <option value="">Select Unit</option>
+                                    {singleUnits.map(u => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.unit_code ? `${u.unit_code} - ${u.unit_name || u.name}` : (u.unit_name || u.name)}
+                                        </option>
                                     ))}
                                 </select>
                             </div>
@@ -1258,29 +1333,57 @@ export default function Results() {
                         <div className="flex justify-between items-center border-b pb-4 shrink-0">
                             <div>
                                 <h3 className="text-xl font-black text-black uppercase">Batch CAT Entry</h3>
-                                <p className="text-xs font-bold text-black/40 uppercase">Class-wide mark submission</p>
+                                <p className="text-xs font-bold text-black/40 uppercase">Class-wide mark submission per unit</p>
                             </div>
                             <button onClick={() => setShowBatchModal(false)} className="p-2 text-gray-400 hover:text-black">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
-                        <div className="shrink-0">
-                            <label className="text-[10px] font-black uppercase text-black/60">Select Course</label>
-                            <select
-                                value={batchCourse}
-                                onChange={e => {
-                                    const cId = e.target.value;
-                                    setBatchCourse(cId);
-                                    loadBatchStudentsForCourse(cId);
-                                }}
-                                className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
-                            >
-                                <option value="">Select Course</option>
-                                {courses.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-black/60">Select Course</label>
+                                <select
+                                    value={batchCourse}
+                                    onChange={e => {
+                                        const cId = e.target.value;
+                                        setBatchCourse(cId);
+                                        setBatchUnit('');
+                                        loadBatchStudentsForCourse(cId);
+                                        if (cId) {
+                                            courseUnitsAPI.getUnits(cId).then(res => {
+                                                const uList = res.data || [];
+                                                setBatchUnits(uList);
+                                                if (uList.length > 0) setBatchUnit(String(uList[0].id));
+                                            }).catch(() => setBatchUnits([]));
+                                        } else {
+                                            setBatchUnits([]);
+                                        }
+                                    }}
+                                    className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
+                                >
+                                    <option value="">Select Course</option>
+                                    {courses.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-black/60">Select Unit / Subject</label>
+                                <select
+                                    value={batchUnit}
+                                    onChange={e => setBatchUnit(e.target.value)}
+                                    className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
+                                >
+                                    <option value="">Select Unit</option>
+                                    {batchUnits.map(u => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.unit_code ? `${u.unit_code} - ${u.unit_name || u.name}` : (u.unit_name || u.name)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         <div className="overflow-y-auto flex-1 divide-y border rounded-2xl p-4 space-y-3 custom-scrollbar">
