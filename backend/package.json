@@ -11,7 +11,7 @@
     "seed": "node src/scripts/seed.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "keywords": [
     "college",
