@@ -350,23 +350,28 @@ function AdminFinanceView({
         const parts = [];
         if (search) {
             const rawClean = search.replace(/^[-_\s]+/, '').trim();
-            const query = rawClean.toLowerCase();
-            const matchedStudent = (allStudents || []).find(s =>
-                (s.name || '').toLowerCase().includes(query) ||
-                (s.id || '').toLowerCase().includes(query)
-            );
 
-            if (matchedStudent) {
-                let details = `Student: ${matchedStudent.name} (${matchedStudent.id})`;
-                if (matchedStudent.course) {
-                    details += ` - ${matchedStudent.course}`;
+            // Derive identity from the actual filtered payments (DB-joined names)
+            // rather than a fuzzy allStudents.find() which returns the wrong student
+            // when the search term is short (e.g. "ES" matches "Aurelia Esther" first).
+            if (filteredPayments.length > 0) {
+                const uniqueStudentIds = [...new Set(filteredPayments.map(p => p.student_id))];
+                if (uniqueStudentIds.length === 1) {
+                    // All records belong to one student — show their identity
+                    const first = filteredPayments[0];
+                    const name = first.student_name || first.student_id;
+                    let details = `Student: ${name} (${first.student_id})`;
+                    // Append course from allStudents if available
+                    const studentRecord = (allStudents || []).find(
+                        s => (s.id || '').toLowerCase() === (first.student_id || '').toLowerCase()
+                    );
+                    if (studentRecord?.course) details += ` - ${studentRecord.course}`;
+                    parts.push(details);
+                } else {
+                    parts.push(`${uniqueStudentIds.length} Students — Filter: ${rawClean}`);
                 }
-                parts.push(details);
-            } else if (filteredPayments.length > 0 && filteredPayments[0].student_name) {
-                const first = filteredPayments[0];
-                parts.push(`Student: ${first.student_name} (${first.student_id})`);
             } else {
-                parts.push(`Student Details: ${rawClean}`);
+                parts.push(`Filter: ${rawClean}`);
             }
         }
         if (methodFilter !== 'all') parts.push(`Method: ${methodFilter}`);
@@ -1294,7 +1299,7 @@ export default function Finance() {
                         </div>
 
                         <div className="flex-1 overflow-y-auto px-10 py-10">
-                            <form onSubmit={handleRecordPayment} className="space-y-8">
+                            <form onSubmit={e => e.preventDefault()} className="space-y-8">
                                 {/* --- SECTION 1: STUDENT SELECTION --- */}
                                 <div className="p-8 bg-gray-50/50 rounded-[2.5rem] border border-gray-100/50 space-y-6">
                                     <div className="flex items-center gap-3 mb-2">
