@@ -256,15 +256,16 @@ export default function UnitCoverage() {
         }
     }, [selectedCourse, showToast]);
 
-    // ── Mark unit covered for a single student directly from their drawer ─────
     const handleMarkForStudent = async (unit, studentId) => {
         const student = enrolledStudents.find(s => s.id === studentId);
         if (!student) return;
+        const courseObj = courses.find(c => String(c.id) === String(selectedCourse));
         try {
             await unitCoverageAPI.markCovered({
                 course_id: selectedCourse,
                 unit_id: String(unit.id),
                 student_ids: [studentId],
+                teacher_name: courseObj?.instructor || (isTeacher ? user?.name : undefined),
             });
             showToast(`"${unit.name}" marked covered for ${student.name}`, 'success');
             loadStudentUnitView(studentId);
@@ -316,7 +317,8 @@ export default function UnitCoverage() {
         );
         setBatchSelectedStudents(uncoveredStudentIds);
         setBatchIntakeFilter('all');
-        setBatchForm({ remarks: '', material_urls: '' });
+        const courseObj = courses.find(c => String(c.id) === String(selectedCourse));
+        setBatchForm({ remarks: '', material_urls: '', teacher_name: courseObj?.instructor || '' });
         setShowBatchModal(true);
     };
 
@@ -344,6 +346,7 @@ export default function UnitCoverage() {
         e.preventDefault();
         if (!batchUnit || batchSelectedStudents.size === 0) return;
         setBatchLoading(true);
+        const courseObj = courses.find(c => String(c.id) === String(selectedCourse));
         try {
             const res = await unitCoverageAPI.markCovered({
                 course_id: selectedCourse,
@@ -351,6 +354,7 @@ export default function UnitCoverage() {
                 student_ids: [...batchSelectedStudents],
                 remarks: batchForm.remarks || null,
                 material_urls: batchForm.material_urls ? [batchForm.material_urls] : null,
+                teacher_name: batchForm.teacher_name || courseObj?.instructor || (isTeacher ? user?.name : undefined),
             });
             const data = res.data;
             showToast(`Marked for ${data.marked?.length || 0} student(s). ${data.skipped?.length || 0} skipped.`, 'success');
@@ -1485,6 +1489,20 @@ export default function UnitCoverage() {
                                 </div>
 
                                 <p className="text-[10px] font-bold text-black/40 uppercase">{batchSelectedStudents.size} student(s) selected</p>
+
+                                {/* Trainer Field for Admins */}
+                                {isAdmin && (
+                                    <div>
+                                        <label className="text-[10px] font-black text-black/50 uppercase tracking-wider block mb-1.5">Trainer / Instructor</label>
+                                        <input
+                                            type="text"
+                                            value={batchForm.teacher_name || ''}
+                                            onChange={e => setBatchForm(f => ({ ...f, teacher_name: e.target.value }))}
+                                            placeholder="Assigned Trainer / Instructor"
+                                            className="w-full px-4 py-3 text-xs bg-black/[0.02] border border-black/8 rounded-2xl outline-none focus:border-maroon/30 font-medium text-black"
+                                        />
+                                    </div>
+                                )}
 
                                 {/* Remarks */}
                                 <div>

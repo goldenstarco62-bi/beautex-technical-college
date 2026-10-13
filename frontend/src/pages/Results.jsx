@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { catPeriodsAPI, catResultsAPI, coursesAPI, studentsAPI, courseUnitsAPI } from '../services/api';
+import { isStudentEnrolledInCourse } from '../utils/courseUtils';
 import {
     Award, BookOpen, Users, Search, Plus, X, Edit, Trash2, CheckCircle,
     FileDown, Printer, History, TrendingUp, GraduationCap, Layers, AlertTriangle,
@@ -244,10 +245,7 @@ export default function Results() {
         if (!singleForm.course_id) return allStudents;
         const courseObj = courses.find(c => String(c.id) === String(singleForm.course_id));
         if (!courseObj) return allStudents;
-        return allStudents.filter(s => {
-            const sc = Array.isArray(s.course) ? s.course : [s.course];
-            return sc.some(cn => cn?.toLowerCase() === courseObj?.name?.toLowerCase());
-        });
+        return allStudents.filter(s => isStudentEnrolledInCourse(s, courseObj));
     }, [allStudents, courses, singleForm.course_id]);
 
     // ── Single Result Create / Edit ───────────────────────────────────────────
@@ -260,7 +258,11 @@ export default function Results() {
             return showToast('Please select a unit for this assessment.', 'error');
         }
 
-        const payload = { ...singleForm };
+        const courseObj = courses.find(c => String(c.id) === String(singleForm.course_id));
+        const payload = {
+            ...singleForm,
+            trainer_name: courseObj?.instructor || (isTeacher ? user?.name : undefined)
+        };
 
         try {
             if (editingResult) {
@@ -286,11 +288,7 @@ export default function Results() {
             return;
         }
         const courseObj = courses.find(c => String(c.id) === String(courseId));
-        const enrolled = allStudents.filter(s => {
-            if (!courseObj) return true;
-            const sc = Array.isArray(s.course) ? s.course : [s.course];
-            return sc.some(cn => cn?.toLowerCase() === courseObj?.name?.toLowerCase());
-        });
+        const enrolled = allStudents.filter(s => isStudentEnrolledInCourse(s, courseObj));
 
         setBatchStudents(enrolled);
         const init = {};
@@ -345,6 +343,7 @@ export default function Results() {
 
         if (entriesArr.length === 0) return showToast('No marks or status entries filled.', 'error');
 
+        const batchCourseObj = courses.find(c => String(c.id) === String(batchCourse));
         setSubmittingBatch(true);
         try {
             const res = await catResultsAPI.batchCreate({
@@ -352,6 +351,7 @@ export default function Results() {
                 course_id: batchCourse,
                 unit_id: selectedUnitObj?.id || batchUnit,
                 unit_name: unitName,
+                trainer_name: batchCourseObj?.instructor || (isTeacher ? user?.name : undefined),
                 entries: entriesArr
             });
             const savedCount = res.data?.saved || 0;

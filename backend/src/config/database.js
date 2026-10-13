@@ -2032,6 +2032,61 @@ export async function ensureHighPerformanceIndexes(database) {
             }
         }
         console.log('⚡ High-performance database indexes verified & active');
+
+        // Self-healing: Repair any legacy records where teacher/lecturer was erroneously stored as 'Admin'
+        try {
+            if (isPostgres) {
+                await database.query(`
+                    UPDATE unit_coverage_logs ucl
+                    SET teacher_name = c.instructor
+                    FROM courses c
+                    WHERE ucl.course_id = c.id
+                      AND (ucl.teacher_name ILIKE '%admin%' OR ucl.teacher_name = 'Unknown' OR ucl.teacher_name IS NULL)
+                      AND c.instructor IS NOT NULL AND c.instructor != ''
+                `).catch(() => {});
+
+                await database.query(`
+                    UPDATE student_unit_marks sum
+                    SET lecturer = c.instructor
+                    FROM courses c
+                    WHERE sum.course_id = c.id
+                      AND (sum.lecturer ILIKE '%admin%' OR sum.lecturer = 'Unknown' OR sum.lecturer IS NULL)
+                      AND c.instructor IS NOT NULL AND c.instructor != ''
+                `).catch(() => {});
+
+                await database.query(`
+                    UPDATE cat_results cr
+                    SET trainer_name = c.instructor
+                    FROM courses c
+                    WHERE cr.course_id = c.id
+                      AND (cr.trainer_name ILIKE '%admin%' OR cr.trainer_name = 'Unknown' OR cr.trainer_name IS NULL)
+                      AND c.instructor IS NOT NULL AND c.instructor != ''
+                `).catch(() => {});
+            } else {
+                await database.run(`
+                    UPDATE unit_coverage_logs
+                    SET teacher_name = (SELECT instructor FROM courses WHERE courses.id = unit_coverage_logs.course_id)
+                    WHERE (LOWER(teacher_name) LIKE '%admin%' OR teacher_name = 'Unknown' OR teacher_name IS NULL)
+                      AND EXISTS (SELECT 1 FROM courses WHERE courses.id = unit_coverage_logs.course_id AND instructor IS NOT NULL AND instructor != '')
+                `).catch(() => {});
+
+                await database.run(`
+                    UPDATE student_unit_marks
+                    SET lecturer = (SELECT instructor FROM courses WHERE courses.id = student_unit_marks.course_id)
+                    WHERE (LOWER(lecturer) LIKE '%admin%' OR lecturer = 'Unknown' OR lecturer IS NULL)
+                      AND EXISTS (SELECT 1 FROM courses WHERE courses.id = student_unit_marks.course_id AND instructor IS NOT NULL AND instructor != '')
+                `).catch(() => {});
+
+                await database.run(`
+                    UPDATE cat_results
+                    SET trainer_name = (SELECT instructor FROM courses WHERE courses.id = cat_results.course_id)
+                    WHERE (LOWER(trainer_name) LIKE '%admin%' OR trainer_name = 'Unknown' OR trainer_name IS NULL)
+                      AND EXISTS (SELECT 1 FROM courses WHERE courses.id = cat_results.course_id AND instructor IS NOT NULL AND instructor != '')
+                `).catch(() => {});
+            }
+        } catch (repairErr) {
+            console.warn('⚠️ Legacy teacher assignment repair warning:', repairErr.message);
+        }
     } catch (err) {
         console.warn('⚠️ High-performance index check warning:', err.message);
     }

@@ -190,24 +190,11 @@ function AssignCoursesModal({ unit, allCourses, onClose, onDone }) {
             const toAdd = [...assigned].filter(id => !currentSet.has(id));
             const toRemove = [...currentSet].filter(id => !assigned.has(id));
 
-            let failedErr = null;
             for (const courseId of toAdd) {
-                try {
-                    await masterUnitsAPI.assignToCourse(unit.id, courseId);
-                } catch (err) {
-                    failedErr = err.response?.data?.error || err.message;
-                }
+                try { await masterUnitsAPI.assignToCourse(unit.id, courseId); } catch (_) { }
             }
             for (const courseId of toRemove) {
-                try {
-                    await masterUnitsAPI.removeFromCourse(unit.id, courseId);
-                } catch (err) {
-                    failedErr = err.response?.data?.error || err.message;
-                }
-            }
-            if (failedErr) {
-                setError(failedErr);
-                return;
+                try { await masterUnitsAPI.removeFromCourse(unit.id, courseId); } catch (_) { }
             }
 
             onDone();
@@ -332,24 +319,11 @@ function QuickAttachUnitsModal({ course, allUnits, onClose, onDone }) {
             const toAdd = [...selectedUnits].filter(id => !initiallyAttached.has(id));
             const toRemove = [...initiallyAttached].filter(id => !selectedUnits.has(id));
 
-            let failedErr = null;
             for (const unitId of toAdd) {
-                try {
-                    await masterUnitsAPI.assignToCourse(unitId, course.id);
-                } catch (err) {
-                    failedErr = err.response?.data?.error || err.message;
-                }
+                try { await masterUnitsAPI.assignToCourse(unitId, course.id); } catch (_) { }
             }
             for (const unitId of toRemove) {
-                try {
-                    await masterUnitsAPI.removeFromCourse(unitId, course.id);
-                } catch (err) {
-                    failedErr = err.response?.data?.error || err.message;
-                }
-            }
-            if (failedErr) {
-                setError(failedErr);
-                return;
+                try { await masterUnitsAPI.removeFromCourse(unitId, course.id); } catch (_) { }
             }
 
             onDone();
@@ -611,7 +585,7 @@ export default function UnitManagement() {
     // Group units by course
     const courseGroupedData = useMemo(() => {
         const q = search.toLowerCase();
-        
+
         // Filter units first based on search & status
         const matchingUnits = units.filter(u => {
             const uName = String(u.name || u.unit_name || '').toLowerCase();
@@ -741,7 +715,7 @@ export default function UnitManagement() {
 
                 {/* Main View Mode Selector & Search Toolbar */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-                    
+
                     {/* View Switcher Tabs */}
                     <div style={{ display: 'flex', background: '#e2e8f0', padding: 4, borderRadius: 14, gap: 4 }}>
                         <button

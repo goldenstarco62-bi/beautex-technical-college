@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { courseUnitsAPI, studentUnitMarksAPI, coursesAPI, studentsAPI, settingsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { isStudentEnrolledInCourse } from '../utils/courseUtils';
 import {
     BookOpen, Award, Search, Plus, X, Edit, Trash2, Users, CheckCircle,
     FileDown, Printer, History, ChevronDown, ChevronUp, TrendingUp, GraduationCap, Layers, AlertTriangle
@@ -256,13 +257,9 @@ export default function UnitsCovered() {
     // ── Batch modal: load students for selected course ─────────────────────────
     const loadBatchStudents = async (courseId) => {
         if (!courseId) return;
-        // Filter from already-loaded students list
         const course = courses.find(c => c.id === courseId);
         if (!course) return;
-        const enrolled = students.filter(s => {
-            const sc = Array.isArray(s.course) ? s.course : [s.course];
-            return sc.some(cn => cn?.toLowerCase() === course.name?.toLowerCase());
-        });
+        const enrolled = students.filter(s => isStudentEnrolledInCourse(s, course));
         setBatchStudents(enrolled);
         const initMarks = {};
         enrolled.forEach(s => { initMarks[s.id] = ''; });
@@ -285,9 +282,11 @@ export default function UnitsCovered() {
             return showToast(`Invalid marks detected: all marks must be numbers between 0 and 100. Please correct ${invalidEntries.length} entr${invalidEntries.length === 1 ? 'y' : 'ies'} before saving.`, 'error');
         }
 
+        const course = courses.find(c => c.id === selectedCourse);
+        const lecturerToPass = course?.instructor || (isTeacher ? user?.name : undefined);
         const entries = Object.entries(batchMarks)
             .filter(([, v]) => v !== '')
-            .map(([student_id, marksVal]) => ({ student_id, marks: Number(marksVal) }));
+            .map(([student_id, marksVal]) => ({ student_id, marks: Number(marksVal), lecturer: lecturerToPass }));
         if (entries.length === 0) return showToast('No marks entered.', 'error');
         try {
             setSubmittingBatch(true);
@@ -317,7 +316,9 @@ export default function UnitsCovered() {
             return showToast('Marks must be a valid number between 0 and 100.', 'error');
         }
         try {
-            await studentUnitMarksAPI.saveMark(singleForm);
+            const course = courses.find(c => c.id === singleForm.course_id);
+            const lecturerToPass = course?.instructor || (isTeacher ? user?.name : undefined);
+            await studentUnitMarksAPI.saveMark({ ...singleForm, lecturer: lecturerToPass });
             setShowModal(false);
             setEditingMark(null);
             setSingleForm({ student_id: '', course_id: '', unit_id: '', marks: '' });
@@ -1016,10 +1017,7 @@ export default function UnitsCovered() {
                                         {(() => {
                                             const selectedCourseObj = courses.find(c => String(c.id) === String(singleForm.course_id));
                                             const filteredStudents = selectedCourseObj
-                                                ? students.filter(s => {
-                                                    const sc = Array.isArray(s.course) ? s.course : [s.course];
-                                                    return sc.some(cn => cn?.toLowerCase() === selectedCourseObj.name?.toLowerCase());
-                                                  })
+                                                ? students.filter(s => isStudentEnrolledInCourse(s, selectedCourseObj))
                                                 : students;
                                             return filteredStudents.map(s => <option key={s.id} value={s.id}>{s.name} ({s.id})</option>);
                                         })()}

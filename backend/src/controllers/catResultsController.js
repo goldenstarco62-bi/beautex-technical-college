@@ -74,6 +74,21 @@ async function getTeacherAllowedCoursesAndStudents(req) {
     const allowedCourseIds = teacherCourseObjs.map(c => String(c.id));
     const allowedCourseNames = teacherCourseObjs.map(c => String(c.name).toLowerCase().trim());
 
+    // Also include courses from trainer_unit_assignments
+    if (faculty?.id) {
+        const tuaRows = await query('SELECT DISTINCT course_id FROM trainer_unit_assignments WHERE faculty_id = ?', [faculty.id]);
+        for (const tr of tuaRows) {
+            const cId = String(tr.course_id);
+            if (!allowedCourseIds.includes(cId)) {
+                allowedCourseIds.push(cId);
+                const cObj = allCourses.find(c => String(c.id) === cId);
+                if (cObj?.name) {
+                    allowedCourseNames.push(String(cObj.name).toLowerCase().trim());
+                }
+            }
+        }
+    }
+
     // Get all students enrolled in these courses
     const allStudents = await query('SELECT id, name, course FROM students');
     const parseStudentCourses = (raw) => {
@@ -92,7 +107,11 @@ async function getTeacherAllowedCoursesAndStudents(req) {
     const enrolledStudentIds = new Set(
         allStudents.filter(s => {
             const sc = parseStudentCourses(s.course);
-            return sc.some(cn => allowedCourseNames.includes(cn));
+            return sc.some(cn =>
+                allowedCourseNames.includes(cn) ||
+                allowedCourseIds.map(x => x.toLowerCase()).includes(cn) ||
+                allowedCourseNames.some(acn => acn.includes(cn) || cn.includes(acn))
+            );
         }).map(s => String(s.id).trim())
     );
 
@@ -129,7 +148,7 @@ export async function getResults(req, res) {
         if (userRole === 'student') {
             const sId = await resolveStudentId(req);
             if (!sId) return res.json([]);
-            sql += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND cr.workflow_status = ?';
+            sql += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND (cr.workflow_status = ? OR cr.workflow_status IS NULL)';
             params.push(sId, sId, 'Published');
         } else if (userRole === 'teacher') {
             const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
@@ -139,19 +158,12 @@ export async function getResults(req, res) {
 
             const courseIds = teacherAccess.allowedCourseIds;
             const courseNames = teacherAccess.allowedCourseNames;
-            const enrolledIdsArr = Array.from(teacherAccess.enrolledStudentIds);
-
-            if (enrolledIdsArr.length === 0) return res.json([]);
 
             const coursePlaceholders = courseIds.map(() => '?').join(',');
             const namePlaceholders = courseNames.map(() => '?').join(',');
 
             sql += ` AND (cr.course_id IN (${coursePlaceholders}) OR LOWER(TRIM(c.name)) IN (${namePlaceholders}))`;
             params.push(...courseIds, ...courseNames);
-
-            const studentPlaceholders = enrolledIdsArr.map(() => '?').join(',');
-            sql += ` AND LOWER(TRIM(cr.student_id)) IN (${studentPlaceholders})`;
-            params.push(...enrolledIdsArr.map(id => id.toLowerCase()));
 
             if (student_id) { sql += ' AND cr.student_id = ?'; params.push(student_id); }
             if (workflow_status) { sql += ' AND cr.workflow_status = ?'; params.push(workflow_status); }
@@ -225,7 +237,26 @@ export async function createResult(req, res) {
         }
 
         const enteredBy = req.user?.email || req.user?.id;
-        const trainerName = req.user?.name || req.user?.email;
+        let trainerName = req.body.trainer_name || null;
+        if (!trainerName) {
+            if (userRole === 'teacher' && req.user?.name) {
+                trainerName = req.user.name;
+            } else {
+                if (unit_id) {
+                    const assigned = await queryOne(
+                        `SELECT f.name FROM trainer_unit_assignments tua
+                         JOIN faculty f ON f.id = tua.faculty_id
+                         WHERE tua.course_id = ? AND tua.unit_id = ? LIMIT 1`,
+                        [course_id, unit_id]
+                    );
+                    if (assigned?.name) trainerName = assigned.name;
+                }
+                if (!trainerName) {
+                    const cRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id]);
+                    trainerName = cRow?.instructor || req.user?.name || req.user?.email || 'Instructor';
+                }
+            }
+        }
 
         try {
             // Check if result already exists for this student in this period and unit/course
@@ -329,7 +360,27 @@ export async function batchCreateResults(req, res) {
         if (!period) return res.status(404).json({ error: 'CAT period not found.' });
 
         const enteredBy = req.user?.email || req.user?.id;
-        const trainerName = req.user?.name || req.user?.email;
+        let defaultTrainerName = req.body.trainer_name || null;
+        if (!defaultTrainerName) {
+            if (userRole === 'teacher' && req.user?.name) {
+                defaultTrainerName = req.user.name;
+            } else {
+                if (unit_id) {
+                    const assigned = await queryOne(
+                        `SELECT f.name FROM trainer_unit_assignments tua
+                         JOIN faculty f ON f.id = tua.faculty_id
+                         WHERE tua.course_id = ? AND tua.unit_id = ? LIMIT 1`,
+                        [course_id, unit_id]
+                    );
+                    if (assigned?.name) defaultTrainerName = assigned.name;
+                }
+                if (!defaultTrainerName) {
+                    const cRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id]);
+                    defaultTrainerName = cRow?.instructor || req.user?.name || req.user?.email || 'Instructor';
+                }
+            }
+        }
+        const trainerName = defaultTrainerName;
         const maxMarks = period.max_marks || 100;
 
         const saved = [];

@@ -33,8 +33,8 @@ import { studentDailyReportsAPI } from '../services/api';
 import { attendanceAPI } from '../services/api';
 import { cacheGet, cacheSet, cacheInvalidate, studentDashboardKey } from '../utils/dashboardCache';
 import { useAuth } from '../context/AuthContext';
-import { toast } from 'react-hot-toast';
 import { calculateRemainingTime } from '../utils/dateUtils';
+import { matchEnrolledCourse, parseStudentCourses } from '../utils/courseUtils';
 
 
 const stripHtml = (html) => {
@@ -159,22 +159,14 @@ export default function StudentDashboard() {
             ? `${Math.round((presentCount / myAttendance.length) * 100)}%`
             : '0%';
 
-        // Match enrolled course
+        // Match enrolled course using robust parser (never falsely fall back to random courses[0])
         if (profile) {
             const allCourses = Array.isArray(courses) ? courses : [];
-            const studentCourseNames = Array.isArray(profile.course)
-                ? profile.course
-                : (typeof profile.course === 'string' && profile.course.startsWith('['))
-                    ? (() => { try { return JSON.parse(profile.course); } catch { return [profile.course]; } })()
-                    : [profile.course].filter(Boolean);
-            const enrolledCourse = allCourses.find(c =>
-                studentCourseNames.some(cn =>
-                    cn && c.name && cn.toLowerCase().trim() === c.name.toLowerCase().trim()
-                )
-            ) || allCourses[0] || null;
+            const studentCourseNames = parseStudentCourses(profile.course);
+            const enrolledCourse = matchEnrolledCourse(allCourses, profile);
             setCourseDetails(enrolledCourse);
             setStats({
-                enrolledCourses: studentCourseNames.length,
+                enrolledCourses: studentCourseNames.length > 0 ? studentCourseNames.length : 1,
                 avgGrade: myGrades.length > 0 ? `${avgGrade}%` : (profile.gpa ? `${profile.gpa} GPA` : 'N/A'),
                 attendanceRate,
                 sessionsCount: Array.isArray(dailyReports) ? dailyReports.length : 0

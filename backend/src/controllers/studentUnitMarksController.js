@@ -64,6 +64,16 @@ async function getTeacherAllowedCourseIds(req) {
         allowedCourses = courses.map(c => c.id);
     }
 
+    // 3. Also include courses from trainer_unit_assignments
+    if (faculty?.id) {
+        const assignedTua = await query('SELECT DISTINCT course_id FROM trainer_unit_assignments WHERE faculty_id = ?', [faculty.id]);
+        assignedTua.forEach(r => {
+            if (r.course_id && !allowedCourses.includes(r.course_id)) {
+                allowedCourses.push(r.course_id);
+            }
+        });
+    }
+
     return allowedCourses;
 }
 
@@ -178,9 +188,14 @@ export async function saveStudentUnitMark(req, res) {
                 return res.status(404).json({ error: 'Student not found' });
             }
 
-                const sCourses = parseCoursesField(student.course).map(c => c.toLowerCase().trim());
-            const courseObj = await queryOne('SELECT name FROM courses WHERE id = ?', [course_id]);
-            if (!courseObj || !sCourses.includes(courseObj.name.toLowerCase().trim())) {
+            const sCourses = parseCoursesField(student.course).map(c => c.toLowerCase().trim());
+            const courseObj = await queryOne('SELECT id, name FROM courses WHERE id = ?', [course_id]);
+            const courseNameLower = (courseObj?.name || '').toLowerCase().trim();
+            const courseIdLower = String(course_id || '').toLowerCase().trim();
+            const isEnrolled = sCourses.includes(courseNameLower) ||
+                               sCourses.includes(courseIdLower) ||
+                               sCourses.some(sc => sc.includes(courseNameLower) || courseNameLower.includes(sc));
+            if (!courseObj || !isEnrolled) {
                 return res.status(400).json({ error: 'Student is not enrolled in this course' });
             }
         }
@@ -194,7 +209,28 @@ export async function saveStudentUnitMark(req, res) {
 
         const thresholds = await getGradingThresholds();
         const grade      = calculateGrade(marksNum, thresholds);
-        const recLecturer = lecturer || req.user?.name || req.user?.email || null;
+
+        // Resolve lecturer: prefer explicit, else trainer assigned to unit, else course instructor
+        let recLecturer = lecturer || null;
+        if (!recLecturer) {
+            if (req.user?.role === 'teacher' && req.user?.name) {
+                recLecturer = req.user.name;
+            } else {
+                const assignedTrainer = await queryOne(
+                    `SELECT f.name FROM trainer_unit_assignments tua
+                     JOIN faculty f ON f.id = tua.faculty_id
+                     WHERE tua.course_id = ? AND tua.unit_id = ?
+                     LIMIT 1`,
+                    [course_id, unit_id]
+                );
+                if (assignedTrainer?.name) {
+                    recLecturer = assignedTrainer.name;
+                } else {
+                    const courseRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id]);
+                    recLecturer = courseRow?.instructor || req.user?.name || req.user?.email || null;
+                }
+            }
+        }
 
         // Upsert
         const existing = await queryOne(
@@ -257,20 +293,44 @@ export async function batchSaveUnitMarks(req, res) {
         );
         if (!unit) return res.status(404).json({ error: 'Unit not found for this course' });
 
-        const courseObj = await queryOne('SELECT name FROM courses WHERE id = ?', [course_id]);
+        const courseObj = await queryOne('SELECT id, name FROM courses WHERE id = ?', [course_id]);
         if (!courseObj) return res.status(404).json({ error: 'Course not found' });
 
         // Retrieve enrolled students to validate registry enrollment
         const students = await query('SELECT id, course FROM students');
-        const courseNameLower = courseObj.name.toLowerCase().trim();
+        const courseNameLower = (courseObj.name || '').toLowerCase().trim();
+        const courseIdLower = String(courseObj.id || '').toLowerCase().trim();
         const enrolledStudentIds = new Set(
             students.filter(s => {
                 const sCourses = parseCoursesField(s.course).map(c => c.toLowerCase().trim());
-                return sCourses.includes(courseNameLower);
+                return sCourses.includes(courseNameLower) ||
+                       sCourses.includes(courseIdLower) ||
+                       sCourses.some(sc => sc.includes(courseNameLower) || courseNameLower.includes(sc));
             }).map(s => String(s.id).trim())
         );
+        const registeredStudentIds = new Set(students.map(s => String(s.id).trim()));
 
         const thresholds = await getGradingThresholds();
+
+        // Resolve default lecturer for batch if not passed on individual entries
+        let defaultLecturer = null;
+        if (req.user?.role === 'teacher' && req.user?.name) {
+            defaultLecturer = req.user.name;
+        } else {
+            const assignedTrainer = await queryOne(
+                `SELECT f.name FROM trainer_unit_assignments tua
+                 JOIN faculty f ON f.id = tua.faculty_id
+                 WHERE tua.course_id = ? AND tua.unit_id = ?
+                 LIMIT 1`,
+                [course_id, unit_id]
+            );
+            if (assignedTrainer?.name) {
+                defaultLecturer = assignedTrainer.name;
+            } else {
+                const courseRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id]);
+                defaultLecturer = courseRow?.instructor || req.user?.name || req.user?.email || null;
+            }
+        }
         
         // Pre-load all existing marks for this course/unit to avoid sequential SELECT queries
         const existingMarks = await query(
@@ -290,14 +350,18 @@ export async function batchSaveUnitMarks(req, res) {
 
                 const normalizedSid = String(student_id).trim();
 
-                // Double check student is enrolled in the course
-                if (!enrolledStudentIds.has(normalizedSid)) continue;
+                // Validate student enrollment: teachers must match enrolled; admins can enter for any registered student
+                if (allowedCourses !== null) {
+                    if (!enrolledStudentIds.has(normalizedSid)) continue;
+                } else {
+                    if (!enrolledStudentIds.has(normalizedSid) && !registeredStudentIds.has(normalizedSid)) continue;
+                }
 
                 const marksNum = parseFloat(marks);
                 if (isNaN(marksNum) || marksNum < 0 || marksNum > 100) continue;
 
                 const grade       = calculateGrade(marksNum, thresholds);
-                const recLecturer = lecturer || req.user?.name || req.user?.email || null;
+                const recLecturer = lecturer || defaultLecturer;
 
                 const existingId = existingMap.get(normalizedSid);
 

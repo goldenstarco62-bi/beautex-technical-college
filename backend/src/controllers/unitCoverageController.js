@@ -4,6 +4,7 @@
  * Students confirm whether units were taught. Admins monitor per-student progress.
  */
 import { query, run, queryOne } from '../config/database.js';
+import { parseCoursesField } from '../utils/courseParser.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -40,39 +41,28 @@ async function getActivePeriodLabel() {
     }
 }
 
-function normaliseCourseField(raw) {
-    if (!raw) return [];
-    if (typeof raw === 'string' && raw.startsWith('{') && raw.endsWith('}')) {
-        return raw.slice(1, -1).split(',').map(s => s.replace(/^"|"$/g, '').trim()).filter(Boolean);
-    }
-    if (typeof raw === 'string' && raw.startsWith('[')) {
-        try {
-            const p = JSON.parse(raw);
-            return Array.isArray(p) ? p.map(s => s.trim()) : [String(p).trim()];
-        } catch (e) {
-            // fallback
-        }
-    }
-    return [String(raw).trim()].filter(Boolean);
-}
-
 /**
- * Get all students enrolled in a course (by course name match), returning id, name, intake.
+ * Get all students enrolled in a course (by course name, id, or code match), returning id, name, intake.
  */
 async function getEnrolledStudents(courseId) {
     try {
-        const course = await queryOne('SELECT name FROM courses WHERE id = ?', [courseId]);
+        const course = await queryOne('SELECT id, name FROM courses WHERE id = ?', [courseId]);
         if (!course) return [];
-        const courseLC = course.name.toLowerCase().trim();
+        const courseLC = (course.name || '').toLowerCase().trim();
+        const courseIdLC = String(course.id || '').toLowerCase().trim();
         
         const allStudents = await query(
-            `SELECT id, name, intake, course FROM students WHERE status = 'Active'`,
+            `SELECT id, name, intake, course FROM students WHERE LOWER(status) = 'active' OR status IS NULL OR status = ''`,
             []
         );
         
-        const matchedStudents = allStudents.filter(s => 
-            normaliseCourseField(s.course).some(c => c.toLowerCase().trim() === courseLC)
-        );
+        const matchedStudents = allStudents.filter(s => {
+            const studentCourses = parseCoursesField(s.course);
+            return studentCourses.some(c => {
+                const cLC = c.toLowerCase().trim();
+                return cLC === courseLC || cLC === courseIdLC || courseLC.includes(cLC);
+            });
+        });
         
         return matchedStudents.map(s => ({
             id: s.id,
@@ -291,8 +281,46 @@ export async function markUnitCovered(req, res) {
         if (!unit) return res.status(404).json({ error: 'Unit not found in this course' });
 
         const activePeriod = await getActivePeriodLabel();
-        const teacherName = teacher.name || teacher.email || 'Unknown';
-        const teacherId = teacher.email || String(teacher.id);
+
+        // Resolve teacher: prefer explicitly passed teacher, or trainer assigned to this unit/course, or course instructor
+        let teacherName = req.body.teacher_name || null;
+        let teacherId = req.body.teacher_id || null;
+
+        if (!teacherName) {
+            if (req.user?.role === 'teacher' && req.user?.name) {
+                teacherName = req.user.name;
+                teacherId = req.user.email || String(req.user.id);
+            } else {
+                // Admin or Superadmin: Look up assigned trainer for this unit in trainer_unit_assignments
+                const assignedTrainer = await queryOne(
+                    `SELECT tua.faculty_id, f.name, f.email
+                     FROM trainer_unit_assignments tua
+                     JOIN faculty f ON f.id = tua.faculty_id
+                     WHERE tua.course_id = ? AND tua.unit_id = ?
+                     LIMIT 1`,
+                    [course_id, targetUnitId]
+                );
+
+                if (assignedTrainer?.name) {
+                    teacherName = assignedTrainer.name;
+                    teacherId = assignedTrainer.email || String(assignedTrainer.faculty_id);
+                } else if (course?.instructor) {
+                    teacherName = course.instructor;
+                    const fac = await queryOne(
+                        'SELECT email, id FROM faculty WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))',
+                        [course.instructor]
+                    );
+                    teacherId = fac?.email || String(fac?.id || course.instructor);
+                } else {
+                    teacherName = req.user?.name || req.user?.email || 'Unknown';
+                    teacherId = req.user?.email || String(req.user?.id || 'Unknown');
+                }
+            }
+        }
+        if (!teacherId) {
+            teacherId = teacherName;
+        }
+
         const now = new Date();
         const dateCovered = now.toISOString().split('T')[0];
         const timeCovered = now.toTimeString().split(' ')[0];
@@ -392,11 +420,44 @@ export async function getCoverageLogs(req, res) {
         const params = [];
 
         if (isTeacher) {
-            sql += ' AND ucl.teacher_id = ?';
-            params.push(req.user.email || String(req.user.id));
+            const userEmail = String(req.user?.email || '').toLowerCase().trim();
+            const userName = String(req.user?.name || '').toLowerCase().trim();
+            const faculty = await queryOne('SELECT id, name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+            const tutorName = faculty?.name || userName;
+
+            // Get allowed courses for this teacher
+            const facCoursesList = faculty?.courses ? parseCoursesField(faculty.courses).map(c => c.toLowerCase().trim()) : [];
+            let teacherCourses = [];
+            if (facCoursesList.length > 0) {
+                const phs = facCoursesList.map(() => '?').join(',');
+                teacherCourses = await query(
+                    `SELECT id FROM courses WHERE LOWER(instructor) = LOWER(?) OR LOWER(name) IN (${phs})`,
+                    [tutorName, ...facCoursesList]
+                );
+            } else {
+                teacherCourses = await query(`SELECT id FROM courses WHERE LOWER(instructor) = LOWER(?)`, [tutorName]);
+            }
+            const teacherCourseIds = teacherCourses.map(c => String(c.id));
+            if (faculty?.id) {
+                const tuaRows = await query('SELECT DISTINCT course_id FROM trainer_unit_assignments WHERE faculty_id = ?', [faculty.id]);
+                tuaRows.forEach(r => {
+                    if (r.course_id && !teacherCourseIds.includes(String(r.course_id))) {
+                        teacherCourseIds.push(String(r.course_id));
+                    }
+                });
+            }
+
+            if (teacherCourseIds.length > 0) {
+                const cPhs = teacherCourseIds.map(() => '?').join(',');
+                sql += ` AND (ucl.teacher_id = ? OR LOWER(TRIM(ucl.teacher_name)) = LOWER(TRIM(?)) OR ucl.course_id IN (${cPhs}))`;
+                params.push(req.user.email || String(req.user.id), tutorName, ...teacherCourseIds);
+            } else {
+                sql += ` AND (ucl.teacher_id = ? OR LOWER(TRIM(ucl.teacher_name)) = LOWER(TRIM(?)))`;
+                params.push(req.user.email || String(req.user.id), tutorName);
+            }
         } else if (teacher_id) {
-            sql += ' AND ucl.teacher_id = ?';
-            params.push(teacher_id);
+            sql += ' AND (ucl.teacher_id = ? OR ucl.teacher_name = ?)';
+            params.push(teacher_id, teacher_id);
         }
 
         if (course_id) { sql += ' AND ucl.course_id = ?'; params.push(course_id); }
