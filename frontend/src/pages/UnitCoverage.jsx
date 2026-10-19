@@ -974,7 +974,7 @@ export default function UnitCoverage() {
                                         <table className="w-full">
                                             <thead>
                                                 <tr className="bg-black/[0.015] border-b border-black/5">
-                                                    {['#', 'Unit / Topic', 'Duration', 'Students Covered', 'Action'].map(h => (
+                                                    {['#', 'Unit / Topic', 'Lecturer', 'Duration', 'Students Covered', 'Action'].map(h => (
                                                         <th key={h} className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">{h}</th>
                                                     ))}
                                                 </tr>
@@ -984,12 +984,29 @@ export default function UnitCoverage() {
                                                     const covPct = enrolledStudents.length > 0
                                                         ? Math.round((unit.students_covered_count / enrolledStudents.length) * 100)
                                                         : 0;
+                                                    // assigned_trainer_name comes from the backend JOIN with trainer_unit_assignments
+                                                    const lecturerName = unit.assigned_trainer_name
+                                                        || unit.coverage_log?.teacher_name
+                                                        || null;
                                                     return (
                                                         <tr key={unit.id} className="hover:bg-black/[0.005] transition-colors">
                                                             <td className="px-6 py-4 text-xs font-black text-black/30">{idx + 1}</td>
                                                             <td className="px-6 py-4">
                                                                 <p className="text-xs font-black text-black uppercase">{unit.name}</p>
                                                                 {unit.description && <p className="text-[9px] text-black/30 mt-0.5">{unit.description}</p>}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {lecturerName ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black text-white flex-shrink-0"
+                                                                            style={{ background: 'linear-gradient(135deg, #7c3aed, #a78bfa)' }}>
+                                                                            {lecturerName.charAt(0).toUpperCase()}
+                                                                        </div>
+                                                                        <span className="text-[10px] font-black text-purple-700 uppercase tracking-tight">{lecturerName}</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <span className="text-[9px] text-black/20 italic">Unassigned</span>
+                                                                )}
                                                             </td>
                                                             <td className="px-6 py-4 text-xs text-black/50 font-bold">{unit.expected_duration || '—'}</td>
                                                             <td className="px-6 py-4">

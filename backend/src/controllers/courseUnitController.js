@@ -35,6 +35,53 @@ function ph(i) {
     return getActiveDbEngine() === 'postgres' ? `$${i}` : '?';
 }
 
+// Returns the first code (case-insensitive) already in global_units among the given candidates.
+async function findExistingCode(code) {
+    if (!code) return null;
+    const isPg = getActiveDbEngine() === 'postgres';
+    return queryOne(
+        isPg
+            ? 'SELECT id, unit_name FROM global_units WHERE LOWER(unit_code) = LOWER($1)'
+            : 'SELECT id, unit_name FROM global_units WHERE LOWER(unit_code) = LOWER(?)',
+        [code]
+    );
+}
+
+// Generates a unique unit code from a base (e.g. 'INT' or 'INT-123'), appending an incrementing
+// suffix until a free slot is found. Guards against the unit_code UNIQUE constraint.
+async function ensureUniqueCode(base) {
+    const root = String(base || 'UNIT').trim().toUpperCase().replace(/(-\d+)+$/, '');
+    for (let n = 0; n < 200; n++) {
+        const candidate = n === 0 ? `${root}-${Math.floor(Math.random() * 900 + 100)}` : `${root}-${100 + n}`;
+        if (!(await findExistingCode(candidate))) return candidate;
+    }
+    return `${root}-${Date.now()}`;
+}
+
+// Returns an error message if newName/newCode clash with a different unit, else null.
+async function findUnitCollision(newName, newCode, excludeId) {
+    const isPg = getActiveDbEngine() === 'postgres';
+    if (newName) {
+        const owner = await queryOne(
+            isPg
+                ? 'SELECT unit_name FROM global_units WHERE LOWER(unit_name) = LOWER($1) AND id <> $2'
+                : 'SELECT unit_name FROM global_units WHERE LOWER(unit_name) = LOWER(?) AND id <> ?',
+            [newName, excludeId]
+        );
+        if (owner) return `Another unit is already named "${owner.unit_name}". Use a different name.`;
+    }
+    if (newCode) {
+        const owner = await queryOne(
+            isPg
+                ? 'SELECT unit_name FROM global_units WHERE LOWER(unit_code) = LOWER($1) AND id <> $2'
+                : 'SELECT unit_name FROM global_units WHERE LOWER(unit_code) = LOWER(?) AND id <> ?',
+            [newCode, excludeId]
+        );
+        if (owner) return `Unit code "${newCode}" is already used by "${owner.unit_name}". Choose a different code.`;
+    }
+    return null;
+}
+
 // ── MASTER UNIT ENDPOINTS ─────────────────────────────────────────────────────
 
 /**
@@ -79,19 +126,31 @@ export async function getAllUnits(req, res) {
             } catch (_) { units = []; }
         }
 
-        // Attach assigned courses to each unit
-        const enriched = await Promise.all((units || []).map(async (u) => {
-            let assignedCourses = [];
+        // Attach assigned courses (with trainer info) to each unit in one batched query
+        const unitIds = (units || []).map(u => u.id);
+        const coursesByUnit = {};
+        if (unitIds.length > 0) {
             try {
-                assignedCourses = await query(
-                    `SELECT pu.course_id, c.name AS course_name
+                const placeholders = unitIds.map((_, i) => ph(i + 1)).join(', ');
+                const rows = await query(
+                    `SELECT pu.unit_id, pu.course_id, c.name AS course_name,
+                            tua.faculty_id, f.name AS faculty_name, f.email AS faculty_email
                      FROM program_units pu
                      LEFT JOIN courses c ON c.id = pu.course_id
-                     WHERE pu.unit_id = ${ph(1)}
+                     LEFT JOIN trainer_unit_assignments tua
+                            ON tua.unit_id = pu.unit_id AND tua.course_id = pu.course_id
+                     LEFT JOIN faculty f ON f.id = tua.faculty_id
+                     WHERE pu.unit_id IN (${placeholders})
                      ORDER BY c.name ASC`,
-                    [u.id]
+                    unitIds
                 );
+                for (const r of rows || []) {
+                    (coursesByUnit[r.unit_id] ||= []).push(r);
+                }
             } catch (_) { /* program_units may not exist yet */ }
+        }
+
+        const enriched = (units || []).map((u) => {
             const nameVal = u.unit_name || u.name || '';
             const codeVal = u.unit_code || u.code || '';
             return {
@@ -100,9 +159,10 @@ export async function getAllUnits(req, res) {
                 code: codeVal,
                 unit_name: nameVal,
                 unit_code: codeVal,
-                assigned_courses: assignedCourses
+                is_common: u.is_common === true || u.is_common === 1,
+                assigned_courses: coursesByUnit[u.id] || []
             };
-        }));
+        });
 
         res.json(enriched);
     } catch (error) {
@@ -117,9 +177,10 @@ export async function getAllUnits(req, res) {
  */
 export async function createUnit(req, res) {
     try {
-        const { name, unit_name, code, unit_code, description, status = 'Active' } = req.body;
+        const { name, unit_name, code, unit_code, description, status = 'Active', is_common } = req.body;
         const finalName = (unit_name || name || '').trim();
         const finalCode = (unit_code || code || '').trim();
+        const finalCommon = is_common === undefined ? false : (is_common === true || is_common === 1 || is_common === 'true');
 
         if (!finalName) return res.status(400).json({ error: 'Unit name is required' });
 
@@ -134,20 +195,29 @@ export async function createUnit(req, res) {
         );
         if (existing) return res.status(409).json({ error: 'A unit with this name already exists.' });
 
-        // Auto-generate code if missing
-        const autoCode = finalCode || finalName.substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 900 + 100);
+        // Check code collision (case-insensitive) before insert
+        if (finalCode) {
+            const codeOwner = await findExistingCode(finalCode);
+            if (codeOwner) {
+                return res.status(409).json({ error: `Unit code "${finalCode}" is already used by "${codeOwner.unit_name}". Choose a different code.` });
+            }
+        }
+
+        // Auto-generate code if missing (collision-safe)
+        const autoCode = finalCode || await ensureUniqueCode(finalName.substring(0, 3).toUpperCase());
 
         let result;
+        const commonVal = isPg ? finalCommon : (finalCommon ? 1 : 0);
         if (isPg) {
             result = await query(
-                'INSERT INTO global_units (unit_code, unit_name, description, status) VALUES ($1, $2, $3, $4) RETURNING *',
-                [autoCode, finalName, description?.trim() || null, status]
+                'INSERT INTO global_units (unit_code, unit_name, description, status, is_common) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+                [autoCode, finalName, description?.trim() || null, status, commonVal]
             );
             res.status(201).json(result[0]);
         } else {
             result = await run(
-                'INSERT INTO global_units (unit_code, unit_name, description, status) VALUES (?, ?, ?, ?)',
-                [autoCode, finalName, description?.trim() || null, status]
+                'INSERT INTO global_units (unit_code, unit_name, description, status, is_common) VALUES (?, ?, ?, ?, ?)',
+                [autoCode, finalName, description?.trim() || null, status, commonVal]
             );
             const unit = await queryOne('SELECT * FROM global_units WHERE id = ?', [result.lastID]);
             res.status(201).json(unit);
@@ -165,7 +235,7 @@ export async function createUnit(req, res) {
 export async function updateUnit(req, res) {
     try {
         const { unitId } = req.params;
-        const { name, unit_name, code, unit_code, description, status } = req.body;
+        const { name, unit_name, code, unit_code, description, status, is_common } = req.body;
         const isPg = getActiveDbEngine() === 'postgres';
 
         const unit = await queryOne(
@@ -178,18 +248,26 @@ export async function updateUnit(req, res) {
         const updatedCode   = (unit_code || code)?.trim() ?? unit.unit_code;
         const updatedDesc   = description !== undefined ? (description?.trim() || null) : unit.description;
         const updatedStatus = status ?? unit.status ?? 'Active';
+        const updatedCommon = is_common === undefined
+            ? !!unit.is_common
+            : (is_common === true || is_common === 1 || is_common === 'true');
+
+        const nameChanged = updatedName && updatedName.toLowerCase() !== String(unit.unit_name || '').toLowerCase();
+        const codeChanged = updatedCode && updatedCode.toLowerCase() !== String(unit.unit_code || '').toLowerCase();
+        const collision = await findUnitCollision(nameChanged ? updatedName : null, codeChanged ? updatedCode : null, unitId);
+        if (collision) return res.status(409).json({ error: collision });
 
         if (isPg) {
             await query(
-                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5',
-                [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
+                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, is_common=$5, updated_at=CURRENT_TIMESTAMP WHERE id=$6',
+                [updatedName, updatedCode, updatedDesc, updatedStatus, updatedCommon, unitId]
             );
             const updated = await queryOne('SELECT * FROM global_units WHERE id=$1', [unitId]);
             res.json(updated);
         } else {
             await run(
-                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-                [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
+                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, is_common=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                [updatedName, updatedCode, updatedDesc, updatedStatus, updatedCommon ? 1 : 0, unitId]
             );
             const updated = await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]);
             res.json(updated);
@@ -198,6 +276,24 @@ export async function updateUnit(req, res) {
         console.error('updateUnit error:', error);
         res.status(500).json({ error: 'Failed to update unit' });
     }
+}
+
+// Counts historical marks/assessment rows attached to a unit (deletion guard).
+async function countUnitRecords(unitId) {
+    let total = 0;
+    try {
+        const markCount = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]);
+        total += parseInt(markCount?.cnt) || 0;
+    } catch (_) {}
+    try {
+        const catCount = await queryOne(`SELECT COUNT(*) AS cnt FROM cat_results WHERE unit_id = ${ph(1)}`, [unitId]);
+        total += parseInt(catCount?.cnt) || 0;
+    } catch (_) {}
+    try {
+        const resultCount = await queryOne(`SELECT COUNT(*) AS cnt FROM assessment_results WHERE unit_id = ${ph(1)}`, [unitId]);
+        total += parseInt(resultCount?.cnt) || 0;
+    } catch (_) {}
+    return total;
 }
 
 /**
@@ -213,19 +309,7 @@ export async function deleteUnit(req, res) {
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
         // Check for historical records
-        let total = 0;
-        try {
-            const markCount = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]);
-            total += parseInt(markCount?.cnt) || 0;
-        } catch (_) {}
-        try {
-            const catCount = await queryOne(`SELECT COUNT(*) AS cnt FROM cat_results WHERE unit_id = ${ph(1)}`, [unitId]);
-            total += parseInt(catCount?.cnt) || 0;
-        } catch (_) {}
-        try {
-            const resultCount = await queryOne(`SELECT COUNT(*) AS cnt FROM assessment_results WHERE unit_id = ${ph(1)}`, [unitId]);
-            total += parseInt(resultCount?.cnt) || 0;
-        } catch (_) {}
+        const total = await countUnitRecords(unitId);
 
         if (total > 0) {
             return res.status(409).json({
@@ -235,6 +319,7 @@ export async function deleteUnit(req, res) {
         }
 
         await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)}`, [unitId]);
+        try { await run(`DELETE FROM trainer_unit_assignments WHERE unit_id = ${ph(1)}`, [unitId]); } catch (_) { /* table may not exist yet */ }
         await run(`DELETE FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         res.json({ message: 'Unit deleted successfully' });
     } catch (error) {
@@ -356,6 +441,7 @@ export async function unassignUnitFromCourse(req, res) {
         const course = await queryOne(`SELECT name FROM courses WHERE id = ${ph(1)}`, [cId]);
 
         await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [uId, cId]);
+        try { await run(`DELETE FROM trainer_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [uId, cId]); } catch (_) { /* table may not exist yet */ }
 
         res.json({ message: `Unit "${unit?.unit_name || unitId}" removed from course "${course?.name || courseId}". Historical records preserved.` });
     } catch (error) {
@@ -399,6 +485,19 @@ export async function setCourseUnitAssignments(req, res) {
             }
         }
 
+        // Drop lecturer assignments for units no longer attached to this course
+        try {
+            if (unit_ids.length > 0) {
+                const inPlaceholders = unit_ids.map((_, i) => ph(i + 2)).join(', ');
+                await run(
+                    `DELETE FROM trainer_unit_assignments WHERE course_id = ${ph(1)} AND unit_id NOT IN (${inPlaceholders})`,
+                    [courseId, ...unit_ids]
+                );
+            } else {
+                await run(`DELETE FROM trainer_unit_assignments WHERE course_id = ${ph(1)}`, [courseId]);
+            }
+        } catch (_) { /* trainer table may not exist yet */ }
+
         const assignments = await query(
             `SELECT pu.unit_id, gu.unit_name AS name, gu.unit_code AS code, gu.status
              FROM program_units pu
@@ -430,12 +529,17 @@ export async function getCourseUnits(req, res) {
         const course = await queryOne(`SELECT * FROM courses WHERE id = ${ph(1)}`, [courseId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
-        // Primary: new program_units -> global_units
+        // Primary: new program_units -> global_units (with trainer info)
         let units = await query(
             `SELECT gu.id, gu.unit_code AS code, gu.unit_name AS name, gu.description, gu.status,
-                    pu.id AS assignment_id
+                    pu.id AS assignment_id,
+                    tua.faculty_id AS trainer_id,
+                    f.name AS trainer_name, f.email AS trainer_email
              FROM program_units pu
              LEFT JOIN global_units gu ON gu.id = pu.unit_id
+             LEFT JOIN trainer_unit_assignments tua
+                    ON tua.unit_id = pu.unit_id AND tua.course_id = pu.course_id
+             LEFT JOIN faculty f ON f.id = tua.faculty_id
              WHERE pu.course_id = ${ph(1)} AND (gu.status IS NULL OR gu.status = 'Active')
              ORDER BY gu.unit_name ASC`,
             [courseId]
@@ -459,14 +563,16 @@ export async function getCourseUnits(req, res) {
                 // Upsert into global_units
                 let unitRow = await queryOne(`SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(${ph(1)})`, [u.unit_name]);
                 if (!unitRow) {
+                    let seedCode = u.unit_code;
+                    if (await findExistingCode(seedCode)) seedCode = await ensureUniqueCode(seedCode);
                     if (isPg) {
                         const r = await query(
                             `INSERT INTO global_units (unit_code, unit_name, status) VALUES ($1, $2, 'Active') RETURNING id`,
-                            [u.unit_code, u.unit_name]
+                            [seedCode, u.unit_name]
                         );
                         unitRow = r[0];
                     } else {
-                        const r = await run(`INSERT INTO global_units (unit_code, unit_name, status) VALUES (?, ?, 'Active')`, [u.unit_code, u.unit_name]);
+                        const r = await run(`INSERT INTO global_units (unit_code, unit_name, status) VALUES (?, ?, 'Active')`, [seedCode, u.unit_name]);
                         unitRow = { id: r.lastID };
                     }
                 }
@@ -512,7 +618,18 @@ export async function createCourseUnit(req, res) {
         const course = await queryOne(`SELECT id FROM courses WHERE id = ${ph(1)}`, [courseId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
-        const autoCode = finalCode || finalName.substring(0, 3).toUpperCase() + '-' + Math.floor(Math.random() * 900 + 100);
+        if (finalCode) {
+            const codeOwner = await findExistingCode(finalCode);
+            if (codeOwner) {
+                return res.status(409).json({ error: `Unit code "${finalCode}" is already used by "${codeOwner.unit_name}". Choose a different code.` });
+            }
+        }
+        const existingName = await queryOne(
+            `SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(${ph(1)})`, [finalName]
+        );
+        if (existingName) return res.status(409).json({ error: 'A unit with this name already exists in the library. Attach it instead of creating a duplicate.' });
+
+        const autoCode = finalCode || await ensureUniqueCode(finalName.substring(0, 3).toUpperCase());
 
         let unit;
         if (isPg) {
@@ -556,6 +673,11 @@ export async function updateCourseUnit(req, res) {
         const updatedDesc   = description !== undefined ? (description?.trim() || null) : unit.description;
         const updatedStatus = status ?? unit.status ?? 'Active';
 
+        const nameChanged = updatedName && updatedName.toLowerCase() !== String(unit.unit_name || '').toLowerCase();
+        const codeChanged = updatedCode && updatedCode.toLowerCase() !== String(unit.unit_code || '').toLowerCase();
+        const collision = await findUnitCollision(nameChanged ? updatedName : null, codeChanged ? updatedCode : null, unitId);
+        if (collision) return res.status(409).json({ error: collision });
+
         if (isPg) {
             await query(
                 'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5',
@@ -580,7 +702,8 @@ export async function updateCourseUnit(req, res) {
 /**
  * DELETE /api/courses/:courseId/units/:unitId
  * Removes a unit from a course (unlinks from program_units).
- * If the unit has student records, deactivates it instead.
+ * Historical marks/assessment rows for this course are preserved; the unit is
+ * NEVER deactivated globally, since other courses may still use it.
  */
 export async function deleteCourseUnit(req, res) {
     try {
@@ -589,18 +712,17 @@ export async function deleteCourseUnit(req, res) {
         const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
-        let total = 0;
-        try { const c = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)}`, [unitId]); total += parseInt(c?.cnt) || 0; } catch (_) {}
-        try { const c = await queryOne(`SELECT COUNT(*) AS cnt FROM assessment_results WHERE unit_id = ${ph(1)}`, [unitId]); total += parseInt(c?.cnt) || 0; } catch (_) {}
-
-        if (total > 0) {
-            await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
-            await run(`UPDATE global_units SET status='Inactive', updated_at=CURRENT_TIMESTAMP WHERE id = ${ph(1)}`, [unitId]);
-            return res.json({ message: `Unit has ${total} student record(s). It has been deactivated and removed from this course to preserve historical data.`, deactivated: true });
-        }
+        let courseRecords = 0;
+        try { const c = await queryOne(`SELECT COUNT(*) AS cnt FROM student_unit_marks WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]); courseRecords += parseInt(c?.cnt) || 0; } catch (_) {}
+        try { const c = await queryOne(`SELECT COUNT(*) AS cnt FROM assessment_results WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]); courseRecords += parseInt(c?.cnt) || 0; } catch (_) {}
 
         await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
-        res.json({ message: 'Unit removed from course successfully' });
+        try { await run(`DELETE FROM trainer_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]); } catch (_) { /* table may not exist yet */ }
+
+        const note = courseRecords > 0
+            ? ` ${courseRecords} historical record(s) for this course were preserved; the unit remains active in the shared library.`
+            : '';
+        res.json({ message: `Unit removed from course successfully.${note}`, preservedRecords: courseRecords });
     } catch (error) {
         console.error('deleteCourseUnit error:', error);
         res.status(500).json({ error: 'Failed to remove unit from course' });

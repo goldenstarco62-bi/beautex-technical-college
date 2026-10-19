@@ -109,9 +109,12 @@ export async function getDb() {
                     connectionString: processedUrl,
                     ssl: { rejectUnauthorized: false },
                     connectionTimeoutMillis: 10000, // 10s timeout
+                    idleTimeoutMillis: 30000,       // drop idle clients after 30s so dead connections don't linger
+                    keepAlive: true,                // TCP keep-alive survives laptop sleep / short Wi-Fi drops
                 });
                 pgPool.on('error', (err) => {
-                    console.error('Unexpected error on idle Postgres client', err);
+                    // Errors on idle/removed clients surface here; the client is evicted automatically.
+                    console.error('Unexpected error on idle Postgres client:', err.message);
                 });
                 // Test the connection
                 const client = await pgPool.connect();
@@ -167,6 +170,10 @@ export async function getDb() {
  * Initialize database schema
  */
 let isInitializing = false;
+// Bump this whenever a new migration block is added below — the version gate
+// then re-runs the full (idempotent) migration sweep once on next boot.
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-10-15-03';
+
 export async function initializeDatabase() {
     if (isInitializing) return;
     isInitializing = true;
@@ -183,46 +190,65 @@ export async function initializeDatabase() {
         if (processedUrl) {
             console.log('🐘 PostgreSQL detected. Ensuring all tables are initialized...');
 
-            // Check if users table exists
-            const checkTable = await database.query(`
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'users'
-                );
-            `);
+            // ── Schema version gate: skips the full migration sweep (previously ~27s of
+            //    sequential round-trips) when this version is already recorded. ──
+            await database.query(`CREATE TABLE IF NOT EXISTS schema_migrations (key TEXT PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
+            const versionApplied = await database.query(
+                `SELECT 1 AS ok FROM schema_migrations WHERE key = $1`,
+                [SCHEMA_MIGRATION_VERSION]
+            );
 
-            if (!checkTable.rows[0].exists) {
-                console.log('🚀 Base table "users" missing in PostgreSQL. Running full schema initialization...');
-                const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');
-                if (fs.existsSync(supabaseSchemaPath)) {
-                    const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
-                    // Split content by semicolons to execute as individual queries if needed, 
-                    // though most PostgreSQL drivers handle multiple statements if they are simple DDL.
-                    await database.query(supabaseSchema);
-                    console.log('✅ Full PostgreSQL schema initialized.');
-                } else {
-                    console.error('❌ Critical: supabase_schema.sql not found for PostgreSQL initialization');
-                }
+            if (versionApplied.rows.length > 0) {
+                console.log(`✅ Schema ${SCHEMA_MIGRATION_VERSION} already applied — skipping migration sweep (fast boot).`);
             } else {
-                console.log('ℹ️ Base tables present. Skipping base schema execution (speed optimization).');
-            }
+                // Check if users table exists
+                const checkTable = await database.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = 'users'
+                    );
+                `);
 
-            await runPostgresMigrations(database);
-
-            // ─── INVENTORY MODULE (POSTGRES) ──────────────────────────────
-            const pgInvSchemaPath = path.join(__dirname, '../models/postgres_inventory_schema.sql');
-            if (fs.existsSync(pgInvSchemaPath)) {
-                console.log('📦 Initializing Inventory Module for PostgreSQL...');
-                const pgInvSchema = fs.readFileSync(pgInvSchemaPath, 'utf-8');
-                try {
-                    await database.query(pgInvSchema);
-                    console.log('✅ Inventory schema initialized (PostgreSQL)');
-                } catch (e) {
-                    console.warn('⚠️ Inventory schema warning (PostgreSQL):', e.message);
+                if (!checkTable.rows[0].exists) {
+                    console.log('🚀 Base table "users" missing in PostgreSQL. Running full schema initialization...');
+                    const supabaseSchemaPath = path.join(__dirname, '../models/supabase_schema.sql');
+                    if (fs.existsSync(supabaseSchemaPath)) {
+                        const supabaseSchema = fs.readFileSync(supabaseSchemaPath, 'utf-8');
+                        // Split content by semicolons to execute as individual queries if needed, 
+                        // though most PostgreSQL drivers handle multiple statements if they are simple DDL.
+                        await database.query(supabaseSchema);
+                        console.log('✅ Full PostgreSQL schema initialized.');
+                    } else {
+                        console.error('❌ Critical: supabase_schema.sql not found for PostgreSQL initialization');
+                    }
+                } else {
+                    console.log('ℹ️ Base tables present. Skipping base schema execution (speed optimization).');
                 }
+
+                await runPostgresMigrations(database);
+
+                // ─── INVENTORY MODULE (POSTGRES) ──────────────────────────────
+                const pgInvSchemaPath = path.join(__dirname, '../models/postgres_inventory_schema.sql');
+                if (fs.existsSync(pgInvSchemaPath)) {
+                    console.log('📦 Initializing Inventory Module for PostgreSQL...');
+                    const pgInvSchema = fs.readFileSync(pgInvSchemaPath, 'utf-8');
+                    try {
+                        await database.query(pgInvSchema);
+                        console.log('✅ Inventory schema initialized (PostgreSQL)');
+                    } catch (e) {
+                        console.warn('⚠️ Inventory schema warning (PostgreSQL):', e.message);
+                    }
+                }
+
+                await ensureHighPerformanceIndexes(database);
+
+                await database.query(
+                    `INSERT INTO schema_migrations (key) VALUES ($1) ON CONFLICT (key) DO NOTHING`,
+                    [SCHEMA_MIGRATION_VERSION]
+                );
+                console.log(`✅ Schema version ${SCHEMA_MIGRATION_VERSION} recorded in schema_migrations.`);
             }
 
-            await ensureHighPerformanceIndexes(database);
             await seedNewSettings(database);
             return;
         }
@@ -1035,9 +1061,22 @@ async function runPostgresMigrations(database) {
                 UNIQUE(faculty_id, course_id, unit_id)
             )
         `);
+        // Align legacy column names (teacher_id / trainer_id) to faculty_id
+        const tuaCols = await database.query(
+            `SELECT column_name FROM information_schema.columns WHERE table_name = 'trainer_unit_assignments'`
+        );
+        const tuaColNames = tuaCols.rows.map(r => r.column_name);
+        if (!tuaColNames.includes('faculty_id')) {
+            const legacyCol = ['teacher_id', 'trainer_id'].find(c => tuaColNames.includes(c));
+            if (legacyCol) {
+                await database.query(`ALTER TABLE trainer_unit_assignments RENAME COLUMN ${legacyCol} TO faculty_id`);
+                console.log(`✅ trainer_unit_assignments: renamed legacy column ${legacyCol} -> faculty_id (PostgreSQL)`);
+            }
+        }
         await database.query('CREATE INDEX IF NOT EXISTS idx_tua_faculty ON trainer_unit_assignments(faculty_id)');
         await database.query('CREATE INDEX IF NOT EXISTS idx_tua_course ON trainer_unit_assignments(course_id)');
         await database.query('CREATE INDEX IF NOT EXISTS idx_tua_unit ON trainer_unit_assignments(unit_id)');
+        await database.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_tua_unit_course ON trainer_unit_assignments(unit_id, course_id)');
         console.log('✅ trainer_unit_assignments table ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ trainer_unit_assignments migration warning (PostgreSQL):', e.message);
@@ -1117,6 +1156,237 @@ async function runPostgresMigrations(database) {
         console.log('✅ assessment_results table ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ assessment_results migration warning (PostgreSQL):', e.message);
+    }
+
+    // ── UNIT OFFERINGS: one unit taught by one lecturer to one group ──────────
+    // Common units (Business Skills, ICT, Communication Skills...) are taught by
+    // different lecturers to students of different courses. Units stay shared in
+    // global_units; an *offering* is the teaching instance, and students are
+    // attached per offering instead of per course.
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS unit_offerings (
+                id SERIAL PRIMARY KEY,
+                unit_id INTEGER NOT NULL,
+                course_id TEXT,
+                offering_name TEXT NOT NULL,
+                faculty_id TEXT,
+                faculty_name TEXT,
+                group_label TEXT DEFAULT 'Default',
+                academic_year TEXT,
+                term TEXT,
+                is_default BOOLEAN DEFAULT FALSE,
+                status TEXT DEFAULT 'Active',
+                dedupe_key TEXT UNIQUE NOT NULL,
+                created_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_offerings_unit ON unit_offerings(unit_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_offerings_course ON unit_offerings(course_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_offerings_faculty ON unit_offerings(faculty_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_offerings_status ON unit_offerings(status)');
+        console.log('✅ unit_offerings table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ unit_offerings migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS offering_students (
+                id SERIAL PRIMARY KEY,
+                offering_id INTEGER NOT NULL,
+                student_id TEXT NOT NULL,
+                enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(offering_id, student_id)
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_off_students_offering ON offering_students(offering_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_off_students_student ON offering_students(student_id)');
+        console.log('✅ offering_students table ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ offering_students migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query('ALTER TABLE cat_results ADD COLUMN IF NOT EXISTS offering_id INTEGER');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_cat_results_offering ON cat_results(offering_id)');
+        // Offering-keyed rows get their own key; the legacy UNIQUE(student_id, unit_id,
+        // cat_period_id) stays in place so historic rows keep their integrity.
+        await database.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_cat_results_offering
+            ON cat_results(student_id, offering_id, cat_period_id)
+            WHERE offering_id IS NOT NULL
+        `);
+        console.log('✅ cat_results.offering_id ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ cat_results.offering_id migration warning (PostgreSQL):', e.message);
+    }
+
+    try {
+        await database.query('ALTER TABLE global_units ADD COLUMN IF NOT EXISTS is_common BOOLEAN DEFAULT FALSE');
+    } catch (e) {
+        console.warn('⚠️ global_units.is_common migration warning (PostgreSQL):', e.message);
+    }
+
+    // Idempotent backfill: default offering per (unit, course), lecturer copied from
+    // trainer_unit_assignments where one exists, then historic marks stamped onto it.
+    try {
+        await database.query(`
+            INSERT INTO unit_offerings (unit_id, course_id, offering_name, faculty_id, faculty_name, group_label, is_default, dedupe_key, created_by)
+            SELECT pu.unit_id, pu.course_id,
+                   COALESCE(gu.unit_name, 'Unit ' || CAST(pu.unit_id AS TEXT)),
+                   tua.faculty_id, f.name, 'Default', TRUE,
+                   pu.unit_id || '|' || pu.course_id || '|*|*|*',
+                   'system-migration'
+            FROM program_units pu
+            JOIN global_units gu ON gu.id = pu.unit_id
+            LEFT JOIN trainer_unit_assignments tua
+                   ON tua.unit_id = pu.unit_id AND tua.course_id = pu.course_id
+            LEFT JOIN faculty f ON f.id = tua.faculty_id
+            ON CONFLICT (dedupe_key) DO NOTHING
+        `);
+        await database.query(`
+            INSERT INTO unit_offerings (unit_id, course_id, offering_name, group_label, is_default, dedupe_key, created_by)
+            SELECT s.unit_id, s.course_id,
+                   COALESCE(gu.unit_name, 'Unit ' || CAST(s.unit_id AS TEXT)),
+                   'Default', TRUE,
+                   s.unit_id || '|' || s.course_id || '|*|*|*',
+                   'system-migration'
+            FROM (SELECT DISTINCT unit_id, course_id FROM cat_results WHERE unit_id IS NOT NULL) s
+            LEFT JOIN global_units gu ON gu.id = s.unit_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM unit_offerings o
+                WHERE o.dedupe_key = s.unit_id || '|' || s.course_id || '|*|*|*'
+            )
+            ON CONFLICT (dedupe_key) DO NOTHING
+        `);
+        await database.query(`
+            UPDATE cat_results SET offering_id = o.id
+            FROM unit_offerings o
+            WHERE cat_results.offering_id IS NULL
+              AND cat_results.unit_id IS NOT NULL
+              AND o.dedupe_key = cat_results.unit_id || '|' || cat_results.course_id || '|*|*|*'
+        `);
+        await database.query(`
+            INSERT INTO offering_students (offering_id, student_id)
+            SELECT DISTINCT cr.offering_id, cr.student_id
+            FROM cat_results cr
+            WHERE cr.offering_id IS NOT NULL
+            ON CONFLICT (offering_id, student_id) DO NOTHING
+        `);
+        await database.query(`
+            UPDATE global_units SET is_common = TRUE
+            WHERE id IN (
+                SELECT unit_id FROM program_units
+                GROUP BY unit_id HAVING COUNT(DISTINCT course_id) > 1
+            )
+        `);
+        console.log('✅ Unit offerings backfilled from existing units/marks (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ unit offerings backfill warning (PostgreSQL):', e.message);
+    }
+
+    // ── PROGRAMME HIERARCHY: Diplomas vs Short Courses ────────────────────────
+    // A diploma can cover several streams taught by different lecturers (Cosmetology
+    // covers Beauty Therapy + Hairdressing); short courses hang off the discipline
+    // that hosts them. Course ids stay the join key, so this only adds structure.
+    try {
+        await database.query(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS programme_type TEXT NOT NULL DEFAULT 'Short Course'`);
+        await database.query(`ALTER TABLE courses ADD COLUMN IF NOT EXISTS parent_id TEXT REFERENCES courses(id) ON DELETE SET NULL`);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_courses_programme_type ON courses(programme_type)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_courses_parent ON courses(parent_id)');
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS diploma_streams (
+                diploma_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                sort_order INTEGER DEFAULT 0,
+                PRIMARY KEY (diploma_id, course_id)
+            )
+        `);
+        await database.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS registration_type TEXT`);
+        await database.query(`ALTER TABLE students ADD COLUMN IF NOT EXISTS programme_id TEXT REFERENCES courses(id) ON DELETE SET NULL`);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_students_programme ON students(programme_id)');
+        console.log('✅ Programme hierarchy columns ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ programme hierarchy migration warning (PostgreSQL):', e.message);
+    }
+
+    // The college's real catalogue: three diplomas, short courses parented to the
+    // discipline that teaches them. Idempotent — safe to re-run.
+    try {
+        await database.query(`
+            INSERT INTO courses (id, name, department, instructor, duration, capacity, programme_type, parent_id, status)
+            SELECT v.id, v.name, 'Cosmetology', COALESCE(h.instructor, 'To be assigned'), v.duration, COALESCE(h.capacity, 30), 'Short Course', v.parent_id, 'Active'
+            FROM (VALUES ('SC-10', 'Sista Locks', '3 Months', 'SC-03'), ('SC-11', 'Dreadlocks', '2 Months', 'SC-03'))
+                 AS v(id, name, duration, parent_id)
+            LEFT JOIN courses h ON h.id = 'SC-03'
+            ON CONFLICT (id) DO NOTHING
+        `);
+        await database.query(`UPDATE courses SET programme_type = 'Diploma' WHERE id IN ('COS 002', 'SC-03', 'SC-06')`);
+        await database.query(`
+            UPDATE courses SET parent_id = CASE id
+                WHEN 'SC-01' THEN 'SC-06'
+                WHEN 'SC-02' THEN 'SC-06'
+                WHEN 'SC-04' THEN 'SC-03'
+                WHEN 'SC-05' THEN 'SC-03'
+                WHEN 'SC-10' THEN 'SC-03'
+                WHEN 'SC-11' THEN 'SC-03'
+                WHEN 'COS 110' THEN 'SC-03'
+            END
+            WHERE id IN ('SC-01','SC-02','SC-04','SC-05','SC-10','SC-11','COS 110')
+        `);
+        await database.query(`
+            INSERT INTO diploma_streams (diploma_id, course_id, sort_order)
+            VALUES ('COS 002', 'SC-06', 1), ('COS 002', 'SC-03', 2)
+            ON CONFLICT (diploma_id, course_id) DO NOTHING
+        `);
+        console.log('✅ Programme catalogue seeded (diplomas, short-course parents, Cosmetology streams) (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ programme catalogue seed warning (PostgreSQL):', e.message);
+    }
+
+    // ── Certificates module (PostgreSQL) ──────────────────────────────────────
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS certificates (
+                id SERIAL PRIMARY KEY,
+                certificate_number TEXT UNIQUE NOT NULL,
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                programme_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+                category TEXT NOT NULL CHECK(category IN ('Diploma','Certificate','Short Course')),
+                student_name TEXT NOT NULL,
+                course_name TEXT NOT NULL,
+                admission_number TEXT,
+                completion_date DATE,
+                award_date DATE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Issued' CHECK(status IN ('Issued','Revoked')),
+                template_version TEXT,
+                issued_by TEXT,
+                issued_by_name TEXT,
+                revoke_reason TEXT,
+                revoked_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_certificates_category ON certificates(category)');
+        // One active (non-revoked) certificate per student + programme.
+        await database.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_certificates_active ON certificates(student_id, programme_id) WHERE status = 'Issued'`);
+        // Per-category, per-year sequence for certificate numbering.
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS certificate_sequences (
+                category TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                last_number INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (category, year)
+            )
+        `);
+        console.log('✅ Certificates module tables created (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ certificates migration warning (PostgreSQL):', e.message);
     }
 }
 
@@ -1315,6 +1585,15 @@ async function runSqliteMigrations(database) {
                     UNIQUE(faculty_id, course_id, unit_id)
                 )
             `);
+            const tuaCols = (await database.all(`PRAGMA table_info(trainer_unit_assignments)`)).map(r => r.name);
+            if (!tuaCols.includes('faculty_id')) {
+                const legacyCol = ['teacher_id', 'trainer_id'].find(c => tuaCols.includes(c));
+                if (legacyCol) {
+                    await database.run(`ALTER TABLE trainer_unit_assignments RENAME COLUMN ${legacyCol} TO faculty_id`);
+                    console.log(`✅ trainer_unit_assignments: renamed legacy column ${legacyCol} -> faculty_id (SQLite)`);
+                }
+            }
+            await database.run('CREATE UNIQUE INDEX IF NOT EXISTS uq_tua_unit_course ON trainer_unit_assignments(unit_id, course_id)');
             console.log('✅ course_units, course_unit_assignments & trainer_unit_assignments ensured (SQLite)');
         } catch (e) {
             console.warn('⚠️ course_units SQLite migration warning:', e.message);
@@ -1865,6 +2144,233 @@ async function runSqliteMigrations(database) {
         console.warn('⚠️ assessment_results migration warning (SQLite):', e.message);
     }
 
+    // ── UNIT OFFERINGS (SQLite mirror) ────────────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS unit_offerings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                unit_id INTEGER NOT NULL,
+                course_id TEXT,
+                offering_name TEXT NOT NULL,
+                faculty_id TEXT,
+                faculty_name TEXT,
+                group_label TEXT DEFAULT 'Default',
+                academic_year TEXT,
+                term TEXT,
+                is_default INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'Active',
+                dedupe_key TEXT UNIQUE NOT NULL,
+                created_by TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_offerings_unit ON unit_offerings(unit_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_offerings_course ON unit_offerings(course_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_offerings_faculty ON unit_offerings(faculty_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_offerings_status ON unit_offerings(status)');
+        console.log('✅ unit_offerings table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ unit_offerings migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS offering_students (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                offering_id INTEGER NOT NULL,
+                student_id TEXT NOT NULL,
+                enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(offering_id, student_id)
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_off_students_offering ON offering_students(offering_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_off_students_student ON offering_students(student_id)');
+        console.log('✅ offering_students table ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ offering_students migration warning (SQLite):', e.message);
+    }
+
+    try {
+        const crCols = await database.all(`PRAGMA table_info(cat_results)`);
+        if (!crCols.some(c => c.name === 'offering_id')) {
+            await database.run('ALTER TABLE cat_results ADD COLUMN offering_id INTEGER');
+        }
+        await database.run('CREATE INDEX IF NOT EXISTS idx_cat_results_offering ON cat_results(offering_id)');
+        await database.run(`
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_cat_results_offering
+            ON cat_results(student_id, offering_id, cat_period_id)
+            WHERE offering_id IS NOT NULL
+        `);
+        console.log('✅ cat_results.offering_id ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ cat_results.offering_id migration warning (SQLite):', e.message);
+    }
+
+    try {
+        const guCols = await database.all(`PRAGMA table_info(global_units)`);
+        if (!guCols.some(c => c.name === 'is_common')) {
+            await database.run('ALTER TABLE global_units ADD COLUMN is_common INTEGER DEFAULT 0');
+        }
+    } catch (e) {
+        console.warn('⚠️ global_units.is_common migration warning (SQLite):', e.message);
+    }
+
+    try {
+        await database.run(`
+            INSERT OR IGNORE INTO unit_offerings (unit_id, course_id, offering_name, faculty_id, faculty_name, group_label, is_default, dedupe_key, created_by)
+            SELECT pu.unit_id, pu.course_id,
+                   COALESCE(gu.unit_name, 'Unit ' || CAST(pu.unit_id AS TEXT)),
+                   tua.faculty_id, f.name, 'Default', 1,
+                   pu.unit_id || '|' || pu.course_id || '|*|*|*',
+                   'system-migration'
+            FROM program_units pu
+            JOIN global_units gu ON gu.id = pu.unit_id
+            LEFT JOIN trainer_unit_assignments tua
+                   ON tua.unit_id = pu.unit_id AND tua.course_id = pu.course_id
+            LEFT JOIN faculty f ON f.id = tua.faculty_id
+        `);
+        await database.run(`
+            INSERT OR IGNORE INTO unit_offerings (unit_id, course_id, offering_name, group_label, is_default, dedupe_key, created_by)
+            SELECT s.unit_id, s.course_id,
+                   COALESCE(gu.unit_name, 'Unit ' || CAST(s.unit_id AS TEXT)),
+                   'Default', 1,
+                   s.unit_id || '|' || s.course_id || '|*|*|*',
+                   'system-migration'
+            FROM (SELECT DISTINCT unit_id, course_id FROM cat_results WHERE unit_id IS NOT NULL) s
+            LEFT JOIN global_units gu ON gu.id = s.unit_id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM unit_offerings o
+                WHERE o.dedupe_key = s.unit_id || '|' || s.course_id || '|*|*|*'
+            )
+        `);
+        await database.run(`
+            UPDATE cat_results SET offering_id = (
+                SELECT o.id FROM unit_offerings o
+                WHERE o.dedupe_key = cat_results.unit_id || '|' || cat_results.course_id || '|*|*|*'
+            )
+            WHERE cat_results.offering_id IS NULL AND cat_results.unit_id IS NOT NULL
+        `);
+        await database.run(`
+            INSERT OR IGNORE INTO offering_students (offering_id, student_id)
+            SELECT DISTINCT cr.offering_id, cr.student_id
+            FROM cat_results cr
+            WHERE cr.offering_id IS NOT NULL
+        `);
+        await database.run(`
+            UPDATE global_units SET is_common = 1
+            WHERE id IN (
+                SELECT unit_id FROM program_units
+                GROUP BY unit_id HAVING COUNT(DISTINCT course_id) > 1
+            )
+        `);
+        console.log('✅ Unit offerings backfilled from existing units/marks (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ unit offerings backfill warning (SQLite):', e.message);
+    }
+
+    // ── PROGRAMME HIERARCHY: Diplomas vs Short Courses (SQLite) ──────────────
+    try {
+        const courseCols = await database.all("PRAGMA table_info('courses')");
+        if (!courseCols.some(c => c.name === 'programme_type')) {
+            await database.run(`ALTER TABLE courses ADD COLUMN programme_type TEXT NOT NULL DEFAULT 'Short Course'`);
+        }
+        if (!courseCols.some(c => c.name === 'parent_id')) {
+            await database.run('ALTER TABLE courses ADD COLUMN parent_id TEXT');
+        }
+        const studentCols = await database.all("PRAGMA table_info('students')");
+        if (!studentCols.some(c => c.name === 'registration_type')) {
+            await database.run('ALTER TABLE students ADD COLUMN registration_type TEXT');
+        }
+        if (!studentCols.some(c => c.name === 'programme_id')) {
+            await database.run('ALTER TABLE students ADD COLUMN programme_id TEXT');
+        }
+        await database.run('CREATE INDEX IF NOT EXISTS idx_courses_programme_type ON courses(programme_type)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_courses_parent ON courses(parent_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_students_programme ON students(programme_id)');
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS diploma_streams (
+                diploma_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                sort_order INTEGER DEFAULT 0,
+                PRIMARY KEY (diploma_id, course_id)
+            )
+        `);
+        console.log('✅ Programme hierarchy columns ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ programme hierarchy migration warning (SQLite):', e.message);
+    }
+
+    try {
+        const seedShort = async (id, name, duration, parentId) => {
+            await database.run(`
+                INSERT INTO courses (id, name, department, instructor, duration, capacity, programme_type, parent_id, status)
+                SELECT ?, ?, 'Cosmetology', COALESCE((SELECT instructor FROM courses WHERE id = 'SC-03'), 'To be assigned'),
+                       ?, COALESCE((SELECT capacity FROM courses WHERE id = 'SC-03'), 30), 'Short Course', ?, 'Active'
+                WHERE NOT EXISTS (SELECT 1 FROM courses WHERE id = ?)
+            `, [id, name, duration, parentId, id]);
+        };
+        await seedShort('SC-10', 'Sista Locks', '3 Months', 'SC-03');
+        await seedShort('SC-11', 'Dreadlocks', '2 Months', 'SC-03');
+        await database.run(`UPDATE courses SET programme_type = 'Diploma' WHERE id IN ('COS 002', 'SC-03', 'SC-06')`);
+        await database.run(`
+            UPDATE courses SET parent_id = CASE id
+                WHEN 'SC-01' THEN 'SC-06' WHEN 'SC-02' THEN 'SC-06'
+                WHEN 'SC-04' THEN 'SC-03' WHEN 'SC-05' THEN 'SC-03'
+                WHEN 'SC-10' THEN 'SC-03' WHEN 'SC-11' THEN 'SC-03'
+                WHEN 'COS 110' THEN 'SC-03'
+            END
+            WHERE id IN ('SC-01','SC-02','SC-04','SC-05','SC-10','SC-11','COS 110')
+        `);
+        await database.run(`
+            INSERT OR IGNORE INTO diploma_streams (diploma_id, course_id, sort_order)
+            VALUES ('COS 002', 'SC-06', 1), ('COS 002', 'SC-03', 2)
+        `);
+        console.log('✅ Programme catalogue seeded (diplomas, short-course parents, Cosmetology streams) (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ programme catalogue seed warning (SQLite):', e.message);
+    }
+
+    // ── Certificates module (SQLite) ──────────────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS certificates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                certificate_number TEXT UNIQUE NOT NULL,
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                programme_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+                category TEXT NOT NULL CHECK(category IN ('Diploma','Certificate','Short Course')),
+                student_name TEXT NOT NULL,
+                course_name TEXT NOT NULL,
+                admission_number TEXT,
+                completion_date DATE,
+                award_date DATE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Issued' CHECK(status IN ('Issued','Revoked')),
+                template_version TEXT,
+                issued_by TEXT,
+                issued_by_name TEXT,
+                revoke_reason TEXT,
+                revoked_at DATETIME,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_certificates_category ON certificates(category)');
+        await database.run(`CREATE UNIQUE INDEX IF NOT EXISTS uq_certificates_active ON certificates(student_id, programme_id) WHERE status = 'Issued'`);
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS certificate_sequences (
+                category TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                last_number INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (category, year)
+            )
+        `);
+        console.log('✅ Certificates module tables created (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ certificates migration warning (SQLite):', e.message);
+    }
+
     // ── Inventory Requisition System (SQLite) ─────────────────────────────────
     try {
         await database.run(`
@@ -2096,7 +2602,7 @@ export async function ensureHighPerformanceIndexes(database) {
 /**
  * Translate SQLite-specific functions to PostgreSQL equivalents
  */
-const translateSqlForPostgres = (sql) => {
+export const translateSqlForPostgres = (sql) => {
     let pgSql = sql;
     // Handle date('now') -> CURRENT_DATE
     pgSql = pgSql.replace(/date\('now'\)/gi, 'CURRENT_DATE');
@@ -2181,8 +2687,8 @@ export async function run(sql, params = []) {
         // upsert semantics write an explicit ON CONFLICT clause.
 
         // Add RETURNING id if it's an INSERT statement and doesn't have one
-        // Skip for tables known to not have an 'id' column (e.g. student_fees)
-        const noIdTables = ['student_fees', 'system_settings'];
+        // Skip for tables that have no 'id' column (composite-key / junction tables)
+        const noIdTables = ['student_fees', 'system_settings', 'diploma_streams'];
         const tableNameMatch = pgSql.match(/INSERT\s+INTO\s+(\w+)/i);
         const tableName = tableNameMatch ? tableNameMatch[1].toLowerCase() : '';
 

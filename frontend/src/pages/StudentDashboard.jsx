@@ -500,7 +500,7 @@ export default function StudentDashboard() {
                                 <p className="text-xs font-bold text-gray-600">You have only <span className="text-red-500">{remainingTime.formatted}</span> remaining in your current curriculum. Please ensure all requirements are met.</p>
                             </div>
                         </div>
-                        <Link to="/grades" className="shrink-0 px-6 py-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                        <Link to="/results" className="shrink-0 px-6 py-3 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-sm">
                             View Progress
                         </Link>
                     </div>
@@ -632,7 +632,7 @@ export default function StudentDashboard() {
                                         <h3 className="text-2xl font-black text-gray-800 dark:text-white mb-1">{courseDetails.name}</h3>
                                         <p className="text-sm text-gray-400 font-medium">Instructor: {courseDetails.instructor} • {courseDetails.room}</p>
                                     </div>
-                                    <Link to="/grades" className="bg-maroon text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center shrink-0">
+                                    <Link to="/results" className="bg-maroon text-white px-8 py-4 rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-xl block text-center shrink-0">
                                         View All Results
                                     </Link>
                                 </div>

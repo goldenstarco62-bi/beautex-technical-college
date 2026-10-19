@@ -463,7 +463,9 @@ export default function UnitsCovered() {
         };
 
         // Pre-convert student photo and logo to base64 to avoid CORS/tainting/decoding lag
-        let logoB64 = logoDataUrl;
+        // Prefer the crest uploaded in Settings; fall back to the bundled app icon.
+        const crest = String(settings.college_logo || '').trim();
+        let logoB64 = crest ? (crest.startsWith('data:') ? crest : await urlToBase64(crest)) : logoDataUrl;
         if (!logoB64 || !logoB64.startsWith('data:')) {
             logoB64 = await urlToBase64('/app-icon-v2.png');
         }
@@ -1579,9 +1581,22 @@ export default function UnitsCovered() {
                                         {/* BODY */}
                                         <div style={{ flex: 1, padding: '24px 36px 20px', position: 'relative' }}>
 
+                                            {/* COLLEGE LOGO WATERMARK — tiled across the whole page */}
                                             {printTarget.logoB64 && (
-                                                <img src={printTarget.logoB64} alt=""
-                                                    style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '340px', height: '340px', objectFit: 'contain', opacity: 0.04, pointerEvents: 'none', zIndex: 0 }} />
+                                                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 5 }}>
+                                                    {[
+                                                        { top: '2%',  left: '4%',  size: 165 },
+                                                        { top: '1%',  left: '56%', size: 165 },
+                                                        { top: '27%', left: '28%', size: 300 },
+                                                        { top: '31%', left: '76%', size: 165 },
+                                                        { top: '56%', left: '2%',  size: 165 },
+                                                        { top: '62%', left: '50%', size: 230 },
+                                                        { top: '84%', left: '26%', size: 165 },
+                                                    ].map((t, i) => (
+                                                        <img key={i} src={printTarget.logoB64} alt=""
+                                                            style={{ position: 'absolute', top: t.top, left: t.left, width: `${t.size}px`, height: `${t.size}px`, objectFit: 'contain', opacity: 0.07 }} />
+                                                    ))}
+                                                </div>
                                             )}
 
                                             {/* STUDENT INFO CARD */}

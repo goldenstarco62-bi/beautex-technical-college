@@ -298,7 +298,7 @@ export const addStudentComment = async (req, res) => {
 
         await run(
             'UPDATE student_daily_reports SET lesson_taught = ?, student_comment = ?, student_commented_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-            [lesson_taught === true ? 1 : lesson_taught === false ? 0 : null, student_comment || null, id]
+            [typeof lesson_taught === 'boolean' ? lesson_taught : null, student_comment || null, id]
         );
         const updated = await queryOne('SELECT * FROM student_daily_reports WHERE id = ?', [id]);
         return res.json(updated);

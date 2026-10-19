@@ -44,6 +44,7 @@ const Attendance = safeLazy(() => import('./pages/Attendance'));
 const UnitsCovered = safeLazy(() => import('./pages/UnitsCovered'));
 const UnitCoverage = safeLazy(() => import('./pages/UnitCoverage'));
 const Results = safeLazy(() => import('./pages/Results'));
+const Certificates = safeLazy(() => import('./pages/Certificates'));
 const AcademicsHub = safeLazy(() => import('./pages/AcademicsHub'));
 const Schedule = safeLazy(() => import('./pages/Schedule'));
 const Announcements = safeLazy(() => import('./pages/Announcements'));
@@ -141,6 +142,7 @@ function App() {
                                 <Route path="/grades" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitsCovered /></Layout></ProtectedRoute>} />
                                 <Route path="/unit-coverage" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitCoverage /></Layout></ProtectedRoute>} />
                                 <Route path="/results" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Results /></Layout></ProtectedRoute>} />
+                                <Route path="/certificates" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Certificates /></Layout></ProtectedRoute>} />
                                 <Route path="/schedule" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Schedule /></Layout></ProtectedRoute>} />
                                 <Route path="/announcements" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Announcements /></Layout></ProtectedRoute>} />
 

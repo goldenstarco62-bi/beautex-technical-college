@@ -119,20 +119,28 @@ export async function assignTrainerUnit(req, res) {
         const faculty = await queryOne(`SELECT id, name FROM faculty WHERE id = ${ph(1)}`, [faculty_id]);
         if (!faculty) return res.status(404).json({ error: 'Faculty member not found' });
 
-        const unit = await queryOne(`SELECT id, COALESCE(unit_name, name) AS name FROM global_units WHERE id = ${ph(1)}`, [unit_id])
+        const unit = await queryOne(`SELECT id, unit_name AS name FROM global_units WHERE id = ${ph(1)}`, [unit_id])
             || await queryOne(`SELECT id, name FROM course_units WHERE id = ${ph(1)}`, [unit_id]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
 
         const course = await queryOne(`SELECT id, name FROM courses WHERE id = ${ph(1)}`, [course_id]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
-        // Check duplicate
-        const existing = await queryOne(
-            `SELECT id FROM trainer_unit_assignments WHERE faculty_id = ${ph(1)} AND unit_id = ${ph(2)} AND course_id = ${ph(3)}`,
-            [faculty_id, unit_id, course_id]
+        // One lecturer per unit+course (DB-enforced via unique index uq_tua_unit_course)
+        const existingForUnit = await queryOne(
+            `SELECT tua.faculty_id, f.name AS faculty_name
+             FROM trainer_unit_assignments tua
+             LEFT JOIN faculty f ON f.id = tua.faculty_id
+             WHERE tua.unit_id = ${ph(1)} AND tua.course_id = ${ph(2)}`,
+            [unit_id, course_id]
         );
-        if (existing) {
-            return res.status(409).json({ error: `${faculty.name} is already assigned to "${unit.name}" in "${course.name}"` });
+        if (existingForUnit) {
+            if (String(existingForUnit.faculty_id) === String(faculty_id)) {
+                return res.status(409).json({ error: `${faculty.name} is already assigned to "${unit.name}" in "${course.name}"` });
+            }
+            return res.status(409).json({
+                error: `"${unit.name}" in "${course.name}" already has a lecturer assigned (${existingForUnit.faculty_name || 'Unknown'}). Change or remove that assignment first.`
+            });
         }
 
         const isPg = getActiveDbEngine() === 'postgres';
@@ -186,6 +194,16 @@ export async function bulkSetTrainerUnits(req, res) {
             `DELETE FROM trainer_unit_assignments WHERE faculty_id = ${ph(1)} AND course_id = ${ph(2)}`,
             [faculty_id, course_id]
         );
+
+        // Handover: release these units if another lecturer holds them in this course,
+        // so every (unit, course) pair keeps exactly one lecturer.
+        if (unit_ids.length > 0) {
+            const inPh = unit_ids.map((_, i) => ph(i + 2)).join(', ');
+            await run(
+                `DELETE FROM trainer_unit_assignments WHERE course_id = ${ph(1)} AND unit_id IN (${inPh}) AND faculty_id <> ${ph(unit_ids.length + 2)}`,
+                [course_id, ...unit_ids, faculty_id]
+            );
+        }
 
         // Re-insert new set
         for (const uid of unit_ids) {

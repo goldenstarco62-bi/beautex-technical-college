@@ -34,7 +34,7 @@ function isSimilarName(a, b) {
 
 async function getActivePeriodLabel() {
     try {
-        const p = await queryOne(`SELECT name FROM academic_periods WHERE is_active = true OR is_active = 1 LIMIT 1`, []);
+        const p = await queryOne(`SELECT name FROM academic_periods WHERE is_active = ? LIMIT 1`, [true]);
         return p?.name || null;
     } catch {
         return null;
@@ -102,7 +102,15 @@ export async function getCourseCoverage(req, res) {
         if (!course) return res.status(404).json({ error: 'Course not found' });
 
         const units = await query(
-            `SELECT * FROM course_units WHERE course_id = ? AND (is_archived IS NOT TRUE) ORDER BY sort_order ASC, id ASC`,
+            `SELECT cu.*,
+                    tua.faculty_id AS trainer_id,
+                    f.name AS assigned_trainer_name,
+                    f.email AS assigned_trainer_email
+             FROM course_units cu
+             LEFT JOIN trainer_unit_assignments tua ON tua.unit_id = cu.id AND tua.course_id = cu.course_id
+             LEFT JOIN faculty f ON f.id = tua.faculty_id
+             WHERE cu.course_id = ? AND (cu.is_archived IS NOT TRUE)
+             ORDER BY cu.sort_order ASC, cu.id ASC`,
             [courseId]
         );
 
@@ -638,7 +646,7 @@ export async function submitConfirmation(req, res) {
         );
         if (!log) return res.status(404).json({ error: 'Coverage log not found or does not belong to you' });
 
-        const activePeriod = await queryOne(`SELECT id FROM academic_periods WHERE is_active = true OR is_active = 1 LIMIT 1`, []);
+        const activePeriod = await queryOne(`SELECT id FROM academic_periods WHERE is_active = ? LIMIT 1`, [true]);
 
         const existing = await queryOne(
             `SELECT * FROM unit_coverage_confirmations WHERE coverage_log_id = ? AND student_id = ?`,

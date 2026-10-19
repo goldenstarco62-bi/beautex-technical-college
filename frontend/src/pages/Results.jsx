@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { catPeriodsAPI, catResultsAPI, coursesAPI, studentsAPI, courseUnitsAPI } from '../services/api';
+import { catPeriodsAPI, catResultsAPI, coursesAPI, studentsAPI, courseUnitsAPI, unitOfferingsAPI } from '../services/api';
 import { isStudentEnrolledInCourse } from '../utils/courseUtils';
 import {
     Award, BookOpen, Users, Search, Plus, X, Edit, Trash2, CheckCircle,
@@ -51,6 +51,13 @@ function WorkflowChip({ status }) {
     );
 }
 
+// A result row's unit can be a real linked unit (unit_id) or a legacy course-level
+// entry with no unit — the latter is shown as the student's programme overall assessment.
+const unitLabel = (r) => r.unit_id
+    ? (r.unit_display_name || r.unit_name || '—')
+    : `${r.student_main_course || r.course_name || 'Programme'} — Overall Assessment`;
+const courseLabel = (r) => r.student_main_course || r.course_name || '—';
+
 export default function Results() {
     const { user } = useAuth();
     const userRole = (user?.role || '').toLowerCase().trim();
@@ -98,6 +105,8 @@ export default function Results() {
     const [batchUnits, setBatchUnits] = useState([]);
     const [batchUnit, setBatchUnit] = useState('');
     const [batchCourse, setBatchCourse] = useState('');
+    const [batchOfferings, setBatchOfferings] = useState([]);
+    const [batchOffering, setBatchOffering] = useState('');
     const [batchStudents, setBatchStudents] = useState([]);
     const [batchEntries, setBatchEntries] = useState({}); // student_id -> { marks, status, remarks }
     const [submittingBatch, setSubmittingBatch] = useState(false);
@@ -144,8 +153,8 @@ export default function Results() {
         try {
             const [periodsRes, coursesRes, studentsRes] = await Promise.all([
                 catPeriodsAPI.getAll().catch(() => ({ data: [] })),
-                coursesAPI.getAll().catch(() => ({ data: [] })),
-                studentsAPI.getAll().catch(() => ({ data: [] })),
+                coursesAPI.getAll({ all: 1 }).catch(() => ({ data: [] })),
+                studentsAPI.getAll({ all: 1 }).catch(() => ({ data: [] })),
             ]);
 
             const pList = Array.isArray(periodsRes.data) ? periodsRes.data : [];
@@ -254,13 +263,16 @@ export default function Results() {
         if (!singleForm.cat_period_id || !singleForm.course_id || !singleForm.student_id) {
             return showToast('Please select period, course, and student.', 'error');
         }
-        if (!singleForm.unit_name) {
-            return showToast('Please select a unit for this assessment.', 'error');
+        if (!singleForm.unit_id) {
+            return showToast('Please select the unit this mark belongs to.', 'error');
         }
 
         const courseObj = courses.find(c => String(c.id) === String(singleForm.course_id));
+        const unitObj = singleUnits.find(u => String(u.id) === String(singleForm.unit_id));
         const payload = {
             ...singleForm,
+            unit_id: singleForm.unit_id,
+            unit_name: singleForm.unit_name || unitObj?.unit_name || unitObj?.name || '',
             trainer_name: courseObj?.instructor || (isTeacher ? user?.name : undefined)
         };
 
@@ -298,6 +310,38 @@ export default function Results() {
         setBatchEntries(init);
     }, [allStudents, courses]);
 
+    // Choosing an offering fixes the unit and switches the class list to that offering's
+    // roster — this is how a common unit taught across courses gets marked per group.
+    const handleBatchOfferingChange = async (offeringId) => {
+        setBatchOffering(offeringId);
+        setBatchEntries({});
+        if (!offeringId) {
+            loadBatchStudentsForCourse(batchCourse);
+            return;
+        }
+        const offering = batchOfferings.find(o => String(o.id) === String(offeringId));
+        if (!offering) return;
+
+        if (offering.course_id) setBatchCourse(String(offering.course_id));
+        setBatchUnit(offering.unit_id ? String(offering.unit_id) : '');
+        setBatchUnits([{
+            id: offering.unit_id,
+            unit_name: offering.offering_name,
+            unit_code: offering.unit_code
+        }]);
+        try {
+            const res = await unitOfferingsAPI.getStudents(offeringId);
+            const roster = res.data || [];
+            setBatchStudents(roster);
+            const init = {};
+            roster.forEach(s => { init[s.id] = { marks: '', status: 'Present', remarks: '' }; });
+            setBatchEntries(init);
+        } catch (err) {
+            setBatchStudents([]);
+            showToast(err.response?.data?.error || 'Could not load the roster for that offering.', 'error');
+        }
+    };
+
     const handleOpenBatch = () => {
         if (!selectedPeriod) {
             return showToast('Select a CAT Period first.', 'error');
@@ -305,13 +349,16 @@ export default function Results() {
         const initialCourse = selectedCourse || (courses.length > 0 ? String(courses[0].id) : '');
         setBatchCourse(initialCourse);
         setBatchUnit('');
+        setBatchOffering('');
         loadBatchStudentsForCourse(initialCourse);
+        unitOfferingsAPI.getAll({ status: 'Active' })
+            .then(res => setBatchOfferings((res.data || []).filter(o => o.status === 'Active')))
+            .catch(() => setBatchOfferings([]));
         if (initialCourse) {
             courseUnitsAPI.getUnits(initialCourse)
                 .then(res => {
                     const uList = res.data || [];
                     setBatchUnits(uList);
-                    if (uList.length > 0) setBatchUnit(String(uList[0].id));
                 })
                 .catch(() => setBatchUnits([]));
         } else {
@@ -321,11 +368,17 @@ export default function Results() {
     };
 
     const handleSaveBatch = async () => {
-        if (!batchCourse) return showToast('Please select a course for batch entry.', 'error');
-        if (!batchUnit) return showToast('Please select a unit for batch entry.', 'error');
+        if (!batchOffering && !batchCourse) {
+            return showToast('Select an offering or a course for batch entry.', 'error');
+        }
 
         const selectedUnitObj = batchUnits.find(u => String(u.id) === String(batchUnit));
-        const unitName = selectedUnitObj?.unit_name || selectedUnitObj?.name || 'General Assessment';
+        const chosenOffering = batchOfferings.find(o => String(o.id) === String(batchOffering));
+        const effectiveUnitId = selectedUnitObj?.id || chosenOffering?.unit_id || null;
+        if (!effectiveUnitId) {
+            return showToast('Select the unit these marks belong to.', 'error');
+        }
+        const unitName = selectedUnitObj?.unit_name || selectedUnitObj?.name || chosenOffering?.offering_name || '';
 
         const entriesArr = Object.entries(batchEntries)
             .filter(([, val]) => {
@@ -348,10 +401,13 @@ export default function Results() {
         try {
             const res = await catResultsAPI.batchCreate({
                 cat_period_id: selectedPeriod,
-                course_id: batchCourse,
-                unit_id: selectedUnitObj?.id || batchUnit,
+                // An offering supplies its own course; a cross-course offering supplies none
+                // and the backend files each mark under that student's course.
+                offering_id: batchOffering || undefined,
+                course_id: batchOffering ? (chosenOffering?.course_id || undefined) : batchCourse,
+                unit_id: effectiveUnitId,
                 unit_name: unitName,
-                trainer_name: batchCourseObj?.instructor || (isTeacher ? user?.name : undefined),
+                trainer_name: chosenOffering?.faculty_name || batchCourseObj?.instructor || (isTeacher ? user?.name : undefined),
                 entries: entriesArr
             });
             const savedCount = res.data?.saved || 0;
@@ -432,7 +488,7 @@ export default function Results() {
         const student = {
             name: studentResults[0].student_name || 'Student',
             reg_id: studentResults[0].student_reg_id || studentId,
-            course_name: studentResults[0].course_name || 'N/A'
+            course_name: courseLabel(studentResults[0])
         };
 
         setSlipStudentTarget({ student, results: studentResults });
@@ -464,8 +520,8 @@ export default function Results() {
             const matchSearch = !search ||
                 (r.student_name || '').toLowerCase().includes(search) ||
                 String(r.student_id).toLowerCase().includes(search) ||
-                (r.unit_name || '').toLowerCase().includes(search) ||
-                (r.course_name || '').toLowerCase().includes(search);
+                (unitLabel(r) || '').toLowerCase().includes(search) ||
+                (courseLabel(r) || '').toLowerCase().includes(search);
 
             return matchSearch;
         });
@@ -483,10 +539,11 @@ export default function Results() {
         return filteredResults.slice(start, start + ITEMS_PER_PAGE);
     }, [filteredResults, currentPage, ITEMS_PER_PAGE]);
 
-    // Student Grouped View
+    // Student Grouped View — the API already scopes rows to the logged-in student and
+    // hides never-filled placeholders, so show whatever the trainer has uploaded.
     const ownStudentResults = useMemo(() => {
         if (!isStudent) return [];
-        return results.filter(r => r.workflow_status === 'Published');
+        return results;
     }, [isStudent, results]);
 
     const studentMetrics = useMemo(() => {
@@ -838,8 +895,8 @@ export default function Results() {
                                 <Award className="w-8 h-8" />
                             </div>
                             <div>
-                                <p className="text-base font-black text-black uppercase">No published CAT results available yet</p>
-                                <p className="text-xs text-black/50 uppercase tracking-widest mt-1">Your assessment marks will be visible here once verified by trainers and published by administration.</p>
+                                <p className="text-base font-black text-black uppercase">No results available yet</p>
+                                <p className="text-xs text-black/50 uppercase tracking-widest mt-1">Your assessment marks will appear here as soon as your trainer uploads them.</p>
                             </div>
                         </div>
                     ) : studentViewMode === 'cards' ? (
@@ -850,8 +907,8 @@ export default function Results() {
                                     <div className="space-y-3">
                                         <div className="flex justify-between items-start gap-2">
                                             <div>
-                                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-maroon/70 block">{r.course_name}</span>
-                                                <h4 className="text-base font-black text-black uppercase tracking-tight group-hover:text-maroon transition-colors">{r.unit_name}</h4>
+                                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-maroon/70 block">{courseLabel(r)}</span>
+                                                <h4 className="text-base font-black text-black uppercase tracking-tight group-hover:text-maroon transition-colors">{unitLabel(r)}</h4>
                                             </div>
                                             <GradeChip grade={r.grade} percentage={r.percentage} />
                                         </div>
@@ -887,9 +944,10 @@ export default function Results() {
                                     </div>
 
                                     <div className="pt-3 border-t border-black/5 flex justify-between items-center text-[10px] font-bold text-black/40 uppercase">
-                                        <span>Trainer: {r.trainer_name || 'Department'}</span>
-                                        <span className="text-emerald-600 font-black flex items-center gap-1">
-                                            <CheckCircle className="w-3 h-3" /> Published
+                                        <span>Trainer: {r.offering_faculty_name || r.trainer_name || 'Department'}</span>
+                                        <span className={`font-black flex items-center gap-1 ${r.workflow_status === 'Published' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                            {r.workflow_status === 'Published' ? <CheckCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                            {r.workflow_status || 'Draft'}
                                         </span>
                                     </div>
                                 </div>
@@ -913,8 +971,8 @@ export default function Results() {
                                     <tbody className="divide-y divide-black/5">
                                         {ownStudentResults.map(r => (
                                             <tr key={r.id} className="hover:bg-black/[0.005]">
-                                                <td className="px-6 py-4 text-xs font-black text-black uppercase">{r.unit_name}</td>
-                                                <td className="px-6 py-4 text-xs font-bold text-black/60 uppercase">{r.course_name}</td>
+                                                <td className="px-6 py-4 text-xs font-black text-black uppercase">{unitLabel(r)}</td>
+                                                <td className="px-6 py-4 text-xs font-bold text-black/60 uppercase">{courseLabel(r)}</td>
                                                 <td className="px-6 py-4 text-xs font-black text-black">{r.marks !== null ? `${r.marks} / ${r.period_max_marks || 100}` : '—'}</td>
                                                 <td className="px-6 py-4 text-xs font-black text-maroon">{r.percentage !== null ? `${r.percentage}%` : '—'}</td>
                                                 <td className="px-6 py-4"><GradeChip grade={r.grade} percentage={r.percentage} /></td>
@@ -1006,8 +1064,8 @@ export default function Results() {
                                     <thead>
                                         <tr className="bg-black/[0.02] border-b border-black/5">
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Student</th>
-                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Course & Unit</th>
-                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Marks</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Course Registered</th>
+                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Unit & Marks</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Grade</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Status</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Workflow</th>
@@ -1022,10 +1080,13 @@ export default function Results() {
                                                     <p className="text-[9px] font-bold text-black/40 uppercase">{r.student_reg_id}</p>
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <p className="text-[11px] font-black text-maroon uppercase">{r.unit_name}</p>
-                                                    <p className="text-[9px] text-black/50 font-bold uppercase">{r.course_name}</p>
+                                                    <p className="text-[11px] font-black text-maroon uppercase">{courseLabel(r)}</p>
                                                 </td>
                                                 <td className="px-4 py-3">
+                                                    <p className="text-[9px] font-black text-black/60 uppercase tracking-wide">{unitLabel(r)}{r.unit_display_code ? ` · ${r.unit_display_code}` : ''}</p>
+                                                    {!r.unit_id && (
+                                                        <p className="text-[8px] font-black text-amber-600 uppercase tracking-widest">Programme-level entry</p>
+                                                    )}
                                                     {r.marks !== null ? (
                                                         <div>
                                                             <span className="text-[11px] font-black text-black">{r.marks}</span>
@@ -1208,15 +1269,7 @@ export default function Results() {
                                         setSingleForm(prev => ({ ...prev, course_id: cId, unit_id: '', unit_name: '' }));
                                         if (cId) {
                                             courseUnitsAPI.getUnits(cId).then(res => {
-                                                const uList = res.data || [];
-                                                setSingleUnits(uList);
-                                                if (uList.length > 0) {
-                                                    setSingleForm(prev => ({
-                                                        ...prev,
-                                                        unit_id: uList[0].id,
-                                                        unit_name: uList[0].unit_name || uList[0].name
-                                                    }));
-                                                }
+                                                setSingleUnits(res.data || []);
                                             }).catch(() => setSingleUnits([]));
                                         } else {
                                             setSingleUnits([]);
@@ -1246,9 +1299,8 @@ export default function Results() {
                                         }));
                                     }}
                                     className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
-                                    required
                                 >
-                                    <option value="">Select Unit</option>
+                                    <option value="">Select a unit…</option>
                                     {singleUnits.map(u => (
                                         <option key={u.id} value={u.id}>
                                             {u.unit_code ? `${u.unit_code} - ${u.unit_name || u.name}` : (u.unit_name || u.name)}
@@ -1341,10 +1393,29 @@ export default function Results() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
+                            <div className="md:col-span-2">
+                                <label className="text-[10px] font-black uppercase text-black/60">
+                                    Offering <span className="normal-case font-bold text-black/40">(optional — pick a class group to mark its roster)</span>
+                                </label>
+                                <select
+                                    value={batchOffering}
+                                    onChange={e => handleBatchOfferingChange(e.target.value)}
+                                    className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
+                                >
+                                    <option value="">No offering — mark a whole course</option>
+                                    {batchOfferings.map(o => (
+                                        <option key={o.id} value={o.id}>
+                                            {o.offering_name} — {o.faculty_name || 'No lecturer'} — {o.group_label}{o.course_id ? ` — ${o.course_name || o.course_id}` : ' — all courses'} ({o.student_count} students)
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
                             <div>
                                 <label className="text-[10px] font-black uppercase text-black/60">Select Course</label>
                                 <select
                                     value={batchCourse}
+                                    disabled={!!batchOffering}
                                     onChange={e => {
                                         const cId = e.target.value;
                                         setBatchCourse(cId);
@@ -1352,9 +1423,7 @@ export default function Results() {
                                         loadBatchStudentsForCourse(cId);
                                         if (cId) {
                                             courseUnitsAPI.getUnits(cId).then(res => {
-                                                const uList = res.data || [];
-                                                setBatchUnits(uList);
-                                                if (uList.length > 0) setBatchUnit(String(uList[0].id));
+                                                setBatchUnits(res.data || []);
                                             }).catch(() => setBatchUnits([]));
                                         } else {
                                             setBatchUnits([]);
@@ -1370,13 +1439,14 @@ export default function Results() {
                             </div>
 
                             <div>
-                                <label className="text-[10px] font-black uppercase text-black/60">Select Unit / Subject</label>
+                                <label className="text-[10px] font-black uppercase text-black/60">Unit / Subject <span className="normal-case font-bold text-black/40">(optional)</span></label>
                                 <select
                                     value={batchUnit}
+                                    disabled={!!batchOffering}
                                     onChange={e => setBatchUnit(e.target.value)}
                                     className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
                                 >
-                                    <option value="">Select Unit</option>
+                                    <option value="">No unit — General Assessment</option>
                                     {batchUnits.map(u => (
                                         <option key={u.id} value={u.id}>
                                             {u.unit_code ? `${u.unit_code} - ${u.unit_name || u.name}` : (u.unit_name || u.name)}
@@ -1388,7 +1458,11 @@ export default function Results() {
 
                         <div className="overflow-y-auto flex-1 divide-y border rounded-2xl p-4 space-y-3 custom-scrollbar">
                             {batchStudents.length === 0 ? (
-                                <p className="text-xs text-center text-gray-400 py-8 font-black uppercase">No students enrolled in this course.</p>
+                                <p className="text-xs text-center text-gray-400 py-8 font-black uppercase">
+                                    {batchOffering
+                                        ? 'This offering has no students yet — add its roster in Units Management first.'
+                                        : 'No students enrolled in this course.'}
+                                </p>
                             ) : (
                                 batchStudents.map(s => (
                                     <div key={s.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-3">
@@ -1640,7 +1714,7 @@ export default function Results() {
                                     <span className="text-gray-900 font-extrabold uppercase">{slipStudentTarget.student.reg_id}</span>
                                 </div>
                                 <div className="col-span-2">
-                                    <span className="text-[8px] font-bold text-gray-500 uppercase block tracking-wider mb-0.5">Enrolled Course</span>
+                                    <span className="text-[8px] font-bold text-gray-500 uppercase block tracking-wider mb-0.5">Main Course Registered</span>
                                     <span className="text-gray-900 font-extrabold uppercase">{slipStudentTarget.student.course_name}</span>
                                 </div>
                             </div>
@@ -1658,7 +1732,10 @@ export default function Results() {
                                 <tbody className="divide-y divide-gray-200 text-[10px] font-semibold">
                                     {slipStudentTarget.results.map(r => (
                                         <tr key={r.id}>
-                                            <td className="py-1.5 px-2 text-left uppercase text-gray-800">{r.unit_name}</td>
+                                            <td className="py-1.5 px-2 text-left uppercase text-gray-800">
+                                                {unitLabel(r)}
+                                                {r.unit_display_code ? <span className="text-gray-500 font-medium"> · {r.unit_display_code}</span> : null}
+                                            </td>
                                             <td className="py-1.5 px-2 text-center font-bold text-gray-900">{r.marks !== null ? r.marks : '—'}</td>
                                             <td className="py-1.5 px-2 text-center text-maroon font-bold">{r.percentage !== null ? `${r.percentage}%` : '—'}</td>
                                             <td className="py-1.5 px-2 text-right font-bold uppercase text-gray-800">{r.grade || '—'}</td>

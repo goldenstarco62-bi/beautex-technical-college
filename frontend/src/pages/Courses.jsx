@@ -10,10 +10,13 @@ export default function Courses() {
     const [showModal, setShowModal] = useState(false);
     const [editingCourse, setEditingCourse] = useState(null);
     const [formData, setFormData] = useState({
-        id: '', name: '', department: '', instructor: '', duration: '', capacity: 30, room: '', schedule: '', status: 'Active'
+        id: '', name: '', department: '', instructor: '', duration: '', capacity: 30, room: '', schedule: '', status: 'Active',
+        programme_type: 'Short Course', parent_id: '', stream_ids: []
     });
     const [discussionEntity, setDiscussionEntity] = useState(null);
     const [availableFaculty, setAvailableFaculty] = useState([]);
+    const [newStreamDraft, setNewStreamDraft] = useState({ id: '', name: '' });
+    const [pendingStreams, setPendingStreams] = useState([]);
 
     const isStudent = user?.role === 'student';
     const departments = ['Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'IT & Computer Science', 'Business', 'Production Unit'];
@@ -72,14 +75,40 @@ export default function Courses() {
         }
     };
 
+    const addPendingStream = () => {
+        const name = newStreamDraft.name.trim();
+        const code = newStreamDraft.id.trim();
+        if (!name) return;
+        const id = code || `CRS-${Date.now().toString().slice(-6)}`;
+        if (pendingStreams.some(p => p.id === id) || courses.some(c => c.id === id)) return;
+        setPendingStreams(prev => [...prev, { id, name }]);
+        // Auto-select the freshly drafted discipline as a stream of this diploma.
+        setFormData(prev => ({ ...prev, stream_ids: [...(prev.stream_ids || []), id] }));
+        setNewStreamDraft({ id: '', name: '' });
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            // Materialise any newly drafted disciplines as Diploma courses first, so their
+            // real ids can be attached as streams of this diploma.
+            const createdIds = [];
+            for (const ns of pendingStreams) {
+                await coursesAPI.create({
+                    id: ns.id, name: ns.name, programme_type: 'Diploma',
+                    department: formData.department || '', duration: formData.duration || '',
+                    capacity: formData.capacity || 30, status: 'Active'
+                });
+                createdIds.push(ns.id);
+            }
+            const finalStreamIds = [...new Set([...(formData.stream_ids || []), ...createdIds])];
+            const payload = { ...formData, stream_ids: finalStreamIds };
+
             if (editingCourse) {
-                await coursesAPI.update(editingCourse.id, formData);
+                await coursesAPI.update(editingCourse.id, payload);
             } else {
                 const newId = formData.id || `CRS-${Date.now().toString().slice(-6)}`;
-                await coursesAPI.create({ ...formData, id: newId });
+                await coursesAPI.create({ ...payload, id: newId });
             }
             setShowModal(false);
             fetchCourses();
@@ -91,7 +120,12 @@ export default function Courses() {
 
     const handleEdit = (course) => {
         setEditingCourse(course);
-        setFormData(course);
+        setFormData({
+            ...course,
+            programme_type: course.programme_type || 'Short Course',
+            parent_id: course.parent_id || '',
+            stream_ids: Array.isArray(course.streams) ? course.streams.map(s => s.course_id) : (course.stream_ids || [])
+        });
         setShowModal(true);
     };
 
@@ -108,9 +142,12 @@ export default function Courses() {
 
     const resetForm = () => {
         setFormData({
-            id: '', name: '', department: '', instructor: '', duration: '', capacity: 30, room: '', schedule: '', status: 'Active'
+            id: '', name: '', department: '', instructor: '', duration: '', capacity: 30, room: '', schedule: '', status: 'Active',
+            programme_type: 'Short Course', parent_id: '', stream_ids: []
         });
         setEditingCourse(null);
+        setNewStreamDraft({ id: '', name: '' });
+        setPendingStreams([]);
     };
 
     return (
@@ -186,7 +223,18 @@ export default function Courses() {
                             </div>
 
                             <h3 className="text-lg sm:text-xl font-black text-maroon tracking-tight mb-1 sm:mb-2 uppercase">{course.name}</h3>
-                            <p className="text-xs font-black text-maroon/40 uppercase tracking-widest mb-4 sm:mb-6">{course.department}</p>
+                            <div className="flex flex-wrap items-center gap-2 mb-4 sm:mb-6">
+                                <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${course.programme_type === 'Diploma' ? 'bg-maroon text-gold' : 'bg-gold/20 text-maroon'}`}>
+                                    {course.programme_type || 'Short Course'}
+                                </span>
+                                {course.parent_name && (
+                                    <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-slate-100 text-maroon/60">· {course.parent_name}</span>
+                                )}
+                                <span className="text-xs font-black text-maroon/40 uppercase tracking-widest">{course.department}</span>
+                            </div>
+                            {course.programme_type === 'Diploma' && course.streams?.length > 0 && (
+                                <p className="text-[10px] font-bold text-maroon/50 -mt-3 mb-4 uppercase tracking-wide">Streams: {course.streams.map(s => s.name).join(' · ')}</p>
+                            )}
 
                             <div className="mt-4 flex flex-col gap-2">
                                 <div className="flex items-center gap-2 text-[10px] text-maroon/40 font-bold uppercase tracking-widest">
@@ -261,6 +309,111 @@ export default function Courses() {
                                     required
                                 />
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Programme Type</label>
+                                    <select
+                                        value={formData.programme_type}
+                                        onChange={(e) => setFormData({ ...formData, programme_type: e.target.value, parent_id: '', stream_ids: [] })}
+                                        className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/5"
+                                    >
+                                        <option value="Diploma">Diploma</option>
+                                        <option value="Short Course">Short Course</option>
+                                    </select>
+                                </div>
+                                {formData.programme_type === 'Short Course' && (
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Discipline</label>
+                                        <select
+                                            value={formData.parent_id}
+                                            onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
+                                            className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/5"
+                                        >
+                                            <option value="">Select discipline…</option>
+                                            {courses.filter(c => c.programme_type === 'Diploma').map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                            {formData.programme_type === 'Diploma' && (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Streams (disciplines covered by this diploma)</label>
+                                    <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100 max-h-40 overflow-y-auto custom-scrollbar">
+                                        {courses.filter(c => c.programme_type === 'Diploma' && c.id !== formData.id).map(c => {
+                                            const sel = Array.isArray(formData.stream_ids) && formData.stream_ids.includes(c.id);
+                                            return (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, stream_ids: sel ? formData.stream_ids.filter(x => x !== c.id) : [...(formData.stream_ids || []), c.id] })}
+                                                    className={`text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all border ${sel ? 'bg-maroon text-gold border-maroon' : 'bg-white text-gray-600 border-slate-100 hover:border-maroon/30'}`}
+                                                >
+                                                    {c.name}
+                                                </button>
+                                            );
+                                        })}
+                                        {pendingStreams.map(ns => {
+                                            const sel = Array.isArray(formData.stream_ids) && formData.stream_ids.includes(ns.id);
+                                            return (
+                                                <div key={ns.id} className="relative">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, stream_ids: sel ? formData.stream_ids.filter(x => x !== ns.id) : [...(formData.stream_ids || []), ns.id] })}
+                                                        className={`w-full text-left px-3 py-2 pr-7 rounded-lg text-[10px] font-bold transition-all border ${sel ? 'bg-maroon text-gold border-maroon' : 'bg-white text-gray-600 border-slate-100 hover:border-maroon/30'}`}
+                                                    >
+                                                        {ns.name} <span className="opacity-70">· new</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPendingStreams(prev => prev.filter(p => p.id !== ns.id));
+                                                            setFormData({ ...formData, stream_ids: (formData.stream_ids || []).filter(x => x !== ns.id) });
+                                                        }}
+                                                        className="absolute top-1 right-1 w-4 h-4 flex items-center justify-center rounded-full text-[10px] font-black text-maroon/40 hover:text-red-600"
+                                                        title="Remove new discipline"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="grid grid-cols-[1fr_2fr_auto] gap-2 items-end">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">New code</label>
+                                            <input
+                                                type="text"
+                                                value={newStreamDraft.id}
+                                                onChange={(e) => setNewStreamDraft({ ...newStreamDraft, id: e.target.value })}
+                                                placeholder="auto"
+                                                className="w-full px-3 py-2.5 bg-white border border-slate-100 rounded-xl text-maroon font-bold text-[11px] placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/5"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-maroon/40 uppercase tracking-widest ml-1">New diploma / discipline</label>
+                                            <input
+                                                type="text"
+                                                value={newStreamDraft.name}
+                                                onChange={(e) => setNewStreamDraft({ ...newStreamDraft, name: e.target.value })}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addPendingStream(); } }}
+                                                placeholder="e.g. Diploma in Nail Technology"
+                                                className="w-full px-3 py-2.5 bg-white border border-slate-100 rounded-xl text-maroon font-bold text-[11px] placeholder-maroon/20 outline-none focus:ring-2 focus:ring-maroon/5"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={addPendingStream}
+                                            disabled={!newStreamDraft.name.trim()}
+                                            className="px-4 py-2.5 mb-0 rounded-xl bg-maroon text-gold text-[10px] font-black uppercase tracking-widest hover:bg-elite-maroon transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                            + Add
+                                        </button>
+                                    </div>
+                                    <p className="text-[9px] font-bold text-black/40 ml-1">New disciplines are saved as standalone Diplomas and attached here.</p>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Duration</label>

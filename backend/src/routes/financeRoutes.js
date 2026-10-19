@@ -60,7 +60,7 @@ router.get('/finance/analytics', authenticateToken, authorizeRoles('admin', 'sup
 // ── Monthly Fee Tracking ──────────────────────────────────────────────────────
 router.get('/finance/monthly-tracking', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getAllMonthlyTracking);
 router.get('/finance/monthly-tracking/status', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getCurrentMonthStatus);
-router.get('/finance/monthly-tracking/:sid', authenticateToken, monthlyFeeController.getStudentMonthlyTracking);
+router.get('/finance/monthly-tracking/:sid', authenticateToken, authorizeRoles('admin', 'superadmin', 'student'), monthlyFeeController.getStudentMonthlyTracking);
 router.post('/finance/monthly-tracking/record', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.recordMonthlyPayment);
 router.post('/finance/monthly-tracking/init', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.initializeMonthlyRecords);
 router.get('/finance/monthly-alerts', authenticateToken, authorizeRoles('admin', 'superadmin'), monthlyFeeController.getAdminAlerts);

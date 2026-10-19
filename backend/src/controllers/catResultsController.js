@@ -122,6 +122,100 @@ async function getTeacherAllowedCoursesAndStudents(req) {
     };
 }
 
+// ── Offering-scoped access ────────────────────────────────────────────────────
+// An offering is one lecturer teaching one unit to one group, so write access is
+// derived from the offering rather than from the coarse course-level assignment above.
+async function getTeacherFaculty(req) {
+    const email = String(req.user?.email || '').toLowerCase().trim();
+    if (!email) return null;
+    return queryOne('SELECT id, name FROM faculty WHERE LOWER(email) = LOWER(?)', [email]);
+}
+
+// students.course stores an ordered list; the first entry is the main registered course.
+function parseStudentCourseList(raw) {
+    if (!raw) return [];
+    const s = String(raw).trim();
+    let names = [];
+    if (s.startsWith('[')) { try { names = JSON.parse(s).map(x => String(x)); } catch (e) { names = []; } }
+    else if (s.startsWith('{') && s.endsWith('}')) names = s.slice(1, -1).split(',');
+    else names = s.split(',');
+    return names.map(n => String(n).replace(/"/g, '').trim()).filter(Boolean);
+}
+
+async function resolveStudentCourseId(studentId) {
+    const st = await queryOne('SELECT course FROM students WHERE id = ?', [studentId]);
+    const names = parseStudentCourseList(st?.course).map(n => n.toLowerCase());
+    if (!names.length) return null;
+
+    const courses = await query('SELECT id, name FROM courses');
+    const hit = courses.find(c => names.includes(String(c.name || '').toLowerCase().trim()));
+    return hit ? String(hit.id) : null;
+}
+
+/**
+ * Validate that the caller may write marks against this offering, and that the student
+ * belongs to it. Returns { offering, roster } — roster is null for a single-student call.
+ */
+async function checkOfferingWriteAccess(req, offeringId, studentId) {
+    const offering = await queryOne('SELECT * FROM unit_offerings WHERE id = ?', [offeringId]);
+    if (!offering) return { error: { status: 404, message: 'Offering not found.' } };
+    if (offering.status !== 'Active') return { error: { status: 403, message: `"${offering.offering_name}" is not an active offering.` } };
+
+    const role = (req.user?.role || '').toLowerCase().trim();
+    if (role === 'teacher') {
+        const faculty = await getTeacherFaculty(req);
+        if (!faculty || String(offering.faculty_id || '') !== String(faculty.id || '')) {
+            return { error: { status: 403, message: 'You can only enter marks for offerings you lecture.' } };
+        }
+    }
+
+    if (studentId !== undefined) {
+        const onRoster = await queryOne(
+            'SELECT 1 AS ok FROM offering_students WHERE offering_id = ? AND student_id = ?',
+            [offeringId, studentId]
+        );
+        if (!onRoster) return { error: { status: 403, message: 'This student is not on the roster of that offering.' } };
+        return { offering };
+    }
+
+    const rows = await query('SELECT student_id FROM offering_students WHERE offering_id = ?', [offeringId]);
+    return { offering, roster: new Set((rows || []).map(r => String(r.student_id).trim())) };
+}
+
+// Row-level gate for update/submit/delete: lecturing the row's offering authorizes the
+// teacher even when that row's course is outside their own course list.
+async function canManageResultRow(req, row) {
+    if (row.offering_id) {
+        const faculty = await getTeacherFaculty(req);
+        if (faculty) {
+            const owns = await queryOne(
+                'SELECT 1 AS ok FROM unit_offerings WHERE id = ? AND faculty_id = ?',
+                [row.offering_id, faculty.id]
+            );
+            if (owns) return true;
+        }
+    }
+    const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+    if (!teacherAccess) return false;
+    return teacherAccess.allowedCourseIds.includes(String(row.course_id).trim())
+        && teacherAccess.enrolledStudentIds.has(String(row.student_id).trim());
+}
+
+// Combined teacher scope for set-based operations: assigned course+student rows OR any row
+// belonging to an offering they lecture.
+async function getTeacherScope(req) {
+    const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
+    const faculty = await getTeacherFaculty(req);
+    const offeringIds = faculty
+        ? (await query('SELECT id FROM unit_offerings WHERE faculty_id = ?', [faculty.id])).map(r => Number(r.id))
+        : [];
+    return {
+        courseIds: teacherAccess?.allowedCourseIds || [],
+        students: teacherAccess ? Array.from(teacherAccess.enrolledStudentIds) : [],
+        offeringIds
+    };
+}
+
 /**
  * GET /cat-results — List results with role-based filtering
  * Query params: period_id, course_id, unit_id, student_id, workflow_status
@@ -129,41 +223,62 @@ async function getTeacherAllowedCoursesAndStudents(req) {
 export async function getResults(req, res) {
     try {
         const userRole = (req.user?.role || '').toLowerCase().trim();
-        const { period_id, course_id, unit_id, student_id, workflow_status } = req.query;
+        const { period_id, course_id, unit_id, student_id, workflow_status, offering_id } = req.query;
 
         let sql = `
             SELECT cr.*, cp.cat_name, cp.academic_year, cp.term_name, cp.max_marks as period_max_marks,
-                   s.name as student_name, s.id as student_reg_id,
-                   c.name as course_name, COALESCE(gu.unit_name, cu.name, cr.unit_name) as unit_display_name
+                   s.name as student_name, s.id as student_reg_id, s.course as student_courses_raw,
+                   c.name as course_name, COALESCE(gu.unit_name, cu.name, cr.unit_name) as unit_display_name,
+                   gu.unit_code as unit_display_code,
+                   o.group_label AS offering_group, o.faculty_name AS offering_faculty_name, o.course_id AS offering_course_id
             FROM cat_results cr
             LEFT JOIN cat_periods cp ON cr.cat_period_id = cp.id
             LEFT JOIN students s ON cr.student_id = s.id
             LEFT JOIN courses c ON cr.course_id = c.id
             LEFT JOIN global_units gu ON cr.unit_id = gu.id
             LEFT JOIN course_units cu ON cr.unit_id = cu.id
+            LEFT JOIN unit_offerings o ON o.id = cr.offering_id
             WHERE 1=1
         `;
         const params = [];
 
         if (userRole === 'student') {
+            // Students see every mark filed against them as soon as a trainer uploads it,
+            // regardless of Draft/Submitted/Approved/Published — but only rows that actually
+            // carry a mark (never-filled placeholder drafts stay hidden).
             const sId = await resolveStudentId(req);
             if (!sId) return res.json([]);
-            sql += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND (cr.workflow_status = ? OR cr.workflow_status IS NULL)';
-            params.push(sId, sId, 'Published');
+            sql += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND cr.marks IS NOT NULL';
+            params.push(sId, sId);
         } else if (userRole === 'teacher') {
+            // A teacher sees their assigned courses plus every row of offerings they lecture —
+            // cross-course offerings are not covered by course-level assignment.
             const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
-            if (!teacherAccess || teacherAccess.allowedCourseIds.length === 0) {
-                return res.json([]);
+            const faculty = await getTeacherFaculty(req);
+            const myOfferingIds = faculty
+                ? (await query('SELECT id FROM unit_offerings WHERE faculty_id = ?', [faculty.id])).map(r => Number(r.id))
+                : [];
+
+            const courseIds = teacherAccess?.allowedCourseIds || [];
+            const courseNames = teacherAccess?.allowedCourseNames || [];
+            if (!courseIds.length && !myOfferingIds.length) return res.json([]);
+
+            const clauses = [];
+            const clauseParams = [];
+            if (courseIds.length) {
+                clauses.push(`cr.course_id IN (${courseIds.map(() => '?').join(',')})`);
+                clauseParams.push(...courseIds);
             }
-
-            const courseIds = teacherAccess.allowedCourseIds;
-            const courseNames = teacherAccess.allowedCourseNames;
-
-            const coursePlaceholders = courseIds.map(() => '?').join(',');
-            const namePlaceholders = courseNames.map(() => '?').join(',');
-
-            sql += ` AND (cr.course_id IN (${coursePlaceholders}) OR LOWER(TRIM(c.name)) IN (${namePlaceholders}))`;
-            params.push(...courseIds, ...courseNames);
+            if (courseNames.length) {
+                clauses.push(`LOWER(TRIM(c.name)) IN (${courseNames.map(() => '?').join(',')})`);
+                clauseParams.push(...courseNames);
+            }
+            if (myOfferingIds.length) {
+                clauses.push(`cr.offering_id IN (${myOfferingIds.map(() => '?').join(',')})`);
+                clauseParams.push(...myOfferingIds);
+            }
+            sql += ` AND (${clauses.join(' OR ')})`;
+            params.push(...clauseParams);
 
             if (student_id) { sql += ' AND cr.student_id = ?'; params.push(student_id); }
             if (workflow_status) { sql += ' AND cr.workflow_status = ?'; params.push(workflow_status); }
@@ -173,18 +288,63 @@ export async function getResults(req, res) {
             if (workflow_status) { sql += ' AND cr.workflow_status = ?'; params.push(workflow_status); }
         }
 
-        if (period_id)  { sql += ' AND cr.cat_period_id = ?'; params.push(period_id); }
-        if (course_id)  { sql += ' AND cr.course_id = ?';     params.push(course_id); }
-        if (unit_id)    { sql += ' AND cr.unit_id = ?';       params.push(unit_id); }
+        if (period_id)   { sql += ' AND cr.cat_period_id = ?';  params.push(period_id); }
+        if (course_id)   { sql += ' AND cr.course_id = ?';      params.push(course_id); }
+        if (unit_id)     { sql += ' AND cr.unit_id = ?';        params.push(unit_id); }
+        if (offering_id) { sql += ' AND cr.offering_id = ?';    params.push(offering_id); }
 
         sql += ' ORDER BY cr.created_at DESC';
 
         const results = await query(sql, params);
+        for (const r of results || []) {
+            const courseList = parseStudentCourseList(r.student_courses_raw);
+            r.student_main_course = courseList[0] || null;
+            r.student_course_list = courseList;
+            // Legacy rows can carry a course_id that no longer exists; the student's own
+            // registration is the fallback the UI shows so the course column is never blank.
+            if (!r.course_name) r.course_name = r.student_main_course || null;
+            delete r.student_courses_raw;
+        }
         return res.json(results || []);
     } catch (err) {
         logger.error({ err }, 'getResults error');
         return res.status(500).json({ error: 'Failed to fetch results.' });
     }
+}
+
+/**
+ * Locate the row a new mark should write to. Offering-keyed entries match on the offering, but
+ * legacy rows (same student + unit + period, no offering yet) are adopted into the offering instead
+ * of being re-inserted — the legacy UNIQUE(student_id, unit_id, cat_period_id) forbids a second row.
+ */
+async function findResultTarget({ offering, studentId, courseId, unitId, unitName, catPeriodId }) {
+    if (offering) {
+        const byOffering = await queryOne(
+            'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND offering_id=? AND cat_period_id=?',
+            [studentId, offering.id, catPeriodId]
+        );
+        if (byOffering) return { existing: byOffering, adopt: null };
+        const unitKey = offering.unit_id || unitId;
+        if (unitKey) {
+            const legacy = await queryOne(
+                'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND unit_id=? AND cat_period_id=? AND offering_id IS NULL',
+                [studentId, unitKey, catPeriodId]
+            );
+            if (legacy) return { existing: legacy, adopt: { offering_id: offering.id, unit_id: unitKey } };
+        }
+        return { existing: null, adopt: null };
+    }
+
+    const existing = unitId
+        ? await queryOne(
+            'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND course_id=? AND unit_id=? AND cat_period_id=?',
+            [studentId, courseId, unitId, catPeriodId]
+        )
+        : await queryOne(
+            'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND course_id=? AND unit_name=? AND cat_period_id=?',
+            [studentId, courseId, unitName, catPeriodId]
+        );
+    return { existing, adopt: null };
 }
 
 /**
@@ -198,22 +358,42 @@ export async function createResult(req, res) {
         }
 
         const {
-            student_id, course_id, unit_id, unit_name,
+            student_id, course_id, unit_id, unit_name, offering_id,
             cat_period_id, marks, status, remarks
         } = req.body;
 
-        if (!student_id || !course_id || !cat_period_id || !unit_name) {
-            return res.status(400).json({ error: 'student_id, course_id, cat_period_id and unit_name are required.' });
+        if (!student_id || !cat_period_id || !unit_name) {
+            return res.status(400).json({ error: 'student_id, cat_period_id and unit_name are required.' });
+        }
+        // Marks must be tied to a real unit (directly or via an offering) — no more
+        // free-text "general assessment" rows.
+        if (!unit_id) {
+            return res.status(400).json({ error: 'A unit is required — select the unit this mark belongs to.' });
         }
 
-        if (userRole === 'teacher') {
+        // Offering-driven entry: the offering decides the course and the permission, so a
+        // common unit taught across courses works without touching course-level rules.
+        let offering = null;
+        if (offering_id) {
+            const access = await checkOfferingWriteAccess(req, offering_id, student_id);
+            if (access.error) return res.status(access.error.status).json({ error: access.error.message });
+            offering = access.offering;
+        }
+
+        const effectiveCourseId = String(
+            course_id || offering?.course_id || (await resolveStudentCourseId(student_id)) || ''
+        ).trim();
+        if (!effectiveCourseId) {
+            return res.status(400).json({ error: 'course_id is required (or pass an offering_id / give the student a course).' });
+        }
+
+        if (userRole === 'teacher' && !offering) {
             const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
             if (!teacherAccess) {
                 return res.status(403).json({ error: 'Teacher profile not found or unauthorized.' });
             }
-            const courseIdStr = String(course_id).trim();
             const studentIdStr = String(student_id).trim();
-            const courseAllowed = teacherAccess.allowedCourseIds.includes(courseIdStr);
+            const courseAllowed = teacherAccess.allowedCourseIds.includes(effectiveCourseId);
             const studentAllowed = teacherAccess.enrolledStudentIds.has(studentIdStr);
             if (!courseAllowed || !studentAllowed) {
                 return res.status(403).json({ error: 'You are only authorized to enter results for your registered students and assigned courses.' });
@@ -237,7 +417,7 @@ export async function createResult(req, res) {
         }
 
         const enteredBy = req.user?.email || req.user?.id;
-        let trainerName = req.body.trainer_name || null;
+        let trainerName = req.body.trainer_name || offering?.faculty_name || null;
         if (!trainerName) {
             if (userRole === 'teacher' && req.user?.name) {
                 trainerName = req.user.name;
@@ -247,28 +427,25 @@ export async function createResult(req, res) {
                         `SELECT f.name FROM trainer_unit_assignments tua
                          JOIN faculty f ON f.id = tua.faculty_id
                          WHERE tua.course_id = ? AND tua.unit_id = ? LIMIT 1`,
-                        [course_id, unit_id]
+                        [effectiveCourseId, unit_id]
                     );
                     if (assigned?.name) trainerName = assigned.name;
                 }
                 if (!trainerName) {
-                    const cRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id]);
+                    const cRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [effectiveCourseId]);
                     trainerName = cRow?.instructor || req.user?.name || req.user?.email || 'Instructor';
                 }
             }
         }
 
         try {
-            // Check if result already exists for this student in this period and unit/course
-            const existing = unit_id
-                ? await queryOne(
-                    'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND unit_id=? AND cat_period_id=?',
-                    [student_id, unit_id, cat_period_id]
-                )
-                : await queryOne(
-                    'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND unit_name=? AND cat_period_id=?',
-                    [student_id, unit_name, cat_period_id]
-                );
+            // Check if result already exists for this student in this period and unit.
+            // Offering-keyed entries match on the offering; otherwise the match is by course
+            // plus (unit_id, or the unit_name label when no unit was chosen) — course_id must
+            // be part of it because units are shared across courses.
+            const { existing, adopt } = await findResultTarget({
+                offering, studentId: student_id, courseId: effectiveCourseId, unitId: unit_id, unitName: unit_name, catPeriodId: cat_period_id
+            });
 
             if (existing) {
                 // Only allow updating Draft/Submitted, not Approved/Published
@@ -278,11 +455,14 @@ export async function createResult(req, res) {
                 await run(
                     `UPDATE cat_results SET marks=?, percentage=?, grade=?, status=?,
                      remarks=?, entered_by=?, trainer_name=?, updated_at=CURRENT_TIMESTAMP
+                     ${adopt ? ', offering_id=?, unit_id=COALESCE(unit_id, ?)' : ''}
                      WHERE id=?`,
                     [
                         marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                         percentage, grade, status || 'Present',
-                        remarks || null, enteredBy, trainerName, existing.id
+                        remarks || null, enteredBy, trainerName,
+                        ...(adopt ? [adopt.offering_id, adopt.unit_id] : []),
+                        existing.id
                     ]
                 );
 
@@ -298,12 +478,12 @@ export async function createResult(req, res) {
 
             const result = await run(
                 `INSERT INTO cat_results
-                 (student_id, course_id, unit_id, unit_name, cat_period_id,
+                 (student_id, course_id, unit_id, unit_name, offering_id, cat_period_id,
                   marks, percentage, grade, status, workflow_status,
                   entered_by, trainer_name, remarks)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`,
                 [
-                    student_id, course_id, unit_id || null, unit_name, cat_period_id,
+                    student_id, effectiveCourseId, unit_id || offering?.unit_id || null, unit_name, offering?.id || null, cat_period_id,
                     marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                     percentage, grade,
                     status || 'Present',
@@ -332,8 +512,8 @@ export async function createResult(req, res) {
 }
 
 /**
- * POST /cat-results/batch — Batch entry for a class
- * Body: { cat_period_id, course_id, unit_id, unit_name, entries: [{ student_id, marks, status, remarks }] }
+ * POST /cat-results/batch — Batch entry for a class or an offering
+ * Body: { cat_period_id, offering_id?, course_id?, unit_id?, unit_name, entries: [{ student_id, marks, status, remarks }] }
  */
 export async function batchCreateResults(req, res) {
     try {
@@ -342,25 +522,46 @@ export async function batchCreateResults(req, res) {
             return res.status(403).json({ error: 'Students are not authorized to create results.' });
         }
 
-        const { cat_period_id, course_id, unit_id, unit_name, entries } = req.body;
+        const { cat_period_id, course_id, unit_id, unit_name, offering_id, entries } = req.body;
 
-        if (!cat_period_id || !course_id || !unit_name || !Array.isArray(entries)) {
-            return res.status(400).json({ error: 'cat_period_id, course_id, unit_name and entries[] are required.' });
+        if (!cat_period_id || !unit_name || !Array.isArray(entries)) {
+            return res.status(400).json({ error: 'cat_period_id, unit_name and entries[] are required.' });
         }
 
+        // Offering-scoped batch: roster + lecturer ownership replace the course-level gate,
+        // which is what lets one common unit be marked per group across different courses.
+        let offering = null;
+        let offeringRoster = null;
         let teacherAccess = null;
-        if (userRole === 'teacher') {
+
+        if (offering_id) {
+            const access = await checkOfferingWriteAccess(req, offering_id);
+            if (access.error) return res.status(access.error.status).json({ error: access.error.message });
+            offering = access.offering;
+            offeringRoster = access.roster;
+            if (offeringRoster.size === 0) {
+                return res.status(400).json({ error: 'This offering has no students yet. Add the roster before entering marks.' });
+            }
+        } else if (!course_id) {
+            return res.status(400).json({ error: 'course_id or offering_id is required.' });
+        } else if (userRole === 'teacher') {
             teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
             if (!teacherAccess || !teacherAccess.allowedCourseIds.includes(String(course_id).trim())) {
                 return res.status(403).json({ error: 'You are only authorized to enter results for your assigned courses.' });
             }
         }
 
+        // Marks must be tied to a real unit (directly, or through the offering's unit) —
+        // no more free-text "general assessment" batch rows.
+        if (!unit_id && !offering?.unit_id) {
+            return res.status(400).json({ error: 'A unit is required — select the unit these marks belong to.' });
+        }
+
         const period = await queryOne('SELECT * FROM cat_periods WHERE id = ?', [cat_period_id]);
         if (!period) return res.status(404).json({ error: 'CAT period not found.' });
 
         const enteredBy = req.user?.email || req.user?.id;
-        let defaultTrainerName = req.body.trainer_name || null;
+        let defaultTrainerName = req.body.trainer_name || offering?.faculty_name || null;
         if (!defaultTrainerName) {
             if (userRole === 'teacher' && req.user?.name) {
                 defaultTrainerName = req.user.name;
@@ -370,18 +571,19 @@ export async function batchCreateResults(req, res) {
                         `SELECT f.name FROM trainer_unit_assignments tua
                          JOIN faculty f ON f.id = tua.faculty_id
                          WHERE tua.course_id = ? AND tua.unit_id = ? LIMIT 1`,
-                        [course_id, unit_id]
+                        [course_id || offering?.course_id, unit_id]
                     );
                     if (assigned?.name) defaultTrainerName = assigned.name;
                 }
                 if (!defaultTrainerName) {
-                    const cRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id]);
+                    const cRow = await queryOne('SELECT instructor FROM courses WHERE id = ?', [course_id || offering?.course_id]);
                     defaultTrainerName = cRow?.instructor || req.user?.name || req.user?.email || 'Instructor';
                 }
             }
         }
         const trainerName = defaultTrainerName;
         const maxMarks = period.max_marks || 100;
+        const batchCourseId = course_id || offering?.course_id || null;
 
         const saved = [];
         const errors = [];
@@ -390,9 +592,24 @@ export async function batchCreateResults(req, res) {
             const { student_id, marks, status, remarks } = entry;
             if (!student_id) continue;
 
+            if (offeringRoster && !offeringRoster.has(String(student_id).trim())) {
+                const st = await queryOne('SELECT name FROM students WHERE id = ?', [student_id]);
+                errors.push({ student_id, student_name: st?.name || student_id, error: 'Student is not on the roster of this offering.' });
+                continue;
+            }
+
             if (teacherAccess && !teacherAccess.enrolledStudentIds.has(String(student_id).trim())) {
                 const st = await queryOne('SELECT name FROM students WHERE id = ?', [student_id]);
                 errors.push({ student_id, student_name: st?.name || student_id, error: 'Student is not registered in your assigned course.' });
+                continue;
+            }
+
+            // A cross-course offering has no course of its own: each student's row is filed
+            // under the course that student actually studies.
+            const entryCourseId = batchCourseId || await resolveStudentCourseId(student_id);
+            if (!entryCourseId) {
+                const st = await queryOne('SELECT name FROM students WHERE id = ?', [student_id]);
+                errors.push({ student_id, student_name: st?.name || student_id, error: 'Could not resolve a course for this student — assign them to a course or use a course-scoped offering.' });
                 continue;
             }
 
@@ -411,16 +628,11 @@ export async function batchCreateResults(req, res) {
             }
 
             try {
-                // Upsert: if exists update, otherwise insert
-                const existing = unit_id
-                    ? await queryOne(
-                        'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND unit_id=? AND cat_period_id=?',
-                        [student_id, unit_id, cat_period_id]
-                    )
-                    : await queryOne(
-                        'SELECT id, workflow_status FROM cat_results WHERE student_id=? AND unit_name=? AND cat_period_id=?',
-                        [student_id, unit_name, cat_period_id]
-                    );
+                // Upsert: offering-keyed rows match on the offering; otherwise student +
+                // course + (unit_id, or unit_name when no unit was chosen).
+                const { existing, adopt } = await findResultTarget({
+                    offering, studentId: student_id, courseId: entryCourseId, unitId: unit_id, unitName: unit_name, catPeriodId: cat_period_id
+                });
 
                 if (existing) {
                     // Only allow updating Draft/Submitted, not Approved/Published
@@ -432,11 +644,14 @@ export async function batchCreateResults(req, res) {
                     await run(
                         `UPDATE cat_results SET marks=?, percentage=?, grade=?, status=?,
                          remarks=?, entered_by=?, trainer_name=?, updated_at=CURRENT_TIMESTAMP
+                         ${adopt ? ', offering_id=?, unit_id=COALESCE(unit_id, ?)' : ''}
                          WHERE id=?`,
                         [
                             marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                             percentage, grade, status || 'Present',
-                            remarks || null, enteredBy, trainerName, existing.id
+                            remarks || null, enteredBy, trainerName,
+                            ...(adopt ? [adopt.offering_id, adopt.unit_id] : []),
+                            existing.id
                         ]
                     );
                     await writeAuditLog({ result_id: existing.id, student_id, unit_name, cat_period_id,
@@ -445,11 +660,11 @@ export async function batchCreateResults(req, res) {
                     saved.push(existing.id);
                 } else {
                     const result = await run(
-                        `INSERT INTO cat_results (student_id, course_id, unit_id, unit_name, cat_period_id,
+                        `INSERT INTO cat_results (student_id, course_id, unit_id, unit_name, offering_id, cat_period_id,
                           marks, percentage, grade, status, workflow_status, entered_by, trainer_name, remarks)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`,
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`,
                         [
-                            student_id, course_id, unit_id || null, unit_name, cat_period_id,
+                            student_id, entryCourseId, unit_id || offering?.unit_id || null, unit_name, offering?.id || null, cat_period_id,
                             marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                             percentage, grade, status || 'Present',
                             enteredBy, trainerName, remarks || null
@@ -490,14 +705,8 @@ export async function updateResult(req, res) {
             return res.status(403).json({ error: 'Students are not authorized to edit results.' });
         }
 
-        if (userRole === 'teacher') {
-            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
-            if (!teacherAccess) return res.status(403).json({ error: 'Unauthorized.' });
-            const courseAllowed = teacherAccess.allowedCourseIds.includes(String(existing.course_id).trim());
-            const studentAllowed = teacherAccess.enrolledStudentIds.has(String(existing.student_id).trim());
-            if (!courseAllowed || !studentAllowed) {
-                return res.status(403).json({ error: 'You are only authorized to edit results for your registered students and assigned courses.' });
-            }
+        if (userRole === 'teacher' && !(await canManageResultRow(req, existing))) {
+            return res.status(403).json({ error: 'You are only authorized to edit results for your registered students and assigned courses.' });
         }
 
         // Block editing approved/published results unless admin/superadmin
@@ -582,14 +791,8 @@ async function updateWorkflowStatus(req, res, fromStatus, toStatus, actionName) 
             return res.status(403).json({ error: 'Students are not authorized to change result status.' });
         }
 
-        if (userRole === 'teacher') {
-            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
-            if (!teacherAccess) return res.status(403).json({ error: 'Unauthorized.' });
-            const courseAllowed = teacherAccess.allowedCourseIds.includes(String(existing.course_id).trim());
-            const studentAllowed = teacherAccess.enrolledStudentIds.has(String(existing.student_id).trim());
-            if (!courseAllowed || !studentAllowed) {
-                return res.status(403).json({ error: 'You are only authorized to manage results for your registered students and assigned courses.' });
-            }
+        if (userRole === 'teacher' && !(await canManageResultRow(req, existing))) {
+            return res.status(403).json({ error: 'You are only authorized to manage results for your registered students and assigned courses.' });
         }
 
         if (existing.workflow_status !== fromStatus) {
@@ -653,19 +856,20 @@ export async function bulkSubmitResults(req, res) {
         if (unit_id)   { sql += ' AND unit_id=?';   params.push(unit_id); }
 
         if (userRole === 'teacher') {
-            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
-            if (!teacherAccess || teacherAccess.allowedCourseIds.length === 0) {
-                return res.json({ message: '0 result(s) submitted.', changes: 0 });
+            const scope = await getTeacherScope(req);
+            const orParts = [];
+            const orParams = [];
+            if (scope.courseIds.length && scope.students.length) {
+                orParts.push(`(course_id IN (${scope.courseIds.map(() => '?').join(',')}) AND LOWER(TRIM(student_id)) IN (${scope.students.map(() => '?').join(',')}))`);
+                orParams.push(...scope.courseIds, ...scope.students.map(id => id.toLowerCase()));
             }
-            const coursePlaceholders = teacherAccess.allowedCourseIds.map(() => '?').join(',');
-            sql += ` AND course_id IN (${coursePlaceholders})`;
-            params.push(...teacherAccess.allowedCourseIds);
-
-            const enrolledArr = Array.from(teacherAccess.enrolledStudentIds);
-            if (enrolledArr.length === 0) return res.json({ message: '0 result(s) submitted.', changes: 0 });
-            const studentPlaceholders = enrolledArr.map(() => '?').join(',');
-            sql += ` AND LOWER(TRIM(student_id)) IN (${studentPlaceholders})`;
-            params.push(...enrolledArr.map(id => id.toLowerCase()));
+            if (scope.offeringIds.length) {
+                orParts.push(`offering_id IN (${scope.offeringIds.map(() => '?').join(',')})`);
+                orParams.push(...scope.offeringIds);
+            }
+            if (!orParts.length) return res.json({ message: '0 result(s) submitted.', changes: 0 });
+            sql += ` AND (${orParts.join(' OR ')})`;
+            params.push(...orParams);
         }
 
         const result = await run(sql, params);
@@ -732,14 +936,8 @@ export async function deleteResult(req, res) {
         const existing = await queryOne('SELECT * FROM cat_results WHERE id = ?', [id]);
         if (!existing) return res.status(404).json({ error: 'Result not found.' });
 
-        if (userRole === 'teacher') {
-            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
-            if (!teacherAccess) return res.status(403).json({ error: 'Unauthorized.' });
-            const courseAllowed = teacherAccess.allowedCourseIds.includes(String(existing.course_id).trim());
-            const studentAllowed = teacherAccess.enrolledStudentIds.has(String(existing.student_id).trim());
-            if (!courseAllowed || !studentAllowed) {
-                return res.status(403).json({ error: 'You are only authorized to delete results for your registered students and assigned courses.' });
-            }
+        if (userRole === 'teacher' && !(await canManageResultRow(req, existing))) {
+            return res.status(403).json({ error: 'You are only authorized to delete results for your registered students and assigned courses.' });
         }
 
         // Only superadmin can delete published results
@@ -783,25 +981,21 @@ export async function getResultStats(req, res) {
             baseCondition += ' AND (LOWER(TRIM(cr.student_id)) = LOWER(TRIM(?)) OR cr.student_id = ?) AND cr.workflow_status = ?';
             params.push(sId, sId, 'Published');
         } else if (userRole === 'teacher') {
-            const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
-            if (!teacherAccess || teacherAccess.allowedCourseIds.length === 0) {
-                return res.json({
-                    total: 0, gradeBreakdown: [], workflowBreakdown: [], avgPercentage: 0, passRate: { passed: 0, failed: 0, total: 0 }
-                });
+            const emptyStats = { total: 0, gradeBreakdown: [], workflowBreakdown: [], avgPercentage: 0, passRate: { passed: 0, failed: 0, total: 0 } };
+            const scope = await getTeacherScope(req);
+            const orParts = [];
+            const orParams = [];
+            if (scope.courseIds.length && scope.students.length) {
+                orParts.push(`(cr.course_id IN (${scope.courseIds.map(() => '?').join(',')}) AND LOWER(TRIM(cr.student_id)) IN (${scope.students.map(() => '?').join(',')}))`);
+                orParams.push(...scope.courseIds, ...scope.students.map(id => id.toLowerCase()));
             }
-            const coursePlaceholders = teacherAccess.allowedCourseIds.map(() => '?').join(',');
-            baseCondition += ` AND cr.course_id IN (${coursePlaceholders})`;
-            params.push(...teacherAccess.allowedCourseIds);
-
-            const enrolledArr = Array.from(teacherAccess.enrolledStudentIds);
-            if (enrolledArr.length === 0) {
-                return res.json({
-                    total: 0, gradeBreakdown: [], workflowBreakdown: [], avgPercentage: 0, passRate: { passed: 0, failed: 0, total: 0 }
-                });
+            if (scope.offeringIds.length) {
+                orParts.push(`cr.offering_id IN (${scope.offeringIds.map(() => '?').join(',')})`);
+                orParams.push(...scope.offeringIds);
             }
-            const studentPlaceholders = enrolledArr.map(() => '?').join(',');
-            baseCondition += ` AND LOWER(TRIM(cr.student_id)) IN (${studentPlaceholders})`;
-            params.push(...enrolledArr.map(id => id.toLowerCase()));
+            if (!orParts.length) return res.json(emptyStats);
+            baseCondition += ` AND (${orParts.join(' OR ')})`;
+            params.push(...orParams);
         }
 
         if (cat_period_id) { baseCondition += ' AND cr.cat_period_id = ?'; params.push(cat_period_id); }

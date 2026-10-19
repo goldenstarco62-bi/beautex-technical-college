@@ -38,10 +38,44 @@ async function enrichCoursesWithEnrollment(courses) {
         }
     }
     
-    return courses.map(course => ({
+    return (await attachProgrammeInfo(courses)).map(course => ({
         ...course,
         enrolled: courseCounts[String(course.name).toLowerCase().trim()] || 0
     }));
+}
+
+// ── Programme hierarchy ──────────────────────────────────────────────────────
+// A course is either a Diploma (which can cover several streams, each with its own
+// lecturers) or a Short Course parented to the discipline that teaches it.
+const PROGRAMME_TYPES = ['Diploma', 'Short Course'];
+
+async function attachProgrammeInfo(courses) {
+    if (!courses || courses.length === 0) return [];
+    const streams = await query(`
+        SELECT ds.diploma_id, ds.course_id, c.name AS course_name
+        FROM diploma_streams ds JOIN courses c ON c.id = ds.course_id
+        ORDER BY ds.sort_order
+    `).catch(() => []);
+    const allCourses = await query('SELECT id, name FROM courses');
+    const nameById = new Map(allCourses.map(c => [String(c.id), c.name]));
+    const streamsByDiploma = {};
+    for (const s of streams) (streamsByDiploma[s.diploma_id] ||= []).push({ course_id: s.course_id, name: s.course_name });
+
+    return courses.map(course => ({
+        ...course,
+        programme_type: course.programme_type || 'Short Course',
+        streams: course.programme_type === 'Diploma' ? (streamsByDiploma[String(course.id)] || []) : [],
+        parent_name: course.parent_id ? (nameById.get(String(course.parent_id)) || null) : null
+    }));
+}
+
+async function replaceDiplomaStreams(diplomaId, streamIds) {
+    await run('DELETE FROM diploma_streams WHERE diploma_id = ?', [diplomaId]);
+    const ids = [...new Set((streamIds || []).map(String).filter(Boolean))];
+    for (let i = 0; i < ids.length; i++) {
+        if (ids[i] === String(diplomaId)) continue;
+        await run('INSERT INTO diploma_streams (diploma_id, course_id, sort_order) VALUES (?, ?, ?)', [diplomaId, ids[i], i + 1]);
+    }
 }
 
 export async function getAllCourses(req, res) {
@@ -69,6 +103,18 @@ export async function getAllCourses(req, res) {
             const courses = await query(`SELECT * FROM courses ORDER BY name`);
             const enriched = await enrichCoursesWithEnrollment(courses);
             return res.json(enriched);
+        }
+
+        // Teachers see every Active course when the caller asks for the full list
+        // (?all=1) — used by mark/grade entry selectors, where a teacher may record
+        // results for any course, not only the ones linked to their profile.
+        if (currentRole === 'teacher' && ['1', 'true'].includes(String(req.query.all ?? '').toLowerCase())) {
+            if (mongo) {
+                const Course = (await import('../models/mongo/Course.js')).default;
+                return res.json(await Course.find({ status: 'Active' }).sort({ name: 1 }).lean());
+            }
+            const courses = await query(`SELECT * FROM courses WHERE status = 'Active' ORDER BY name`);
+            return res.json(await enrichCoursesWithEnrollment(courses));
         }
 
         // Teachers see courses they instruct
@@ -229,13 +275,18 @@ export async function createCourse(req, res) {
             return res.status(201).json(savedCourse);
         }
 
-        const { id, name, department, instructor, duration, capacity, schedule, room } = req.body;
+        const { id, name, department, instructor, duration, capacity, schedule, room, programme_type, parent_id, stream_ids } = req.body;
+        const pType = PROGRAMME_TYPES.includes(programme_type) ? programme_type : 'Short Course';
+        if (parent_id && !(await queryOne('SELECT id FROM courses WHERE id = ?', [parent_id]))) {
+            return res.status(400).json({ error: 'Parent course does not exist.' });
+        }
         await run(
-            'INSERT INTO courses (id, name, department, instructor, duration, capacity, schedule, room, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, name, department, instructor, duration, capacity, schedule, room, 'Active']
+            'INSERT INTO courses (id, name, department, instructor, duration, capacity, schedule, room, status, programme_type, parent_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, name, department, instructor, duration, capacity, schedule, room, 'Active', pType, parent_id || null]
         );
+        if (pType === 'Diploma' && Array.isArray(stream_ids)) await replaceDiplomaStreams(id, stream_ids);
         const course = await queryOne('SELECT * FROM courses WHERE id = ?', [id]);
-        res.status(201).json(course);
+        res.status(201).json((await attachProgrammeInfo([course]))[0]);
     } catch (error) {
         console.error('Create course error:', error);
         res.status(500).json({ error: 'Failed to create course' });
@@ -256,20 +307,37 @@ export async function updateCourse(req, res) {
         }
 
         const allowedFields = [
-            'name', 'department', 'instructor', 'duration', 'capacity', 'schedule', 'room', 'status'
+            'name', 'department', 'instructor', 'duration', 'capacity', 'schedule', 'room', 'status', 'programme_type', 'parent_id'
         ];
+        if (req.body.programme_type && !PROGRAMME_TYPES.includes(req.body.programme_type)) {
+            return res.status(400).json({ error: `programme_type must be one of: ${PROGRAMME_TYPES.join(', ')}` });
+        }
+        if (req.body.parent_id) {
+            if (req.body.parent_id === req.params.id) return res.status(400).json({ error: 'A course cannot be its own parent.' });
+            if (!(await queryOne('SELECT id FROM courses WHERE id = ?', [req.body.parent_id]))) {
+                return res.status(400).json({ error: 'Parent course does not exist.' });
+            }
+        }
         const fields = Object.keys(req.body).filter(k => allowedFields.includes(k));
-        if (fields.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
+        if (fields.length === 0 && req.body.stream_ids === undefined) return res.status(400).json({ error: 'No valid fields to update' });
 
         const setClause = fields.map(f => `${f} = ?`).join(', ');
         const values = fields.map(f => req.body[f]);
         values.push(new Date().toISOString()); // updated_at
         values.push(req.params.id);
 
-        await run(`UPDATE courses SET ${setClause}, updated_at = ? WHERE id = ?`, values);
+        if (setClause) await run(`UPDATE courses SET ${setClause}, updated_at = ? WHERE id = ?`, values);
         const course = await queryOne('SELECT * FROM courses WHERE id = ?', [req.params.id]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
-        res.json(course);
+
+        if (course.programme_type !== 'Diploma') {
+            if ((await query('SELECT 1 AS x FROM diploma_streams WHERE diploma_id = ?', [req.params.id])).length) {
+                await replaceDiplomaStreams(req.params.id, []);
+            }
+        } else if (Array.isArray(req.body.stream_ids)) {
+            await replaceDiplomaStreams(req.params.id, req.body.stream_ids);
+        }
+        res.json((await attachProgrammeInfo([course]))[0]);
     } catch (error) {
         console.error('Update course error:', error);
         res.status(500).json({ error: 'Failed to update course' });

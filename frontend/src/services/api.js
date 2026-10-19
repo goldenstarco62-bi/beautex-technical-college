@@ -130,6 +130,15 @@ export const coursesAPI = {
     delete: (id) => api.delete(`courses/${encodeURIComponent(id)}`),
 };
 
+// Certificates
+export const certificatesAPI = {
+    getEligible: () => api.get('certificates/eligible'),
+    getAll: (params) => api.get('certificates', { params }),
+    getById: (id) => api.get(`certificates/${encodeURIComponent(id)}`),
+    issue: (data) => api.post('certificates/issue', data),
+    revoke: (id, data) => api.post(`certificates/${encodeURIComponent(id)}/revoke`, data),
+};
+
 // Faculty
 export const facultyAPI = {
     getAll: (params) => api.get('faculty', { params }),
@@ -535,6 +544,20 @@ export const trainerUnitsAPI = {
     createAssignment: (data) => api.post('trainer-units', data),
     bulkSetAssignments: (data) => api.post('trainer-units/bulk-set', data),
     deleteAssignment: (id) => api.delete(`trainer-units/${id}`),
+};
+
+// ── Unit Offerings API (one unit taught by one lecturer to one group) ─────────
+export const unitOfferingsAPI = {
+    getAll: (params) => api.get('unit-offerings', { params }),
+    getMine: () => api.get('unit-offerings/mine'),
+    getById: (id) => api.get(`unit-offerings/${encodeURIComponent(id)}`),
+    create: (data) => api.post('unit-offerings', data),
+    update: (id, data) => api.put(`unit-offerings/${encodeURIComponent(id)}`, data),
+    delete: (id) => api.delete(`unit-offerings/${encodeURIComponent(id)}`),
+    getStudents: (id) => api.get(`unit-offerings/${encodeURIComponent(id)}/students`),
+    setStudents: (id, studentIds) => api.put(`unit-offerings/${encodeURIComponent(id)}/students`, { student_ids: studentIds }),
+    addStudents: (id, studentIds) => api.post(`unit-offerings/${encodeURIComponent(id)}/students/bulk-add`, { student_ids: studentIds }),
+    removeStudent: (id, studentId) => api.delete(`unit-offerings/${encodeURIComponent(id)}/students/${encodeURIComponent(studentId)}`),
 };
 
 export default api;

@@ -38,6 +38,8 @@ export default function Students() {
         name: '',
         email: '',
         course: [],
+        registration_type: '',
+        programme_id: '',
         intake: 'May Intake',
         contact: '',
         photo: '',
@@ -183,6 +185,10 @@ export default function Students() {
         if (!formData.id) return 'Admission Number is required';
         if (!formData.name) return 'Full Name is required';
         if (!emailRegex.test(formData.email)) return 'Invalid email format';
+        if (diplomas.length || shortCourses.length) {
+            if (!formData.registration_type) return 'Please choose Diploma or Short Course';
+            if (!formData.programme_id) return 'Please select a programme';
+        }
         if (!formData.course || (Array.isArray(formData.course) && formData.course.length === 0)) return 'Please select at least one specialization course';
         if (formData.gpa < 0 || formData.gpa > 4) return 'GPA must be between 0.0 and 4.0';
         return null;
@@ -314,6 +320,8 @@ export default function Students() {
             name: '',
             email: '',
             course: [],
+            registration_type: '',
+            programme_id: '',
             intake: 'May Intake',
             contact: '',
             photo: '',
@@ -501,6 +509,32 @@ export default function Students() {
     };
 
     const courses = availableCourses.map(c => c.name);
+
+    // Programme catalogue (from courses enriched with programme_type/streams)
+    const diplomas = availableCourses.filter(c => c.programme_type === 'Diploma');
+    const shortCourses = availableCourses.filter(c => c.programme_type !== 'Diploma');
+
+    // Mirror the backend derivation so the form can preview / validate the
+    // resulting course list: Diploma -> [name, ...stream names]; Short -> [name].
+    const coursesForProgramme = (type, programmeId) => {
+        const c = availableCourses.find(x => String(x.id) === String(programmeId));
+        if (!c) return [];
+        if (type === 'Diploma') {
+            const names = [c.name];
+            for (const s of (c.streams || [])) if (s.name && !names.includes(s.name)) names.push(s.name);
+            return names;
+        }
+        return [c.name];
+    };
+
+    const applyProgramme = (registration_type, programme_id) => {
+        setFormData(prev => ({
+            ...prev,
+            registration_type,
+            programme_id,
+            course: programme_id ? coursesForProgramme(registration_type, programme_id) : []
+        }));
+    };
     const departments = [...new Set([
         ...availableCourses.map(c => c.department),
         'Cosmetology', 'Beauty Therapy', 'Hairdressing', 'Catering', 'Information Technology', 'Fashion & Design', 'Production Unit'
@@ -1237,33 +1271,61 @@ export default function Students() {
                                             className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10 min-h-[80px]"
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Specialization Courses (Select all that apply)</label>
-                                        <div className="grid grid-cols-2 gap-2 p-4 bg-gray-50 rounded-2xl border border-gray-100 max-h-48 overflow-y-auto custom-scrollbar">
-                                            {courses.map(course => {
-                                                const isSelected = Array.isArray(formData.course) && formData.course.includes(course);
-                                                return (
-                                                    <button
-                                                        key={course}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const currentCourses = Array.isArray(formData.course) ? formData.course : [];
-                                                            if (isSelected) {
-                                                                setFormData({ ...formData, course: currentCourses.filter(c => c !== course) });
-                                                            } else {
-                                                                setFormData({ ...formData, course: [...currentCourses, course] });
-                                                            }
-                                                        }}
-                                                        className={`text-left px-3 py-2 rounded-lg text-[10px] font-bold transition-all border ${isSelected
-                                                            ? 'bg-maroon text-gold border-maroon'
-                                                            : 'bg-white text-gray-600 border-gray-100 hover:border-maroon/30'
-                                                            }`}
-                                                    >
-                                                        {course}
-                                                    </button>
-                                                );
-                                            })}
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Registration Type</label>
+                                            <div className="grid grid-cols-2 gap-2 p-1.5 bg-gray-50 rounded-2xl border border-gray-100">
+                                                {['Diploma', 'Short Course'].map(rt => {
+                                                    const active = formData.registration_type === rt;
+                                                    return (
+                                                        <button
+                                                            key={rt}
+                                                            type="button"
+                                                            onClick={() => applyProgramme(rt, '')}
+                                                            className={`py-3 rounded-xl text-[11px] font-black uppercase tracking-wide transition-all border ${active
+                                                                ? 'bg-maroon text-gold border-maroon shadow-sm'
+                                                                : 'bg-white text-gray-500 border-gray-100 hover:border-maroon/30'}`}
+                                                        >
+                                                            {rt}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
+                                        {formData.registration_type && (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">
+                                                    {formData.registration_type === 'Diploma' ? 'Diploma Programme' : 'Short Course'}
+                                                </label>
+                                                <select
+                                                    value={formData.programme_id}
+                                                    onChange={(e) => applyProgramme(formData.registration_type, e.target.value)}
+                                                    className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                                >
+                                                    <option value="">Select {formData.registration_type === 'Diploma' ? 'a diploma' : 'a short course'}…</option>
+                                                    {(formData.registration_type === 'Diploma' ? diplomas : shortCourses).map(c => (
+                                                        <option key={c.id} value={c.id}>
+                                                            {c.name}{c.parent_name ? ` — ${c.parent_name}` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {formData.course?.length > 0 && (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-gold/70 uppercase tracking-widest ml-1">Registered Course(s)</label>
+                                                <div className="flex flex-wrap gap-2 p-3 bg-maroon/5 rounded-2xl border border-maroon/10">
+                                                    {formData.course.map((c, i) => (
+                                                        <span key={c} className={`px-3 py-1 rounded-lg text-[10px] font-bold ${i === 0 ? 'bg-maroon text-gold' : 'bg-white text-maroon border border-maroon/20'}`}>
+                                                            {i === 0 ? 'Main · ' : ''}{c}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                {formData.registration_type === 'Diploma' && formData.programme_id && (
+                                                    <p className="text-[9px] font-bold text-black/40 ml-1">Streams are captured automatically from the diploma.</p>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Current Intake</label>

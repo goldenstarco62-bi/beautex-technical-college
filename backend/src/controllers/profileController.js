@@ -91,14 +91,16 @@ export async function updateProfile(req, res) {
             const values = [...fields.map(f => updates[f]), userEmail];
 
             if (role === 'student') {
-                // Check if contact column exists in addition to phone
-                await run(`UPDATE students SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values).catch(() => { });
+                await run(`UPDATE students SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values);
             } else if (role === 'teacher') {
-                await run(`UPDATE faculty SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values).catch(() => { });
+                await run(`UPDATE faculty SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`, values);
             }
 
-            // Sync all updatable fields to users table
-            await run(`UPDATE users SET ${setClause} WHERE LOWER(email) = LOWER(?)`, values);
+            // Sync to users table — it has no `contact` column (only `phone`), so exclude it there.
+            const userFields = fields.filter(f => f !== 'contact');
+            const userSetClause = userFields.map(f => `${f} = ?`).join(', ');
+            const userValues = [...userFields.map(f => updates[f]), userEmail];
+            await run(`UPDATE users SET ${userSetClause} WHERE LOWER(email) = LOWER(?)`, userValues);
         }
 
         res.json({ message: 'Profile updated successfully', updates });

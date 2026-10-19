@@ -20,6 +20,31 @@ function generatePassword(length = 12) {
 // Helper to check if using MongoDB
 const isMongo = async () => !!process.env.MONGODB_URI;
 
+const REGISTRATION_TYPES = ['Diploma', 'Short Course'];
+
+// Build the students.course name array (main course first) from a programme
+// choice, so marks/attendance/fees keep reading the legacy name array while the
+// registration form only asks for a type + programme.
+//   Diploma      -> [programme name, ...stream names]
+//   Short Course -> [that short course name]
+// Returns { courseNames, programmeName } or { error } — SQL mode only.
+async function deriveProgrammeCourses(registrationType, programmeId) {
+    const pid = String(programmeId || '').trim();
+    if (!pid) return { error: 'A programme is required.' };
+    const course = await queryOne('SELECT id, name FROM courses WHERE id = ?', [pid]);
+    if (!course) return { error: `Programme "${pid}" was not found.` };
+    const names = [course.name];
+    if (registrationType === 'Diploma') {
+        const streams = await query(
+            `SELECT c.name FROM diploma_streams ds JOIN courses c ON c.id = ds.course_id
+             WHERE ds.diploma_id = ? ORDER BY ds.sort_order`,
+            [pid]
+        );
+        for (const s of streams) if (!names.includes(s.name)) names.push(s.name);
+    }
+    return { courseNames: names, programmeName: course.name };
+}
+
 // Tables/collections that store a student's admission number in a `student_id`
 // column. When an admission number is renamed, every one of these must be
 // updated in the same transaction or the student's payments, fees, grades and
@@ -54,8 +79,11 @@ export async function getAllStudents(req, res) {
         const mongo = await isMongo();
         const limit = req.query.limit ? parseInt(req.query.limit) : null;
 
-        // Admin and Superadmin see everything
-        if (role === 'admin' || role === 'superadmin') {
+        // Admin and Superadmin see everything. Teachers may also request the full
+        // roster with ?all=1, which pairs with /courses?all=1 so mark entry can
+        // target any course, not only the ones linked to their faculty profile.
+        const wantsAll = ['1', 'true'].includes(String(req.query.all ?? '').toLowerCase());
+        if (role === 'admin' || role === 'superadmin' || (role === 'teacher' && wantsAll)) {
             if (mongo) {
                 const Student = (await import('../models/mongo/Student.js')).default;
                 let q = Student.find().sort({ created_at: -1 });
@@ -238,7 +266,23 @@ export async function createStudent(req, res) {
     try {
         const { id, name, intake, contact, photo, dob, address, guardian_name, guardian_contact, blood_group } = req.body;
         const email = String(req.body.email || '').toLowerCase().trim();
-        const course = req.body.course;
+        let course = req.body.course;
+
+        const registrationType = String(req.body.registration_type || '').trim();
+        const programmeId = req.body.programme_id != null ? String(req.body.programme_id).trim() : null;
+        if (registrationType && !REGISTRATION_TYPES.includes(registrationType)) {
+            return res.status(400).json({ error: `registration_type must be one of: ${REGISTRATION_TYPES.join(', ')}` });
+        }
+
+        // When a programme is chosen (SQL mode), derive the course name array server-side
+        // so the client no longer needs to send a raw course list.
+        let derivedProgrammeName = null;
+        if (!await isMongo() && programmeId && registrationType) {
+            const derived = await deriveProgrammeCourses(registrationType, programmeId);
+            if (derived.error) return res.status(400).json({ error: derived.error });
+            course = derived.courseNames;
+            derivedProgrammeName = derived.programmeName;
+        }
 
         if (!id || !name || !email || !course) {
             return res.status(400).json({ error: 'ID, name, email, and course are required' });
@@ -297,9 +341,9 @@ export async function createStudent(req, res) {
             // Run both inserts in parallel — students and users tables are independent
             await Promise.all([
                 run(
-                    `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, completion_date, dob, address, guardian_name, guardian_contact, blood_group)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                    [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dobDate, address, guardian_name, guardian_contact, blood_group]
+                    `INSERT INTO students (id, name, email, course, intake, gpa, status, contact, photo, enrolled_date, completion_date, dob, address, guardian_name, guardian_contact, blood_group, registration_type, programme_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [id, name, email, courseVal, intake, 0.0, 'Active', contact, photo, enrolledDate, completionDate, dobDate, address, guardian_name, guardian_contact, blood_group, registrationType || null, programmeId || null]
                 ),
                 run(
                     `INSERT INTO users (name, email, password, role, status, photo, must_change_password)
@@ -314,6 +358,8 @@ export async function createStudent(req, res) {
                 gpa: 0.0, status: 'Active', contact, photo,
                 enrolled_date: enrolledDate, completion_date: completionDate,
                 dob: dobDate, address, guardian_name, guardian_contact, blood_group,
+                registration_type: registrationType || null, programme_id: programmeId || null,
+                programme_name: derivedProgrammeName,
                 created_at: new Date().toISOString()
             };
         }
@@ -479,8 +525,24 @@ export async function updateStudent(req, res) {
             'name', 'email', 'course', 'intake', 'gpa', 'status', 'contact',
             'photo', 'dob', 'address', 'guardian_name', 'guardian_contact', 'blood_group',
             'completion_date', 'enrolled_date',
-            'id_status', 'passport_status'
+            'id_status', 'passport_status',
+            'registration_type', 'programme_id'
         ];
+
+        // If the edit came through the programme-first form, re-derive the course
+        // name array server-side so legacy readers stay consistent.
+        {
+            const rt = String(req.body.registration_type || '').trim();
+            const pid = req.body.programme_id != null ? String(req.body.programme_id).trim() : null;
+            if (rt && pid) {
+                if (!REGISTRATION_TYPES.includes(rt)) {
+                    return res.status(400).json({ error: `registration_type must be one of: ${REGISTRATION_TYPES.join(', ')}` });
+                }
+                const derived = await deriveProgrammeCourses(rt, pid);
+                if (derived.error) return res.status(400).json({ error: derived.error });
+                req.body.course = derived.courseNames;
+            }
+        }
 
         // Detect if the admission number itself is being changed
         const newStudentId = req.body.id ? String(req.body.id).trim() : null;
@@ -549,9 +611,9 @@ export async function updateStudent(req, res) {
 
             const user = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [oldEmail]);
             if (user) {
-                await run('UPDATE users SET email = ?, password = ?, must_change_password = ? WHERE id = ?', [newEmail, hashedPassword, 1, user.id]);
+                await run('UPDATE users SET email = ?, password = ?, must_change_password = ? WHERE id = ?', [newEmail, hashedPassword, true, user.id]);
             } else {
-                await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldStudent.name, newEmail, hashedPassword, 'student', 'Active', 1]);
+                await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldStudent.name, newEmail, hashedPassword, 'student', 'Active', true]);
             }
 
             sendAdminResetPasswordEmail(newEmail, tempPassword)

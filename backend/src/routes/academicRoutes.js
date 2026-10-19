@@ -21,6 +21,8 @@ import * as unitCoverageController from '../controllers/unitCoverageController.j
 import * as catController from '../controllers/catController.js';
 import * as catResultsController from '../controllers/catResultsController.js';
 import * as trainerUnitController from '../controllers/trainerUnitController.js';
+import * as unitOfferingController from '../controllers/unitOfferingController.js';
+import * as certificateController from '../controllers/certificateController.js';
 import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
@@ -64,6 +66,18 @@ router.get('/trainer-units', authenticateToken, trainerUnitController.getTrainer
 router.post('/trainer-units', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerUnitController.assignTrainerUnit);
 router.post('/trainer-units/bulk-set', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerUnitController.bulkSetTrainerUnits);
 router.delete('/trainer-units/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerUnitController.removeTrainerUnit);
+
+// ── Unit Offerings (one unit taught by one lecturer to one group of students) ──
+router.get('/unit-offerings/mine', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitOfferingController.getMyOfferings);
+router.get('/unit-offerings', authenticateToken, unitOfferingController.getOfferings);
+router.post('/unit-offerings', authenticateToken, authorizeRoles('admin', 'superadmin'), unitOfferingController.createOffering);
+router.get('/unit-offerings/:id', authenticateToken, unitOfferingController.getOffering);
+router.put('/unit-offerings/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), unitOfferingController.updateOffering);
+router.delete('/unit-offerings/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), unitOfferingController.deleteOffering);
+router.get('/unit-offerings/:id/students', authenticateToken, unitOfferingController.getOfferingStudents);
+router.put('/unit-offerings/:id/students', authenticateToken, authorizeRoles('admin', 'superadmin'), unitOfferingController.setOfferingStudents);
+router.post('/unit-offerings/:id/students/bulk-add', authenticateToken, authorizeRoles('admin', 'superadmin'), unitOfferingController.addOfferingStudents);
+router.delete('/unit-offerings/:id/students/:studentId', authenticateToken, authorizeRoles('admin', 'superadmin'), unitOfferingController.removeOfferingStudent);
 
 // ── Course Units (competency-based grading, per-course) ───────────────────────
 router.get('/courses/:courseId/units', authenticateToken, courseUnitController.getCourseUnits);
@@ -202,5 +216,12 @@ router.post('/cat-results/:id/publish', authenticateToken, authorizeRoles('admin
 router.post('/cat-results', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.createResult);
 router.put('/cat-results/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.updateResult);
 router.delete('/cat-results/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), catResultsController.deleteResult);
+
+// ── Certificates ──────────────────────────────────────────────────────────────
+router.get('/certificates/eligible', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.getEligibleStudents);
+router.get('/certificates', authenticateToken, certificateController.getCertificates);
+router.get('/certificates/:id', authenticateToken, certificateController.getCertificate);
+router.post('/certificates/issue', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.issueCertificate);
+router.post('/certificates/:id/revoke', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.revokeCertificate);
 
 export default router;

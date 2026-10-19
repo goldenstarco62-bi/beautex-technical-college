@@ -29,6 +29,7 @@ import {
     Award,
     Layers,
     Library,
+    ScrollText,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { academicAPI } from '../../services/api';
@@ -48,6 +49,7 @@ const navSections = [
             { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Unit Coverage', path: '/unit-coverage', icon: CheckSquare, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Results', path: '/results', icon: Award, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
+            { name: 'Certificates', path: '/certificates', icon: ScrollText, roles: ['admin', 'superadmin'], highlight: 'Core' },
             { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin', 'teacher'] },
             { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },

@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS students (
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   course TEXT NOT NULL,
+  registration_type TEXT CHECK(registration_type IS NULL OR registration_type IN ('Diploma', 'Short Course')),
+  programme_id TEXT,
   intake TEXT,
   gpa DECIMAL DEFAULT 0.0,
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive', 'Graduated')),
@@ -54,8 +56,50 @@ CREATE TABLE IF NOT EXISTS courses (
   schedule TEXT,
   room TEXT,
   status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Inactive')),
+  programme_type TEXT NOT NULL DEFAULT 'Short Course' CHECK(programme_type IN ('Diploma', 'Short Course')),
+  parent_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Streams a diploma covers (e.g. Cosmetology -> Beauty Therapy + Hairdressing)
+CREATE TABLE IF NOT EXISTS diploma_streams (
+  diploma_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  sort_order INTEGER DEFAULT 0,
+  PRIMARY KEY (diploma_id, course_id)
+);
+
+-- Certificates module
+CREATE TABLE IF NOT EXISTS certificates (
+  id SERIAL PRIMARY KEY,
+  certificate_number TEXT UNIQUE NOT NULL,
+  student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  programme_id TEXT REFERENCES courses(id) ON DELETE SET NULL,
+  category TEXT NOT NULL CHECK(category IN ('Diploma','Certificate','Short Course')),
+  student_name TEXT NOT NULL,
+  course_name TEXT NOT NULL,
+  admission_number TEXT,
+  completion_date DATE,
+  award_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Issued' CHECK(status IN ('Issued','Revoked')),
+  template_version TEXT,
+  issued_by TEXT,
+  issued_by_name TEXT,
+  revoke_reason TEXT,
+  revoked_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id);
+CREATE INDEX IF NOT EXISTS idx_certificates_category ON certificates(category);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_certificates_active ON certificates(student_id, programme_id) WHERE status = 'Issued';
+
+CREATE TABLE IF NOT EXISTS certificate_sequences (
+  category TEXT NOT NULL,
+  year INTEGER NOT NULL,
+  last_number INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (category, year)
 );
 
 -- Faculty table

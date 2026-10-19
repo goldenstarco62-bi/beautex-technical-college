@@ -280,9 +280,9 @@ export async function updateFaculty(req, res) {
 
             const user = await queryOne('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [oldEmail]);
             if (user) {
-                await run('UPDATE users SET email = ?, password = ?, must_change_password = ? WHERE id = ?', [newEmail, hashedPassword, 1, user.id]);
+                await run('UPDATE users SET email = ?, password = ?, must_change_password = ? WHERE id = ?', [newEmail, hashedPassword, true, user.id]);
             } else {
-                await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldFaculty.name, newEmail, hashedPassword, 'teacher', 'Active', 1]);
+                await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldFaculty.name, newEmail, hashedPassword, 'teacher', 'Active', true]);
             }
 
             sendAdminResetPasswordEmail(newEmail, tempPassword)

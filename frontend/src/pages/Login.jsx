@@ -60,36 +60,6 @@ export default function Login() {
         }
     };
 
-    const demoLogin = async (role) => {
-        let demoEmail = '';
-        let demoPassword = 'Beautex@2026';
-
-        if (role === 'superadmin') {
-            demoEmail = 'beautexcollege01@gmail.com';
-        } else if (role === 'admin') {
-            demoEmail = 'admin@beautex.edu';
-        } else if (role === 'teacher') {
-            demoEmail = 'james.wilson@beautex.edu';
-        } else if (role === 'student') {
-            demoEmail = 'sarah.johnson0@beautex.edu';
-        }
-
-        setEmail(demoEmail);
-        setPassword(demoPassword);
-
-        // Auto-submit
-        setError('');
-        setLoading(true);
-        try {
-            await login(demoEmail, demoPassword);
-            navigate('/dashboard');
-        } catch (err) {
-            setError(err.response?.data?.error || 'Auth system failure');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     return (
         <div className="min-h-screen bg-maroon flex items-center justify-center p-4">
             <div className="w-full max-w-sm">
