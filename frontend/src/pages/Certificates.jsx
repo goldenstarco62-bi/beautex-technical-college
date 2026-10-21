@@ -139,20 +139,20 @@ function CertificateTemplate({ data, innerRef }) {
                 {heading}
             </div>
 
-            {/* Qualification title — ivory panel erases sample text, keeps flanking gold rules. Course names use Times New Roman per spec. */}
-            <div style={abs({ ...center, left: 450, top: 484, width: 636, height: 44, background: IVORY, color: MAROON, fontFamily: '"Times New Roman", Times, serif', fontSize: 38, fontWeight: 700, fontVariant: 'small-caps', letterSpacing: 1 })}>
-                <FitLine style={{ textAlign: 'center' }}>{courseDisplay}</FitLine>
+            {/* Qualification title — no flex; text-align:center + line-height is html2canvas-safe */}
+            <div style={abs({ left: 450, top: 484, width: 636, height: 44, background: IVORY, color: MAROON, fontFamily: '"Times New Roman", Times, serif', fontSize: 38, fontWeight: 700, fontVariant: 'small-caps', letterSpacing: 1, textAlign: 'center', lineHeight: '44px', overflow: 'hidden' })}>
+                <FitLine>{courseDisplay}</FitLine>
             </div>
 
-            {/* Student name — wide ivory panel covers the baked signature rule (incl. the short end-dashes). Amoresa Aged per spec (Georgia/TNR fallback if absent). */}
-            <div style={abs({ position: 'absolute', boxSizing: 'border-box', left: 150, top: 598, width: 1236, height: 58, background: IVORY, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 6, fontFamily: '"Amoresa Aged", Georgia, "Times New Roman", serif', fontSize: 42, fontWeight: 700, color: MAROON, fontVariant: 'small-caps', letterSpacing: 1 })}>
-                <FitLine style={{ textAlign: 'center' }}>{studentName}</FitLine>
+            {/* Student name — no flex; text-align:center + line-height is html2canvas-safe */}
+            <div style={abs({ left: 150, top: 598, width: 1236, height: 58, background: IVORY, fontFamily: '"Amoresa Aged", Georgia, "Times New Roman", serif', fontSize: 42, fontWeight: 700, color: MAROON, fontVariant: 'small-caps', letterSpacing: 1, textAlign: 'center', lineHeight: '52px', paddingBottom: 6, overflow: 'hidden' })}>
+                <FitLine>{studentName}</FitLine>
             </div>
 
-            {/* Completion sentence — ivory panel erases sample text (baked at y671–728) */}
-            <div style={abs({ left: 230, top: 660, width: 1076, height: 80, background: IVORY, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontStyle: 'italic', fontSize: 27, lineHeight: 1.5, color: MAROON })}>
-                <div>has successfully completed the prescribed course of study in {courseDisplay}</div>
-                <div>{ending}</div>
+            {/* Completion sentence — no flex; block divs with text-align:center are html2canvas-safe */}
+            <div style={abs({ left: 230, top: 660, width: 1076, height: 80, background: IVORY, fontStyle: 'italic', fontSize: 27, color: MAROON, textAlign: 'center', paddingTop: 10 })}>
+                <div style={{ lineHeight: 1.5 }}>has successfully completed the prescribed course of study in {courseDisplay}</div>
+                <div style={{ lineHeight: 1.5 }}>{ending}</div>
             </div>
 
             {/* Details row — ivory panel erases sample labels (baked at y771–787), re-rendered with values.
