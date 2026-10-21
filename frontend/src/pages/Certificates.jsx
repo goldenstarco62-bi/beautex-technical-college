@@ -132,11 +132,11 @@ function CertificateTemplate({ data, innerRef }) {
             {/* Background sample (1:1) */}
             {bg && <img src={bg} alt="" crossOrigin="anonymous" style={abs({ inset: 0, width: CERT_W, height: CERT_H, objectFit: 'fill' })} />}
 
-            {/* Banner heading — maroon panel is 776px wide starting at x380, so its centre is exactly x768 (page centre) for every certificate type.
-                Use display:block + width:100% on FitLine so text-align:center centres the text — html2canvas does not reliably render flexbox
-                justify-content, so we avoid flex here to ensure the PDF matches the preview. line-height:70px centres vertically. */}
-            <div style={abs({ left: 380, top: 388, width: 776, height: 70, background: RIBBON, color: GOLD, fontSize: 52, fontWeight: 700, fontVariant: 'small-caps' })}>
-                <FitLine style={{ display: 'block', width: '100%', textAlign: 'center', lineHeight: '70px' }}>{heading}</FitLine>
+            {/* Banner heading — plain div with text-align:center is the most html2canvas-safe centering approach.
+                FitLine (inline-block + whiteSpace:nowrap) caused left-alignment in the PDF even when display:block was passed.
+                48px fits both "Certificate of Completion" and "Diploma Certificate" inside 776px. */}
+            <div style={abs({ left: 380, top: 388, width: 776, height: 70, background: RIBBON, color: GOLD, fontSize: 48, fontWeight: 700, fontVariant: 'small-caps', textAlign: 'center', lineHeight: '70px', overflow: 'hidden' })}>
+                {heading}
             </div>
 
             {/* Qualification title — ivory panel erases sample text, keeps flanking gold rules. Course names use Times New Roman per spec. */}
