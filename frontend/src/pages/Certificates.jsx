@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { certificatesAPI, settingsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2 } from 'lucide-react';
@@ -8,6 +8,8 @@ import html2canvas from 'html2canvas';
 const MAROON = '#800000';
 const GOLD = '#C9A227';
 const IVORY = '#FBF6E9';
+// sampled from the baked ribbon interior so the banner cover panel blends into it
+const RIBBON = '#630A11';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 function formatDate(v) {
@@ -52,8 +54,72 @@ function titleCase(s) {
     return String(s || '').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Shrinks its own font size until the text fits the available width, so long
+// names/headings/details never spill out of their fixed panels.
+function FitLine({ children, style, minScale = 0.55, as: Tag = 'span' }) {
+    const ref = useRef(null);
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        el.style.fontSize = '';
+        const base = parseFloat(getComputedStyle(el).fontSize) || 0;
+        const parentAvail = el.parentElement ? el.parentElement.clientWidth - 8 : Infinity;
+        const avail = Math.min(el.clientWidth || Infinity, parentAvail);
+        let size = base;
+        while (el.scrollWidth > avail && size > base * minScale) {
+            size -= 1;
+            el.style.fontSize = `${size}px`;
+        }
+    });
+    return <Tag ref={ref} style={{ display: 'inline-block', whiteSpace: 'nowrap', ...style }}>{children}</Tag>;
+}
+
+// Chrome's page zoom (Ctrl +/-) inflates text metrics ~9% at 110% and html2canvas
+// captures the degraded layout, which pushed words out of the certificate panels.
+// Probe the effective zoom and neutralise it on the element during capture.
+function currentPageZoom() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;top:0;left:0;width:100px;height:100px;visibility:hidden;pointer-events:none';
+    document.body.appendChild(probe);
+    const z = probe.getBoundingClientRect().width / 100;
+    probe.remove();
+    return z > 0.5 ? z : 1;
+}
+
+async function captureCertificate(el) {
+    const images = Array.from(el.querySelectorAll('img'));
+    await Promise.all(images.map(img => (img.complete && img.naturalWidth ? null : new Promise(r => { img.onload = r; img.onerror = r; }))));
+    if (document.fonts?.ready) await document.fonts.ready;
+    const z = currentPageZoom();
+    const inverse = Math.abs(z - 1) > 0.01 ? String(1 / z) : null;
+    if (inverse) el.style.zoom = inverse;
+    try {
+        return await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: IVORY, logging: false });
+    } finally {
+        if (inverse) el.style.zoom = '';
+    }
+}
+
+// Spec requires the certificate fonts by name; report instead of silently substituting.
+// Chrome's document.fonts.check() returns true even for fonts that are NOT installed,
+// so detect availability by measuring: if "X, monospace" and "X, serif" render at the
+// same width, X is actually being used; different widths mean both fell back.
+function fontAvailable(name) {
+    const c = document.createElement('canvas').getContext('2d');
+    const probe = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789';
+    c.font = `42px "${name}", monospace`;
+    const wm = c.measureText(probe).width;
+    c.font = `42px "${name}", serif`;
+    const ws = c.measureText(probe).width;
+    return Math.abs(wm - ws) < 0.5;
+}
+
+function missingCertFonts() {
+    return ['Amoresa Aged', 'Times New Roman'].filter(n => !fontAvailable(n));
+}
+
 function CertificateTemplate({ data, innerRef }) {
-    const { bg, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, photo } = data;
+    const { bg, seal, signature, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, photo } = data;
     const heading = HEADINGS[category] || 'Certificate of Completion';
     const ending = ENDINGS[category] || ENDINGS['Short Course'];
     const courseDisplay = titleCase(courseName);
@@ -66,19 +132,21 @@ function CertificateTemplate({ data, innerRef }) {
             {/* Background sample (1:1) */}
             {bg && <img src={bg} alt="" crossOrigin="anonymous" style={abs({ inset: 0, width: CERT_W, height: CERT_H, objectFit: 'fill' })} />}
 
-            {/* Banner heading — maroon panel erases sample text; text centered via container text-align + inline-block span (robust in html2canvas) */}
-            <div style={abs({ left: 380, top: 388, width: 775, height: 70, background: MAROON, color: GOLD, fontSize: 44, fontWeight: 700, fontVariant: 'small-caps', textAlign: 'center' })}>
-                <span style={{ display: 'inline-block', width: 'auto', maxWidth: '100%', textAlign: 'center', lineHeight: '70px', whiteSpace: 'nowrap' }}>{heading}</span>
+            {/* Banner heading — maroon panel is 776px wide starting at x380, so its centre is exactly x768 (page centre) for every certificate type.
+                Use display:block + width:100% on FitLine so text-align:center centres the text — html2canvas does not reliably render flexbox
+                justify-content, so we avoid flex here to ensure the PDF matches the preview. line-height:70px centres vertically. */}
+            <div style={abs({ left: 380, top: 388, width: 776, height: 70, background: RIBBON, color: GOLD, fontSize: 52, fontWeight: 700, fontVariant: 'small-caps' })}>
+                <FitLine style={{ display: 'block', width: '100%', textAlign: 'center', lineHeight: '70px' }}>{heading}</FitLine>
             </div>
 
-            {/* Qualification title — ivory panel erases sample text, keeps flanking gold rules */}
-            <div style={abs({ ...center, left: 450, top: 484, width: 636, height: 44, background: IVORY, color: MAROON, fontSize: 38, fontWeight: 700, fontVariant: 'small-caps', letterSpacing: 1, whiteSpace: 'nowrap' })}>
-                {courseDisplay}
+            {/* Qualification title — ivory panel erases sample text, keeps flanking gold rules. Course names use Times New Roman per spec. */}
+            <div style={abs({ ...center, left: 450, top: 484, width: 636, height: 44, background: IVORY, color: MAROON, fontFamily: '"Times New Roman", Times, serif', fontSize: 38, fontWeight: 700, fontVariant: 'small-caps', letterSpacing: 1 })}>
+                <FitLine style={{ textAlign: 'center' }}>{courseDisplay}</FitLine>
             </div>
 
-            {/* Student name — wide ivory panel covers the baked signature rule (incl. the short end-dashes) */}
-            <div style={abs({ position: 'absolute', boxSizing: 'border-box', left: 150, top: 598, width: 1236, height: 58, background: IVORY, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 6, fontSize: 42, fontWeight: 700, color: MAROON, fontVariant: 'small-caps', letterSpacing: 1, whiteSpace: 'nowrap' })}>
-                {studentName}
+            {/* Student name — wide ivory panel covers the baked signature rule (incl. the short end-dashes). Amoresa Aged per spec (Georgia/TNR fallback if absent). */}
+            <div style={abs({ position: 'absolute', boxSizing: 'border-box', left: 150, top: 598, width: 1236, height: 58, background: IVORY, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 6, fontFamily: '"Amoresa Aged", Georgia, "Times New Roman", serif', fontSize: 42, fontWeight: 700, color: MAROON, fontVariant: 'small-caps', letterSpacing: 1 })}>
+                <FitLine style={{ textAlign: 'center' }}>{studentName}</FitLine>
             </div>
 
             {/* Completion sentence — ivory panel erases sample text (baked at y671–728) */}
@@ -87,15 +155,32 @@ function CertificateTemplate({ data, innerRef }) {
                 <div>{ending}</div>
             </div>
 
-            {/* Details row — ivory panel erases sample labels (baked at y771–787), re-rendered with values */}
-            <div style={abs({ left: 110, top: 760, width: 1130, height: 40, background: IVORY, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', fontStyle: 'italic', fontSize: 23, color: MAROON, padding: '0 8px' })}>
+            {/* Details row — ivory panel erases sample labels (baked at y771–787), re-rendered with values.
+                Plain italic text, no underlines; content stays left of x≈1240 so it never touches the seal. */}
+            <FitLine as="div" style={abs({ left: 110, top: 760, width: 1150, height: 40, background: IVORY, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, fontStyle: 'italic', fontSize: 21, color: MAROON, padding: '0 10px' })}>
                 {[['Date of Award:', formatDate(awardDate) || ''], ['Certificate No.:', certificateNumber || ''], ['Registration No.:', admissionNumber || '']].map(([label, val]) => (
-                    <div key={label} style={{ flex: 1, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                    <div key={label} style={{ flex: '0 1 auto', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span style={{ fontWeight: 700 }}>{label}&nbsp;</span>
-                        <span style={{ display: 'inline-block', minWidth: 150, borderBottom: `1.5px solid ${MAROON}`, padding: '0 8px' }}>{val || ' '}</span>
+                        <span>{val || ' '}</span>
                     </div>
                 ))}
+            </FitLine>
+
+            {/* Signature zone — one Principal section only.
+                The baked HOD line + both baked placeholder labels are erased with ivory covers;
+                the baked Principal rule (x310–623 @ y886) is kept as the handwriting line, with
+                the printed name/title below it and blank space above it for the signature. */}
+            <div style={abs({ left: 280, top: 890, width: 373, height: 48, background: IVORY })} />
+            <div style={abs({ left: 830, top: 875, width: 365, height: 63, background: IVORY })} />
+            {signature && <img src={signature} alt="" crossOrigin="anonymous" style={abs({ left: 366, top: 795, width: 200, height: 89 })} />}
+            <div style={abs({ left: 310, top: 892, width: 313, height: 44, color: MAROON, textAlign: 'center', lineHeight: 1.35 })}>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>Linet Kariuki</div>
+                <div style={{ fontSize: 18, fontStyle: 'italic' }}>Principal</div>
             </div>
+
+            {/* Official seal — extracted seal disc re-rendered enlarged (r≈112 vs baked r≈91),
+                concentric with the baked seal so it fully covers it without touching details or signatures. */}
+            {seal && <img src={seal} alt="" crossOrigin="anonymous" style={abs({ left: 1254, top: 720, width: 224, height: 224 })} />}
 
             {/* Passport photo frame — empty upper-right ivory zone */}
             <div style={abs({ left: 1245, top: 312, width: 178, height: 222, background: '#fff', border: `3px solid ${MAROON}`, outline: `3px solid ${GOLD}`, outlineOffset: '-9px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,.25)' })}>
@@ -157,8 +242,10 @@ export default function Certificates() {
     async function buildData(row) {
         const photo = row.photo ? await urlToBase64(String(row.photo).trim()) : '';
         const bg = await urlToBase64('/certificate-bg.png');
+        const seal = await urlToBase64('/certificate-seal.png');
+        const signature = await urlToBase64('/principal-signature.png');
         return {
-            bg, photo,
+            bg, photo, seal, signature,
             studentName: row.student_name || row.name,
             admissionNumber: row.admission_number || row.student_id,
             courseName: row.course_name,
@@ -172,7 +259,9 @@ export default function Certificates() {
         setBusy(true);
         try {
             const data = await buildData(row);
-            setPreview({ data, studentId: row.student_id, issued: !!row.already_issued && !!row.certificate_number, certificateNumber: row.certificate_number || null });
+            const missing = await missingCertFonts();
+            if (missing.length) notify(`Missing font${missing.length > 1 ? 's' : ''} on this computer: ${missing.join(', ')}. Install them for exact rendering.`, 'error');
+            setPreview({ data, studentId: row.student_id, programmeId: row.programme_id, issued: !!row.already_issued && !!row.certificate_number, certificateNumber: row.certificate_number || null });
         } catch (e) { notify('Could not prepare preview: ' + (e.message || ''), 'error'); }
         finally { setBusy(false); }
     }
@@ -181,7 +270,7 @@ export default function Certificates() {
         if (!preview) return;
         setBusy(true);
         try {
-            const { data } = await certificatesAPI.issue({ student_id: preview.studentId });
+            const { data } = await certificatesAPI.issue({ student_id: preview.studentId, programme_id: preview.programmeId });
             const newData = { ...preview.data, certificateNumber: data.certificate_number, awardDate: data.award_date };
             setPreview({ ...preview, data: newData, issued: true, certificateNumber: data.certificate_number, record: data });
             notify(`Certificate issued: ${data.certificate_number}`, 'success');
@@ -218,10 +307,7 @@ export default function Certificates() {
         const prevTransform = wrapper ? wrapper.style.transform : null;
         if (wrapper) wrapper.style.transform = 'none';
         try {
-            const images = Array.from(el.querySelectorAll('img'));
-            await Promise.all(images.map(img => (img.complete ? null : new Promise(r => { img.onload = r; img.onerror = r; }))));
-            if (document.fonts?.ready) await document.fonts.ready;
-            return await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: IVORY, logging: false });
+            return await captureCertificate(el);
         } finally {
             if (wrapper && prevTransform !== null) wrapper.style.transform = prevTransform;
         }

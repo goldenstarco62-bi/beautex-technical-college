@@ -101,6 +101,16 @@ function resolveProgramme(student, maps) {
     return { course, category };
 }
 
+// Every programme a student is enrolled in (multi-course registration).
+async function enrolledProgrammeIds(studentId) {
+    const rows = await query('SELECT programme_id FROM student_programmes WHERE student_id = ?', [studentId]);
+    return rows.map(r => String(r.programme_id));
+}
+
+function categoryOf(course) {
+    return course.programme_type === 'Diploma' ? 'Diploma' : 'Short Course';
+}
+
 // GET /certificates/eligible — graduated students with their programme + issue state.
 export async function getEligibleStudents(req, res) {
     try {
@@ -117,27 +127,43 @@ export async function getEligibleStudents(req, res) {
         );
         const issuedKey = new Set(issued.map(c => `${c.student_id}::${c.programme_id ?? ''}`));
 
+        // Junction rows drive eligibility so a student enrolled in several
+        // programmes appears once per qualification (one certificate each).
+        const links = await query('SELECT student_id, programme_id FROM student_programmes');
+        const linkMap = new Map();
+        for (const l of links) {
+            const sid = String(l.student_id);
+            if (!linkMap.has(sid)) linkMap.set(sid, []);
+            linkMap.get(sid).push(String(l.programme_id));
+        }
+
         const result = [];
         for (const s of students) {
-            const resolved = resolveProgramme(s, maps);
-            if (!resolved) continue;
-            const { course, category } = resolved;
-            const key = `${s.id}::${course.id}`;
-            const existing = issued.find(c => String(c.student_id) === String(s.id) && String(c.programme_id ?? '') === String(course.id));
-            result.push({
-                student_id: s.id,
-                admission_number: s.id,
-                student_name: s.name,
-                email: s.email,
-                photo: s.photo,
-                enrolled_date: s.enrolled_date,
-                completion_date: s.completion_date,
-                programme_id: course.id,
-                category,
-                course_name: qualificationTitle(course.name, category),
-                already_issued: issuedKey.has(key),
-                certificate_number: existing ? existing.certificate_number : null
-            });
+            const ids = linkMap.get(String(s.id)) || [];
+            let coursesList = ids.map(id => maps.byId.get(id)).filter(Boolean);
+            if (coursesList.length === 0) {
+                const resolved = resolveProgramme(s, maps);
+                if (resolved) coursesList = [resolved.course];
+            }
+            for (const course of coursesList) {
+                const category = categoryOf(course);
+                const key = `${s.id}::${course.id}`;
+                const existing = issued.find(c => String(c.student_id) === String(s.id) && String(c.programme_id ?? '') === String(course.id));
+                result.push({
+                    student_id: s.id,
+                    admission_number: s.id,
+                    student_name: s.name,
+                    email: s.email,
+                    photo: s.photo,
+                    enrolled_date: s.enrolled_date,
+                    completion_date: s.completion_date,
+                    programme_id: course.id,
+                    category,
+                    course_name: qualificationTitle(course.name, category),
+                    already_issued: issuedKey.has(key),
+                    certificate_number: existing ? existing.certificate_number : null
+                });
+            }
         }
         res.json(result);
     } catch (error) {
@@ -166,9 +192,27 @@ export async function issueCertificate(req, res) {
         }
 
         const maps = await loadCourseMaps();
-        const resolved = resolveProgramme(student, maps);
-        if (!resolved) return res.status(400).json({ error: 'Could not resolve a programme for this student. Set their course/programme first.' });
-        const { course, category } = resolved;
+        const requestedPid = req.body.programme_id != null ? String(req.body.programme_id).trim() : null;
+        const enrolledIds = await enrolledProgrammeIds(student.id);
+        let course = null;
+        if (requestedPid) {
+            course = maps.byId.get(requestedPid) || null;
+            if (!course) return res.status(400).json({ error: `Programme "${requestedPid}" was not found.` });
+            if (enrolledIds.length && !enrolledIds.includes(requestedPid)) {
+                return res.status(400).json({ error: 'This student is not enrolled in the selected programme.' });
+            }
+        } else if (enrolledIds.length === 1) {
+            course = maps.byId.get(enrolledIds[0]) || null;
+        } else if (enrolledIds.length > 1) {
+            return res.status(400).json({ error: 'This student is enrolled in multiple programmes — select which qualification to certify.' });
+        }
+        if (!course) {
+            // Legacy fallback for students without junction rows.
+            const resolved = resolveProgramme(student, maps);
+            if (!resolved) return res.status(400).json({ error: 'Could not resolve a programme for this student. Set their course/programme first.' });
+            course = resolved.course;
+        }
+        const category = categoryOf(course);
 
         const already = await queryOne(
             `SELECT certificate_number FROM certificates WHERE student_id = ? AND programme_id = ? AND status = 'Issued'`,

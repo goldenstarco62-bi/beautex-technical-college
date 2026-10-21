@@ -40,6 +40,7 @@ export default function Students() {
         course: [],
         registration_type: '',
         programme_id: '',
+        additional_programme_ids: [],
         intake: 'May Intake',
         contact: '',
         photo: '',
@@ -257,9 +258,12 @@ export default function Students() {
 
     const handleEdit = (student) => {
         setEditingStudent(student);
+        const mainId = student.programme_id != null ? String(student.programme_id) : '';
         setFormData({
             ...student,
-            course: Array.isArray(student.course) ? student.course : [student.course].filter(Boolean)
+            course: Array.isArray(student.course) ? student.course : [student.course].filter(Boolean),
+            programme_id: mainId,
+            additional_programme_ids: (student.programme_ids || []).map(String).filter(id => id && id !== mainId)
         });
         setShowModal(true);
     };
@@ -322,6 +326,7 @@ export default function Students() {
             course: [],
             registration_type: '',
             programme_id: '',
+            additional_programme_ids: [],
             intake: 'May Intake',
             contact: '',
             photo: '',
@@ -527,13 +532,47 @@ export default function Students() {
         return [c.name];
     };
 
+    // Aggregated students.course preview across the main + additional programmes.
+    const buildCourseList = (mainId, addIds) => {
+        const names = [];
+        for (const id of [mainId, ...(addIds || [])]) {
+            if (!id) continue;
+            const c = availableCourses.find(x => String(x.id) === String(id));
+            if (!c) continue;
+            for (const n of coursesForProgramme(c.programme_type === 'Diploma' ? 'Diploma' : 'Short Course', id)) {
+                if (!names.includes(n)) names.push(n);
+            }
+        }
+        return names;
+    };
+
     const applyProgramme = (registration_type, programme_id) => {
-        setFormData(prev => ({
-            ...prev,
-            registration_type,
-            programme_id,
-            course: programme_id ? coursesForProgramme(registration_type, programme_id) : []
-        }));
+        setFormData(prev => {
+            const additional = (prev.additional_programme_ids || []).filter(a => String(a) !== String(programme_id));
+            return {
+                ...prev,
+                registration_type,
+                programme_id,
+                additional_programme_ids: additional,
+                course: programme_id ? buildCourseList(programme_id, additional) : []
+            };
+        });
+    };
+
+    const toggleAdditionalProgramme = (id) => {
+        setFormData(prev => {
+            const sid = String(id);
+            if (sid === String(prev.programme_id)) return prev;
+            const has = (prev.additional_programme_ids || []).map(String).includes(sid);
+            const additional = has
+                ? (prev.additional_programme_ids || []).filter(a => String(a) !== sid)
+                : [...(prev.additional_programme_ids || []), sid];
+            return {
+                ...prev,
+                additional_programme_ids: additional,
+                course: prev.programme_id ? buildCourseList(prev.programme_id, additional) : []
+            };
+        });
     };
     const departments = [...new Set([
         ...availableCourses.map(c => c.department),
@@ -1309,6 +1348,24 @@ export default function Students() {
                                                         </option>
                                                     ))}
                                                 </select>
+                                            </div>
+                                        )}
+                                        {formData.programme_id && (
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Additional Programmes (optional)</label>
+                                                <div className="max-h-36 overflow-y-auto border border-gray-100 rounded-2xl bg-gray-50 p-2 space-y-0.5">
+                                                    {availableCourses.filter(c => String(c.id) !== String(formData.programme_id)).map(c => {
+                                                        const checked = (formData.additional_programme_ids || []).map(String).includes(String(c.id));
+                                                        return (
+                                                            <label key={c.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-white border border-maroon/20' : 'hover:bg-white'}`}>
+                                                                <input type="checkbox" checked={checked} onChange={() => toggleAdditionalProgramme(c.id)} className="accent-maroon" />
+                                                                <span className={`text-[11px] font-bold ${checked ? 'text-maroon' : 'text-gray-500'}`}>{c.name}{c.parent_name ? ` — ${c.parent_name}` : ''}</span>
+                                                                <span className="text-[9px] font-black uppercase text-maroon/30 ml-auto">{c.programme_type === 'Diploma' ? 'Diploma' : 'Short Course'}</span>
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <p className="text-[9px] font-bold text-black/40 ml-1">A student can hold several qualifications — each enrolled programme earns its own certificate on completion.</p>
                                             </div>
                                         )}
                                         {formData.course?.length > 0 && (

@@ -172,7 +172,7 @@ export async function getDb() {
 let isInitializing = false;
 // Bump this whenever a new migration block is added below — the version gate
 // then re-runs the full (idempotent) migration sweep once on next boot.
-const SCHEMA_MIGRATION_VERSION = 'pg-2026-10-15-03';
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-10-21-01';
 
 export async function initializeDatabase() {
     if (isInitializing) return;
@@ -1388,6 +1388,31 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ certificates migration warning (PostgreSQL):', e.message);
     }
+
+    // ── Multi-programme enrolment (PostgreSQL) ────────────────────────────────
+    // A student may register for more than one qualification (e.g. a Diploma plus
+    // a Short Course). students.programme_id stays the MAIN programme for legacy
+    // readers; this junction holds the full set and drives per-qualification certificates.
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS student_programmes (
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                programme_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (student_id, programme_id)
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_student_programmes_programme ON student_programmes(programme_id)');
+        await database.query(`
+            INSERT INTO student_programmes (student_id, programme_id)
+            SELECT id, programme_id FROM students
+            WHERE programme_id IS NOT NULL AND programme_id <> ''
+            ON CONFLICT (student_id, programme_id) DO NOTHING
+        `);
+        console.log('✅ student_programmes junction table ensured + backfilled (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ student_programmes migration warning (PostgreSQL):', e.message);
+    }
 }
 
 
@@ -2371,6 +2396,27 @@ async function runSqliteMigrations(database) {
         console.warn('⚠️ certificates migration warning (SQLite):', e.message);
     }
 
+    // ── Multi-programme enrolment (SQLite) ────────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS student_programmes (
+                student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                programme_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (student_id, programme_id)
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_student_programmes_programme ON student_programmes(programme_id)');
+        await database.run(`
+            INSERT OR IGNORE INTO student_programmes (student_id, programme_id)
+            SELECT id, programme_id FROM students
+            WHERE programme_id IS NOT NULL AND programme_id <> ''
+        `);
+        console.log('✅ student_programmes junction table ensured + backfilled (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ student_programmes migration warning (SQLite):', e.message);
+    }
+
     // ── Inventory Requisition System (SQLite) ─────────────────────────────────
     try {
         await database.run(`
@@ -2688,7 +2734,7 @@ export async function run(sql, params = []) {
 
         // Add RETURNING id if it's an INSERT statement and doesn't have one
         // Skip for tables that have no 'id' column (composite-key / junction tables)
-        const noIdTables = ['student_fees', 'system_settings', 'diploma_streams'];
+        const noIdTables = ['student_fees', 'system_settings', 'diploma_streams', 'student_programmes'];
         const tableNameMatch = pgSql.match(/INSERT\s+INTO\s+(\w+)/i);
         const tableName = tableNameMatch ? tableNameMatch[1].toLowerCase() : '';
 

@@ -45,6 +45,53 @@ async function deriveProgrammeCourses(registrationType, programmeId) {
     return { courseNames: names, programmeName: course.name };
 }
 
+// A student may enrol in several programmes (e.g. Diploma + Short Course).
+// Validate the full set (main first, then additional ids) and return course rows.
+async function resolveProgrammeList(mainId, additionalIds) {
+    const ids = [];
+    if (mainId) ids.push(String(mainId).trim());
+    for (const a of (Array.isArray(additionalIds) ? additionalIds : [])) {
+        const id = String(a || '').trim();
+        if (id && !ids.includes(id)) ids.push(id);
+    }
+    if (ids.length === 0) return { programmes: [] };
+    const rows = await query('SELECT id, name, programme_type FROM courses');
+    const byId = new Map(rows.map(r => [String(r.id), r]));
+    const programmes = [];
+    for (const id of ids) {
+        const c = byId.get(id);
+        if (!c) return { error: `Programme "${id}" was not found.` };
+        programmes.push(c);
+    }
+    return { programmes };
+}
+
+// Aggregate the legacy students.course name array across every enrolled programme:
+// each Diploma contributes [name, ...stream names], each Short Course just its name.
+async function buildCourseNames(programmes) {
+    const names = [];
+    for (const p of programmes) {
+        if (!names.includes(p.name)) names.push(p.name);
+        if (p.programme_type === 'Diploma') {
+            const streams = await query(
+                `SELECT c.name FROM diploma_streams ds JOIN courses c ON c.id = ds.course_id
+                 WHERE ds.diploma_id = ? ORDER BY ds.sort_order`,
+                [p.id]
+            );
+            for (const s of streams) if (!names.includes(s.name)) names.push(s.name);
+        }
+    }
+    return names;
+}
+
+// Replace a student's junction rows so they match the enrolled programme set.
+async function syncStudentProgrammes(studentId, programmes) {
+    await run('DELETE FROM student_programmes WHERE student_id = ?', [studentId]);
+    for (const p of programmes) {
+        await run('INSERT INTO student_programmes (student_id, programme_id) VALUES (?, ?)', [studentId, p.id]);
+    }
+}
+
 // Tables/collections that store a student's admission number in a `student_id`
 // column. When an admission number is renamed, every one of these must be
 // updated in the same transaction or the student's payments, fees, grades and
@@ -60,6 +107,7 @@ const STUDENT_ID_REFERENCES = [
     'result_audit_logs',
     'student_daily_reports',
     'student_fees',
+    'student_programmes',
     'student_unit_marks',
     'unit_coverage_confirmations',
     'unit_coverage_logs',
@@ -98,7 +146,13 @@ export async function getAllStudents(req, res) {
                 params.push(limit);
             }
             const students = await query(sql, params);
-            return res.json(students.map(s => ({ ...s, course: parseCoursesField(s.course) })));
+            const links = await query('SELECT student_id, programme_id FROM student_programmes');
+            const linkMap = new Map();
+            for (const l of links) {
+                if (!linkMap.has(l.student_id)) linkMap.set(l.student_id, []);
+                linkMap.get(l.student_id).push(l.programme_id);
+            }
+            return res.json(students.map(s => ({ ...s, course: parseCoursesField(s.course), programme_ids: linkMap.get(s.id) || [] })));
         }
 
         // Teachers see students in their courses
@@ -254,7 +308,8 @@ export async function getStudent(req, res) {
 
         res.json({
             ...student,
-            course: typeof student.course === 'string' && student.course.startsWith('[') ? JSON.parse(student.course) : [student.course].filter(Boolean)
+            course: typeof student.course === 'string' && student.course.startsWith('[') ? JSON.parse(student.course) : [student.course].filter(Boolean),
+            programme_ids: (await query('SELECT programme_id FROM student_programmes WHERE student_id = ?', [student.id])).map(r => r.programme_id)
         });
     } catch (error) {
         console.error('Get student error:', error);
@@ -275,13 +330,19 @@ export async function createStudent(req, res) {
         }
 
         // When a programme is chosen (SQL mode), derive the course name array server-side
-        // so the client no longer needs to send a raw course list.
+        // so the client no longer needs to send a raw course list. Additional programme ids
+        // (e.g. a short course taken alongside a diploma) are enrolled at the same time.
+        const additionalIds = Array.isArray(req.body.additional_programme_ids) ? req.body.additional_programme_ids : [];
         let derivedProgrammeName = null;
+        let enrolledProgrammes = [];
         if (!await isMongo() && programmeId && registrationType) {
-            const derived = await deriveProgrammeCourses(registrationType, programmeId);
-            if (derived.error) return res.status(400).json({ error: derived.error });
-            course = derived.courseNames;
-            derivedProgrammeName = derived.programmeName;
+            const resolved = await resolveProgrammeList(programmeId, additionalIds);
+            if (resolved.error) return res.status(400).json({ error: resolved.error });
+            enrolledProgrammes = resolved.programmes;
+            course = await buildCourseNames(enrolledProgrammes);
+            derivedProgrammeName = enrolledProgrammes[0]?.name || null;
+        } else if (!await isMongo() && additionalIds.length) {
+            return res.status(400).json({ error: 'additional_programme_ids requires a main programme_id.' });
         }
 
         if (!id || !name || !email || !course) {
@@ -352,6 +413,8 @@ export async function createStudent(req, res) {
                 )
             ]);
 
+            if (enrolledProgrammes.length) await syncStudentProgrammes(id, enrolledProgrammes);
+
             // Build response from known data — avoids an extra SELECT round-trip
             savedStudent = {
                 id, name, email, course: courseArr, intake,
@@ -359,6 +422,7 @@ export async function createStudent(req, res) {
                 enrolled_date: enrolledDate, completion_date: completionDate,
                 dob: dobDate, address, guardian_name, guardian_contact, blood_group,
                 registration_type: registrationType || null, programme_id: programmeId || null,
+                programme_ids: enrolledProgrammes.map(p => p.id),
                 programme_name: derivedProgrammeName,
                 created_at: new Date().toISOString()
             };
@@ -530,17 +594,23 @@ export async function updateStudent(req, res) {
         ];
 
         // If the edit came through the programme-first form, re-derive the course
-        // name array server-side so legacy readers stay consistent.
+        // name array server-side so legacy readers stay consistent. The junction
+        // rows are synced to the new enrolment set after the update lands.
+        let enrolledProgrammes = null;
         {
             const rt = String(req.body.registration_type || '').trim();
             const pid = req.body.programme_id != null ? String(req.body.programme_id).trim() : null;
+            const addIds = Array.isArray(req.body.additional_programme_ids) ? req.body.additional_programme_ids : [];
             if (rt && pid) {
                 if (!REGISTRATION_TYPES.includes(rt)) {
                     return res.status(400).json({ error: `registration_type must be one of: ${REGISTRATION_TYPES.join(', ')}` });
                 }
-                const derived = await deriveProgrammeCourses(rt, pid);
-                if (derived.error) return res.status(400).json({ error: derived.error });
-                req.body.course = derived.courseNames;
+                const resolved = await resolveProgrammeList(pid, addIds);
+                if (resolved.error) return res.status(400).json({ error: resolved.error });
+                enrolledProgrammes = resolved.programmes;
+                req.body.course = await buildCourseNames(resolved.programmes);
+            } else if (addIds.length) {
+                return res.status(400).json({ error: 'additional_programme_ids requires a main programme_id.' });
             }
         }
 
@@ -603,6 +673,9 @@ export async function updateStudent(req, res) {
 
         // The effective student ID going forward
         const effectiveId = isIdChanged ? newStudentId : studentId;
+
+        // Sync the multi-programme enrolment rows last so they key off the effective ID.
+        if (enrolledProgrammes) await syncStudentProgrammes(effectiveId, enrolledProgrammes);
 
         let passwordResetSent = false;
         if (isEmailChanged) {
