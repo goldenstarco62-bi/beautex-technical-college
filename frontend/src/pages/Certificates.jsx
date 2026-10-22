@@ -26,6 +26,19 @@ const ENDINGS = {
     'Short Course': 'and has fulfilled the requirements for the award of this certificate.'
 };
 
+// Head of Department signing each programme (matched by substring on the course name).
+// `sig` is the HOD's handwritten signature overlay (empty = none supplied yet).
+const HODS = [
+    { hod: 'Douglas Ndinyo', sig: '/hod-signature-douglas.png', courses: ['ict', 'information communication technology', 'website development', 'web development', 'computer packages', 'cyber security'] },
+    { hod: 'Elsy Mutuma', sig: '', courses: ['cosmetology', 'beauty therapy', 'hairdressing'] },
+    { hod: 'Vivian Karimi', sig: '', courses: ['baking and pastry', 'baking & pastry'] }
+];
+function hodForCourse(courseName) {
+    const cn = String(courseName || '').toLowerCase();
+    for (const { hod, sig, courses } of HODS) if (courses.some(c => cn.includes(c))) return { hod, sig };
+    return { hod: '', sig: '' };
+}
+
 async function urlToBase64(url) {
     if (!url) return '';
     if (url.startsWith('data:')) return url;
@@ -165,7 +178,7 @@ function missingCertFonts() {
 //  Details row     --> IVORY cover at y=758-798
 //  Signature zone  --> targeted ivory covers for HOD line and labels
 function CertificateTemplate({ data, innerRef }) {
-    const { bg, seal, signature, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, photo } = data;
+    const { bg, seal, signature, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, photo, nita, tveta, hodName, hodSig } = data;
     const heading = HEADINGS[category] || 'Certificate of Completion';
     const ending = ENDINGS[category] || ENDINGS['Short Course'];
     const courseDisplay = titleCase(courseName);
@@ -193,6 +206,27 @@ function CertificateTemplate({ data, innerRef }) {
                     alt=""
                     crossOrigin="anonymous"
                     style={abs({ inset: 0, width: CERT_W, height: CERT_H, objectFit: 'fill' })}
+                />
+            )}
+
+            {/* ── Accreditation logos (centred between the two signature blocks) ─
+                The pair sits in the widened gutter x484–850 between the (moved)
+                Principal rule and the HOD rule, vertically centred in the clear
+                band y798–885. Transparent PNGs so no white box shows.           */}
+            {nita && (
+                <img
+                    src={nita}
+                    alt="NITA"
+                    crossOrigin="anonymous"
+                    style={abs({ left: 528, top: 818, width: 180, height: 75 })}
+                />
+            )}
+            {tveta && (
+                <img
+                    src={tveta}
+                    alt="TVETA"
+                    crossOrigin="anonymous"
+                    style={abs({ left: 730, top: 818, width: 75, height: 75 })}
                 />
             )}
 
@@ -330,26 +364,33 @@ function CertificateTemplate({ data, innerRef }) {
             </div>
 
             {/* ── Signature zone ──────────────────────────────────────────────
-                Pixel scan: Principal rule x310-622 @ y887 (kept as handwriting
-                line), HOD rule x850-1169 @ y887 (erased), small stray marks
-                x1319-1337 (erased by seal disc). Covers sized from measurements. */}
+                Pixel scan: Principal rule x309-623 @ y886-887 — erased and redrawn
+                140px further left (x170-484) to open a wide gutter for the NITA +
+                TVETA logos between the two signing lines. HOD rule x850-1169 @ y887
+                (baked label erased, rule kept). */}
 
-            {/* Erase baked "Principal" label below the left underline */}
+            {/* Erase the baked Principal rule (2px line at y886-887) */}
+            <div style={abs({ left: 300, top: 884, width: 330, height: 7, background: IVORY })} />
+            {/* Erase baked "Principal" label + fleuron below the old rule position */}
             <div style={abs({ left: 280, top: 890, width: 373, height: 48, background: IVORY })} />
-            {/* Erase baked HOD underline (x850-1169) + its label entirely */}
-            <div style={abs({ left: 830, top: 875, width: 365, height: 63, background: IVORY })} />
+            {/* Erase only the baked HOD label; the rule x850-1169 @ y887 stays as the
+                handwriting line, mirroring how the Principal line is used */}
+            <div style={abs({ left: 830, top: 890, width: 365, height: 48, background: IVORY })} />
+
+            {/* Redrawn Principal rule at the new left position */}
+            <div style={abs({ left: 170, top: 886, width: 314, height: 2, background: '#83182C' })} />
 
             {signature && (
                 <img
                     src={signature}
                     alt=""
                     crossOrigin="anonymous"
-                    style={abs({ left: 366, top: 795, width: 200, height: 89 })}
+                    style={abs({ left: 226, top: 795, width: 200, height: 89 })}
                 />
             )}
             <div
                 style={abs({
-                    left: 310, top: 892, width: 313, height: 44,
+                    left: 170, top: 892, width: 313, height: 44,
                     color: MAROON,
                     textAlign: 'center',
                     lineHeight: 1.35,
@@ -357,6 +398,28 @@ function CertificateTemplate({ data, innerRef }) {
             >
                 <div style={{ fontSize: 20, fontWeight: 700 }}>Linet Kariuki</div>
                 <div style={{ fontSize: 18, fontStyle: 'italic' }}>Principal</div>
+            </div>
+
+            {/* HOD handwritten signature on the baked right rule (mirrors Principal) */}
+            {hodSig && (
+                <img
+                    src={hodSig}
+                    alt=""
+                    crossOrigin="anonymous"
+                    style={abs({ left: 934, top: 796, width: 150, height: 88 })}
+                />
+            )}
+            {/* HOD name + title under the right rule (mirrors the Principal block) */}
+            <div
+                style={abs({
+                    left: 850, top: 892, width: 319, height: 44,
+                    color: MAROON,
+                    textAlign: 'center',
+                    lineHeight: 1.35,
+                })}
+            >
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{hodName || '\u00A0'}</div>
+                <div style={{ fontSize: 18, fontStyle: 'italic' }}>Head of Department</div>
             </div>
 
             {/* ── Official seal ───────────────────────────────────────────────
@@ -450,11 +513,16 @@ export default function Certificates() {
         const bg = await urlToBase64('/certificate-bg.png');
         const seal = await urlToBase64('/certificate-seal.png');
         const signature = await urlToBase64('/principal-signature.png');
+        const nita = await urlToBase64('/nita-logo.png');
+        const tveta = await urlToBase64('/tveta-logo.png');
+        const hod = hodForCourse(row.course_name);
+        const hodSig = hod.sig ? await urlToBase64(hod.sig) : '';
         return {
-            bg, photo, seal, signature,
+            bg, photo, seal, signature, nita, tveta, hodSig,
             studentName: row.student_name || row.name,
             admissionNumber: row.admission_number || row.student_id,
             courseName: row.course_name,
+            hodName: hod.hod,
             category: row.category,
             awardDate: row.award_date || row.completion_date,
             certificateNumber: row.certificate_number || null
