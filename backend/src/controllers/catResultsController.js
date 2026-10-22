@@ -47,7 +47,9 @@ async function getTeacherAllowedCoursesAndStudents(req) {
     const userEmail = String(req.user?.email || '').toLowerCase().trim();
     const userName = String(req.user?.name || '').toLowerCase().trim();
 
-    const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+    // id is required below for the trainer_unit_assignments merge — without it, teachers
+    // assigned units via trainer assignments silently get no course credit and 403.
+    const faculty = await queryOne('SELECT id, name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
     let tutorName = userName;
     let facultyCoursesList = [];
 
@@ -182,6 +184,22 @@ async function checkOfferingWriteAccess(req, offeringId, studentId) {
     return { offering, roster: new Set((rows || []).map(r => String(r.student_id).trim())) };
 }
 
+// The single-entry form sends course+unit only, never an offering_id. A teacher whose access
+// to a common unit comes purely from an offering would fail the course-level gate, so match
+// their Active offering for this unit that lists the student on its roster.
+async function resolveTeacherOffering(req, unitId, studentId) {
+    if (!unitId || !studentId) return null;
+    const faculty = await getTeacherFaculty(req);
+    if (!faculty) return null;
+    return await queryOne(
+        `SELECT uo.* FROM unit_offerings uo
+         JOIN offering_students os ON os.offering_id = uo.id AND os.student_id = ?
+         WHERE uo.faculty_id = ? AND uo.unit_id = ? AND uo.status = 'Active'
+         LIMIT 1`,
+        [studentId, faculty.id, unitId]
+    );
+}
+
 // Row-level gate for update/submit/delete: lecturing the row's offering authorizes the
 // teacher even when that row's course is outside their own course list.
 async function canManageResultRow(req, row) {
@@ -195,6 +213,9 @@ async function canManageResultRow(req, row) {
             if (owns) return true;
         }
     }
+    // Legacy rows carry no offering_id; a common-unit lecturer should still manage a row whose
+    // student sits on the roster of one of their Active offerings for that unit.
+    if (row.unit_id && await resolveTeacherOffering(req, row.unit_id, row.student_id)) return true;
     const teacherAccess = await getTeacherAllowedCoursesAndStudents(req);
     if (!teacherAccess) return false;
     return teacherAccess.allowedCourseIds.includes(String(row.course_id).trim())
@@ -378,6 +399,8 @@ export async function createResult(req, res) {
             const access = await checkOfferingWriteAccess(req, offering_id, student_id);
             if (access.error) return res.status(access.error.status).json({ error: access.error.message });
             offering = access.offering;
+        } else if (userRole === 'teacher') {
+            offering = await resolveTeacherOffering(req, unit_id, student_id);
         }
 
         const effectiveCourseId = String(

@@ -50,12 +50,18 @@ async function urlToBase64(url) {
 const CERT_W = 1536;
 const CERT_H = 1024;
 
+// Preview scale: how much to shrink the certificate to fit inside the modal.
+const PREVIEW_SCALE = 0.62;
+
 function titleCase(s) {
     return String(s || '').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // Shrinks its own font size until the text fits the available width, so long
 // names/headings/details never spill out of their fixed panels.
+// IMPORTANT: Only use FitLine inside containers where overflow:hidden is acceptable
+// and where the container is NOT already a flex container. Using FitLine as the
+// direct flex child of a display:flex parent breaks centering in html2canvas.
 function FitLine({ children, style, minScale = 0.55, as: Tag = 'span' }) {
     const ref = useRef(null);
     useLayoutEffect(() => {
@@ -74,30 +80,45 @@ function FitLine({ children, style, minScale = 0.55, as: Tag = 'span' }) {
     return <Tag ref={ref} style={{ display: 'inline-block', whiteSpace: 'nowrap', ...style }}>{children}</Tag>;
 }
 
-// Chrome's page zoom (Ctrl +/-) inflates text metrics ~9% at 110% and html2canvas
-// captures the degraded layout, which pushed words out of the certificate panels.
-// Probe the effective zoom and neutralise it on the element during capture.
-function currentPageZoom() {
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:absolute;top:0;left:0;width:100px;height:100px;visibility:hidden;pointer-events:none';
-    document.body.appendChild(probe);
-    const z = probe.getBoundingClientRect().width / 100;
-    probe.remove();
-    return z > 0.5 ? z : 1;
-}
-
 async function captureCertificate(el) {
+    // 1. Wait for all images inside the certificate to be fully loaded & decoded.
     const images = Array.from(el.querySelectorAll('img'));
-    await Promise.all(images.map(img => (img.complete && img.naturalWidth ? null : new Promise(r => { img.onload = r; img.onerror = r; }))));
+    await Promise.all(
+        images.map(img => {
+            if (img.complete && img.naturalWidth) {
+                // Already loaded — still decode to ensure paint is done.
+                return img.decode ? img.decode().catch(() => {}) : Promise.resolve();
+            }
+            return new Promise(r => {
+                img.onload = () => (img.decode ? img.decode().catch(r).then(r) : r());
+                img.onerror = r;
+            });
+        })
+    );
+
+    // 2. Wait for web fonts to finish loading.
     if (document.fonts?.ready) await document.fonts.ready;
-    const z = currentPageZoom();
-    const inverse = Math.abs(z - 1) > 0.01 ? String(1 / z) : null;
-    if (inverse) el.style.zoom = inverse;
-    try {
-        return await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: IVORY, logging: false });
-    } finally {
-        if (inverse) el.style.zoom = '';
-    }
+
+    // 3. Small rAF-based flush to let the browser repaint after any layout changes.
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    // NB: html2canvas rasterises its own clone in CSS pixels, so browser page
+    // zoom does NOT distort the output. An earlier el.style.zoom neutralisation
+    // hack here was the opposite — html2canvas applies element zoom but ignores
+    // page zoom, so the hack inflated the layout ~11% inside the 1536×1024
+    // capture box and shifted every panel off the background (double transform).
+
+    return await html2canvas(el, {
+        scale: 3,           // 3× for crisp PDF at 297mm wide
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: IVORY,
+        logging: false,
+        imageTimeout: 15000,
+        // Use the element's own scroll dimensions to avoid clipping.
+        width: CERT_W,
+        height: CERT_H,
+    });
 }
 
 // Spec requires the certificate fonts by name; report instead of silently substituting.
@@ -118,6 +139,31 @@ function missingCertFonts() {
     return ['Amoresa Aged', 'Times New Roman'].filter(n => !fontAvailable(n));
 }
 
+// ─── Certificate Template ─────────────────────────────────────────────────────
+// All coordinates pixel-scanned directly from the actual certificate-bg.png
+// (1536x1024 — confirmed via System.Drawing). Key zones:
+//
+//  Ribbon structure at x=760 (RGB scan-verified):
+//  y=382-441   Maroon outer top band
+//  y=447-463   Maroon upper inner band
+//  y=465-490   IVORY inner band (baked heading placeholder text lives here)
+//  y=491-497   Maroon thin separator
+//  y=500-512   IVORY (baked course-title placeholder text)
+//  y=515-519   Maroon thin separator
+//  y=521-543   Ivory open area
+//  y=544-548   Gold ornament divider (baked)
+//  y=588-594   Baked "This is to certify that" italic text
+//  y=887       Baked signature underline (exact pixel scan)
+//  Seal:       center approx x=1390, y=870  (gold ring y=745-935)
+//  Photo zone: x=1245-1445, y=310-540 -- confirmed 100% clear ivory
+//
+// OVERLAY STRATEGY:
+//  Banner heading  --> RIBBON panel at y=462-494 erases baked ivory text zone
+//  Course title    --> IVORY cover at y=496-526, text rendered on top
+//  Student name    --> IVORY cover at y=604-656, name rendered on top
+//  Body text       --> IVORY cover at y=666-756, text rendered on top
+//  Details row     --> IVORY cover at y=758-798
+//  Signature zone  --> targeted ivory covers for HOD line and labels
 function CertificateTemplate({ data, innerRef }) {
     const { bg, seal, signature, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, photo } = data;
     const heading = HEADINGS[category] || 'Certificate of Completion';
@@ -125,68 +171,228 @@ function CertificateTemplate({ data, innerRef }) {
     const courseDisplay = titleCase(courseName);
 
     const abs = (style) => ({ position: 'absolute', boxSizing: 'border-box', ...style });
-    const center = { display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' };
 
     return (
-        <div ref={innerRef} style={{ width: CERT_W, height: CERT_H, position: 'relative', background: IVORY, overflow: 'hidden', fontFamily: 'Georgia, "Times New Roman", serif', color: MAROON, boxSizing: 'border-box' }}>
-            {/* Background sample (1:1) */}
-            {bg && <img src={bg} alt="" crossOrigin="anonymous" style={abs({ inset: 0, width: CERT_W, height: CERT_H, objectFit: 'fill' })} />}
+        <div
+            ref={innerRef}
+            style={{
+                width: CERT_W,
+                height: CERT_H,
+                position: 'relative',
+                background: IVORY,
+                overflow: 'hidden',
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                color: MAROON,
+                boxSizing: 'border-box',
+            }}
+        >
+            {/* ── Background image (1536x1024, no scaling distortion) ── */}
+            {bg && (
+                <img
+                    src={bg}
+                    alt=""
+                    crossOrigin="anonymous"
+                    style={abs({ inset: 0, width: CERT_W, height: CERT_H, objectFit: 'fill' })}
+                />
+            )}
 
-            {/* Banner heading — plain div with text-align:center is the most html2canvas-safe centering approach.
-                FitLine (inline-block + whiteSpace:nowrap) caused left-alignment in the PDF even when display:block was passed.
-                48px fits both "Certificate of Completion" and "Diploma Certificate" inside 776px. */}
-            <div style={abs({ left: 380, top: 388, width: 776, height: 70, background: RIBBON, color: GOLD, fontSize: 48, fontWeight: 700, fontVariant: 'small-caps', textAlign: 'center', lineHeight: '70px', overflow: 'hidden' })}>
+            {/* ── Banner heading ──────────────────────────────────────────────
+                Pixel scan of certificate-bg.png: the baked cream heading occupies
+                x410-1126 y380-460 INSIDE the maroon band (band interior y379-463,
+                gold borders y375-378 / y464-470, fleurons at x330-370 & x1165-1230).
+                Panel covers the full band interior so no baked glyph peeks out,
+                while the fleurons and gold borders stay visible.
+                textAlign:center without flex = html2canvas-safe centering.
+                lineHeight 59 (not 85): html2canvas puts the baseline at
+                panel_top + lineHeight - 1 instead of centering the line box,
+                so lh=85 rendered the heading ~20px low, clipped at the band's
+                bottom gold border. lh=59 centres the cap-height in the band.   */}
+            <div
+                style={abs({
+                    left: 381, top: 379, width: 774, height: 85,
+                    background: RIBBON,
+                    color: GOLD,
+                    fontSize: 44,
+                    fontWeight: 700,
+                    fontVariant: 'small-caps',
+                    textAlign: 'center',
+                    lineHeight: '59px',
+                    overflow: 'hidden',
+                })}
+            >
                 {heading}
             </div>
 
-            {/* Qualification title — no flex; text-align:center + line-height is html2canvas-safe */}
-            <div style={abs({ left: 450, top: 484, width: 636, height: 44, background: IVORY, color: MAROON, fontFamily: '"Times New Roman", Times, serif', fontSize: 38, fontWeight: 700, fontVariant: 'small-caps', letterSpacing: 1, textAlign: 'center', lineHeight: '44px', overflow: 'hidden' })}>
-                <FitLine>{courseDisplay}</FitLine>
+            {/* ── Course-title cover + text ────────────────────────────────────
+                Baked course title occupies x458-1075 y490-520. Panel 450-1086
+                x 480-534 erases it completely. The decorative gold line segments
+                (y508-509) live OUTSIDE x450-1086 (left segment ends x432, right
+                starts x1103) so they remain visible beside the text.
+                fs 34 + lh 40: html2canvas puts the baseline at panel_top+lh-1
+                (=519), centring cap-height in the clear ivory zone between the
+                ribbon border (y470) and the fleuron divider (y546). With the old
+                fs38/lh44 the baseline sat at 527 and long course names were cut
+                off along the panel's bottom edge in the PDF.                    */}
+            <div
+                style={abs({
+                    left: 450, top: 480, width: 636, height: 54,
+                    background: IVORY,
+                    color: MAROON,
+                    fontFamily: '"Times New Roman", Times, serif',
+                    fontSize: 34,
+                    fontWeight: 700,
+                    fontVariant: 'small-caps',
+                    letterSpacing: 1,
+                    textAlign: 'center',
+                    lineHeight: '40px',
+                    overflow: 'hidden',
+                })}
+            >
+                <FitLine minScale={0.6}>{courseDisplay}</FitLine>
             </div>
 
-            {/* Student name — no flex; text-align:center + line-height is html2canvas-safe */}
-            <div style={abs({ left: 150, top: 598, width: 1236, height: 58, background: IVORY, fontFamily: '"Amoresa Aged", Georgia, "Times New Roman", serif', fontSize: 42, fontWeight: 700, color: MAROON, fontVariant: 'small-caps', letterSpacing: 1, textAlign: 'center', lineHeight: '52px', paddingBottom: 6, overflow: 'hidden' })}>
+            {/* ── Student name ────────────────────────────────────────────────
+                Baked sample name spans x253-1282 y600-646 — cover must be at
+                least that wide/tall or baked glyph edges peek out. No flex;
+                text-align:center + line-height is html2canvas-safe.
+                lh 36 (not 52): html2canvas puts the baseline at
+                top + lineHeight + 5 (=639), centring the 42px caps in the panel.
+                lh 52 pushed the baseline to 655, past the 650 content edge, so
+                the bottom of the name was clipped in the PDF (user screenshot). */}
+            <div
+                style={abs({
+                    left: 150, top: 598, width: 1236, height: 58,
+                    background: IVORY,
+                    fontFamily: '"Amoresa Aged", Georgia, "Times New Roman", serif',
+                    fontSize: 42,
+                    fontWeight: 700,
+                    color: MAROON,
+                    fontVariant: 'small-caps',
+                    letterSpacing: 1,
+                    textAlign: 'center',
+                    lineHeight: '36px',
+                    paddingBottom: 6,
+                    overflow: 'hidden',
+                })}
+            >
                 <FitLine>{studentName}</FitLine>
             </div>
 
-            {/* Completion sentence — no flex; block divs with text-align:center are html2canvas-safe */}
-            <div style={abs({ left: 230, top: 660, width: 1076, height: 80, background: IVORY, fontStyle: 'italic', fontSize: 27, color: MAROON, textAlign: 'center', paddingTop: 10 })}>
-                <div style={{ lineHeight: 1.5 }}>has successfully completed the prescribed course of study in {courseDisplay}</div>
+            {/* ── Completion sentence ─────────────────────────────────────────
+                IVORY cover erases baked placeholder. Height 90px holds two lines
+                at 26px x lineHeight 1.55 comfortably.
+                No flex; block divs with text-align:center are html2canvas-safe.  */}
+            <div
+                style={abs({
+                    left: 230, top: 660, width: 1076, height: 80,
+                    background: IVORY,
+                    fontStyle: 'italic',
+                    fontSize: 27,
+                    color: MAROON,
+                    textAlign: 'center',
+                    paddingTop: 10,
+                })}
+            >
+                <div style={{ lineHeight: 1.5 }}>
+                    has successfully completed the prescribed course of study in {courseDisplay}
+                </div>
                 <div style={{ lineHeight: 1.5 }}>{ending}</div>
             </div>
 
-            {/* Details row — ivory panel erases sample labels (baked at y771–787), re-rendered with values.
-                Plain italic text, no underlines; content stays left of x≈1240 so it never touches the seal. */}
-            <FitLine as="div" style={abs({ left: 110, top: 760, width: 1150, height: 40, background: IVORY, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, fontStyle: 'italic', fontSize: 21, color: MAROON, padding: '0 10px' })}>
-                {[['Date of Award:', formatDate(awardDate) || ''], ['Certificate No.:', certificateNumber || ''], ['Registration No.:', admissionNumber || '']].map(([label, val]) => (
+            {/* ── Details row ─────────────────────────────────────────────────
+                Plain div with display:flex (NOT wrapped in FitLine — FitLine would
+                apply inline-block and collapse flex children to 0px in html2canvas).
+                Each label+value pair is a nowrap flex child.                     */}
+            <div
+                style={abs({
+                    left: 100, top: 758, width: 1160, height: 40,
+                    background: IVORY,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 16,
+                    fontStyle: 'italic',
+                    fontSize: 20,
+                    color: MAROON,
+                    padding: '0 12px',
+                })}
+            >
+                {[
+                    ['Date of Award:', formatDate(awardDate) || ''],
+                    ['Certificate No.:', certificateNumber || ''],
+                    ['Registration No.:', admissionNumber || ''],
+                ].map(([label, val]) => (
                     <div key={label} style={{ flex: '0 1 auto', textAlign: 'center', whiteSpace: 'nowrap' }}>
                         <span style={{ fontWeight: 700 }}>{label}&nbsp;</span>
                         <span>{val || ' '}</span>
                     </div>
                 ))}
-            </FitLine>
+            </div>
 
-            {/* Signature zone — one Principal section only.
-                The baked HOD line + both baked placeholder labels are erased with ivory covers;
-                the baked Principal rule (x310–623 @ y886) is kept as the handwriting line, with
-                the printed name/title below it and blank space above it for the signature. */}
+            {/* ── Signature zone ──────────────────────────────────────────────
+                Pixel scan: Principal rule x310-622 @ y887 (kept as handwriting
+                line), HOD rule x850-1169 @ y887 (erased), small stray marks
+                x1319-1337 (erased by seal disc). Covers sized from measurements. */}
+
+            {/* Erase baked "Principal" label below the left underline */}
             <div style={abs({ left: 280, top: 890, width: 373, height: 48, background: IVORY })} />
+            {/* Erase baked HOD underline (x850-1169) + its label entirely */}
             <div style={abs({ left: 830, top: 875, width: 365, height: 63, background: IVORY })} />
-            {signature && <img src={signature} alt="" crossOrigin="anonymous" style={abs({ left: 366, top: 795, width: 200, height: 89 })} />}
-            <div style={abs({ left: 310, top: 892, width: 313, height: 44, color: MAROON, textAlign: 'center', lineHeight: 1.35 })}>
+
+            {signature && (
+                <img
+                    src={signature}
+                    alt=""
+                    crossOrigin="anonymous"
+                    style={abs({ left: 366, top: 795, width: 200, height: 89 })}
+                />
+            )}
+            <div
+                style={abs({
+                    left: 310, top: 892, width: 313, height: 44,
+                    color: MAROON,
+                    textAlign: 'center',
+                    lineHeight: 1.35,
+                })}
+            >
                 <div style={{ fontSize: 20, fontWeight: 700 }}>Linet Kariuki</div>
                 <div style={{ fontSize: 18, fontStyle: 'italic' }}>Principal</div>
             </div>
 
-            {/* Official seal — extracted seal disc re-rendered enlarged (r≈112 vs baked r≈91),
-                concentric with the baked seal so it fully covers it without touching details or signatures. */}
-            {seal && <img src={seal} alt="" crossOrigin="anonymous" style={abs({ left: 1254, top: 720, width: 224, height: 224 })} />}
+            {/* ── Official seal ───────────────────────────────────────────────
+                Baked seal disc center x=1366, y=832, r~92 (gold ring scan:
+                x1275-1456 @ y840, y738-926 @ x1366). 224x224 overlay centred on
+                it fully covers the baked seal.                                   */}
+            {seal && (
+                <img
+                    src={seal}
+                    alt=""
+                    crossOrigin="anonymous"
+                    style={abs({ left: 1254, top: 720, width: 224, height: 224 })}
+                />
+            )}
 
-            {/* Passport photo frame — empty upper-right ivory zone */}
-            <div style={abs({ left: 1245, top: 312, width: 178, height: 222, background: '#fff', border: `3px solid ${MAROON}`, outline: `3px solid ${GOLD}`, outlineOffset: '-9px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,.25)' })}>
+            {/* ── Passport photo frame ────────────────────────────────────────
+                Photo zone confirmed 100% clear ivory (0 non-ivory pixels found in
+                x=1245-1445, y=310-540 zone). Frame is sized/positioned to stay
+                inside that clear area.                                           */}
+            <div
+                style={abs({
+                    left: 1258, top: 318, width: 172, height: 214,
+                    background: '#fff',
+                    border: `3px solid ${MAROON}`,
+                    outline: `3px solid ${GOLD}`,
+                    outlineOffset: '-8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    boxShadow: '0 2px 8px rgba(0,0,0,.28)',
+                })}
+            >
                 {photo
                     ? <img src={photo} alt="student" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: 14, color: '#9a9a9a', textAlign: 'center', lineHeight: 1.2 }}>No<br />photo</span>}
+                    : <span style={{ fontSize: 13, color: '#9a9a9a', textAlign: 'center', lineHeight: 1.2 }}>No<br />photo</span>}
             </div>
         </div>
     );
@@ -302,14 +508,25 @@ export default function Certificates() {
     async function captureCanvas() {
         const el = certRef.current;
         if (!el) throw new Error('Template not ready.');
-        // Neutralise preview scaling so html2canvas captures at full size.
-        const wrapper = scaleRef.current;
-        const prevTransform = wrapper ? wrapper.style.transform : null;
-        if (wrapper) wrapper.style.transform = 'none';
+
+        // html2canvas mispositions the absolutely-positioned panels when the
+        // template lives inside the preview modal (transform-scaled wrapper +
+        // backdrop-filter + scrollable overlay): the PDF then shows panels and
+        // text shifted down over the background. Fix: move the template node
+        // into a clean body-level fixed container for the capture, then put it
+        // back exactly where it was.
+        const holder = document.createElement('div');
+        holder.style.cssText = `position:fixed;left:0;top:0;width:${CERT_W}px;height:${CERT_H}px;z-index:99999;background:${IVORY};`;
+        const parent = el.parentElement;
+        const next = el.nextSibling;
+        document.body.appendChild(holder);
+        holder.appendChild(el);
+
         try {
             return await captureCertificate(el);
         } finally {
-            if (wrapper && prevTransform !== null) wrapper.style.transform = prevTransform;
+            if (parent) parent.insertBefore(el, next);
+            holder.remove();
         }
     }
 
@@ -317,14 +534,14 @@ export default function Certificates() {
         setBusy(true);
         try {
             const canvas = await captureCanvas();
-            // Size the PDF page to the canvas geometry (1536x1024 ≈ 1.5:1) instead of
-            // forcing it into A4's 1.414:1. Stretching the wider canvas into A4 squeezed
-            // text horizontally, crowding words and the underlined detail labels together.
-            // Keeping the native ratio (widest A4 edge = 297mm) means the PDF matches the
-            // preview exactly and nothing overlaps.
-            const pw = 297;
-            const ph = Math.round(pw * (canvas.height / canvas.width));
-            const pdf = new jsPDF({ orientation: pw >= ph ? 'landscape' : 'portrait', unit: 'mm', format: [pw, ph] });
+            // Size the PDF page to the canvas geometry (1536×1024 ≈ 3:2) instead of
+            // forcing it into A4's 1.414:1 ratio. Stretching the wider canvas into A4
+            // squeezed text horizontally, causing words to collide and decorative lines
+            // to overlap text. Keeping the native 3:2 ratio (widest edge = 297mm) means
+            // the PDF matches the preview exactly and nothing overlaps.
+            const pw = 297; // mm — landscape long edge
+            const ph = Math.round(pw * (canvas.height / canvas.width)); // ≈198mm
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pw, ph] });
             pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pw, ph, undefined, 'SLOW');
             const name = (preview.data.studentName || 'certificate').replace(/\s+/g, '_');
             pdf.save(`${name}_${preview.certificateNumber || 'DRAFT'}.pdf`);
@@ -345,12 +562,15 @@ export default function Certificates() {
 
     const closePreview = () => setPreview(null);
 
+    // The scaled preview height: the template is 1024px tall scaled to PREVIEW_SCALE.
+    const scaledH = Math.round(CERT_H * PREVIEW_SCALE); // 635px
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-end justify-between">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight">Certificates</h1>
-                    <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">Qualification Award & Issuance Register</p>
+                    <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">Qualification Award &amp; Issuance Register</p>
                 </div>
                 <div className="flex gap-2">
                     {['generate', 'issued'].map(t => (
@@ -370,7 +590,7 @@ export default function Certificates() {
 
                     {loading ? <div className="flex items-center gap-2 text-maroon/50 font-bold text-sm py-8 justify-center"><Loader2 className="w-5 h-5 animate-spin" /> Loading eligible students…</div>
                         : error ? <p className="text-red-600 font-bold text-sm py-6">{error}</p>
-                        : filteredEligible.length === 0 ? <p className="text-maroon/40 font-bold text-sm py-8 text-center">No graduated students are eligible yet. Mark a student as “Graduated” (or set a completion date) to issue a certificate.</p>
+                        : filteredEligible.length === 0 ? <p className="text-maroon/40 font-bold text-sm py-8 text-center">No graduated students are eligible yet. Mark a student as "Graduated" (or set a completion date) to issue a certificate.</p>
                             : (
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
@@ -437,7 +657,7 @@ export default function Certificates() {
                                         <td className="py-3 px-3 text-[11px] font-bold text-black/60">{formatDate(c.award_date)}</td>
                                         {issuedFilter === 'Issued'
                                             ? <td className="py-3 px-3 text-[11px] font-bold text-black/50">{c.issued_by_name || c.issued_by || '—'}</td>
-                                            : <td className="py-3 px-3 text-[11px] font-bold text-red-600/80"><div>{formatDate(c.revoked_at)}</div><div className="text-black/50 font-semibold normal-case">“{c.revoke_reason || '—'}”</div></td>}
+                                            : <td className="py-3 px-3 text-[11px] font-bold text-red-600/80"><div>{formatDate(c.revoked_at)}</div><div className="text-black/50 font-semibold normal-case">"{c.revoke_reason || '—'}"</div></td>}
                                         <td className="py-3 px-3 text-right whitespace-nowrap">
                                             <button onClick={() => openPreview({ ...c, student_name: c.student_name, student_id: c.student_id, photo: c.student_photo, already_issued: true })} className="px-3 py-1.5 rounded-lg bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-wider hover:border-maroon/40">View</button>
                                             {issuedFilter === 'Issued' && canIssue && (
@@ -479,17 +699,34 @@ export default function Certificates() {
                             <button onClick={closePreview} className="p-2 hover:bg-gray-100 rounded-full"><X className="w-5 h-5 text-maroon/40" /></button>
                         </div>
 
-                        <div className="border border-gray-200 rounded-xl overflow-auto bg-gray-50 flex justify-center">
-                            <div style={{ width: '100%', maxWidth: 1536 * 0.62 }}>
-                                <div ref={scaleRef} style={{ transform: 'scale(0.62)', transformOrigin: 'top left', width: 1536, height: 1024 }}>
+                        {/* ── Scaled preview container ──────────────────────────────────
+                            The outer div sets the rendered height so the modal doesn't
+                            collapse. Its width uses maxWidth to cap at the scaled cert
+                            width. The inner scaleRef div holds the CSS scale transform
+                            with transformOrigin top-left; width/height must match the
+                            unscaled certificate so the scaled element fits correctly.
+                            During PDF capture, captureCanvas() temporarily sets
+                            transform:none and restores the original value after. */}
+                        <div
+                            className="border border-gray-200 rounded-xl overflow-hidden bg-gray-50 flex justify-center"
+                            style={{ height: scaledH }}
+                        >
+                            <div style={{ width: Math.round(CERT_W * PREVIEW_SCALE), flexShrink: 0 }}>
+                                <div
+                                    ref={scaleRef}
+                                    style={{
+                                        transform: `scale(${PREVIEW_SCALE})`,
+                                        transformOrigin: 'top left',
+                                        width: CERT_W,
+                                        height: CERT_H,
+                                    }}
+                                >
                                     <CertificateTemplate data={preview.data} innerRef={certRef} />
                                 </div>
                             </div>
                         </div>
-                        {/* reserve height so the scaled element doesn't collapse the modal */}
-                        <div style={{ height: 1024 * 0.62 - 1024, marginTop: 0 }} aria-hidden />
 
-                        {!preview.issued && !preview.photo && (
+                        {!preview.issued && !preview.data.photo && (
                             <p className="text-[11px] font-bold text-amber-700 mt-2">⚠ This student has no passport photo on file. Add one before final issuance unless authorized.</p>
                         )}
 
@@ -499,7 +736,7 @@ export default function Certificates() {
                             )}
                             {preview.issued && (
                                 <>
-                                    <button onClick={handleDownload} disabled={busy} className="px-5 py-3 rounded-xl bg-maroon text-gold text-[11px] font-black uppercase tracking-widest hover:bg-elite-maroon disabled:opacity-50 inline-flex items-center gap-2"><Download className="w-4 h-4" /> Download PDF</button>
+                                    <button onClick={handleDownload} disabled={busy} className="px-5 py-3 rounded-xl bg-maroon text-gold text-[11px] font-black uppercase tracking-widest hover:bg-elite-maroon disabled:opacity-50 inline-flex items-center gap-2"><Download className="w-4 h-4" /> {busy ? 'Generating…' : 'Download PDF'}</button>
                                     <button onClick={handlePrint} disabled={busy} className="px-5 py-3 rounded-xl bg-white border border-maroon/20 text-maroon text-[11px] font-black uppercase tracking-widest hover:border-maroon/40 disabled:opacity-50 inline-flex items-center gap-2"><Printer className="w-4 h-4" /> Print</button>
                                 </>
                             )}
