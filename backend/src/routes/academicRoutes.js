@@ -223,5 +223,6 @@ router.get('/certificates', authenticateToken, certificateController.getCertific
 router.get('/certificates/:id', authenticateToken, certificateController.getCertificate);
 router.post('/certificates/issue', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.issueCertificate);
 router.post('/certificates/:id/revoke', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.revokeCertificate);
+router.put('/certificates/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.updateCertificate);
 
 export default router;

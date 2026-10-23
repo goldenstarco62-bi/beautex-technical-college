@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { certificatesAPI, settingsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2 } from 'lucide-react';
+import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -476,6 +476,8 @@ export default function Certificates() {
     const [issuedFilter, setIssuedFilter] = useState('Issued'); // Issued | Revoked
     const [revokeTarget, setRevokeTarget] = useState(null);     // certificate row pending revoke
     const [revokeReason, setRevokeReason] = useState('');
+    const [editTarget, setEditTarget] = useState(null);         // certificate row being edited
+    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', hod_name: '', student_name: '', course_name: '' });
 
     const [preview, setPreview] = useState(null); // { data, record }
     const [busy, setBusy] = useState(false);
@@ -516,13 +518,16 @@ export default function Certificates() {
         const nita = await urlToBase64('/nita-logo.png');
         const tveta = await urlToBase64('/tveta-logo.png');
         const hod = hodForCourse(row.course_name);
-        const hodSig = hod.sig ? await urlToBase64(hod.sig) : '';
+        // Admin-editable override on the certificate record wins over the course→HOD map.
+        const hodName = String(row.hod_name || '').trim() || hod.hod;
+        // Handwritten signature only when the printed name is the mapped HOD.
+        const hodSig = (hodName === hod.hod && hod.sig) ? await urlToBase64(hod.sig) : '';
         return {
             bg, photo, seal, signature, nita, tveta, hodSig,
             studentName: row.student_name || row.name,
             admissionNumber: row.admission_number || row.student_id,
             courseName: row.course_name,
-            hodName: hod.hod,
+            hodName,
             category: row.category,
             awardDate: row.award_date || row.completion_date,
             certificateNumber: row.certificate_number || null
@@ -570,6 +575,55 @@ export default function Certificates() {
             load();       // student becomes re-eligible on the Generate tab
         } catch (e) {
             notify(e.response?.data?.error || 'Failed to revoke certificate.', 'error');
+        } finally { setBusy(false); }
+    }
+
+    // Date columns serialize as UTC-midnight-shifted ISO strings; render the date
+    // input from LOCAL components so an unchanged save doesn't drift by ±1 day.
+    function toInputDate(v) {
+        if (!v) return '';
+        const d = new Date(v);
+        if (isNaN(d.getTime())) return String(v).slice(0, 10);
+        const p = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    }
+
+    function openEdit(c) {
+        setEditForm({
+            certificate_number: c.certificate_number || '',
+            award_date: toInputDate(c.award_date),
+            hod_name: c.hod_name || hodForCourse(c.course_name).hod || '',
+            student_name: c.student_name || '',
+            course_name: c.course_name || ''
+        });
+        setEditTarget(c);
+    }
+    const closeEdit = () => setEditTarget(null);
+
+    async function handleEditSave() {
+        if (!editTarget) return;
+        const certificate_number = editForm.certificate_number.trim();
+        const student_name = editForm.student_name.trim();
+        const course_name = editForm.course_name.trim();
+        if (!certificate_number) { notify('Certificate number is required.', 'error'); return; }
+        if (!editForm.award_date) { notify('Award date is required.', 'error'); return; }
+        if (!student_name) { notify('Student name is required.', 'error'); return; }
+        if (!course_name) { notify('Course name is required.', 'error'); return; }
+        setBusy(true);
+        try {
+            await certificatesAPI.update(editTarget.id, {
+                certificate_number,
+                award_date: editForm.award_date,
+                hod_name: editForm.hod_name.trim(),
+                student_name,
+                course_name
+            });
+            notify(`Certificate ${certificate_number} updated.`, 'success');
+            closeEdit();
+            loadIssued();
+            load();
+        } catch (e) {
+            notify(e.response?.data?.error || 'Failed to update certificate.', 'error');
         } finally { setBusy(false); }
     }
 
@@ -729,6 +783,9 @@ export default function Certificates() {
                                         <td className="py-3 px-3 text-right whitespace-nowrap">
                                             <button onClick={() => openPreview({ ...c, student_name: c.student_name, student_id: c.student_id, photo: c.student_photo, already_issued: true })} className="px-3 py-1.5 rounded-lg bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-wider hover:border-maroon/40">View</button>
                                             {issuedFilter === 'Issued' && canIssue && (
+                                                <button onClick={() => openEdit(c)} className="ml-2 px-3 py-1.5 rounded-lg bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-wider hover:border-maroon/40 inline-flex items-center gap-1"><Pencil className="w-3.5 h-3.5" /> Edit</button>
+                                            )}
+                                            {issuedFilter === 'Issued' && canIssue && (
                                                 <button onClick={() => openRevoke(c)} className="ml-2 px-3 py-1.5 rounded-lg bg-red-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-red-700 inline-flex items-center gap-1"><X className="w-3.5 h-3.5" /> Revoke</button>
                                             )}
                                         </td>
@@ -753,6 +810,33 @@ export default function Certificates() {
                         <div className="flex gap-3 justify-end mt-5">
                             <button onClick={closeRevoke} disabled={busy} className="px-4 py-2.5 rounded-xl bg-white border border-maroon/20 text-maroon text-[11px] font-black uppercase tracking-widest hover:border-maroon/40 disabled:opacity-50">Cancel</button>
                             <button onClick={handleRevoke} disabled={busy || !revokeReason.trim()} className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-[11px] font-black uppercase tracking-widest hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-2">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />} Confirm Revoke</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit certificate modal */}
+            {editTarget && (
+                <div className="fixed inset-0 bg-maroon/50 backdrop-blur-md flex items-center justify-center p-4 z-[70]" onClick={closeEdit}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-sm font-black text-maroon uppercase tracking-widest mb-1">Edit Certificate</h3>
+                        <p className="text-[12px] font-bold text-black/60 mb-4">
+                            Update <span className="font-black text-maroon">{editTarget.certificate_number}</span> for {editTarget.student_name}. The certificate design stays unchanged.
+                        </p>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Student Name</label>
+                        <input value={editForm.student_name} onChange={e => setEditForm(f => ({ ...f, student_name: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Course / Qualification</label>
+                        <input value={editForm.course_name} onChange={e => setEditForm(f => ({ ...f, course_name: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Certificate Number</label>
+                        <input value={editForm.certificate_number} onChange={e => setEditForm(f => ({ ...f, certificate_number: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-black text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Award Date</label>
+                        <input type="date" value={editForm.award_date} onChange={e => setEditForm(f => ({ ...f, award_date: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Head of Department</label>
+                        <input value={editForm.hod_name} onChange={e => setEditForm(f => ({ ...f, hod_name: e.target.value }))} placeholder="Leave blank for default course HOD" className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-1" />
+                        <p className="text-[10px] font-bold text-black/40 mb-4">A blank field uses the automatic HOD for this course; the handwritten signature only appears for the automatic HOD.</p>
+                        <div className="flex gap-3 justify-end mt-2">
+                            <button onClick={closeEdit} disabled={busy} className="px-4 py-2.5 rounded-xl bg-white border border-maroon/20 text-maroon text-[11px] font-black uppercase tracking-widest hover:border-maroon/40 disabled:opacity-50">Cancel</button>
+                            <button onClick={handleEditSave} disabled={busy} className="px-4 py-2.5 rounded-xl bg-maroon text-gold text-[11px] font-black uppercase tracking-widest hover:bg-elite-maroon disabled:opacity-50 inline-flex items-center gap-2">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />} Save Changes</button>
                         </div>
                     </div>
                 </div>

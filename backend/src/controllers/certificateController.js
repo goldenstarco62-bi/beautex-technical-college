@@ -304,6 +304,58 @@ export async function revokeCertificate(req, res) {
     }
 }
 
+// PUT /certificates/:id — admin correction of an issued certificate.
+// Editable: certificate_number, award_date, hod_name (override of the course→HOD mapping),
+// student_name, course_name. The rendered design is untouched; only the stored variable
+// fields change (these are snapshot columns; student/course records are not modified).
+export async function updateCertificate(req, res) {
+    try {
+        const { id } = req.params;
+        const cert = await queryOne('SELECT * FROM certificates WHERE id = ?', [id]);
+        if (!cert) return res.status(404).json({ error: 'Certificate not found.' });
+        if (cert.status !== 'Issued') return res.status(409).json({ error: 'Only an issued certificate can be edited.' });
+
+        const updates = [];
+        const params = [];
+        if (req.body?.certificate_number !== undefined) {
+            const number = String(req.body.certificate_number).trim();
+            if (!number) return res.status(400).json({ error: 'Certificate number cannot be empty.' });
+            const clash = await queryOne('SELECT 1 AS x FROM certificates WHERE certificate_number = ? AND id <> ?', [number, cert.id]);
+            if (clash) return res.status(409).json({ error: `Certificate number "${number}" is already in use.` });
+            updates.push('certificate_number = ?'); params.push(number);
+        }
+        if (req.body?.award_date !== undefined) {
+            const date = toDateStr(req.body.award_date);
+            if (!date) return res.status(400).json({ error: 'Invalid award date.' });
+            updates.push('award_date = ?'); params.push(date);
+        }
+        if (req.body?.hod_name !== undefined) {
+            const hod = String(req.body.hod_name).trim();
+            updates.push('hod_name = ?'); params.push(hod || null);
+        }
+        if (req.body?.student_name !== undefined) {
+            const name = String(req.body.student_name).trim();
+            if (!name) return res.status(400).json({ error: 'Student name cannot be empty.' });
+            updates.push('student_name = ?'); params.push(name);
+        }
+        if (req.body?.course_name !== undefined) {
+            const course = String(req.body.course_name).trim();
+            if (!course) return res.status(400).json({ error: 'Course name cannot be empty.' });
+            updates.push('course_name = ?'); params.push(course);
+        }
+        if (!updates.length) return res.status(400).json({ error: 'Nothing to update.' });
+
+        updates.push('updated_at = ?'); params.push(new Date().toISOString());
+        await run(`UPDATE certificates SET ${updates.join(', ')} WHERE id = ?`, [...params, cert.id]);
+        const updated = await queryOne('SELECT * FROM certificates WHERE id = ?', [cert.id]);
+        logger.info({ cert: updated.certificate_number, by: req.user?.email, fields: updates }, 'certificate edited');
+        res.json(updated);
+    } catch (error) {
+        logger.error({ err: error }, 'updateCertificate error');
+        res.status(500).json({ error: 'Failed to update certificate.' });
+    }
+}
+
 // GET /certificates — issued register.
 export async function getCertificates(req, res) {
     try {

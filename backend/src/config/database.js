@@ -172,7 +172,7 @@ export async function getDb() {
 let isInitializing = false;
 // Bump this whenever a new migration block is added below — the version gate
 // then re-runs the full (idempotent) migration sweep once on next boot.
-const SCHEMA_MIGRATION_VERSION = 'pg-2026-10-21-01';
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-10-23-01';
 
 export async function initializeDatabase() {
     if (isInitializing) return;
@@ -1375,6 +1375,8 @@ async function runPostgresMigrations(database) {
         await database.query('CREATE INDEX IF NOT EXISTS idx_certificates_category ON certificates(category)');
         // One active (non-revoked) certificate per student + programme.
         await database.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_certificates_active ON certificates(student_id, programme_id) WHERE status = 'Issued'`);
+        // Admin-editable HOD name override (empty = fall back to the course→HOD mapping).
+        await database.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS hod_name TEXT');
         // Per-category, per-year sequence for certificate numbering.
         await database.query(`
             CREATE TABLE IF NOT EXISTS certificate_sequences (
@@ -2383,6 +2385,10 @@ async function runSqliteMigrations(database) {
         await database.run('CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id)');
         await database.run('CREATE INDEX IF NOT EXISTS idx_certificates_category ON certificates(category)');
         await database.run(`CREATE UNIQUE INDEX IF NOT EXISTS uq_certificates_active ON certificates(student_id, programme_id) WHERE status = 'Issued'`);
+        const certInfo = await database.all("PRAGMA table_info('certificates')");
+        if (!certInfo.some(col => col.name === 'hod_name')) {
+            await database.run('ALTER TABLE certificates ADD COLUMN hod_name TEXT');
+        }
         await database.run(`
             CREATE TABLE IF NOT EXISTS certificate_sequences (
                 category TEXT NOT NULL,

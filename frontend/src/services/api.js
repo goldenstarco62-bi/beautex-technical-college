@@ -137,6 +137,7 @@ export const certificatesAPI = {
     getById: (id) => api.get(`certificates/${encodeURIComponent(id)}`),
     issue: (data) => api.post('certificates/issue', data),
     revoke: (id, data) => api.post(`certificates/${encodeURIComponent(id)}/revoke`, data),
+    update: (id, data) => api.put(`certificates/${encodeURIComponent(id)}`, data),
 };
 
 // Faculty
