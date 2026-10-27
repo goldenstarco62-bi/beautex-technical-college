@@ -43,6 +43,8 @@ router.put('/users/:id/student-permission', authenticateToken, authorizeRoles('s
 router.get('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getSettings);
 router.put('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.updateSettings);
 router.post('/settings/upload', authenticateToken, authorizeRoles('superadmin', 'admin'), upload.single('file'), settingsController.uploadFileSetting);
+router.get('/settings/dashboard-stats', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getDashboardStats);
+router.get('/settings/integrations/status', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getIntegrationStatus);
 router.get('/settings/backup', authenticateToken, authorizeRoles('superadmin'), settingsController.downloadBackup);
 router.get('/settings/backup/export', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.exportFullBackup);
 router.post('/settings/backup/restore', authenticateToken, authorizeRoles('superadmin'), upload.single('file'), settingsController.restoreFullBackup);

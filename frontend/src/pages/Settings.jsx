@@ -1,110 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import {
-    Settings as SettingsIcon, Save, Globe, Shield, Database,
-    Download, Lock, Palette, Mail, Terminal,
-    HardDrive, RefreshCw, UserPlus, Building,
-    BookOpen, Award, GraduationCap, Eye, EyeOff,
-    CreditCard, CheckCircle, XCircle,
-    FileText, Users, Clock,
-    ChevronDown, Edit3,
-    Trash2, Plus, Search, ShieldAlert,
-    Cpu, FileCheck, LayoutGrid,
-    ArrowLeft, Sparkles, Activity, Zap, Menu, LogOut, ChevronRight,
-    Calendar, MessageSquare, Package, Sliders
-} from 'lucide-react';
-import { settingsAPI, academicAPI, usersAPI, coursesAPI, studentsAPI, facultyAPI } from '../services/api';
+import { Link, useNavigate } from 'react-router-dom';
+import { Settings as SettingsIcon, Save, Globe, Palette, Mail, Terminal, HardDrive, RefreshCw, UserPlus, Building, BookOpen, Award, GraduationCap, CreditCard, CheckCircle, XCircle, Users, Clock, Search, ShieldAlert, Cpu, FileCheck, LayoutGrid, ArrowLeft, Menu, LogOut, Calendar, MessageSquare, Package, Sliders, Bell, ChevronDown, ChevronRight, BellRing } from 'lucide-react';
+import { settingsAPI, academicAPI, usersAPI, notificationsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-
-// ─── Design Tokens ─────────────────────────────────────────────────────────────
-const GOLD     = '#c8a94a';
-const GOLD_BRIGHT = '#FFD700';
-
-// ─── Small Reusable Atoms ─────────────────────────────────────────────────────
-
-const Toggle = ({ value, onChange, locked }) => (
-    <button onClick={() => !locked && onChange(!value)} disabled={locked}
-        className={`relative inline-flex items-center h-6 w-12 rounded-full transition-all duration-300 focus:outline-none ${value ? 'bg-green-500' : 'bg-gray-300 dark:bg-white/20'} ${locked ? 'opacity-50 cursor-not-allowed' : ''}`}>
-        <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-300 ${value ? 'translate-x-7' : 'translate-x-1'}`} />
-    </button>
-);
-
-const StatusBadge = ({ active, labelOn, labelOff }) => (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${active ? 'bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400'}`}>
-        {active ? <CheckCircle className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
-        {active ? labelOn : labelOff}
-    </span>
-);
-
-const FieldRow = ({ label, description, children, locked }) => (
-    <div className={`flex flex-col md:flex-row md:items-start justify-between py-4 border-b border-gray-100 dark:border-white/5 last:border-0 gap-3 ${locked ? 'opacity-50 pointer-events-none' : ''}`}>
-        <div className="md:w-56 flex-shrink-0">
-            <div className="flex items-center gap-1.5">
-                <p className="text-[10px] font-black text-zinc-600 dark:text-zinc-400 uppercase tracking-widest">{label}</p>
-                {locked && <Lock className="w-3 h-3 text-gray-400" />}
-            </div>
-            {description && <p className="text-[9px] text-gray-400 font-medium mt-0.5 leading-relaxed">{description}</p>}
-        </div>
-        <div className="flex-1 max-w-md w-full">{children}</div>
-    </div>
-);
-
-const Inp = ({ value, onChange, placeholder, type = 'text', readOnly, mono }) => (
-    <input type={type} value={value || ''} onChange={onChange} placeholder={placeholder} readOnly={readOnly}
-        className={`w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon transition-all ${mono ? 'font-mono' : ''} ${readOnly ? 'cursor-not-allowed text-gray-400' : ''}`} />
-);
-
-const PwdField = ({ value, onChange, readOnly }) => {
-    const [show, setShow] = useState(false);
-    return (
-        <div className="relative">
-            <input type={show ? 'text' : 'password'} value={value || ''} onChange={onChange} readOnly={readOnly}
-                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2.5 pr-9 text-xs font-mono outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon transition-all" />
-            {!readOnly && (
-                <button type="button" onClick={() => setShow(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-maroon">
-                    {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
-            )}
-        </div>
-    );
-};
-
-const TagInputList = ({ value, onChange, placeholder, readOnly }) => {
-    const tags = (value || '').split(',').map(t => t.trim()).filter(Boolean);
-    const [newTag, setNewTag] = useState('');
-    const handleAdd = () => {
-        if (!newTag.trim()) return;
-        if (tags.includes(newTag.trim())) return;
-        const updated = [...tags, newTag.trim()].join(', ');
-        onChange(updated);
-        setNewTag('');
-    };
-    const handleRemove = (tagToRemove) => {
-        const updated = tags.filter(t => t !== tagToRemove).join(', ');
-        onChange(updated);
-    };
-    return (
-        <div className="space-y-2">
-            <div className="flex flex-wrap gap-1.5 p-2.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl min-h-[50px]">
-                {tags.map(t => (
-                    <span key={t} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider bg-maroon/5 text-maroon dark:bg-gold/10 dark:text-gold border border-maroon/10 dark:border-gold/20">
-                        {t}
-                        {!readOnly && (
-                            <button type="button" onClick={() => handleRemove(t)} className="hover:text-red-500 font-extrabold text-[11px] leading-none transition-colors">×</button>
-                        )}
-                    </span>
-                ))}
-                {tags.length === 0 && <span className="text-[10px] text-zinc-400 font-semibold self-center px-1">No items defined.</span>}
-            </div>
-            {!readOnly && (
-                <div className="flex gap-2">
-                    <input type="text" value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }} placeholder={placeholder || "Add item..."} className="flex-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon transition-all" />
-                    <button type="button" onClick={handleAdd} className="bg-maroon hover:opacity-90 text-white text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-gold/30 transition-all shadow-sm">Add</button>
-                </div>
-            )}
-        </div>
-    );
-};
+import { GOLD, GOLD_BRIGHT } from './settings/atoms';
+import TabBrandingThemes from './settings/TabBrandingThemes';
+import TabDashboard from './settings/TabDashboard';
+import TabBranding from './settings/TabBranding';
+import TabAcademic from './settings/TabAcademic';
+import TabCalendar from './settings/TabCalendar';
+import TabStudent from './settings/TabStudent';
+import TabPortalCustomization from './settings/TabPortalCustomization';
+import TabStaff from './settings/TabStaff';
+import TabExams from './settings/TabExams';
+import TabAttendance from './settings/TabAttendance';
+import TabFinance from './settings/TabFinance';
+import TabCommunications from './settings/TabCommunications';
+import TabNotifyTemplates from './settings/TabNotifyTemplates';
+import TabInventorySettings from './settings/TabInventorySettings';
+import TabReportBuilder from './settings/TabReportBuilder';
+import TabCertificates from './settings/TabCertificates';
+import TabLms from './settings/TabLms';
+import TabSecurity from './settings/TabSecurity';
+import TabIntegrations from './settings/TabIntegrations';
+import TabBackup from './settings/TabBackup';
+import TabSystem from './settings/TabSystem';
+import TabAudit from './settings/TabAudit';
 
 // ─── Tab Definitions ──────────────────────────────────────────────────────────
 const TABS = [
@@ -133,13 +54,15 @@ const TABS = [
 ];
 
 export default function Settings() {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
+    const navigate = useNavigate();
     const isSuperAdmin = ['superadmin', 'super_admin', 'super admin'].includes((user?.role || '').toLowerCase().trim());
 
     const defaultSettings = {
         college_name: 'Beautex Technical Training College', college_abbr: 'BTTC',
-        college_motto: 'Empowering Minds. Shaping Futures.', college_address: 'Main Campus, Nairobi, Kenya',
-        college_phone: '+254 700 000000', college_phone2: '', contact_email: 'info@beautex.edu',
+        college_motto: 'Empowering Minds. Shaping Innovation.',
+        college_address: 'Utawala, Geokarma Building, Behind Astrol Petrol Station',
+        college_phone: '0708 247 557', college_phone2: '', contact_email: 'beautextechnicalcollege@gmail.com',
         college_website: 'www.beautex.edu', college_reg_number: 'TVETA/001/2026',
         college_kra_pin: 'P051234567A', college_principal: 'Dr. Jane Doe',
         college_logo: '', college_stamp: '', college_signature: '',
@@ -153,7 +76,7 @@ export default function Settings() {
         student_portal_materials: true, student_portal_certificates: true, student_portal_attendance: true,
         assessment_types: 'CAT, Practical Assessment, Mid-Term Exam, End-Term Exam, Final Examination',
         grading_distinction_min: '70', grading_credit_min: '60', grading_pass_min: '50', grading_fail_min: '0',
-        attendance_mode: 'daily', attendance_status_types: 'Present, Absent, Late, Sick, Excused',
+        attendance_mode: 'daily', attendance_status_types: 'Present, Absent, Late, Sick, Excused', attendance_threshold_percent: '90',
         fee_categories: 'Registration Fee, Tuition Fee, Practical Fee, Examination Fee, Graduation Fee, Accommodation Fee',
         payment_methods: 'M-Pesa, Bank Deposit, Bank Transfer, Cash, Card Payments',
         finance_penalty_rate: '0', finance_discount_rate: '0',
@@ -202,7 +125,14 @@ export default function Settings() {
     const [searchQuery, setSearchQuery] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    const [counts, setCounts] = useState({ programs: 0, courses: 0, students: 0, staff: 0, intakes: 4 });
+    const [counts, setCounts] = useState({ programs: null, courses: null, students: null, staff: null, active_portals: null });
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [statsError, setStatsError] = useState(false);
+
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [notifications, setNotifications] = useState([]);
+    const [notifOpen, setNotifOpen] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
 
     const [uploadingLogo, setUploadingLogo]           = useState(false);
     const [uploadingStamp, setUploadingStamp]         = useState(false);
@@ -219,15 +149,22 @@ export default function Settings() {
     const [auditLogs, setAuditLogs]       = useState([]);
     const [loadingAudit, setLoadingAudit] = useState(false);
     const [auditSearch, setAuditSearch]   = useState('');
+    const [auditPage, setAuditPage]       = useState(1);
+    const [auditPageSize, setAuditPageSize] = useState(25);
+    const [auditPagination, setAuditPagination] = useState({ total: 0, page: 1, totalPages: 1 });
+    const [auditError, setAuditError]     = useState(false);
     const [restoring, setRestoring]       = useState(false);
     
     // States for premium visual modules enhancements
     const [testingIntegration, setTestingIntegration] = useState({});
     const [integrationStatus, setIntegrationStatus] = useState({});
+    const [systemStatus, setSystemStatus] = useState(null);
+    const [loadingIntegrationOverview, setLoadingIntegrationOverview] = useState(false);
     const [activeSmsPreview, setActiveSmsPreview] = useState('template_admission_sms');
 
     useEffect(() => {
-        fetchSettings(); fetchDepartments(); loadCounts();
+        fetchSettings(); fetchDepartments(); loadCounts(); fetchIntegrationOverview(); fetchUnreadCount();
+        if (isSuperAdmin) fetchAuditLogs();
     }, []);
 
     useEffect(() => {
@@ -240,15 +177,42 @@ export default function Settings() {
     };
 
     const loadCounts = async () => {
+        setStatsLoading(true); setStatsError(false);
         try {
-            const [d, c, s, f] = await Promise.all([
-                academicAPI.getDepartments().catch(() => ({ data: [] })),
-                coursesAPI.getAll().catch(() => ({ data: [] })),
-                studentsAPI.getAll().catch(() => ({ data: [] })),
-                facultyAPI.getAll().catch(() => ({ data: [] })),
-            ]);
-            setCounts({ programs: d.data?.length || 0, courses: c.data?.length || 0, students: s.data?.length || 0, staff: f.data?.length || 0, intakes: 4 });
-        } catch {}
+            const { data } = await settingsAPI.dashboardStats();
+            setCounts({
+                programs: data.programs ?? null, courses: data.courses ?? null,
+                students: data.students ?? null, staff: data.staff ?? null,
+                active_portals: data.active_portals ?? null,
+            });
+        } catch {
+            setStatsError(true);
+        } finally {
+            setStatsLoading(false);
+        }
+    };
+
+    const fetchUnreadCount = async () => {
+        try { const { data } = await notificationsAPI.getUnreadCount(); setUnreadCount(data?.unreadCount ?? 0); }
+        catch { /* bell stays silent if the endpoint is unreachable */ }
+    };
+
+    const toggleNotifPanel = async () => {
+        const next = !notifOpen;
+        setNotifOpen(next); setProfileOpen(false);
+        if (next) {
+            try { const { data } = await notificationsAPI.getAll(); setNotifications(data || []); }
+            catch { setNotifications([]); }
+        }
+    };
+
+    const markAllNotificationsRead = async () => {
+        try {
+            await notificationsAPI.markAllRead();
+            setUnreadCount(0);
+            setNotifications(p => p.map(n => ({ ...n, read: true })));
+            showToast('All notifications marked as read.');
+        } catch { showToast('Failed to update notifications.', 'error'); }
     };
 
     const fetchSettings = async () => {
@@ -268,33 +232,87 @@ export default function Settings() {
         catch {} finally { setLoadingDepts(false); }
     };
 
-    const fetchAuditLogs = async () => {
-        try { setLoadingAudit(true); const { data } = await usersAPI.getAuditLogs(); setAuditLogs(data?.logs || []); }
-        catch {} finally { setLoadingAudit(false); }
+    const fetchAuditLogs = async (opts = {}) => {
+        const page = opts.page ?? auditPage;
+        const search = opts.search ?? auditSearch;
+        const limit = opts.limit ?? auditPageSize;
+        try {
+            setLoadingAudit(true); setAuditError(false);
+            const { data } = await usersAPI.getAuditLogs({ page, limit, search: search || undefined });
+            setAuditLogs(data?.logs || []);
+            if (data?.pagination) setAuditPagination(data.pagination);
+        }
+        catch { setAuditError(true); setAuditLogs([]); } finally { setLoadingAudit(false); }
     };
 
-    const triggerTestIntegration = (gateway) => {
+    useEffect(() => {
+        if (!isSuperAdmin) return;
+        const t = setTimeout(() => {
+            if (activeTab === 'audit') { setAuditPage(1); fetchAuditLogs({ page: 1, search: auditSearch }); }
+        }, 400);
+        return () => clearTimeout(t);
+    }, [auditSearch]);
+
+    const changeAuditPage = (page) => {
+        setAuditPage(page);
+        fetchAuditLogs({ page });
+    };
+
+    const changeAuditPageSize = (size) => {
+        setAuditPageSize(size);
+        setAuditPage(1);
+        fetchAuditLogs({ page: 1, limit: size });
+    };
+
+    const fetchIntegrationOverview = async () => {
+        try {
+            setLoadingIntegrationOverview(true);
+            const { data } = await settingsAPI.integrationStatus();
+            setSystemStatus(data?.results || {});
+        } catch {
+            setSystemStatus({});
+        } finally {
+            setLoadingIntegrationOverview(false);
+        }
+    };
+
+    const triggerTestIntegration = async (gateway) => {
         setTestingIntegration(p => ({ ...p, [gateway]: true }));
         setIntegrationStatus(p => ({ ...p, [gateway]: null }));
-        setTimeout(() => {
+        try {
+            const { data } = await settingsAPI.integrationStatus({ gateway, live: 1 });
+            const result = data?.results?.[gateway] || { status: 'error', message: 'Backend returned no result for this gateway.' };
+            setIntegrationStatus(p => ({ ...p, [gateway]: result }));
+        } catch (err) {
+            setIntegrationStatus(p => ({
+                ...p,
+                [gateway]: { status: 'error', message: err?.response?.data?.error || 'Status endpoint unreachable — is the backend running?' }
+            }));
+        } finally {
             setTestingIntegration(p => ({ ...p, [gateway]: false }));
-            let msg = '';
-            if (gateway === 'mpesa') {
-                msg = `SUCCESS: Connected to Safaricom Daraja Sandbox. Paybill: ${settings.mpesa_shortcode || 'N/A'}`;
-            } else if (gateway === 'google_calendar') {
-                msg = 'SUCCESS: Google OAuth 2.0 connection verified. Calendar synced.';
-            } else if (gateway === 'zoom') {
-                msg = 'SUCCESS: JWT token generated. Meeting scheduler ready.';
-            } else if (gateway === 'google_meet') {
-                msg = 'SUCCESS: Client Handshake OK. API operational.';
-            } else {
-                msg = 'SUCCESS: Server handshake completed.';
-            }
-            setIntegrationStatus(p => ({ ...p, [gateway]: msg }));
-        }, 1500);
+            fetchIntegrationOverview();
+        }
     };
 
     const set = (key, value) => setSettings(p => ({ ...p, [key]: value }));
+
+    // ── Unsaved-changes tracking ──
+    // Same comparison handleSave uses: image keys are persisted immediately via
+    // the upload endpoint, so they never count as dirty.
+    const IMAGE_KEYS = ['college_logo', 'college_stamp', 'college_signature'];
+    const dirtyKeys = Object.keys(settings).filter(k => !IMAGE_KEYS.includes(k) && settings[k] !== initialSettings[k]);
+    const isDirty = !loading && dirtyKeys.length > 0;
+    const discardChanges = () => {
+        setSettings(p => ({ ...initialSettings, college_logo: p.college_logo, college_stamp: p.college_stamp, college_signature: p.college_signature }));
+        showToast('Unsaved changes discarded.');
+    };
+
+    useEffect(() => {
+        if (!isDirty) return;
+        const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', onBeforeUnload);
+        return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    }, [isDirty]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -369,7 +387,7 @@ export default function Settings() {
             const file = e.target.files[0];
             if (!file) return;
 
-            if (!window.confirm(`Are you sure you want to restore database records from "${file.name}"?\nThis will update existing student and system records.`)) return;
+            if (!window.confirm(`Are you sure you want to restore from "${file.name}"?\nEvery table contained in the backup will be replaced by its backup contents. If any table fails, nothing is changed.`)) return;
 
             setRestoring(true);
             try {
@@ -406,13 +424,23 @@ export default function Settings() {
         catch { showToast('Failed to delete.', 'error'); }
     };
 
+    // Close header dropdowns on outside click
+    useEffect(() => {
+        if (!notifOpen && !profileOpen) return;
+        const onDocMouseDown = (e) => {
+            if (!e.target.closest?.('[data-header-dropdown]')) { setNotifOpen(false); setProfileOpen(false); }
+        };
+        document.addEventListener('mousedown', onDocMouseDown);
+        return () => document.removeEventListener('mousedown', onDocMouseDown);
+    }, [notifOpen, profileOpen]);
+
+    const handleLogout = () => {
+        setProfileOpen(false);
+        logout?.();
+    };
+
     const visibleTabs = TABS.filter(t => !t.superAdmin || isSuperAdmin);
     const activeTabDef = visibleTabs.find(t => t.id === activeTab);
-
-    const filteredAudit = auditLogs.filter(l => {
-        const q = auditSearch.toLowerCase();
-        return l.action?.toLowerCase().includes(q) || l.user_email?.toLowerCase().includes(q) || l.ip_address?.toLowerCase().includes(q);
-    });
 
     // Recent Activity data list (top 5 real audit logs or fallback beautiful mocks)
     const displayActivities = auditLogs.length > 0 
@@ -421,40 +449,34 @@ export default function Settings() {
             time: l.created_at ? new Date(l.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'recently',
             dot: 'bg-green-500'
           }))
-        : [
-            { text: 'Super Admin updated college logo', time: '10 mins ago', dot: 'bg-amber-500' },
-            { text: 'Registrar added new course', time: '25 mins ago', dot: 'bg-blue-500' },
-            { text: 'Admin configured fee structure', time: '1 hour ago', dot: 'bg-emerald-500' },
-            { text: 'ICT Admin created new intake', time: '2 hours ago', dot: 'bg-purple-500' },
-            { text: 'Accountant recorded new payment method', time: '3 hours ago', dot: 'bg-rose-500' },
-          ];
+        : [];
 
-    // Modules list excluding dashboard
+    // Modules list excluding dashboard — `tone` styles the icon tile in the grid
     const modulesList = [
-        { id: 'branding', title: 'Institution Profile', icon: Building, desc: 'Manage college information, logo, contacts and official details.' },
-        { id: 'academic', title: 'Academic Settings', icon: GraduationCap, desc: 'Programs, courses, departments, and intakes.' },
-        { id: 'calendar', title: 'Academic Calendar', icon: Calendar, desc: 'Configure term dates, examination periods, holidays, and events.' },
-        { id: 'student', title: 'Student Settings', icon: Users, desc: 'Admission settings, student categories, status definitions.' },
-        { id: 'portal_customization', title: 'Student Portal Options', icon: Globe, desc: 'Customize features, announcement banners, maintenance modes, and support.' },
-        { id: 'staff', title: 'Staff Settings', icon: UserPlus, desc: 'Staff categories, roles, permissions and staff management.' },
-        { id: 'exams', title: 'Examination Settings', icon: Award, desc: 'Exam types, grading system, templates and result configurations.' },
-        { id: 'attendance', title: 'Attendance Settings', icon: Clock, desc: 'Attendance modes, status types and attendance configurations.' },
-        { id: 'finance', title: 'Finance Settings', icon: CreditCard, desc: 'Fee categories, payment methods, penalties and financial controls.' },
-        { id: 'communications', title: 'Communication Settings', icon: Mail, desc: 'SMS gateways, SMTP server, and WhatsApp configuration.' },
-        { id: 'notify_templates', title: 'Notification Templates', icon: MessageSquare, desc: 'Customize message templates for SMS and system alerts.' },
-        { id: 'inventory_settings', title: 'Inventory Configuration', icon: Package, desc: 'Set stock thresholds, depreciation methods, and stores settings.' },
-        { id: 'report_builder', title: 'Report & Document Settings', icon: Sliders, desc: 'Configure printed PDF templates, transcript headers, footers and layouts.' },
-        { id: 'certificates', title: 'Certificates & Graduation', icon: FileCheck, desc: 'Certificate templates, numbering and graduation settings.' },
-        { id: 'lms', title: 'Learning Management', icon: BookOpen, desc: 'LMS features, assignments, quizzes and online learning settings.' },
+        { id: 'branding', title: 'Institution Profile', icon: Building, desc: 'Manage college information, logo, contacts and official details.', tone: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-400' },
+        { id: 'academic', title: 'Academic Settings', icon: GraduationCap, desc: 'Programs, courses, departments, and intakes.', tone: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400' },
+        { id: 'calendar', title: 'Academic Calendar', icon: Calendar, desc: 'Configure term dates, examination periods, holidays, and events.', tone: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-400' },
+        { id: 'student', title: 'Student Settings', icon: Users, desc: 'Admission settings, student categories, status definitions.', tone: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400' },
+        { id: 'portal_customization', title: 'Student Portal Options', icon: Globe, desc: 'Customize features, announcement banners, maintenance modes, and support.', tone: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-400' },
+        { id: 'staff', title: 'Staff Settings', icon: UserPlus, desc: 'Staff categories, roles, permissions and staff management.', tone: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400' },
+        { id: 'exams', title: 'Examination Settings', icon: Award, desc: 'Exam types, grading system, templates and result configurations.', tone: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400' },
+        { id: 'attendance', title: 'Attendance Settings', icon: Clock, desc: 'Attendance modes, status types and attendance configurations.', tone: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400' },
+        { id: 'finance', title: 'Finance Settings', icon: CreditCard, desc: 'Fee categories, payment methods, penalties and financial controls.', tone: 'bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400' },
+        { id: 'communications', title: 'Communication Settings', icon: Mail, desc: 'SMS gateways, SMTP server, and WhatsApp configuration.', tone: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400' },
+        { id: 'notify_templates', title: 'Notification Templates', icon: MessageSquare, desc: 'Customize message templates for SMS and system alerts.', tone: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-500/15 dark:text-fuchsia-400' },
+        { id: 'inventory_settings', title: 'Inventory Configuration', icon: Package, desc: 'Set stock thresholds, depreciation methods, and stores settings.', tone: 'bg-lime-100 text-lime-700 dark:bg-lime-500/15 dark:text-lime-400' },
+        { id: 'report_builder', title: 'Report & Document Settings', icon: Sliders, desc: 'Configure printed PDF templates, transcript headers, footers and layouts.', tone: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400' },
+        { id: 'certificates', title: 'Certificates & Graduation', icon: FileCheck, desc: 'Certificate templates, numbering and graduation settings.', tone: 'bg-gold/20 text-amber-600 dark:bg-gold/15 dark:text-gold' },
+        { id: 'lms', title: 'Learning Management', icon: BookOpen, desc: 'LMS features, assignments, quizzes and online learning settings.', tone: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400' },
         ...(isSuperAdmin ? [
-            { id: 'security', title: 'Security Settings', icon: ShieldAlert, desc: 'Password policies, 2FA, login attempts and security configurations.' },
-            { id: 'backup', title: 'Backup & Recovery', icon: HardDrive, desc: 'System backups, restore, backup schedules and database logs.' },
-            { id: 'integrations', title: 'Integrations', icon: Cpu, desc: 'API integrations, payment gateways and third-party services.' },
+            { id: 'security', title: 'Security Settings', icon: ShieldAlert, desc: 'Password policies, 2FA, login attempts and security configurations.', tone: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400' },
+            { id: 'backup', title: 'Backup & Recovery', icon: HardDrive, desc: 'System backups, restore, backup schedules and database logs.', tone: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-500/20 dark:text-zinc-300' },
+            { id: 'integrations', title: 'Integrations', icon: Cpu, desc: 'API integrations, payment gateways and third-party services.', tone: 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400' },
         ] : []),
-        { id: 'branding_themes', title: 'Branding & Themes', icon: Palette, desc: 'Customize system appearance, colors, logos and templates.' },
-        { id: 'system', title: 'System Configuration', icon: SettingsIcon, desc: 'General system settings and configuration management.' },
+        { id: 'branding_themes', title: 'Branding & Themes', icon: Palette, desc: 'Customize system appearance, colors, logos and templates.', tone: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400' },
+        { id: 'system', title: 'System Configuration', icon: SettingsIcon, desc: 'General system settings and configuration management.', tone: 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300' },
         ...(isSuperAdmin ? [
-            { id: 'audit', title: 'Audit Logs', icon: Terminal, desc: 'View all system activities and configuration changes.' }
+            { id: 'audit', title: 'Audit Logs', icon: Terminal, desc: 'View all system activities and configuration changes.', tone: 'bg-stone-200 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300' }
         ] : [])
     ];
 
@@ -464,40 +486,72 @@ export default function Settings() {
         m.desc.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    // Form atomic fields helpers
-    const TA = ({ value, onChange, rows = 3 }) => (
-        <textarea value={value || ''} onChange={onChange} rows={rows}
-            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon transition-all resize-none" />
-    );
+    // ── Department modal a11y: focus trap, Escape to close, focus restore ──
+    const deptModalRef = useRef(null);
+    useEffect(() => {
+        if (!showDeptModal) return;
+        const modal = deptModalRef.current;
+        const previouslyFocused = document.activeElement;
+        modal?.querySelector('input, textarea, select')?.focus();
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') { setShowDeptModal(false); return; }
+            if (e.key !== 'Tab' || !modal) return;
+            const focusables = Array.from(modal.querySelectorAll('button, input, textarea, select, [href], [tabindex]:not([tabindex="-1"])')).filter(el => !el.disabled);
+            if (!focusables.length) return;
+            const firstEl = focusables[0], lastEl = focusables[focusables.length - 1];
+            if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+            else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown);
+            if (previouslyFocused && typeof previouslyFocused.focus === 'function') previouslyFocused.focus();
+        };
+    }, [showDeptModal]);
 
-    const Sel = ({ value, onChange, children }) => (
-        <select value={value || ''} onChange={onChange}
-            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2.5 text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon transition-all">
-            {children}
-        </select>
-    );
+    const ctx = {
+        settings, set, isSuperAdmin, user, showToast, loading, saving,
+        activeTab, setActiveTab, searchQuery, setSearchQuery, sidebarOpen, setSidebarOpen,
+        counts, statsLoading, statsError, loadCounts, navigate,
+        unreadCount, notifications, notifOpen, toggleNotifPanel, markAllNotificationsRead,
+        uploadingLogo, setUploadingLogo, uploadingStamp, setUploadingStamp,
+        uploadingSignature, setUploadingSignature, logoRef, stampRef, sigRef,
+        departments, loadingDepts, showDeptModal, setShowDeptModal, editingDept, setEditingDept,
+        deptForm, setDeptForm, savingDept, handleDeptSubmit, handleDeptDelete, openNewDept, openEditDept,
+        auditLogs, loadingAudit, auditSearch, setAuditSearch, auditPage, auditPageSize, auditPagination, auditError, changeAuditPage, changeAuditPageSize, restoring,
+        handleBackup, handleRestore, testingIntegration, integrationStatus, triggerTestIntegration, systemStatus, fetchIntegrationOverview, loadingIntegrationOverview,
+        activeSmsPreview, setActiveSmsPreview, displayActivities, filteredModules, visibleTabs, activeTabDef,
+        handleFileUpload, GOLD, GOLD_BRIGHT,
+    };
 
     const sidebarContent = (
         <div className="flex flex-col h-full text-white" style={{ backgroundColor: settings.sidebar_colors || '#7a0000' }}>
             {/* Sidebar Title */}
-            <div className="px-6 py-5 border-b border-white/10">
-                <p className="text-[10px] font-black text-gold uppercase tracking-[0.2em]">Settings Control</p>
+            <div className="px-5 py-4 border-b border-white/10 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/10 border border-gold/30 flex items-center justify-center shrink-0">
+                    <SettingsIcon className="w-4.5 h-4.5 text-gold" />
+                </div>
+                <div className="min-w-0">
+                    <p className="text-[10px] font-black text-gold uppercase tracking-[0.2em] leading-none">Settings</p>
+                    <p className="text-[7.5px] font-bold text-white/60 uppercase tracking-widest mt-1 leading-none truncate">Control Center</p>
+                </div>
             </div>
             
             {/* Sidebar Scrollable Menu */}
-            <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5 custom-scrollbar-settings">
+            <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-0.5 custom-scrollbar-settings" aria-label="Settings sections">
                 {visibleTabs.map(tab => {
                     const Icon = tab.icon;
                     const isAct = activeTab === tab.id;
                     return (
-                        <button key={tab.id}
+                        <button key={tab.id} aria-current={isAct ? 'page' : undefined}
                             onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 group relative ${isAct ? 'bg-gold text-white font-bold shadow-lg animate-in fade-in zoom-in-95 duration-150' : 'text-white/70 hover:text-white hover:bg-white/5'}`}>
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left transition-all duration-200 group relative ${isAct ? 'bg-gold text-maroon font-bold shadow-lg animate-in fade-in zoom-in-95 duration-150' : 'text-white/70 hover:text-white hover:bg-white/5'}`}>
                             {isAct && (
                                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-white rounded-r-full" />
                             )}
-                            <Icon className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-105 ${isAct ? 'text-white' : 'text-white/40'}`} />
-                            <span className="text-[11px] font-bold tracking-wide uppercase">{tab.label}</span>
+                            <Icon className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-105 ${isAct ? 'text-maroon' : 'text-white/40'}`} />
+                            <span className="text-[11px] font-bold tracking-wide uppercase flex-1 truncate">{tab.label}</span>
+                            <ChevronRight className={`w-3 h-3 shrink-0 transition-transform ${isAct ? 'text-maroon' : 'text-white/25 group-hover:translate-x-0.5'}`} />
                         </button>
                     );
                 })}
@@ -511,7 +565,7 @@ export default function Settings() {
                 </Link>
                 <div className="text-center pt-1">
                     <p className="text-[8px] font-black text-white/50 uppercase tracking-[0.1em] leading-tight">Beautex Technical Training College</p>
-                    <p className="text-[7.5px] font-bold text-gold italic mt-0.5">Empowering Minds. Shaping Futures.</p>
+                    <p className="text-[7.5px] font-bold text-gold italic mt-0.5">{settings.college_motto || 'Empowering Minds. Shaping Innovation.'}</p>
                 </div>
             </div>
         </div>
@@ -536,12 +590,13 @@ export default function Settings() {
                     </button>
                     {/* Logo Crest & College Title */}
                     <Link to="/dashboard" className="flex items-center gap-3 group">
-                        <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center p-0.5 overflow-hidden border border-white/20 transition-transform group-hover:scale-105">
-                            <img src="/app-icon-v2.png" alt="Beautex Crest Logo" className="w-full h-full object-contain" />
+                        <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center p-0.5 overflow-hidden border border-white/20 transition-transform group-hover:scale-105 shadow-sm">
+                            <img src={settings.college_logo || '/beautex-crest.png'} alt="Beautex Technical Training College Crest" className="w-full h-full object-contain" />
                         </div>
                         <div className="flex flex-col">
                             <span className="text-base font-black tracking-[0.12em] text-gold uppercase leading-none" style={{ fontFamily: 'Georgia, serif' }}>Beautex</span>
                             <span className="text-[7.5px] font-bold text-white/80 uppercase tracking-widest leading-tight mt-0.5">Technical Training College</span>
+                            <span className="hidden sm:block text-[6.5px] font-semibold italic text-gold/70 tracking-wide mt-0.5 leading-tight">{settings.college_motto || 'Empowering Minds. Shaping Innovation.'}</span>
                         </div>
                     </Link>
                 </div>
@@ -558,25 +613,85 @@ export default function Settings() {
                     <Search className="w-4 h-4 text-white/40" />
                 </div>
 
-                {/* Right Quick Badges */}
-                <div className="flex items-center gap-4">
-                    <button className="relative p-2 bg-black/20 rounded-xl hover:bg-white/5 transition-colors border border-white/5">
-                        <Mail className="w-4 h-4 text-white/80" />
-                        <span className="absolute -top-1 -right-1 bg-gold text-maroon text-[8px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-maroon">7</span>
-                    </button>
-                    <button onClick={() => setActiveTab('dashboard')} className="p-2 bg-black/20 rounded-xl hover:bg-white/5 transition-colors border border-white/5">
+                {/* Right: Notifications, Preferences, Profile */}
+                <div className="flex items-center gap-3">
+                    {/* Notifications bell — real unread count */}
+                    <div className="relative" data-header-dropdown>
+                        <button onClick={toggleNotifPanel} aria-label="Notifications" aria-expanded={notifOpen}
+                            className={`relative p-2 bg-black/20 rounded-xl transition-colors border ${notifOpen ? 'border-gold/60 bg-black/35' : 'border-white/5 hover:bg-white/5'}`}>
+                            <Bell className="w-4 h-4 text-white/80" />
+                            {unreadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 bg-gold text-maroon text-[8px] font-black min-w-[17px] h-[17px] px-0.5 rounded-full flex items-center justify-center border-2 border-maroon tabular-nums">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                            )}
+                        </button>
+                        {notifOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden z-[110] animate-in fade-in slide-in-from-top-2 duration-150">
+                                <div className="px-4 py-3 flex items-center justify-between bg-maroon text-white">
+                                    <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><BellRing className="w-3.5 h-3.5 text-yellow-300" /> Notifications</span>
+                                    {unreadCount > 0 && (
+                                        <button onClick={markAllNotificationsRead} className="text-[8px] font-black uppercase tracking-widest text-gold hover:underline">Mark all read</button>
+                                    )}
+                                </div>
+                                <div className="max-h-72 overflow-y-auto custom-scrollbar-settings-main divide-y divide-zinc-100 dark:divide-white/5">
+                                    {notifications.length === 0 && (
+                                        <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider text-center py-6 px-4">No notifications yet.</p>
+                                    )}
+                                    {notifications.slice(0, 10).map(n => (
+                                        <div key={n.id} className={`px-4 py-3 ${n.read ? 'opacity-60' : ''}`}>
+                                            <p className="text-[10px] font-black text-zinc-700 dark:text-zinc-200 uppercase tracking-wide leading-snug">{n.title}</p>
+                                            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-2 leading-snug">{n.content}</p>
+                                            <span className="text-[8px] text-zinc-400 font-bold uppercase block mt-1">{n.time ? new Date(n.time).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Quick access to system preferences */}
+                    <button onClick={() => setActiveTab('system')} title="System Preferences" aria-label="System preferences"
+                        className="p-2 bg-black/20 rounded-xl hover:bg-white/5 transition-colors border border-white/5">
                         <SettingsIcon className="w-4 h-4 text-white/80" />
                     </button>
-                    
-                    {/* User Profile Info Card */}
-                    <div className="flex items-center gap-2 border-l border-white/10 pl-4">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#c8a94a] to-[#e4c264] border border-white/20 flex items-center justify-center text-xs font-black text-white overflow-hidden uppercase shadow-sm">
-                            {user?.name ? user.name.slice(0, 2) : 'SA'}
-                        </div>
-                        <div className="hidden sm:flex flex-col">
-                            <span className="text-[10px] font-black uppercase text-white tracking-wider leading-none">{user?.name || 'Super Admin'}</span>
-                            <span className="text-[7.5px] font-bold text-gold uppercase tracking-widest mt-0.5 leading-none">{isSuperAdmin ? 'Super Administrator' : 'Administrator'}</span>
-                        </div>
+
+                    {/* Profile dropdown */}
+                    <div className="relative" data-header-dropdown>
+                        <button onClick={() => { setProfileOpen(p => !p); setNotifOpen(false); }} aria-label="User menu" aria-expanded={profileOpen}
+                            className={`flex items-center gap-2 border-l pl-3 pr-2 py-1.5 rounded-xl transition-colors ${profileOpen ? 'bg-white/10 border-gold/50' : 'border-white/10 hover:bg-white/5'}`}>
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#c8a94a] to-[#e4c264] border border-white/20 flex items-center justify-center text-xs font-black text-white overflow-hidden uppercase shadow-sm shrink-0">
+                                {user?.name ? user.name.slice(0, 2) : 'SA'}
+                            </div>
+                            <div className="hidden sm:flex flex-col text-left">
+                                <span className="text-[10px] font-black uppercase text-white tracking-wider leading-none">{user?.name || 'Super Admin'}</span>
+                                <span className="text-[7.5px] font-bold text-gold uppercase tracking-widest mt-0.5 leading-none">{isSuperAdmin ? 'Super Administrator' : (user?.role || 'Administrator')}</span>
+                            </div>
+                            <ChevronDown className={`w-3.5 h-3.5 text-white/60 transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {profileOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden z-[110] animate-in fade-in slide-in-from-top-2 duration-150">
+                                <div className="px-4 py-3.5 border-b border-zinc-100 dark:border-white/5">
+                                    <p className="text-[11px] font-black text-maroon dark:text-gold uppercase tracking-wide truncate">{user?.name || 'Super Admin'}</p>
+                                    <p className="text-[9px] text-zinc-400 font-semibold truncate mt-0.5">{user?.email || '—'}</p>
+                                    <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-maroon/5 dark:bg-gold/10 text-maroon dark:text-gold text-[8px] font-black uppercase tracking-widest border border-maroon/10 dark:border-gold/20">{isSuperAdmin ? 'Super Administrator' : (user?.role || 'Administrator')}</span>
+                                </div>
+                                <div className="p-1.5">
+                                    <button onClick={() => { setProfileOpen(false); setActiveTab('branding_themes'); }}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-[10px] font-black uppercase tracking-wide text-zinc-600 dark:text-zinc-300 hover:bg-maroon/5 dark:hover:bg-white/5 transition-colors">
+                                        <Palette className="w-3.5 h-3.5 text-gold" /> Branding & Themes
+                                    </button>
+                                    <Link to="/dashboard" onClick={() => setProfileOpen(false)}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-[10px] font-black uppercase tracking-wide text-zinc-600 dark:text-zinc-300 hover:bg-maroon/5 dark:hover:bg-white/5 transition-colors">
+                                        <LayoutGrid className="w-3.5 h-3.5 text-gold" /> Main Dashboard
+                                    </Link>
+                                    <button onClick={handleLogout}
+                                        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-[10px] font-black uppercase tracking-wide text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
+                                        <LogOut className="w-3.5 h-3.5" /> Logout
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
@@ -603,169 +718,8 @@ export default function Settings() {
                 <main className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar-settings-main bg-[#fafbfd] dark:bg-[#080809]">
                     
                     {/* ══ DASHBOARD OVERVIEW VIEW ═══════════════════════════════ */}
-                    {activeTab === 'dashboard' && (
-                        <div className="space-y-6 animate-in fade-in duration-300">
-                            
-                            {/* Dashboard Header Title */}
-                            <div>
-                                <h1 className="text-xl font-black text-maroon dark:text-gold uppercase tracking-wider leading-none">Settings Dashboard</h1>
-                                <p className="text-xs text-zinc-400 font-bold uppercase tracking-wider mt-1.5">Manage all system settings and configurations from one central location</p>
-                            </div>
-
-                            {/* KPI Metrics row */}
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                                {[
-                                    { label: 'Programs',  count: counts.programs,  icon: GraduationCap, tab: 'academic',  colorBg: 'bg-rose-950 text-rose-400', border: 'border-rose-100 dark:border-rose-950/20' },
-                                    { label: 'Courses',   count: counts.courses,   icon: BookOpen,      tab: 'academic',  colorBg: 'bg-amber-950 text-amber-400', border: 'border-amber-100 dark:border-amber-950/20' },
-                                    { label: 'Students',  count: counts.students,  icon: Users,         tab: 'student',   colorBg: 'bg-yellow-950 text-yellow-400', border: 'border-yellow-100 dark:border-yellow-950/20' },
-                                    { label: 'Staff Members', count: counts.staff,   icon: UserPlus,    tab: 'staff',     colorBg: 'bg-emerald-950 text-emerald-400', border: 'border-emerald-100 dark:border-emerald-950/20' },
-                                    { label: 'Active Intakes', count: counts.intakes, icon: Award,       tab: 'academic',  colorBg: 'bg-blue-950 text-blue-400', border: 'border-blue-100 dark:border-blue-950/20' },
-                                ].map((kpi, index) => {
-                                    const Icon = kpi.icon;
-                                    return (
-                                        <button key={index} onClick={() => setActiveTab(kpi.tab)}
-                                            className={`bg-white dark:bg-zinc-900 border ${kpi.border} rounded-2xl p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all text-left flex items-center gap-4 group`}>
-                                            <div className={`w-11 h-11 rounded-xl ${kpi.colorBg} flex items-center justify-center shadow-inner shrink-0 group-hover:scale-105 transition-transform`}>
-                                                <Icon className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <p className="text-2xl font-black text-zinc-800 dark:text-white leading-none">{loading ? '—' : kpi.count}</p>
-                                                <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider mt-1">{kpi.label}</p>
-                                                <span className="text-[7.5px] text-gold font-bold uppercase tracking-widest mt-1 block group-hover:underline">Manage {kpi.label.split(' ')[0]} →</span>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Main split grid */}
-                            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-                                
-                                {/* Left column: Settings modules list grid */}
-                                <div className="xl:col-span-3 space-y-4 bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200/50 dark:border-white/5 p-6 shadow-sm">
-                                    <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-white/5">
-                                        <div className="flex items-center gap-2">
-                                            <Sparkles className="w-4.5 h-4.5 text-gold" />
-                                            <span className="text-xs font-black uppercase tracking-wider text-maroon dark:text-gold">Settings Modules</span>
-                                        </div>
-                                        {searchQuery && (
-                                            <span className="text-[9px] bg-gold/10 text-gold px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">Filtered: {filteredModules.length}</span>
-                                        )}
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-                                        {filteredModules.map(mod => {
-                                            const Icon = mod.icon;
-                                            return (
-                                                <button key={mod.id} onClick={() => setActiveTab(mod.id)}
-                                                    className="flex items-start gap-3 p-4 border border-zinc-100 dark:border-white/5 hover:border-gold/30 hover:shadow-md rounded-2xl bg-zinc-50/50 dark:bg-white/[0.02] hover:bg-white transition-all group text-left relative overflow-hidden">
-                                                    <div className="absolute top-0 left-0 bottom-0 w-1 bg-maroon opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                    <div className="w-10 h-10 bg-maroon/10 dark:bg-white/5 rounded-xl flex items-center justify-center shrink-0 shadow-inner group-hover:bg-maroon group-hover:text-white transition-all duration-300">
-                                                        <Icon className="w-4.5 h-4.5 text-maroon dark:text-gold group-hover:text-white" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1 pr-3 pt-0.5">
-                                                        <p className="text-[10px] font-black uppercase tracking-wide text-zinc-700 dark:text-zinc-200 group-hover:text-maroon dark:group-hover:text-gold transition-colors leading-none truncate">{mod.title}</p>
-                                                        <p className="text-[9px] text-zinc-400 font-medium mt-1 leading-normal line-clamp-2">{mod.desc}</p>
-                                                    </div>
-                                                    <ChevronRight className="w-3.5 h-3.5 text-gold self-center shrink-0 transform group-hover:translate-x-1 transition-transform" />
-                                                </button>
-                                            );
-                                        })}
-                                        {filteredModules.length === 0 && (
-                                            <div className="col-span-full py-8 text-center text-zinc-400 text-xs font-semibold uppercase tracking-wider">
-                                                No settings modules matched your search queries.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Right column: Quick actions and stats */}
-                                <div className="xl:col-span-1 space-y-6">
-                                    
-                                    {/* Quick Actions */}
-                                    <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200/50 dark:border-white/5 overflow-hidden shadow-sm">
-                                        <div className="px-5 py-3.5 flex items-center gap-2 bg-maroon text-white">
-                                            <Zap className="w-4 h-4 text-yellow-300 shrink-0" />
-                                            <span className="text-[10px] font-black uppercase tracking-widest leading-none mt-0.5">Quick Actions</span>
-                                        </div>
-                                        <div className="p-3.5 space-y-1">
-                                            {[
-                                                { label: 'Add New Program',      action: () => { setActiveTab('academic'); setTimeout(openNewDept, 200); } },
-                                                { label: 'Add New Course',       action: () => setActiveTab('academic') },
-                                                { label: 'Create New Intake',    action: () => setActiveTab('academic') },
-                                                { label: 'Add New User',         action: () => window.location.href='/users' },
-                                                { label: 'Configure Fee Structure', action: () => setActiveTab('finance') },
-                                                { label: 'Send SMS Notification', action: () => setActiveTab('communications') },
-                                                { label: 'Backup Now',           action: handleBackup, icon: Download },
-                                            ].map((act, idx) => (
-                                                <button key={idx} onClick={act.action}
-                                                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-maroon/5 hover:text-maroon dark:hover:bg-white/5 dark:hover:text-gold transition-all text-left text-zinc-600 dark:text-zinc-400 group">
-                                                    <div className="w-5 h-5 rounded-lg flex items-center justify-center shrink-0 bg-gold/10 group-hover:bg-gold transition-colors duration-200">
-                                                        {act.icon ? <act.icon className="w-3.5 h-3.5 text-gold group-hover:text-white" /> : <Plus className="w-3.5 h-3.5 text-gold group-hover:text-white" />}
-                                                    </div>
-                                                    <span className="text-[9px] font-black uppercase tracking-wide leading-none mt-0.5">{act.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* System Status */}
-                                    <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200/50 dark:border-white/5 overflow-hidden shadow-sm">
-                                        <div className="px-5 py-3.5 flex items-center gap-2 bg-maroon text-white">
-                                            <Activity className="w-4 h-4 text-gold shrink-0" />
-                                            <span className="text-[10px] font-black uppercase tracking-widest leading-none mt-0.5">System Status</span>
-                                        </div>
-                                        <div className="p-4 space-y-3.5">
-                                            {[
-                                                { label: 'Database',         status: 'Online' },
-                                                { label: 'SMS Gateway',      status: 'Connected' },
-                                                { label: 'Email Server',     status: 'Connected' },
-                                                { label: 'M-Pesa API',       status: 'Connected' },
-                                                { label: 'Backup Status',    status: 'Up to date' },
-                                                { label: 'SSL Certificate',  status: 'Active' },
-                                            ].map((statusItem, idx) => (
-                                                <div key={idx} className="flex justify-between items-center">
-                                                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{statusItem.label}</span>
-                                                    <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                                        {statusItem.status}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Recent Activity */}
-                                    <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200/50 dark:border-white/5 overflow-hidden shadow-sm">
-                                        <div className="px-5 py-3.5 flex items-center gap-2 bg-maroon text-white">
-                                            <Clock className="w-4 h-4 text-yellow-300 shrink-0" />
-                                            <span className="text-[10px] font-black uppercase tracking-widest leading-none mt-0.5">Recent Activity</span>
-                                        </div>
-                                        <div className="p-4 space-y-3">
-                                            {displayActivities.map((act, idx) => (
-                                                <div key={idx} className="flex items-start gap-3 text-left">
-                                                    <div className={`w-1.5 h-1.5 rounded-full ${act.dot} shrink-0 mt-1`} />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-[9.5px] font-bold text-zinc-700 dark:text-zinc-300 leading-snug">{act.text}</p>
-                                                        <span className="text-[8px] text-zinc-400 font-semibold uppercase block mt-0.5">{act.time}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                </div>
-
-                            </div>
-
-                            {/* Copyright bottom strip */}
-                            <div className="pt-4 flex flex-col sm:flex-row justify-between items-center text-[9px] text-zinc-400 font-semibold uppercase tracking-wider border-t border-zinc-200/40 dark:border-white/5">
-                                <span>© 2026 Beautex Technical Training College. All Rights Reserved.</span>
-                                <span className="mt-1 sm:mt-0 text-gold">Version 2.0.0</span>
-                            </div>
-
-                        </div>
-                    )}
+                    {/* TabDashboard */}
+                    {activeTab === 'dashboard' && <TabDashboard {...ctx} />}
 
                     {/* ══ SETTINGS FORM CONTAINER VIEWS ═════════════════════════ */}
                     {activeTab !== 'dashboard' && (
@@ -793,1234 +747,110 @@ export default function Settings() {
                             <div className="p-7">
                                 
                                 {/* ══ INSTITUTION PROFILE ══════════════════════════════ */}
-                                {activeTab === 'branding' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-2">
-                                            {[
-                                                { key:'college_logo', label:'College Crest Logo', desc: 'Used on portal top navigation and official certificates.', icon:Building, ref:logoRef, up:uploadingLogo, setU:setUploadingLogo },
-                                                { key:'college_stamp', label:'Official Seal Stamp', desc: 'Stamped on printed transcripts and graduation awards.', icon:FileText, ref:stampRef, up:uploadingStamp, setU:setUploadingStamp },
-                                                { key:'college_signature', label:'Principal Signature', desc: 'Appears as the authorized signatory on diplomas.', icon:Edit3, ref:sigRef, up:uploadingSignature, setU:setUploadingSignature },
-                                            ].map(item => {
-                                                const Icon = item.icon;
-                                                return (
-                                                    <div key={item.key} className="p-6 bg-gray-50/50 dark:bg-white/[0.02] rounded-3xl border border-gray-200 dark:border-white/5 text-center flex flex-col items-center gap-4 hover:border-gold/30 transition-all duration-200 group">
-                                                        <div className="w-24 h-24 bg-white dark:bg-zinc-800 rounded-2xl border border-gray-200 dark:border-white/10 flex items-center justify-center overflow-hidden shadow-inner group-hover:scale-105 transition-transform duration-300 relative">
-                                                            {settings[item.key] ? (
-                                                                <img src={settings[item.key]} alt={item.label} className="w-full h-full object-contain p-2" />
-                                                            ) : (
-                                                                <div className="flex flex-col items-center justify-center text-zinc-300 dark:text-zinc-600">
-                                                                    <Icon className="w-8 h-8 mb-1" />
-                                                                    <span className="text-[7.5px] font-black uppercase tracking-widest">No File</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{item.label}</p>
-                                                            <p className="text-[8px] text-zinc-400 font-semibold leading-relaxed max-w-[180px] mx-auto">{item.desc}</p>
-                                                        </div>
-                                                        <button onClick={() => item.ref.current?.click()} disabled={item.up}
-                                                            className="text-[9px] font-black uppercase tracking-widest text-white px-5 py-2.5 rounded-xl transition-all duration-200 hover:opacity-90 disabled:opacity-50 shadow-sm"
-                                                            style={{ backgroundColor: settings.sidebar_colors || '#7a0000', border: `1px solid ${GOLD}40` }}>
-                                                            {item.up ? 'Uploading...' : 'Choose File'}
-                                                        </button>
-                                                        <input ref={item.ref} type="file" accept="image/*" className="hidden" onChange={e => handleFileUpload(e.target.files[0], item.key, item.setU)} />
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-3xl p-6 space-y-4 shadow-sm">
-                                            <p className="text-[10px] font-black text-maroon dark:text-gold uppercase tracking-widest border-b border-gray-100 dark:border-white/5 pb-2 mb-2">College Information Details</p>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <FieldRow label="College Name"><Inp value={settings.college_name} onChange={e=>set('college_name',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Abbreviation"><Inp value={settings.college_abbr} onChange={e=>set('college_abbr',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Motto Statement"><Inp value={settings.college_motto} onChange={e=>set('college_motto',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Principal Name"><Inp value={settings.college_principal} onChange={e=>set('college_principal',e.target.value)} /></FieldRow>
-                                                <FieldRow label="TVETA Reg Number"><Inp value={settings.college_reg_number} onChange={e=>set('college_reg_number',e.target.value)} /></FieldRow>
-                                                <FieldRow label="KRA PIN Code"><Inp value={settings.college_kra_pin} onChange={e=>set('college_kra_pin',e.target.value)} /></FieldRow>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-3xl p-6 space-y-4 shadow-sm">
-                                            <p className="text-[10px] font-black text-maroon dark:text-gold uppercase tracking-widest border-b border-gray-100 dark:border-white/5 pb-2 mb-2">Contact & Locations</p>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <FieldRow label="Physical Address"><Inp value={settings.college_address} onChange={e=>set('college_address',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Contact Email"><Inp value={settings.contact_email} onChange={e=>set('contact_email',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Website Domain"><Inp value={settings.college_website} onChange={e=>set('college_website',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Primary Telephone"><Inp value={settings.college_phone} onChange={e=>set('college_phone',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Secondary Telephone"><Inp value={settings.college_phone2} onChange={e=>set('college_phone2',e.target.value)} /></FieldRow>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabBranding */}
+                                {activeTab === 'branding' && <TabBranding {...ctx} />}
 
                                 {/* ══ ACADEMIC SETTINGS ════════════════════════════════ */}
-                                {activeTab === 'academic' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm">
-                                            <div className="flex justify-between items-center mb-5 pb-3 border-b border-gray-100 dark:border-white/5">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold">College Departments Registry</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-0.5">Manage administrative and academic departments within the college.</p>
-                                                </div>
-                                                <button onClick={openNewDept} className="text-white text-[9px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all hover:opacity-90 shadow-md"
-                                                    style={{ backgroundColor: settings.sidebar_colors || '#7a0000', border: `1px solid ${GOLD}30` }}>
-                                                    <Plus className="w-3.5 h-3.5 text-yellow-300" /> Add Department
-                                                </button>
-                                            </div>
-                                            {loadingDepts ? (
-                                                <div className="flex flex-col items-center justify-center py-10 space-y-2">
-                                                    <RefreshCw className="w-6 h-6 text-maroon animate-spin" />
-                                                    <span className="text-xs text-zinc-400 font-semibold">Loading departments...</span>
-                                                </div>
-                                            ) : (
-                                                <div className="overflow-hidden border border-gray-100 dark:border-white/5 rounded-2xl">
-                                                    <table className="w-full text-xs">
-                                                        <thead>
-                                                            <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
-                                                                <th className="px-4 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest text-left">Department Name</th>
-                                                                <th className="px-4 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest text-left">Head of Department (HOD)</th>
-                                                                <th className="px-4 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest text-right">Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                                                            {departments.map(d => (
-                                                                <tr key={d.id} className="hover:bg-maroon/[0.02] dark:hover:bg-white/[0.01] transition-colors">
-                                                                    <td className="px-4 py-3.5 font-bold text-zinc-700 dark:text-zinc-200">{d.name}</td>
-                                                                    <td className="px-4 py-3.5 text-zinc-400 font-semibold">{d.head_of_department || 'Unassigned'}</td>
-                                                                    <td className="px-4 py-3.5 text-right">
-                                                                        <div className="flex justify-end gap-2">
-                                                                            <button onClick={() => openEditDept(d)} className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-white/5 hover:border-gold hover:text-maroon dark:hover:text-gold transition-all shadow-sm"><Edit3 className="w-3.5 h-3.5" /></button>
-                                                                            <button onClick={() => handleDeptDelete(d.id)} className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-gray-200 dark:border-white/5 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 transition-all shadow-sm"><Trash2 className="w-3.5 h-3.5" /></button>
-                                                                        </div>
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                            {departments.length === 0 && (
-                                                                <tr>
-                                                                    <td colSpan="3" className="py-8 text-center text-zinc-400 text-xs font-semibold uppercase tracking-wider">No departments registered.</td>
-                                                                </tr>
-                                                            )}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Academic Intake Management</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure status toggles and enrollment capacities for college admissions.</p>
-                                            </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                {[
-                                                    { id:'jan', label:'January Intake', bg: 'from-blue-500/5 to-cyan-500/5', text: 'text-blue-500' },
-                                                    { id:'may', label:'May Intake', bg: 'from-amber-500/5 to-orange-500/5', text: 'text-amber-500' },
-                                                    { id:'sept', label:'September Intake', bg: 'from-purple-500/5 to-pink-500/5', text: 'text-purple-500' },
-                                                    { id:'rolling', label:'Rolling Intake', bg: 'from-emerald-500/5 to-teal-500/5', text: 'text-emerald-500' }
-                                                ].map(i => (
-                                                    <div key={i.id} className={`p-5 bg-gradient-to-br ${i.bg} rounded-3xl border border-gray-200/50 dark:border-white/5 flex flex-col justify-between gap-4`}>
-                                                        <span className="text-[11px] font-black uppercase tracking-wider text-zinc-800 dark:text-gold block">{i.label}</span>
-                                                        <div className="space-y-2">
-                                                            <label className="text-[8px] font-black text-zinc-400 uppercase tracking-wider block">Intake Status</label>
-                                                            <Sel value={settings[`intake_${i.id}_status`]} onChange={e=>set(`intake_${i.id}_status`,e.target.value)}>
-                                                                <option value="open">Open (Admitting)</option>
-                                                                <option value="closed">Closed</option>
-                                                                <option value="suspended">Suspended</option>
-                                                            </Sel>
-                                                        </div>
-                                                        <div className="space-y-2">
-                                                            <label className="text-[8px] font-black text-zinc-400 uppercase tracking-wider block">Max Capacity</label>
-                                                            <input type="number" value={settings[`intake_${i.id}_capacity`] || ''} onChange={e=>set(`intake_${i.id}_capacity`,e.target.value)} className="w-full bg-white dark:bg-zinc-800 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-center outline-none focus:ring-1 focus:ring-maroon" />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm">
-                                            <FieldRow label="Online Applications Portal" description="Enable/Disable self-enrollment registrations from the public website interface.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.intake_online_app_enabled} onChange={v=>set('intake_online_app_enabled',v)} /><StatusBadge active={settings.intake_online_app_enabled} labelOn="Active" labelOff="Suspended" /></div>
-                                            </FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabAcademic */}
+                                {activeTab === 'academic' && <TabAcademic {...ctx} />}
 
                                 {/* ══ ACADEMIC CALENDAR ════════════════════════════════ */}
-                                {activeTab === 'calendar' && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Academic Calendar Dates</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure system dates for academic terms, examination weeks, and holidays.</p>
-                                            </div>
-                                            <FieldRow label="Academic Term Title" description="The official name of the current term or semester."><Inp value={settings.academic_term_name} onChange={e=>set('academic_term_name',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Semester Start"><Inp type="date" value={settings.academic_term_start} onChange={e=>set('academic_term_start',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Semester End"><Inp type="date" value={settings.academic_term_end} onChange={e=>set('academic_term_end',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Exams Commencing"><Inp type="date" value={settings.academic_exam_start} onChange={e=>set('academic_exam_start',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Exams Closing"><Inp type="date" value={settings.academic_exam_end} onChange={e=>set('academic_exam_end',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Holidays Commencing"><Inp type="date" value={settings.academic_holiday_start} onChange={e=>set('academic_holiday_start',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Holidays Closing"><Inp type="date" value={settings.academic_holiday_end} onChange={e=>set('academic_holiday_end',e.target.value)} /></FieldRow>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm flex flex-col justify-between">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Chronological Milestones Map</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Visual sequence map of the academic timeline.</p>
-                                            </div>
-
-                                            <div className="relative py-8 pl-8 space-y-8 flex-1 flex flex-col justify-center">
-                                                <div className="absolute left-[39px] top-10 bottom-10 w-0.5 bg-gray-200 dark:bg-white/10" />
-                                                
-                                                {[
-                                                    { label: 'Term Starts', date: settings.academic_term_start, color: 'bg-emerald-500 text-emerald-500' },
-                                                    { label: 'Examinations Week', date: `${settings.academic_exam_start} to ${settings.academic_exam_end}`, color: 'bg-amber-500 text-amber-500' },
-                                                    { label: 'Term Ends', date: settings.academic_term_end, color: 'bg-rose-500 text-rose-500' },
-                                                    { label: 'Recess & Holidays', date: `${settings.academic_holiday_start} to ${settings.academic_holiday_end}`, color: 'bg-blue-500 text-blue-500' }
-                                                ].map((milestone, idx) => (
-                                                    <div key={idx} className="relative flex items-center gap-4 text-left">
-                                                        <div className={`absolute left-[-22px] w-6 h-6 rounded-full border-4 border-white dark:border-zinc-900 ${milestone.color.split(' ')[0]} flex items-center justify-center shadow-md`} />
-                                                        <div>
-                                                            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200 leading-none">{milestone.label}</p>
-                                                            <span className="text-[9px] font-bold text-zinc-400 block mt-1">{milestone.date ? new Date(milestone.date.split(' to ')[0]).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : 'Not Configured'}
-                                                            {milestone.date?.includes(' to ') && ` to ${new Date(milestone.date.split(' to ')[1]).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'})}`}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-
-                                            {settings.academic_term_start && settings.academic_term_end && new Date(settings.academic_term_start) > new Date(settings.academic_term_end) && (
-                                                <div className="flex items-center gap-2 p-4 bg-red-50 dark:bg-red-950/20 text-red-600 border border-red-100 dark:border-red-900/30 rounded-2xl text-[9px] font-black uppercase tracking-wider">
-                                                    <ShieldAlert className="w-4 h-4 shrink-0" />
-                                                    Warning: Semester Start Date is set after the Semester End Date.
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabCalendar */}
+                                {activeTab === 'calendar' && <TabCalendar {...ctx} />}
 
                                 {/* ══ STUDENT SETTINGS ══════════════════════════════════ */}
-                                {activeTab === 'student' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Admission Configuration</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure student admission formats and system filters.</p>
-                                                </div>
-                                                <FieldRow label="Admission Number Template" description="The format for generating student admission codes.">
-                                                    <Inp value={settings.admission_number_format} onChange={e=>set('admission_number_format',e.target.value)} mono />
-                                                    <div className="mt-2.5 p-3.5 bg-gray-50 dark:bg-white/[0.02] border border-dashed border-gray-200 dark:border-white/10 rounded-2xl text-left">
-                                                        <span className="text-[7.5px] font-black text-zinc-400 uppercase tracking-widest block mb-1">Generated Example Preview</span>
-                                                        <span className="text-xs font-mono font-black text-maroon dark:text-gold">{settings.admission_number_format || 'BTC/2026/001'}</span>
-                                                    </div>
-                                                </FieldRow>
-                                                <FieldRow label="Enrollment Categories" description="Configure classifications of students admitted to the college.">
-                                                    <TagInputList value={settings.student_categories} onChange={val=>set('student_categories',val)} placeholder="e.g. Part-Time" />
-                                                </FieldRow>
-                                            </div>
-
-                                            <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Student Life Cycle Registry</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-1">Life cycle stages available on student records.</p>
-                                                </div>
-                                                <FieldRow label="Life Cycle Status Codes" description="Stages through which students progress during their studies.">
-                                                    <TagInputList value={settings.student_statuses} onChange={val=>set('student_statuses',val)} placeholder="e.g. Graduated" />
-                                                </FieldRow>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Student Portal Access Controls</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure student access permissions inside the personal dashboard.</p>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                                                {[
-                                                    { key:'student_portal_results', label:'Academic Grades & Results Publishing', desc: 'Allows students to view their grade transcripts.' },
-                                                    { key:'student_portal_fees', label:'Financial Statement & Invoices Check', desc: 'Allows access to fee statements and payment modules.' },
-                                                    { key:'student_portal_timetables', label:'Interactive Lecture Timetables', desc: 'Allows students to view their timetables.' },
-                                                    { key:'student_portal_materials', label:'E-Learning Material Downloads', desc: 'Allows access to lecture notes and resources.' },
-                                                    { key:'student_portal_certificates', label:'Official Graduation Awards & Certificates', desc: 'Allows downloading printable awards.' },
-                                                    { key:'student_portal_attendance', label:'Attendance Compliance Auditing', desc: 'Allows students to check their attendance compliance rate.' },
-                                                ].map(i => (
-                                                    <div key={i.key} className="flex items-center justify-between p-4 bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 rounded-3xl hover:border-gold/20 transition-colors">
-                                                        <div className="pr-4 text-left">
-                                                            <p className="text-xs font-black uppercase tracking-wide text-zinc-700 dark:text-zinc-200">{i.label}</p>
-                                                            <p className="text-[8.5px] text-zinc-400 font-medium leading-relaxed mt-0.5">{i.desc}</p>
-                                                        </div>
-                                                        <Toggle value={settings[i.key]} onChange={v=>set(i.key,v)} />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabStudent */}
+                                {activeTab === 'student' && <TabStudent {...ctx} />}
 
                                 {/* ══ PORTAL OPTIONS ══════════════════════════════════ */}
-                                {activeTab === 'portal_customization' && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-6 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Student Portal Configurations</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure announcement banners, contact details and maintenance toggles.</p>
-                                            </div>
-                                            <FieldRow label="Announcement Banner Message" description="Crucial banner message displayed at the top of student dashboards."><TA value={settings.portal_announcement_banner} onChange={e=>set('portal_announcement_banner',e.target.value)} rows={3} /></FieldRow>
-                                            <FieldRow label="Portal Support Email"><Inp value={settings.portal_support_email} onChange={e=>set('portal_support_email',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Portal Support Phone"><Inp value={settings.portal_support_phone} onChange={e=>set('portal_support_phone',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Maintenance Mode Switch" description="Force log out all students and display a system-under-maintenance screen.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.portal_maintenance_mode} onChange={v=>set('portal_maintenance_mode',v)} /><StatusBadge active={settings.portal_maintenance_mode} labelOn="Active" labelOff="Inactive" /></div>
-                                            </FieldRow>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm flex flex-col justify-between">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Student Portal Preview Simulator</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">A real-time mockup view of the portal dashboard.</p>
-                                            </div>
-
-                                            <div className="flex-1 mt-6 border border-gray-200 dark:border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-inner bg-zinc-50 dark:bg-zinc-950 p-4 justify-center relative">
-                                                {settings.portal_maintenance_mode ? (
-                                                    <div className="flex flex-col items-center justify-center text-center p-6 space-y-3">
-                                                        <ShieldAlert className="w-10 h-10 text-red-500 animate-bounce" />
-                                                        <p className="text-xs font-black uppercase tracking-wider text-red-500">System Maintenance Mode Active</p>
-                                                        <p className="text-[9px] text-zinc-400 font-semibold leading-relaxed">The Student Portal is temporarily down for maintenance. Admitted students cannot log in or check results at this time.</p>
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-4 text-left">
-                                                        {settings.portal_announcement_banner && (
-                                                            <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200/50 dark:border-amber-500/20 px-3.5 py-2.5 rounded-xl flex items-start gap-2 animate-pulse">
-                                                                <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                                                                <p className="text-[9.5px] font-bold text-amber-800 dark:text-amber-400 leading-normal">{settings.portal_announcement_banner}</p>
-                                                            </div>
-                                                        )}
-                                                        <div className="bg-white dark:bg-zinc-900 rounded-xl p-4 border border-gray-100 dark:border-white/5 shadow-sm space-y-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-6 h-6 rounded-full bg-gold/25 border border-gold flex items-center justify-center text-[10px] font-black text-maroon dark:text-gold uppercase">JD</div>
-                                                                <div>
-                                                                    <p className="text-[9px] font-black text-zinc-700 dark:text-zinc-200 uppercase leading-none">John Doe</p>
-                                                                    <span className="text-[7.5px] text-zinc-400 font-semibold">Adm No: BTC/2026/042</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="h-0.5 bg-gray-100 dark:bg-white/5 my-2" />
-                                                            <div className="grid grid-cols-2 gap-2 text-[8px] font-black uppercase text-zinc-400 tracking-wider">
-                                                                <div className="p-2 bg-gray-50 dark:bg-zinc-800 rounded-lg flex flex-col justify-between"><span>Grade Record</span><span className="text-maroon dark:text-gold text-[10px] mt-1">GPA 3.82</span></div>
-                                                                <div className="p-2 bg-gray-50 dark:bg-zinc-800 rounded-lg flex flex-col justify-between"><span>Fees Balance</span><span className="text-maroon dark:text-gold text-[10px] mt-1">KES 0.00</span></div>
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        <div className="flex justify-between items-center text-[8px] text-zinc-400 font-bold uppercase tracking-wider px-1">
-                                                            <span>Support Helpline: {settings.portal_support_phone || 'None'}</span>
-                                                            <span>{settings.portal_support_email || 'None'}</span>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabPortalCustomization */}
+                                {activeTab === 'portal_customization' && <TabPortalCustomization {...ctx} />}
 
                                 {/* ══ STAFF SETTINGS ════════════════════════════════════ */}
-                                {activeTab === 'staff' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Staff & Personnel Categories</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Define professional classifications for college staff members.</p>
-                                            </div>
-                                            <FieldRow label="Staff Classifications" description="Organizational categories to segment trainers, admins and support personnel.">
-                                                <TagInputList value={settings.staff_categories} onChange={val=>set('staff_categories',val)} placeholder="e.g. Lecturers" />
-                                            </FieldRow>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Security Access Roles</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Roles mapping security clearances across the college CMS portal.</p>
-                                            </div>
-                                            <FieldRow label="Staff System Roles" description="Clearance roles that allocate user access levels.">
-                                                <TagInputList value={settings.staff_roles} onChange={val=>set('staff_roles',val)} placeholder="e.g. Accountant" />
-                                            </FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabStaff */}
+                                {activeTab === 'staff' && <TabStaff {...ctx} />}
 
                                 {/* ══ EXAMS & GRADING ═══════════════════════════════════ */}
-                                {activeTab === 'exams' && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-5 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Academic Assessment Configurations</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure grading bands and assessment categories.</p>
-                                            </div>
-                                            <FieldRow label="Assessment Formats" description="The catalog of academic assessments used for grading calculations.">
-                                                <TagInputList value={settings.assessment_types} onChange={val=>set('assessment_types',val)} placeholder="e.g. CAT" />
-                                            </FieldRow>
-                                            
-                                            <p className="text-[9.5px] font-black text-zinc-400 uppercase tracking-widest border-b border-gray-100 dark:border-white/5 pb-2 pt-2">Grade Bands Boundaries (%)</p>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                {[
-                                                    {key:'grading_distinction_min',label:'Distinction Min %',c:'border-green-200 dark:border-green-950/20 bg-green-50/50 dark:bg-green-950/10 text-green-700 dark:text-green-400'},
-                                                    {key:'grading_credit_min',label:'Credit Min %',c:'border-blue-200 dark:border-blue-950/20 bg-blue-50/50 dark:bg-blue-950/10 text-blue-700 dark:text-blue-400'},
-                                                    {key:'grading_pass_min',label:'Pass Min %',c:'border-amber-200 dark:border-amber-950/20 bg-amber-50/50 dark:bg-amber-950/10 text-amber-700 dark:text-gold'},
-                                                    {key:'grading_fail_min',label:'Fail Min %',c:'border-red-200 dark:border-red-950/20 bg-red-50/50 dark:bg-red-950/10 text-red-600 dark:text-red-400'},
-                                                ].map(b=>(
-                                                    <div key={b.key} className={`p-4 border rounded-2xl text-left ${b.c} flex justify-between items-center`}>
-                                                        <span className="text-[9px] font-black uppercase tracking-widest block leading-none">{b.label.split(' ')[0]} Threshold</span>
-                                                        <input type="number" value={settings[b.key]||''} onChange={e=>set(b.key,e.target.value)} className="w-16 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-center text-xs font-black outline-none focus:ring-1 focus:ring-maroon" />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm flex flex-col justify-between">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Grading System Visual Graph</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Graphical breakdown of academic performance brackets.</p>
-                                            </div>
-
-                                            <div className="flex-1 flex flex-col justify-center gap-4 mt-6">
-                                                {[
-                                                    { label: 'Distinction Bracket', val: settings.grading_distinction_min || 70, max: 100, color: 'bg-green-500', desc: 'Represents exceptional academic performance.' },
-                                                    { label: 'Credit Bracket', val: settings.grading_credit_min || 60, max: settings.grading_distinction_min || 70, color: 'bg-blue-500', desc: 'Represents highly competent mastery.' },
-                                                    { label: 'Pass Bracket', val: settings.grading_pass_min || 50, max: settings.grading_credit_min || 60, color: 'bg-amber-500', desc: 'Represents minimum standard compliance.' },
-                                                    { label: 'Fail Bracket', val: settings.grading_fail_min || 0, max: settings.grading_pass_min || 50, color: 'bg-red-500', desc: 'Requires re-examination or academic recovery.' }
-                                                ].map((band, idx) => (
-                                                    <div key={idx} className="space-y-1.5 text-left">
-                                                        <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-wider text-zinc-500">
-                                                            <span>{band.label}</span>
-                                                            <span className="font-mono text-zinc-700 dark:text-zinc-300">{band.val}% to {band.max}%</span>
-                                                        </div>
-                                                        <div className="h-3 w-full bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden flex">
-                                                            <div className="h-full bg-gray-300 dark:bg-zinc-800" style={{ width: `${band.val}%` }} />
-                                                            <div className={`h-full ${band.color}`} style={{ width: `${band.max - band.val}%` }} />
-                                                        </div>
-                                                        <p className="text-[8px] text-zinc-400 font-medium italic">{band.desc}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabExams */}
+                                {activeTab === 'exams' && <TabExams {...ctx} />}
 
                                 {/* ══ ATTENDANCE ════════════════════════════════════════ */}
-                                {activeTab === 'attendance' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Lecture Attendance Logging</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure default attendance tracking modes and roll call statuses.</p>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block">System Roll Call Mode</label>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                    {[
-                                                        { id: 'daily', title: 'Daily Roll Register', desc: 'Class attendance recorded once per student daily.' },
-                                                        { id: 'per_lesson', title: 'Per-Lecture Register', desc: 'Attendance marked every lecture block by the trainer.' },
-                                                        { id: 'qr_code', title: 'QR Code Check-In', desc: 'Students sign in by scanning generated room codes.' }
-                                                    ].map(mode => {
-                                                        const isAct = settings.attendance_mode === mode.id;
-                                                        return (
-                                                            <button key={mode.id} onClick={() => set('attendance_mode', mode.id)} type="button"
-                                                                className={`p-5 rounded-2xl border text-left flex flex-col justify-between gap-2.5 transition-all hover:shadow-md ${isAct ? 'border-maroon dark:border-gold bg-maroon/[0.02] dark:bg-gold/[0.02]' : 'border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01]'}`}>
-                                                                <div className="flex justify-between items-center w-full">
-                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200">{mode.title}</span>
-                                                                    <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isAct ? 'border-maroon dark:border-gold' : 'border-gray-300'}`}>
-                                                                        {isAct && <div className="w-1.5 h-1.5 rounded-full bg-maroon dark:bg-gold" />}
-                                                                    </div>
-                                                                </div>
-                                                                <p className="text-[9px] text-zinc-400 font-medium leading-relaxed">{mode.desc}</p>
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Roll Call Status Brackets</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Codes defining student classroom status on the daily register.</p>
-                                            </div>
-                                            <FieldRow label="Roll Call Status Codes" description="Classification status types for student attendance registration.">
-                                                <TagInputList value={settings.attendance_status_types} onChange={val=>set('attendance_status_types',val)} placeholder="e.g. Excused" />
-                                            </FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabAttendance */}
+                                {activeTab === 'attendance' && <TabAttendance {...ctx} />}
 
                                 {/* ══ FINANCE ═══════════════════════════════════════════ */}
-                                {activeTab === 'finance' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Finance Ledger Configuration</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-1">Set invoice billing items and payment methods.</p>
-                                                </div>
-                                                <FieldRow label="Fee Invoice Items" description="The official catalog of items billed on student invoices.">
-                                                    <TagInputList value={settings.fee_categories} onChange={val=>set('fee_categories',val)} placeholder="e.g. Tuition Fee" />
-                                                </FieldRow>
-                                                <FieldRow label="Acceptable Payment Options" description="Channels approved for student fee payments.">
-                                                    <TagInputList value={settings.payment_methods} onChange={val=>set('payment_methods',val)} placeholder="e.g. M-Pesa" />
-                                                </FieldRow>
-                                            </div>
-
-                                            <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Scholarships & Installment Policies</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure interest penalties, early payment discounts and scholarship categories.</p>
-                                                </div>
-                                                <FieldRow label="Penalty Rate (%)" description="Late penalty fees interest rate."><Inp type="number" value={settings.finance_penalty_rate} onChange={e=>set('finance_penalty_rate',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Discount Rate (%)" description="Early payments discount rate."><Inp type="number" value={settings.finance_discount_rate} onChange={e=>set('finance_discount_rate',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Scholarship Brackets" description="Categories of student scholarships.">
-                                                    <TagInputList value={settings.finance_scholarship_types} onChange={val=>set('finance_scholarship_types',val)} placeholder="e.g. Merit-based" />
-                                                </FieldRow>
-                                                <FieldRow label="Installment Options" description="Allow students to make partial fee payments across the term.">
-                                                    <div className="flex items-center gap-3"><Toggle value={settings.finance_installments_allowed} onChange={v=>set('finance_installments_allowed',v)} /><StatusBadge active={settings.finance_installments_allowed} labelOn="Allowed" labelOff="Disabled" /></div>
-                                                </FieldRow>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabFinance */}
+                                {activeTab === 'finance' && <TabFinance {...ctx} />}
 
                                 {/* ══ COMMUNICATIONS ════════════════════════════════════ */}
-                                {activeTab === 'communications' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">SMS Notification Dispatch Triggers</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure events that trigger automated system SMS notifications.</p>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-                                                {[
-                                                    {key:'sms_admission_confirm', label:'Admission Confirmation SMS', desc: 'Dispatched instantly when student registry admits record.'},
-                                                    {key:'sms_fee_reminder', label:'Fee Overdue Reminders SMS', desc: 'Dispatched for outstanding invoice balances.'},
-                                                    {key:'sms_cat_notify', label:'CAT Grades SMS', desc: 'Dispatched when continuous assessments are published.'},
-                                                    {key:'sms_exam_notify', label:'End-Term Outcomes SMS', desc: 'Dispatched when end-of-term grades are confirmed.'},
-                                                    {key:'sms_grad_notify', label:'Graduation Alerts SMS', desc: 'Dispatched to notify of graduation ceremonies.'},
-                                                ].map(s=>(
-                                                    <div key={s.key} className="flex flex-col justify-between p-5 bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 rounded-3xl hover:border-gold/20 transition-all text-left gap-3">
-                                                        <div>
-                                                            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200 leading-snug">{s.label}</p>
-                                                            <p className="text-[8px] text-zinc-400 font-medium leading-relaxed mt-1">{s.desc}</p>
-                                                        </div>
-                                                        <div className="flex items-center justify-between mt-1 border-t border-gray-100 dark:border-white/5 pt-2">
-                                                            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest">Active Dispatch</span>
-                                                            <Toggle value={settings[s.key]} onChange={v=>set(s.key,v)} />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            
-                                            <FieldRow label="WhatsApp Broadcast Integration" description="Enable automated notifications routing via WhatsApp Business API nodes.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.whatsapp_integration} onChange={v=>set('whatsapp_integration',v)} /><StatusBadge active={settings.whatsapp_integration} labelOn="Enabled" labelOff="Disabled" /></div>
-                                            </FieldRow>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">SMTP Mail Server Configuration</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Credentials mapping the default SMTP server for system dispatch.</p>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <FieldRow label="SMTP Hostname"><Inp value={settings.smtp_host} onChange={e=>set('smtp_host',e.target.value)} placeholder="e.g. smtp.gmail.com" readOnly={!isSuperAdmin} /></FieldRow>
-                                                <FieldRow label="SMTP Port"><Inp value={settings.smtp_port} onChange={e=>set('smtp_port',e.target.value)} placeholder="e.g. 587" readOnly={!isSuperAdmin} /></FieldRow>
-                                                <FieldRow label="SMTP Username"><Inp value={settings.smtp_user} onChange={e=>set('smtp_user',e.target.value)} placeholder="e.g. admin@beautex.edu" readOnly={!isSuperAdmin} /></FieldRow>
-                                                <FieldRow label="SMTP Password"><PwdField value={isSuperAdmin?settings.smtp_pass:'••••••••'} onChange={e=>set('smtp_pass',e.target.value)} readOnly={!isSuperAdmin} /></FieldRow>
-                                            </div>
-                                            <FieldRow label="Secure Connection (TLS)" description="Enforce SSL/TLS secure channel validation.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.smtp_secure} onChange={v=>set('smtp_secure',v)} locked={!isSuperAdmin} /><StatusBadge active={settings.smtp_secure} labelOn="TLS Enforced" labelOff="Standard Mode" /></div>
-                                            </FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabCommunications */}
+                                {activeTab === 'communications' && <TabCommunications {...ctx} />}
 
                                 {/* ══ NOTIFICATION TEMPLATES ════════════════════════════ */}
-                                {activeTab === 'notify_templates' && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Custom Notification Templates</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure automated text message content. Tokens map DB parameters dynamically.</p>
-                                            </div>
-
-                                            {[
-                                                { key: 'template_admission_sms', label: 'Student Admission Confirmation SMS', tokens: ['{name}', '{admission_no}', '{start_date}'] },
-                                                { key: 'template_fee_reminder_sms', label: 'Overdue Tuition Balance Alert SMS', tokens: ['{name}', '{balance}', '{due_date}'] },
-                                                { key: 'template_results_sms', label: 'Academic Term Grade Publishing SMS', tokens: ['{name}', '{gpa}'] },
-                                                { key: 'template_absentee_sms', label: 'Student Absence Notification SMS', tokens: ['{name}', '{date}'] }
-                                            ].map(item => {
-                                                const isActive = activeSmsPreview === item.key;
-                                                return (
-                                                    <div key={item.key} onClick={() => setActiveSmsPreview(item.key)}
-                                                        className={`p-4 rounded-2xl border transition-all cursor-pointer ${isActive ? 'border-maroon dark:border-gold bg-maroon/[0.01] dark:bg-gold/[0.01]' : 'border-gray-100 dark:border-white/5 hover:border-gray-200'}`}>
-                                                        <div className="flex justify-between items-center mb-2">
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200">{item.label}</span>
-                                                            {isActive && <span className="text-[7.5px] bg-gold text-maroon font-black uppercase px-2 py-0.5 rounded-full tracking-widest">Editing</span>}
-                                                        </div>
-                                                        <textarea value={settings[item.key] || ''} onChange={e=>set(item.key,e.target.value)} rows={3}
-                                                            className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:ring-1 focus:ring-maroon resize-none font-sans" />
-                                                        <div className="flex flex-wrap gap-1.5 mt-2">
-                                                            <span className="text-[8px] font-black text-zinc-400 uppercase tracking-widest self-center">Available variables:</span>
-                                                            {item.tokens.map(tok => (
-                                                                <span key={tok} className="text-[8px] font-mono font-bold bg-gray-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded border border-gray-200 dark:border-white/5">{tok}</span>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm flex flex-col justify-between">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">SMS Dispatch Visual Mockup</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Live smartphone rendering showing how the recipient receives the message.</p>
-                                            </div>
-
-                                            <div className="flex-1 mt-6 flex justify-center items-center">
-                                                {/* iPhone smartphone Mockup */}
-                                                <div className="w-[240px] h-[440px] bg-zinc-950 rounded-[40px] border-4 border-zinc-800 shadow-2xl overflow-hidden flex flex-col p-2 relative ring-4 ring-zinc-900">
-                                                    {/* Notch */}
-                                                    <div className="absolute top-2 left-1/2 -translate-x-1/2 w-24 h-4 bg-zinc-950 rounded-full z-20 flex items-center justify-center"><div className="w-1.5 h-1.5 rounded-full bg-zinc-900 mr-2" /><div className="w-12 h-1 bg-zinc-900 rounded-full" /></div>
-                                                    
-                                                    {/* Screen Content */}
-                                                    <div className="flex-1 bg-zinc-100 dark:bg-zinc-900 rounded-[32px] overflow-hidden flex flex-col pt-5 relative">
-                                                        {/* Carrier Top bar */}
-                                                        <div className="h-6 flex items-center justify-between px-4 text-[7px] text-zinc-400 font-black uppercase tracking-widest">
-                                                            <span>11:34 AM</span>
-                                                            <div className="flex items-center gap-1"><span>4G</span><div className="w-4 h-2 border border-zinc-400 rounded-sm p-0.5"><div className="h-full bg-zinc-400 rounded-sm w-3/4" /></div></div>
-                                                        </div>
-                                                        
-                                                        {/* Contact Header */}
-                                                        <div className="h-10 border-b border-zinc-200/50 bg-white/70 dark:bg-zinc-950/70 backdrop-blur-md flex flex-col items-center justify-center">
-                                                            <span className="text-[9px] font-black text-zinc-700 dark:text-zinc-200 tracking-wider">BEAUTEX SMS</span>
-                                                            <span className="text-[6.5px] text-green-500 font-black tracking-widest uppercase">Verified Sender</span>
-                                                        </div>
-                                                        
-                                                        {/* Chat Messages Area */}
-                                                        <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end text-left space-y-2 bg-[#e5ddd5] dark:bg-zinc-950">
-                                                            <div className="p-3 bg-white dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-2xl rounded-bl-none text-[9.5px] font-semibold leading-relaxed shadow-sm max-w-[85%] border border-zinc-200/40 animate-in slide-in-from-bottom duration-300">
-                                                                {(() => {
-                                                                    const template = settings[activeSmsPreview] || '';
-                                                                    return template
-                                                                        .replace(/{name}/g, 'Alex Kamau')
-                                                                        .replace(/{admission_no}/g, 'BTC/2026/042')
-                                                                        .replace(/{start_date}/g, 'July 6, 2026')
-                                                                        .replace(/{balance}/g, '12,500')
-                                                                        .replace(/{due_date}/g, 'July 15, 2026')
-                                                                        .replace(/{gpa}/g, '3.82')
-                                                                        .replace(/{date}/g, new Date().toLocaleDateString());
-                                                                })()}
-                                                                <span className="text-[6.5px] text-zinc-400 font-bold block text-right mt-1.5 uppercase">11:34 AM</span>
-                                                            </div>
-                                                        </div>
-                                                        
-                                                        {/* Input Bar */}
-                                                        <div className="h-8 bg-white border-t border-zinc-200 flex items-center px-3 gap-2">
-                                                            <div className="flex-1 h-5 bg-zinc-100 rounded-full border border-zinc-200" />
-                                                            <div className="w-5 h-5 rounded-full bg-green-500" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabNotifyTemplates */}
+                                {activeTab === 'notify_templates' && <TabNotifyTemplates {...ctx} />}
 
                                 {/* ══ INVENTORY CONFIGURATION ═══════════════════════════ */}
-                                {activeTab === 'inventory_settings' && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Inventory System Configuration</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure stock alert rules and defaults for the college inventory.</p>
-                                            </div>
-                                            
-                                            <FieldRow label="Low Stock Warning Limit" description="The stock level below which the system dispatches replenishment warnings.">
-                                                <input type="range" min="1" max="100" value={settings.inventory_low_stock_threshold || 10} onChange={e=>set('inventory_low_stock_threshold',e.target.value)} className="w-full h-1 bg-gray-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-maroon" />
-                                                <div className="flex justify-between items-center text-[10px] font-black text-zinc-500 uppercase mt-2">
-                                                    <span>Min: 1 Unit</span>
-                                                    <span className="text-maroon dark:text-gold">Threshold: {settings.inventory_low_stock_threshold || 10} Units</span>
-                                                    <span>Max: 100 Units</span>
-                                                </div>
-                                            </FieldRow>
-
-                                            <FieldRow label="Auto stock Warning Alerts" description="Automatically flag items in the inventory register when they fall below the minimum threshold.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.inventory_auto_alert_enabled} onChange={v=>set('inventory_auto_alert_enabled',v)} /><StatusBadge active={settings.inventory_auto_alert_enabled} labelOn="Active" labelOff="Disabled" /></div>
-                                            </FieldRow>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Store & Asset Policies</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure accounting methods and target locations.</p>
-                                            </div>
-                                            <FieldRow label="Default Inventory Store" description="Default warehouse store for newly registered assets."><Inp value={settings.inventory_default_store} onChange={e=>set('inventory_default_store',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Asset Depreciation Method" description="Accounting formula used to calculate annual depreciation for registered physical assets.">
-                                                <Sel value={settings.inventory_depreciation_method} onChange={e=>set('inventory_depreciation_method',e.target.value)}>
-                                                    <option value="straight_line">Straight Line Method</option>
-                                                    <option value="double_declining">Double Declining Balance Method</option>
-                                                    <option value="units_of_production">Units of Production Method</option>
-                                                </Sel>
-                                            </FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabInventorySettings */}
+                                {activeTab === 'inventory_settings' && <TabInventorySettings {...ctx} />}
 
                                 {/* ══ REPORT & DOCUMENT BUILDER ══════════════════════════ */}
-                                {activeTab === 'report_builder' && (
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Academic Reports Layout Settings</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure text headers, disclaimers and layouts for PDF transcripts.</p>
-                                            </div>
-                                            <FieldRow label="Official Transcript Header" description="College title banner printed at the top of academic transcripts."><TA value={settings.report_header_text} onChange={e=>set('report_header_text',e.target.value)} rows={3} /></FieldRow>
-                                            <FieldRow label="Document Footer Note" description="Legal verification and validation disclaimer printed at the bottom."><TA value={settings.report_footer_text} onChange={e=>set('report_footer_text',e.target.value)} rows={3} /></FieldRow>
-                                            <FieldRow label="Display Grading Band Scale" description="Embed the Distinct/Credit/Pass grade range grid at the bottom page margins.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.report_show_grading_scale} onChange={v=>set('report_show_grading_scale',v)} /><StatusBadge active={settings.report_show_grading_scale} labelOn="Visible" labelOff="Hidden" /></div>
-                                            </FieldRow>
-                                            <FieldRow label="Official Signatory Title" description="The designation printed beneath the signature line."><Inp value={settings.report_signature_title} onChange={e=>set('report_signature_title',e.target.value)} /></FieldRow>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 shadow-sm flex flex-col justify-between">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Document Layout Real-time Preview</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Live layout simulation of generated PDF reports.</p>
-                                            </div>
-
-                                            <div className="flex-1 mt-6 border border-gray-200 dark:border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-inner bg-zinc-50 dark:bg-zinc-950 p-6 justify-between text-left text-[7px] space-y-4">
-                                                {/* Header Mock */}
-                                                <div className="flex items-start gap-2 border-b border-gray-200 dark:border-white/5 pb-2 text-zinc-700 dark:text-zinc-200">
-                                                    <div className="w-8 h-8 rounded border border-gray-200 bg-white p-0.5 shrink-0 flex items-center justify-center">
-                                                        <img src="/app-icon-v2.png" className="w-full h-full object-contain" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="font-mono whitespace-pre-wrap leading-tight font-black uppercase text-[8px] text-maroon dark:text-gold">{settings.report_header_text || 'BEAUTEX COLLEGE'}</p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Document Body Mock */}
-                                                <div className="flex-1 space-y-2 py-2">
-                                                    <div className="flex justify-between items-center text-[8px] font-black uppercase text-zinc-500 border-b border-gray-100 dark:border-white/5 pb-1">
-                                                        <span>Student: Alex Kamau</span>
-                                                        <span>Reg: BTC/2026/042</span>
-                                                    </div>
-                                                    <div className="space-y-1">
-                                                        {[
-                                                            { code: 'BTC-101', name: 'Introduction to Cosmetology', grade: 'Distinction' },
-                                                            { code: 'BTC-102', name: 'Advanced Aesthetics & Hair Styling', grade: 'Credit' }
-                                                        ].map((item, idx) => (
-                                                            <div key={idx} className="flex justify-between items-center font-mono py-1 border-b border-dashed border-gray-100 dark:border-white/5 text-zinc-600 dark:text-zinc-300">
-                                                                <span>{item.code} {item.name}</span>
-                                                                <span className="font-black text-maroon dark:text-gold">{item.grade}</span>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-
-                                                {/* Footer & Signature Mock */}
-                                                <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-white/5 text-zinc-500 font-semibold leading-relaxed">
-                                                    {settings.report_show_grading_scale && (
-                                                        <div className="p-1.5 bg-gray-100 dark:bg-zinc-800 rounded flex justify-between gap-1 text-[5.5px] uppercase font-black text-zinc-400">
-                                                            <span>Distinction: 70%+</span>
-                                                            <span>Credit: 60%+</span>
-                                                            <span>Pass: 50%+</span>
-                                                            <span>Fail: 0-49%</span>
-                                                        </div>
-                                                    )}
-                                                    <p className="text-[6.5px] italic leading-tight text-center">{settings.report_footer_text || 'Disclaimer text here.'}</p>
-                                                    
-                                                    <div className="flex justify-between items-end pt-1">
-                                                        <div className="w-16 h-8 border border-dashed border-gray-300 rounded flex items-center justify-center text-zinc-400 text-[5px] uppercase font-black">QR Verification</div>
-                                                        <div className="text-center flex flex-col items-center">
-                                                            <div className="w-16 h-4 border-b border-gray-300 font-mono text-[6px] italic text-zinc-600 dark:text-zinc-300 flex items-end justify-center">Dr. Jane Doe</div>
-                                                            <span className="text-[6px] font-black uppercase text-zinc-400 mt-1 block">{settings.report_signature_title || 'Registrar'}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabReportBuilder */}
+                                {activeTab === 'report_builder' && <TabReportBuilder {...ctx} />}
 
                                 {/* ══ CERTIFICATES ══════════════════════════════════════ */}
-                                {activeTab === 'certificates' && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Academic Award Templates</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure layout themes and certificate serial formats.</p>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <FieldRow label="Certificate Code Format" description="Format prefix to generate certificate sequential serial codes."><Inp value={settings.certificate_no_format} onChange={e=>set('certificate_no_format',e.target.value)} mono /></FieldRow>
-                                                <FieldRow label="Graduation registry Format"><Inp value={settings.graduation_no_format} onChange={e=>set('graduation_no_format',e.target.value)} mono /></FieldRow>
-                                            </div>
-
-                                            <div className="space-y-2 pt-2">
-                                                <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block">Short-Course Certificate Theme</label>
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                    {[
-                                                        { id: 'standard', title: 'Classic Borders', desc: 'Symmetrical borders, traditional text layouts.' },
-                                                        { id: 'classic', title: 'Formal Calligraphy', desc: 'Calligraphy serif fonts, gold insignia ornaments.' },
-                                                        { id: 'modern', title: 'Modern Clean', desc: 'Glassmorphic badges, sleek grids.' }
-                                                    ].map(tmpl => {
-                                                        const isAct = settings.certificate_short_course_template === tmpl.id;
-                                                        return (
-                                                            <button key={tmpl.id} onClick={() => set('certificate_short_course_template', tmpl.id)} type="button"
-                                                                className={`p-4.5 rounded-2xl border text-left flex flex-col justify-between gap-2 transition-all hover:shadow-md ${isAct ? 'border-maroon dark:border-gold bg-maroon/[0.02] dark:bg-gold/[0.02]' : 'border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01]'}`}>
-                                                                <div className="flex justify-between items-center w-full">
-                                                                    <span className="text-[9.5px] font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200">{tmpl.title}</span>
-                                                                    <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${isAct ? 'border-maroon dark:border-gold' : 'border-gray-300'}`}>
-                                                                        {isAct && <div className="w-1.5 h-1.5 rounded-full bg-maroon dark:bg-gold" />}
-                                                                    </div>
-                                                                </div>
-                                                                <p className="text-[8.5px] text-zinc-400 font-semibold leading-relaxed">{tmpl.desc}</p>
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                                                <FieldRow label="Incorporate Verification QR Code" description="Print security QR code on awards for digital registry verification checks.">
-                                                    <div className="flex items-center gap-3"><Toggle value={settings.qr_verification_enabled} onChange={v=>set('qr_verification_enabled',v)} /><StatusBadge active={settings.qr_verification_enabled} labelOn="Enabled" labelOff="Disabled" /></div>
-                                                </FieldRow>
-                                                <FieldRow label="Digital Principal Signature" description="Automatically imprint principal authorized signature image on certificates.">
-                                                    <div className="flex items-center gap-3"><Toggle value={settings.digital_signatures_enabled} onChange={v=>set('digital_signatures_enabled',v)} /><StatusBadge active={settings.digital_signatures_enabled} labelOn="Imprinted" labelOff="Disabled" /></div>
-                                                </FieldRow>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabCertificates */}
+                                {activeTab === 'certificates' && <TabCertificates {...ctx} />}
 
                                 {/* ══ LMS ═══════════════════════════════════════════════ */}
-                                {activeTab === 'lms' && (
-                                    <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left animate-in fade-in duration-300">
-                                        <div>
-                                            <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Learning Management System (LMS) Nodes</h4>
-                                            <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure feature visibility inside the student e-learning dashboard portal.</p>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                                            {[
-                                                { key:'lms_assignments_enabled', label:'Virtual Assignment Submissions', desc: 'Allows students to upload assignments directly for grading.' },
-                                                { key:'lms_materials_enabled', label:'Lecture Notes & Handout Library', desc: 'Publishes courseware documents uploaded by trainers.' },
-                                                { key:'lms_online_exams_enabled', label:'Computer Based Testing (CBT)', desc: 'Enables timed online testing modules inside the portal.' },
-                                                { key:'lms_online_classes_enabled', label:'Virtual Video Lectures Integration', desc: 'Allows virtual class meeting scheduling and launches.' },
-                                                { key:'lms_discussions_enabled', label:'Classroom Discussion Forums', desc: 'Allows group threads between students and instructors.' },
-                                            ].map(l=>(
-                                                <div key={l.key} className="flex items-center justify-between p-4.5 bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 rounded-3xl hover:border-gold/20 transition-all gap-4">
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-xs font-black uppercase tracking-wide text-zinc-700 dark:text-zinc-200">{l.label}</p>
-                                                        <p className="text-[8.5px] text-zinc-400 font-medium leading-relaxed mt-0.5">{l.desc}</p>
-                                                    </div>
-                                                    <Toggle value={settings[l.key]} onChange={v=>set(l.key,v)} />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabLms */}
+                                {activeTab === 'lms' && <TabLms {...ctx} />}
 
                                 {/* ══ SECURITY ══════════════════════════════════════════ */}
-                                {activeTab === 'security' && isSuperAdmin && (
-                                    <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left animate-in fade-in duration-300">
-                                        <div>
-                                            <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">CMS Portal Security Policies</h4>
-                                            <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure credentials rules, user sessions, and login lockout triggers.</p>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <FieldRow label="Minimum Password Length" description="Enforce minimum characters for user password updates."><Inp type="number" value={settings.password_policy_min_len} onChange={e=>set('password_policy_min_len',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Session Timeout Duration" description="Timeout user sessions after inactive minutes."><Inp type="number" value={settings.session_timeout} onChange={e=>set('session_timeout',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Lockout Login Attempts" description="Brute-force lockout trigger count."><Inp type="number" value={settings.failed_login_attempts} onChange={e=>set('failed_login_attempts',e.target.value)} /></FieldRow>
-                                            <FieldRow label="Special Characters Required" description="Enforce passwords to contain numbers, uppercase, and symbols.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.password_policy_require_special} onChange={v=>set('password_policy_require_special',v)} /><StatusBadge active={settings.password_policy_require_special} labelOn="Enforced" labelOff="Standard" /></div>
-                                            </FieldRow>
-                                            <FieldRow label="Two-Factor Authentication" description="Enforce email OTP confirmation checks at logins.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.two_factor_auth} onChange={v=>set('two_factor_auth',v)} /><StatusBadge active={settings.two_factor_auth} labelOn="Enforced" labelOff="Disabled" /></div>
-                                            </FieldRow>
-                                            <FieldRow label="Activity logs Auditing" description="Log and audit all operator page interactions.">
-                                                <div className="flex items-center gap-3"><Toggle value={settings.activity_monitoring_enabled} onChange={v=>set('activity_monitoring_enabled',v)} /><StatusBadge active={settings.activity_monitoring_enabled} labelOn="Auditing" labelOff="Disabled" /></div>
-                                            </FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabSecurity */}
+                                {activeTab === 'security' && isSuperAdmin && <TabSecurity {...ctx} />}
 
                                 {/* ══ INTEGRATIONS ══════════════════════════════════════ */}
-                                {activeTab === 'integrations' && isSuperAdmin && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        {/* M-Pesa Integration Card */}
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left">
-                                            <div className="flex justify-between items-center border-b border-gray-100 dark:border-white/5 pb-2">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold">M-Pesa Merchant Gateway</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-0.5">Safaricom Daraja API configurations for real-time mobile receipts.</p>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <button type="button" onClick={() => triggerTestIntegration('mpesa')} disabled={testingIntegration['mpesa']}
-                                                        className="text-[8px] font-black uppercase tracking-widest border border-dashed border-gray-300 dark:border-white/10 hover:border-gold hover:text-maroon dark:hover:text-gold px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm bg-white dark:bg-zinc-800">
-                                                        {testingIntegration['mpesa'] ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <Zap className="w-2.5 h-2.5 text-yellow-500" />}
-                                                        {testingIntegration['mpesa'] ? 'Testing Connection...' : 'Test Connection'}
-                                                    </button>
-                                                    <Toggle value={settings.mpesa_status} onChange={v=>set('mpesa_status',v)} />
-                                                </div>
-                                            </div>
-
-                                            {integrationStatus['mpesa'] && (
-                                                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-xl text-[8.5px] font-mono leading-none">
-                                                    {integrationStatus['mpesa']}
-                                                </div>
-                                            )}
-
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <FieldRow label="Paybill Shortcode" description="Your business LIPA NA M-PESA paybill shortcode."><Inp value={settings.mpesa_shortcode} onChange={e=>set('mpesa_shortcode',e.target.value)} mono /></FieldRow>
-                                                <FieldRow label="Consumer API Key"><Inp value={settings.mpesa_consumer_key} onChange={e=>set('mpesa_consumer_key',e.target.value)} mono /></FieldRow>
-                                                <FieldRow label="Consumer Client Secret"><PwdField value={settings.mpesa_consumer_secret} onChange={e=>set('mpesa_consumer_secret',e.target.value)} /></FieldRow>
-                                                <FieldRow label="API Passkey"><PwdField value={settings.mpesa_passkey} onChange={e=>set('mpesa_passkey',e.target.value)} /></FieldRow>
-                                                <FieldRow label="Instant Callback URL" description="Target endpoint routing payment confirmations from Safaricom."><Inp value={settings.mpesa_callback_url} onChange={e=>set('mpesa_callback_url',e.target.value)} /></FieldRow>
-                                            </div>
-                                        </div>
-
-                                        {/* API Integration Keys */}
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">External Calendar & Meeting SDK Credentials</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Manage API keys routing virtual classrooms and Google Calendars.</p>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                {[
-                                                    { key: 'google_calendar', label: 'Google Calendar Sync SDK', field: 'google_calendar_api_key', desc: 'Synchronizes academic term dates and class timetables to Google Calendar.' },
-                                                    { key: 'zoom', label: 'Zoom Video Webinars SDK', field: 'zoom_api_key', desc: 'Authenticates virtual classroom streams and triggers Zoom meetings.' },
-                                                    { key: 'google_meet', label: 'Google Meet API Client ID', field: 'google_meet_api_key', desc: 'Allows virtual class routing inside Google Workspace.' }
-                                                ].map(api => (
-                                                    <div key={api.key} className="p-4 bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                                        <div className="min-w-0 flex-1">
-                                                            <p className="text-[10px] font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200 leading-none">{api.label}</p>
-                                                            <p className="text-[8.5px] text-zinc-400 font-semibold leading-relaxed mt-1 max-w-sm">{api.desc}</p>
-                                                        </div>
-                                                        <div className="flex items-center gap-3 self-end md:self-auto">
-                                                            {integrationStatus[api.key] && (
-                                                                <span className="text-[7.5px] font-mono text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-1 rounded border border-emerald-200/50">Verified</span>
-                                                            )}
-                                                            <button type="button" onClick={() => triggerTestIntegration(api.key)} disabled={testingIntegration[api.key]}
-                                                                className="text-[8px] font-black uppercase tracking-widest border border-gray-300 dark:border-white/10 hover:border-gold hover:text-maroon dark:hover:text-gold px-2.5 py-1.5 rounded-lg transition-all shadow-sm bg-white dark:bg-zinc-800 shrink-0">
-                                                                {testingIntegration[api.key] ? 'Verifying...' : 'Test Sync'}
-                                                            </button>
-                                                            <div className="w-56"><PwdField value={settings[api.field]} onChange={e=>set(api.field,e.target.value)} /></div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabIntegrations */}
+                                {activeTab === 'integrations' && isSuperAdmin && <TabIntegrations {...ctx} />}
 
                                 {/* ══ BACKUP ════════════════════════════════════════════ */}
-                                {activeTab === 'backup' && isSuperAdmin && (
-                                    <div className="space-y-6 animate-in fade-in duration-300">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="p-6 bg-rose-50/50 dark:bg-rose-950/10 border border-rose-100/50 dark:border-rose-950/30 rounded-3xl space-y-4 text-left flex flex-col justify-between hover:shadow-md transition-shadow">
-                                                <div className="space-y-2">
-                                                    <HardDrive className="w-8 h-8 text-maroon dark:text-gold" />
-                                                    <h4 className="text-xs font-black uppercase text-maroon dark:text-gold tracking-wider leading-none">Download Raw SQLite Snapshot</h4>
-                                                    <p className="text-[9.5px] text-zinc-400 font-semibold leading-relaxed">Download a complete, offline backup snapshot file of the current SQLite database records immediately.</p>
-                                                </div>
-                                                <button onClick={handleBackup} className="w-full flex items-center justify-center gap-2 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest hover:opacity-90 transition-all shadow-md mt-4"
-                                                    style={{ backgroundColor: settings.sidebar_colors || '#7a0000', border: `1px solid ${GOLD}40` }}>
-                                                    <Download className="w-3.5 h-3.5 text-yellow-300 animate-bounce" /> Download Database Backup
-                                                </button>
-                                            </div>
-                                            <div className="p-6 bg-zinc-50/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/10 rounded-3xl space-y-4 text-left flex flex-col justify-between hover:shadow-md transition-shadow">
-                                                <div className="space-y-2">
-                                                    <RefreshCw className={`w-8 h-8 text-zinc-500 ${restoring?'animate-spin':''}`} />
-                                                    <h4 className="text-xs font-black uppercase text-zinc-700 dark:text-zinc-200 tracking-wider leading-none">Restore Last Safe State Snapshot</h4>
-                                                    <p className="text-[9.5px] text-zinc-400 font-semibold leading-relaxed">Overwrite current active table records and restore the database state to the last verified safe snapshot point.</p>
-                                                </div>
-                                                <button onClick={handleRestore} disabled={restoring} className="w-full flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-800 text-white py-3 rounded-xl font-black text-[9px] uppercase tracking-widest disabled:opacity-50 transition-all shadow-md mt-4">
-                                                    <RefreshCw className="w-3.5 h-3.5" /> {restoring?'Restoring snapshot state...':'Trigger Restoration Sequence'}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm text-left">
-                                            <div>
-                                                <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Auto Backup Scheduler</h4>
-                                                <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure cron task triggers for background database backups.</p>
-                                            </div>
-                                            <FieldRow label="Auto-Backup Schedule Frequency">
-                                                <Sel value={settings.backup_interval} onChange={e=>set('backup_interval',e.target.value)}>
-                                                    <option value="daily">Daily Cron Backup (1:00 AM)</option>
-                                                    <option value="weekly">Weekly Cron Backup (Sunday 2:00 AM)</option>
-                                                    <option value="monthly">Monthly Cron Backup (1st of month)</option>
-                                                    <option value="manual">Manual Backup Triggers Only</option>
-                                                </Sel>
-                                            </FieldRow>
-                                            <FieldRow label="Included Target Snapshots" description="Comma-separated catalogs to pack into backups."><Inp value={settings.backup_types} onChange={e=>set('backup_types',e.target.value)} mono /></FieldRow>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabBackup */}
+                                {activeTab === 'backup' && isSuperAdmin && <TabBackup {...ctx} />}
 
                                 {/* ══ THEMES ════════════════════════════════════════════ */}
-                                {activeTab === 'branding_themes' && (() => {
-                                    const MAROON_PALETTE = [
-                                        { name: 'Royal Maroon',    hex: '#800000' },
-                                        { name: 'Deep Crimson',    hex: '#6B0000' },
-                                        { name: 'Dark Maroon',     hex: '#5a0000' },
-                                        { name: 'Warm Burgundy',   hex: '#722F37' },
-                                        { name: 'Classic Wine',    hex: '#7B2D8B' },
-                                        { name: 'Heritage Red',    hex: '#8B1A1A' },
-                                        { name: 'Scarlet Deep',    hex: '#9B1B30' },
-                                        { name: 'Oxblood',         hex: '#4A0010' },
-                                    ];
-                                    const GOLD_PALETTE = [
-                                        { name: 'Classic Gold',    hex: '#c8a94a' },
-                                        { name: 'Bright Gold',     hex: '#FFD700' },
-                                        { name: 'Antique Gold',    hex: '#B8860B' },
-                                        { name: 'Rich Gold',       hex: '#DAA520' },
-                                        { name: 'Warm Amber',      hex: '#FFBF00' },
-                                        { name: 'Deep Saffron',    hex: '#E8A000' },
-                                        { name: 'Burnished Gold',  hex: '#A0790A' },
-                                        { name: 'Pale Gold',       hex: '#EDD26A' },
-                                    ];
-                                    const DARK_PALETTE = [
-                                        { name: 'Midnight',        hex: '#0b0b0c' },
-                                        { name: 'Charcoal',        hex: '#1a1a2e' },
-                                        { name: 'Navy',            hex: '#0d1b2a' },
-                                        { name: 'Forest',          hex: '#0d2818' },
-                                        { name: 'Graphite',        hex: '#2d2d2d' },
-                                        { name: 'Slate',           hex: '#1e293b' },
-                                        { name: 'Deep Purple',     hex: '#2d1b69' },
-                                        { name: 'Ocean',           hex: '#0a3d62' },
-                                    ];
-                                    const SwatchGroup = ({ title, palette, settingKey }) => (
-                                        <div className="space-y-3">
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">{title}</p>
-                                            <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
-                                                {palette.map(sw => {
-                                                    const isActive = settings[settingKey]?.toLowerCase() === sw.hex.toLowerCase();
-                                                    return (
-                                                        <button
-                                                            key={sw.hex}
-                                                            title={sw.name}
-                                                            onClick={() => set(settingKey, sw.hex)}
-                                                            className="group flex flex-col items-center gap-1.5"
-                                                        >
-                                                            <div
-                                                                className={`w-full aspect-square rounded-xl shadow-md transition-all duration-200 group-hover:scale-110 group-hover:shadow-lg border-2 ${isActive ? 'border-white scale-110 shadow-xl ring-2 ring-offset-2' : 'border-transparent'}`}
-                                                                style={{ backgroundColor: sw.hex, ringColor: sw.hex }}
-                                                            >
-                                                                {isActive && (
-                                                                    <div className="w-full h-full flex items-center justify-center">
-                                                                        <CheckCircle className="w-4 h-4 text-white drop-shadow" />
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <span className="text-[7px] font-bold text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200 text-center leading-tight line-clamp-2 px-0.5 transition-colors">{sw.name}</span>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    );
-                                    return (
-                                        <div className="space-y-8 animate-in fade-in duration-300">
-                                            {/* Live Preview Card */}
-                                            <div className="rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden shadow-lg">
-                                                <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-zinc-900 flex items-center justify-between">
-                                                    <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400 flex items-center gap-1.5"><Eye className="w-3 h-3" /> Live Preview</p>
-                                                    <span className="text-[8px] font-bold text-zinc-400">Changes apply on Save</span>
-                                                </div>
-                                                <div className="flex h-32 bg-white dark:bg-zinc-950">
-                                                    {/* Mini sidebar preview */}
-                                                    <div className="w-20 flex flex-col items-start px-2 py-2 gap-1 shrink-0" style={{ backgroundColor: settings.sidebar_colors || '#7a0000' }}>
-                                                        <div className="w-full h-3 rounded bg-white/30 mb-1" />
-                                                        {[1,2,3,4].map(i => (
-                                                            <div key={i} className={`w-full h-2.5 rounded flex items-center gap-1 px-1 ${i===1?'bg-white/25':''}`}>
-                                                                <div className="w-1.5 h-1.5 rounded-sm bg-white/40 shrink-0" />
-                                                                <div className="flex-1 h-1 bg-white/20 rounded-sm" />
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                    {/* Mini header + content preview */}
-                                                    <div className="flex-1 flex flex-col">
-                                                        <div className="h-7 flex items-center px-3 gap-2 shrink-0" style={{ backgroundColor: settings.portal_theme_colors || '#800000' }}>
-                                                            <div className="w-12 h-2 bg-white/50 rounded-sm" />
-                                                            <div className="flex-1" />
-                                                            <div className="w-2 h-2 bg-white/50 rounded-full" />
-                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: GOLD }} />
-                                                        </div>
-                                                        <div className="flex-1 p-2 space-y-1 bg-gray-50 dark:bg-zinc-900">
-                                                            <div className="flex gap-1">
-                                                                <div className="h-6 rounded-lg flex-1" style={{ backgroundColor: (settings.portal_theme_colors || '#800000') + '15', border: `1px solid ${settings.portal_theme_colors || '#800000'}30` }} />
-                                                                <div className="h-6 rounded-lg flex-1 bg-gray-100 dark:bg-zinc-800" />
-                                                                <div className="h-6 rounded-lg flex-1 bg-gray-100 dark:bg-zinc-800" />
-                                                            </div>
-                                                            <div className="h-2 bg-gray-200 dark:bg-zinc-800 rounded-sm w-3/4" />
-                                                            <div className="h-2 bg-gray-100 dark:bg-zinc-700 rounded-sm w-1/2" />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="px-4 py-3 bg-gray-50/50 dark:bg-zinc-900/60 border-t border-gray-100 dark:border-white/5 flex items-center gap-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-5 h-5 rounded-md border border-white/20 shadow" style={{ backgroundColor: settings.portal_theme_colors || '#800000' }} />
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-zinc-400 uppercase tracking-wider">Primary / Header</p>
-                                                            <p className="text-[9px] font-mono font-bold text-zinc-700 dark:text-zinc-200">{settings.portal_theme_colors || '#800000'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-5 h-5 rounded-md border border-white/20 shadow" style={{ backgroundColor: settings.sidebar_colors || '#7a0000' }} />
-                                                        <div>
-                                                            <p className="text-[8px] font-black text-zinc-400 uppercase tracking-wider">Sidebar / Accent</p>
-                                                            <p className="text-[9px] font-mono font-bold text-zinc-700 dark:text-zinc-200">{settings.sidebar_colors || '#7a0000'}</p>
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => { set('portal_theme_colors','#800000'); set('sidebar_colors','#7a0000'); }}
-                                                        className="ml-auto text-[8px] font-black text-zinc-400 hover:text-maroon dark:hover:text-gold transition-colors uppercase tracking-widest border border-dashed border-zinc-200 dark:border-white/10 px-2 py-1 rounded-lg hover:border-maroon dark:hover:border-gold">
-                                                        ↺ Reset to BTTC Default
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* PRIMARY / HEADER COLOR */}
-                                            <div className="p-5 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-2xl shadow-sm space-y-5">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <h4 className="text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200">Primary / Header Color</h4>
-                                                        <p className="text-[9px] text-zinc-400 font-semibold mt-0.5">Used for the top navigation bar and primary action buttons</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2">
-                                                        <div className="w-6 h-6 rounded-lg shadow border border-white/20" style={{backgroundColor:settings.portal_theme_colors || '#800000'}} />
-                                                        <input type="color" value={settings.portal_theme_colors || '#800000'} onChange={e=>set('portal_theme_colors',e.target.value)} className="w-7 h-7 rounded-lg cursor-pointer bg-transparent border-0 p-0" title="Pick custom color" />
-                                                        <span className="text-[10px] font-mono font-black text-gray-500 dark:text-zinc-300">{settings.portal_theme_colors || '#800000'}</span>
-                                                    </div>
-                                                </div>
-                                                <SwatchGroup title="🔴 Maroon Shades" palette={MAROON_PALETTE} settingKey="portal_theme_colors" />
-                                                <SwatchGroup title="⚫ Dark Tones" palette={DARK_PALETTE} settingKey="portal_theme_colors" />
-                                            </div>
-
-                                            {/* SIDEBAR COLOR */}
-                                            <div className="p-5 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-2xl shadow-sm space-y-5">
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <h4 className="text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200">Sidebar / Accent Color</h4>
-                                                        <p className="text-[9px] text-zinc-400 font-semibold mt-0.5">Used for the left navigation sidebar and accent elements</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2">
-                                                        <div className="w-6 h-6 rounded-lg shadow border border-white/20" style={{backgroundColor:settings.sidebar_colors || '#7a0000'}} />
-                                                        <input type="color" value={settings.sidebar_colors || '#7a0000'} onChange={e=>set('sidebar_colors',e.target.value)} className="w-7 h-7 rounded-lg cursor-pointer bg-transparent border-0 p-0" title="Pick custom color" />
-                                                        <span className="text-[10px] font-mono font-black text-gray-500 dark:text-zinc-300">{settings.sidebar_colors || '#7a0000'}</span>
-                                                    </div>
-                                                </div>
-                                                <SwatchGroup title="🔴 Maroon Shades" palette={MAROON_PALETTE} settingKey="sidebar_colors" />
-                                                <SwatchGroup title="🏆 Gold & Amber" palette={GOLD_PALETTE} settingKey="sidebar_colors" />
-                                                <SwatchGroup title="⚫ Dark Tones" palette={DARK_PALETTE} settingKey="sidebar_colors" />
-                                            </div>
-
-                                            {/* QUICK THEME PRESETS */}
-                                            <div className="p-5 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-2xl shadow-sm space-y-4">
-                                                <div>
-                                                    <h4 className="text-xs font-black uppercase tracking-wider text-zinc-700 dark:text-zinc-200">Quick Theme Presets</h4>
-                                                    <p className="text-[9px] text-zinc-400 font-semibold mt-0.5">One-click apply coordinated color combinations</p>
-                                                </div>
-                                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                                                    {[
-                                                        { name: 'BTTC Classic',    primary: '#800000', sidebar: '#7a0000', gold: GOLD },
-                                                        { name: 'Deep Maroon',     primary: '#6B0000', sidebar: '#5a0000', gold: '#DAA520' },
-                                                        { name: 'Burgundy & Gold', primary: '#722F37', sidebar: '#6a2030', gold: '#FFD700' },
-                                                        { name: 'Heritage',        primary: '#8B1A1A', sidebar: '#7a0000', gold: '#B8860B' },
-                                                        { name: 'Midnight Blue',   primary: '#0d1b2a', sidebar: '#1a1a2e', gold: GOLD },
-                                                        { name: 'Forest Green',    primary: '#0d2818', sidebar: '#0a1f12', gold: '#DAA520' },
-                                                        { name: 'Graphite',        primary: '#2d2d2d', sidebar: '#1a1a1a', gold: GOLD },
-                                                        { name: 'Oxblood Elite',   primary: '#4A0010', sidebar: '#3a000c', gold: '#E8A000' },
-                                                    ].map(preset => (
-                                                        <button key={preset.name}
-                                                            onClick={() => { set('portal_theme_colors', preset.primary); set('sidebar_colors', preset.sidebar); }}
-                                                            className="group p-3 rounded-xl border border-gray-100 dark:border-white/5 hover:border-gold hover:shadow-md transition-all text-left space-y-2 bg-gray-50/50 dark:bg-zinc-800 hover:bg-white dark:hover:bg-zinc-700">
-                                                            <div className="flex gap-1.5 h-6 rounded-lg overflow-hidden">
-                                                                <div className="flex-1 h-full" style={{ backgroundColor: preset.primary }} />
-                                                                <div className="flex-1 h-full" style={{ backgroundColor: preset.sidebar }} />
-                                                                <div className="w-4 h-full" style={{ backgroundColor: preset.gold }} />
-                                                            </div>
-                                                            <p className="text-[9px] font-black text-zinc-600 dark:text-zinc-300 uppercase tracking-wide group-hover:text-maroon dark:group-hover:text-gold transition-colors">{preset.name}</p>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* Login Banner URL */}
-                                            <div className="p-5 bg-white dark:bg-zinc-900 border border-gray-100 dark:border-white/5 rounded-2xl shadow-sm">
-                                                <FieldRow label="Login Banner URL" description="Custom image URL displayed on the login page background">
-                                                    <Inp value={settings.login_banner_url} onChange={e=>set('login_banner_url',e.target.value)} placeholder="https://example.com/banner.jpg" />
-                                                </FieldRow>
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
+                                {/* TabBrandingThemes */}
+                                {activeTab === 'branding_themes' && <TabBrandingThemes {...ctx} />}
 
                                 {/* ══ SYSTEM CONFIGURATION ══════════════════════════════ */}
-                                {activeTab === 'system' && (
-                                    <div className="space-y-5">
-                                        <div className="flex items-center gap-3 bg-green-50 dark:bg-green-950/20 px-4 py-3 rounded-xl border border-green-200/50">
-                                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                            <span className="text-[10px] font-black text-green-700 dark:text-green-400 uppercase tracking-widest mt-0.5">All Systems Operational</span>
-                                            <span className="ml-auto text-[9px] text-zinc-400 font-bold uppercase tracking-widest">v{settings.system_version}</span>
-                                        </div>
-                                        <div className="p-5 bg-zinc-900 rounded-2xl font-mono text-[10px] text-zinc-400 space-y-1.5 border border-white/5">
-                                            <p><span className="text-zinc-600">[SYS]</span> System nominal boot check completed.</p>
-                                            <p><span className="text-zinc-600">[SEC]</span> JWT cryptography middleware initiated.</p>
-                                            <p><span className="text-zinc-600">[DB]</span> DB pool initialized (SQLite).</p>
-                                            <p className="text-green-400"><span className="text-green-500">[SYS]</span> All sub-routers loaded successfully.</p>
-                                        </div>
-                                    </div>
-                                )}
+                                {/* TabSystem */}
+                                {activeTab === 'system' && <TabSystem {...ctx} />}
 
                                 {/* ══ AUDIT LOGS ════════════════════════════════════════ */}
-                                {activeTab === 'audit' && isSuperAdmin && (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-2.5">
-                                            <Search className="w-4 h-4 text-gray-400 ml-1" />
-                                            <input type="text" value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Filter by operator, action, or IP..." className="w-full bg-transparent text-xs font-semibold outline-none pl-1" />
-                                        </div>
-                                        {loadingAudit ? <p className="text-center py-6 text-xs text-gray-400 font-semibold">Loading audit logs...</p> : (
-                                            <div className="border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden shadow-inner">
-                                                <table className="w-full text-left text-xs">
-                                                    <thead><tr className="bg-gray-50 dark:bg-white/5 border-b border-gray-200/50 dark:border-white/5">
-                                                        <th className="px-4 py-3 text-[9px] font-black text-zinc-400 uppercase tracking-widest">Date</th>
-                                                        <th className="px-4 py-3 text-[9px] font-black text-zinc-400 uppercase tracking-widest">Operator</th>
-                                                        <th className="px-4 py-3 text-[9px] font-black text-zinc-400 uppercase tracking-widest">Activity</th>
-                                                        <th className="px-4 py-3 text-[9px] font-black text-zinc-400 uppercase tracking-widest">IP Address</th>
-                                                    </tr></thead>
-                                                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                                                        {filteredAudit.map((l,i)=>(
-                                                            <tr key={l.id||i} className="hover:bg-zinc-50 dark:hover:bg-white/5 transition-colors">
-                                                                <td className="px-4 py-3 text-zinc-400 font-semibold">{l.created_at?new Date(l.created_at).toLocaleString():'—'}</td>
-                                                                <td className="px-4 py-3 font-bold text-zinc-700 dark:text-zinc-200">{l.user_email||'system'}</td>
-                                                                <td className="px-4 py-3 text-maroon dark:text-gold font-black">{l.action}</td>
-                                                                <td className="px-4 py-3 font-mono text-zinc-500">{l.ip_address||'127.0.0.1'}</td>
-                                                            </tr>
-                                                        ))}
-                                                        {filteredAudit.length===0&&<tr><td colSpan="4" className="px-4 py-6 text-center text-zinc-400 font-semibold uppercase tracking-wider">No logs found.</td></tr>}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                {/* TabAudit */}
+                                {activeTab === 'audit' && isSuperAdmin && <TabAudit {...ctx} />}
                             </div>
 
                             {/* ── SAVE CHANGES FOOTER ─────────────────────────────── */}
                             <div className="px-7 py-4 border-t border-gray-100 dark:border-white/5 flex items-center justify-between gap-4 bg-gray-50/50 dark:bg-white/[0.02]">
-                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider hidden sm:block">
-                                    Click save to commit configuration changes to the database.
-                                </p>
-                                <button onClick={handleSave} disabled={saving}
+                                {isDirty ? (
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 text-[9px] font-black uppercase tracking-widest shrink-0 border border-amber-200/60 dark:border-amber-500/20">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                            {dirtyKeys.length} unsaved change{dirtyKeys.length === 1 ? '' : 's'}
+                                        </span>
+                                        <button type="button" onClick={discardChanges}
+                                            className="text-[9px] font-black uppercase tracking-widest text-zinc-400 hover:text-red-500 transition-colors shrink-0">
+                                            Discard
+                                        </button>
+                                        <span className="text-[8.5px] text-zinc-400 font-mono truncate hidden lg:block" title={dirtyKeys.join(', ')}>{dirtyKeys.join(', ')}</span>
+                                    </div>
+                                ) : (
+                                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400 text-[9px] font-black uppercase tracking-widest border border-green-200/60 dark:border-green-500/20">
+                                        <CheckCircle className="w-3 h-3" /> {loading ? 'Loading settings…' : 'All changes saved'}
+                                    </span>
+                                )}
+                                <button onClick={handleSave} disabled={saving || !isDirty}
                                     className="flex items-center gap-2 text-white px-7 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all shadow-md hover:shadow-lg hover:opacity-90 ml-auto"
                                     style={{ backgroundColor: settings.sidebar_colors || '#7a0000', border: `1px solid ${GOLD}25` }}>
                                     {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 text-yellow-300" />}
@@ -2035,33 +865,35 @@ export default function Settings() {
 
             {/* ── DEPARTMENT MODAL ─────────────────────────────────────────────── */}
             {showDeptModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200">
-                    <div className="bg-white dark:bg-zinc-900 rounded-3xl p-7 max-w-md w-full shadow-2xl relative overflow-hidden border border-maroon/10">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100] animate-in fade-in duration-200"
+                    onClick={(e) => { if (e.target === e.currentTarget) setShowDeptModal(false); }}>
+                    <div ref={deptModalRef} role="dialog" aria-modal="true" aria-labelledby="dept-modal-title"
+                        className="bg-white dark:bg-zinc-900 rounded-3xl p-7 max-w-md w-full shadow-2xl relative overflow-hidden border border-maroon/10">
                         <div className="absolute top-0 left-0 right-0 h-1"
                             style={{ background: `linear-gradient(90deg, ${settings.sidebar_colors || '#7a0000'}, ${GOLD}, ${settings.portal_theme_colors || '#800000'})` }} />
                         <div className="flex justify-between items-start mb-6">
                             <div>
-                                <h2 className="text-base font-black text-maroon dark:text-gold uppercase tracking-tight">
+                                <h2 id="dept-modal-title" className="text-base font-black text-maroon dark:text-gold uppercase tracking-tight">
                                     {editingDept ? 'Update Department' : 'New Department'}
                                 </h2>
                                 <div className="w-8 h-0.5 mt-1.5" style={{ background: GOLD }} />
                             </div>
-                            <button onClick={()=>setShowDeptModal(false)} className="p-1.5 hover:bg-maroon/5 rounded-full transition-colors">
+                            <button onClick={()=>setShowDeptModal(false)} aria-label="Close department dialog" className="p-1.5 hover:bg-maroon/5 rounded-full transition-colors">
                                 <XCircle className="w-5 h-5 text-gray-300 hover:text-red-500" />
                             </button>
                         </div>
                         <form onSubmit={handleDeptSubmit} className="space-y-4">
                             <div>
-                                <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">Department Name *</label>
-                                <input type="text" value={deptForm.name} onChange={e=>setDeptForm({...deptForm,name:e.target.value})} required placeholder="e.g. Department of Cosmetology" className="w-full px-3.5 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon" />
+                                <label htmlFor="dept-name-input" className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">Department Name *</label>
+                                <input id="dept-name-input" type="text" value={deptForm.name} onChange={e=>setDeptForm({...deptForm,name:e.target.value})} required placeholder="e.g. Department of Cosmetology" className="w-full px-3.5 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon" />
                             </div>
                             <div>
-                                <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">Head of Department (HOD)</label>
-                                <input type="text" value={deptForm.head_of_department} onChange={e=>setDeptForm({...deptForm,head_of_department:e.target.value})} placeholder="e.g. Ms. Grace Kemunto" className="w-full px-3.5 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon" />
+                                <label htmlFor="dept-hod-input" className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">Head of Department (HOD)</label>
+                                <input id="dept-hod-input" type="text" value={deptForm.head_of_department} onChange={e=>setDeptForm({...deptForm,head_of_department:e.target.value})} placeholder="e.g. Ms. Grace Kemunto" className="w-full px-3.5 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon" />
                             </div>
                             <div>
-                                <label className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">Description</label>
-                                <textarea value={deptForm.description} onChange={e=>setDeptForm({...deptForm,description:e.target.value})} placeholder="Brief department overview..." rows={3} className="w-full px-3.5 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon resize-none" />
+                                <label htmlFor="dept-desc-input" className="text-[9px] font-black text-zinc-400 uppercase tracking-widest block mb-1.5">Description</label>
+                                <textarea id="dept-desc-input" value={deptForm.description} onChange={e=>setDeptForm({...deptForm,description:e.target.value})} placeholder="Brief department overview..." rows={3} className="w-full px-3.5 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-maroon/30 focus:border-maroon resize-none" />
                             </div>
                             <button type="submit" disabled={savingDept} className="w-full text-yellow-100 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest shadow-lg transition-all hover:opacity-90 disabled:opacity-60"
                                 style={{ backgroundColor: settings.sidebar_colors || '#7a0000', border: `1px solid ${GOLD}25` }}>

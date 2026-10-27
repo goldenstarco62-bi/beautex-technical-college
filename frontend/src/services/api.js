@@ -222,7 +222,7 @@ export const usersAPI = {
     delete: (id) => api.delete(`users/${encodeURIComponent(id)}`),
     updateFinancePermission: (id, can_edit_finance) => api.put(`users/${encodeURIComponent(id)}/finance-permission`, { can_edit_finance }),
     updateStudentPermission: (id, can_edit_students) => api.put(`users/${encodeURIComponent(id)}/student-permission`, { can_edit_students }),
-    getAuditLogs: () => api.get('audit-logs'),
+    getAuditLogs: (params) => api.get('audit-logs', { params }),
 };
 
 // Academic Reports
@@ -368,9 +368,9 @@ export const settingsAPI = {
     update: (data) => api.put('settings', data),
     uploadFile: (formData) => api.post('settings/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     uploadSettingFile: (formData) => api.post('settings/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-    backup: () => api.get('settings/backup', { responseType: 'blob' }),
-    downloadBackup: () => api.get('settings/backup', { responseType: 'blob' }),
     exportBackup: () => api.get('settings/backup/export', { responseType: 'blob' }),
+    integrationStatus: (params = {}) => api.get('settings/integrations/status', { params }),
+    dashboardStats: () => api.get('settings/dashboard-stats'),
     restoreBackup: (formData) => api.post('settings/backup/restore', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
     }),

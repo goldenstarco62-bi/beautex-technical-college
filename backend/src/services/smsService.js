@@ -1,24 +1,41 @@
 import AfricasTalking from 'africastalking';
 import dotenv from 'dotenv';
+import { query } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 dotenv.config();
 
-// Initialize Africa's Talking
-let sms = null;
+// Credentials resolve from the Settings dashboard (system_settings) first,
+// falling back to .env so existing deployments keep working.
+export const getGatewayConfig = async () => {
+    let dbVals = {};
+    try {
+        const rows = await query("SELECT key, value FROM system_settings WHERE key IN ('sms_api_key','sms_username','sms_sender_id')");
+        for (const r of rows || []) dbVals[r.key] = String(r.value ?? '').trim();
+    } catch (err) {
+        logger.warn(`SMS settings lookup failed, falling back to env: ${err.message}`);
+    }
+    // A stored value of only asterisks is a masked placeholder, not a credential.
+    const real = v => (v && !/^\*+$/.test(v) ? v : '');
+    return {
+        apiKey: real(dbVals.sms_api_key) || process.env.AT_API_KEY || '',
+        username: real(dbVals.sms_username) || process.env.AT_USERNAME || '',
+        senderId: real(dbVals.sms_sender_id) || process.env.SMS_SENDER_ID || 'BEAUTEX',
+    };
+};
 
-const initializeSMS = () => {
-    if (!process.env.AT_API_KEY || !process.env.AT_USERNAME) {
-        console.warn('⚠️  Africa\'s Talking credentials not configured. SMS notifications will be disabled.');
-        console.warn('   Set AT_API_KEY and AT_USERNAME in your .env file to enable SMS.');
+let cachedClient = null; // { apiKey, username, sms } — rebuilt when credentials change
+
+const getSmsClient = async () => {
+    const cfg = await getGatewayConfig();
+    if (!cfg.apiKey || !cfg.username) {
+        logger.warn('SMS disabled: set sms_api_key/sms_username in Settings, or AT_API_KEY/AT_USERNAME in .env');
         return null;
     }
-
-    const africastalking = AfricasTalking({
-        apiKey: process.env.AT_API_KEY,
-        username: process.env.AT_USERNAME,
-    });
-
-    return africastalking.SMS;
+    if (!cachedClient || cachedClient.apiKey !== cfg.apiKey || cachedClient.username !== cfg.username) {
+        cachedClient = { apiKey: cfg.apiKey, username: cfg.username, sms: AfricasTalking({ apiKey: cfg.apiKey, username: cfg.username }).SMS };
+    }
+    return cachedClient.sms;
 };
 
 /**
@@ -61,14 +78,10 @@ const formatPhoneNumber = (phoneNumber) => {
  */
 export const sendLoginCredentials = async (phoneNumber, email, temporaryPassword, role = 'user') => {
     try {
-        // Initialize SMS service if not already done
+        const cfg = await getGatewayConfig();
+        const sms = await getSmsClient();
         if (!sms) {
-            sms = initializeSMS();
-        }
-
-        // If SMS is not configured, log and return false
-        if (!sms) {
-            console.log('📱 SMS not configured. Skipping SMS notification.');
+            logger.info('📱 SMS not configured. Skipping login credentials SMS.');
             return false;
         }
 
@@ -86,7 +99,7 @@ export const sendLoginCredentials = async (phoneNumber, email, temporaryPassword
         const options = {
             to: [formattedPhone],
             message: message,
-            from: process.env.SMS_SENDER_ID || 'BEAUTEX',
+            from: cfg.senderId,
         };
 
         console.log(`📱 Sending SMS to ${formattedPhone}...`);
@@ -116,12 +129,10 @@ export const sendLoginCredentials = async (phoneNumber, email, temporaryPassword
  */
 export const sendPasswordResetSMS = async (phoneNumber, resetCode) => {
     try {
+        const cfg = await getGatewayConfig();
+        const sms = await getSmsClient();
         if (!sms) {
-            sms = initializeSMS();
-        }
-
-        if (!sms) {
-            console.log('📱 SMS not configured. Skipping SMS notification.');
+            logger.info('📱 SMS not configured. Skipping password reset SMS.');
             return false;
         }
 
@@ -136,7 +147,7 @@ export const sendPasswordResetSMS = async (phoneNumber, resetCode) => {
         const options = {
             to: [formattedPhone],
             message: message,
-            from: process.env.SMS_SENDER_ID || 'BEAUTEX',
+            from: cfg.senderId,
         };
 
         console.log(`📱 Sending password reset SMS to ${formattedPhone}...`);

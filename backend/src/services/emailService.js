@@ -1,42 +1,70 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { query } from '../config/database.js';
+import logger from '../utils/logger.js';
 dotenv.config();
 
-// Create transporter
-// SMTP credentials come exclusively from the environment (no hardcoded fallback).
-const getSmtpCredentials = () => {
-    const user = (process.env.SMTP_USER || '').trim();
-    const pass = (process.env.SMTP_PASS || '').trim();
-    if (!user || !pass) {
-        throw new Error('SMTP credentials missing: set SMTP_USER and SMTP_PASS environment variables.');
+// SMTP config resolves from the Settings dashboard (system_settings) first,
+// falling back to .env so existing deployments keep working.
+export const getSmtpConfig = async () => {
+    let dbVals = {};
+    try {
+        const rows = await query("SELECT key, value FROM system_settings WHERE key IN ('smtp_host','smtp_port','smtp_user','smtp_pass','smtp_secure')");
+        for (const r of rows || []) dbVals[r.key] = String(r.value ?? '').trim();
+    } catch (err) {
+        logger.warn(`SMTP settings lookup failed, falling back to env: ${err.message}`);
     }
-    return { user, pass };
+    // A stored value of only asterisks is a masked placeholder, not a credential.
+    const real = v => (v && !/^\*+$/.test(v) ? v : '');
+    const secureRaw = (dbVals.smtp_secure || '').toLowerCase();
+    return {
+        host: real(dbVals.smtp_host) || 'smtp.gmail.com',
+        port: parseInt(real(dbVals.smtp_port) || '587', 10) || 587,
+        user: real(dbVals.smtp_user) || (process.env.SMTP_USER || '').trim(),
+        pass: real(dbVals.smtp_pass) || (process.env.SMTP_PASS || '').trim(),
+        secure: secureRaw ? (secureRaw === 'true' || secureRaw === '1') : false,
+    };
 };
 
-const createTransporter = async () => {
-    const { user, pass } = getSmtpCredentials();
-    const config = {
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // use startTLS
-        requireTLS: true,
-        connectionTimeout: 10000, // 10s
-        greetingTimeout: 10000,   // 10s
-        auth: { user, pass },
-        tls: { rejectUnauthorized: true }
-    };
-
-    console.log(`📡 Initializing Secure SMTP Transporter for: ${user}`);
-    return nodemailer.createTransport(config);
+const requireCredentials = (cfg) => {
+    if (!cfg.user || !cfg.pass) {
+        throw new Error('SMTP credentials missing: set smtp_user/smtp_pass in Settings, or SMTP_USER/SMTP_PASS environment variables.');
+    }
+    return cfg;
 };
 
 let transporter = null;
+let transporterKey = null; // "host|port|user" — rebuilt when config changes
+let announcementsTransporterVerified = false;
 
-// Eagerly warm up the transporter at module load time so the first
-// enrollment/faculty request doesn't pay the SMTP connection cost.
-createTransporter()
-    .then(t => { transporter = t; console.log('📧 Email transporter pre-warmed successfully.'); })
-    .catch(err => console.warn('⚠️ Email transporter pre-warm failed (will retry on first send):', err.message));
+const createTransporter = async () => {
+    const cfg = requireCredentials(await getSmtpConfig());
+    const config = {
+        host: cfg.host,
+        port: cfg.port,
+        secure: cfg.secure, // startTLS by default
+        requireTLS: !cfg.secure,
+        connectionTimeout: 10000, // 10s
+        greetingTimeout: 10000,   // 10s
+        auth: { user: cfg.user, pass: cfg.pass },
+        tls: { rejectUnauthorized: true }
+    };
+
+    console.log(`📡 Initializing SMTP Transporter for: ${cfg.user} via ${cfg.host}:${cfg.port}`);
+    return nodemailer.createTransport(config);
+};
+
+// Returns the cached transporter, rebuilding it when the resolved config changes.
+const getTransporter = async () => {
+    const cfg = requireCredentials(await getSmtpConfig());
+    const key = `${cfg.host}|${cfg.port}|${cfg.user}`;
+    if (!transporter || transporterKey !== key) {
+        transporter = await createTransporter();
+        transporterKey = key;
+        announcementsTransporterVerified = false;
+    }
+    return { transporter, cfg };
+};
 
 /**
  * Call at server startup to ensure the SMTP connection is ready before
@@ -44,9 +72,7 @@ createTransporter()
  */
 export const warmupEmailService = async () => {
     try {
-        if (!transporter) {
-            transporter = await createTransporter();
-        }
+        await getTransporter();
         console.log('📧 Email service ready.');
     } catch (err) {
         console.warn('⚠️ Email warmup failed:', err.message);
@@ -55,15 +81,12 @@ export const warmupEmailService = async () => {
 
 export const sendWelcomeEmail = async (email, role, tempPassword) => {
     try {
-        if (!transporter) {
-            transporter = await createTransporter();
-        }
-
-        const { user: senderEmail } = getSmtpCredentials();
+        const { transporter: t, cfg } = await getTransporter();
+        const senderEmail = cfg.user;
         const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
         console.log(`📧 Dispatching email: To: ${email}, Login: ${loginUrl}, Mode: ${process.env.NODE_ENV}`);
 
-        const info = await transporter.sendMail({
+        const info = await t.sendMail({
             from: `"Beautex Technical Training College" <${senderEmail}>`,
             to: email,
             subject: 'Welcome to Beautex Technical Training College - Your Login Credentials',
@@ -117,14 +140,11 @@ export const sendWelcomeEmail = async (email, role, tempPassword) => {
 
 export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
     try {
-        if (!transporter) {
-            transporter = await createTransporter();
-        }
-
-        const { user: senderEmail } = getSmtpCredentials();
+        const { transporter: t, cfg } = await getTransporter();
+        const senderEmail = cfg.user;
         const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
 
-        const info = await transporter.sendMail({
+        const info = await t.sendMail({
             from: `"Academic Registry" <${senderEmail}>`,
             to: email,
             subject: 'Account Password Reset - Beautex Technical Training College',
@@ -175,18 +195,18 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
     }
 
     try {
-        if (!transporter) {
-            console.log('🔄 Initializing Secure SMTP Transporter...');
-            transporter = await createTransporter();
-            
+        const { transporter: t, cfg } = await getTransporter();
+        const senderEmail = cfg.user;
+        if (!announcementsTransporterVerified) {
+            console.log('🧪 Performing SMTP Handshake...');
             // Add a timeout to verification to prevent hanging
-            const verifyPromise = transporter.verify();
+            const verifyPromise = t.verify();
             const timeoutPromise = new Promise((_, reject) => 
                 setTimeout(() => reject(new Error('SMTP Verification Timeout (15s)')), 15000)
             );
 
-            console.log('🧪 Performing SMTP Handshake...');
             await Promise.race([verifyPromise, timeoutPromise]);
+            announcementsTransporterVerified = true;
             console.log('✅ SMTP Bridge Verified & Ready.');
         }
 
@@ -263,8 +283,8 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
                 // Throttle to adhere to Gmail intake pace (1.5s per email)
                 await new Promise(r => setTimeout(r, 1500));
 
-                await transporter.sendMail({
-                    from: `"Beautex Technical Training College" <${process.env.SMTP_USER}>`,
+                await t.sendMail({
+                    from: `"Beautex Technical Training College" <${senderEmail}>`,
                     to: email,
                     subject: `📢 Announcement: ${title}`,
                     html: htmlBody,
@@ -295,9 +315,9 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
 
         // Send a single summary to the administrator
         try {
-            await transporter.sendMail({
-                from: `"System Monitor" <${process.env.SMTP_USER}>`,
-                to: process.env.SMTP_USER,
+            await t.sendMail({
+                from: `"System Monitor" <${senderEmail}>`,
+                to: senderEmail,
                 subject: `📊 Broadcast Report: ${title}`,
                 html: `
                     <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">

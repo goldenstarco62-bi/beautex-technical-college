@@ -166,14 +166,18 @@ export async function deleteUser(req, res) {
 
 export async function getAuditLogs(req, res) {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
         const offset = (page - 1) * limit;
+        const search = String(req.query.search || '').trim().slice(0, 120);
 
         if (await isMongo()) {
             const AuditLog = (await import('../models/mongo/AuditLog.js')).default;
-            const total = await AuditLog.countDocuments();
-            const logs = await AuditLog.find().sort({ created_at: -1 }).skip(offset).limit(limit);
+            const filt = search
+                ? { $or: ['user_email', 'action', 'resource', 'details', 'ip_address'].map(f => ({ [f]: { $regex: search, $options: 'i' } })) }
+                : {};
+            const total = await AuditLog.countDocuments(filt);
+            const logs = await AuditLog.find(filt).sort({ created_at: -1 }).skip(offset).limit(limit);
             return res.json({
                 logs,
                 pagination: {
@@ -185,13 +189,24 @@ export async function getAuditLogs(req, res) {
             });
         }
 
-        const totalRes = await queryOne('SELECT COUNT(*) as count FROM audit_logs');
+        const isPostgres = (await import('../config/database.js')).getActiveDbEngine() === 'postgres';
+        let where = '';
+        const whereParams = [];
+        if (search) {
+            const like = isPostgres ? 'ILIKE' : 'LIKE';
+            where = `WHERE user_email ${like} ? OR action ${like} ? OR resource ${like} ? OR details ${like} ? OR ip_address ${like} ?`;
+            const p = `%${search}%`;
+            whereParams.push(p, p, p, p, p);
+        }
+
+        const totalRes = await queryOne(`SELECT COUNT(*) as count FROM audit_logs ${where}`, whereParams);
         const total = totalRes ? (parseInt(totalRes.count || totalRes.COUNT || totalRes.cnt || 0, 10)) : 0;
         const logs = await query(`
             SELECT * FROM audit_logs 
+            ${where}
             ORDER BY created_at DESC 
             LIMIT ? OFFSET ?
-        `, [limit, offset]);
+        `, [...whereParams, limit, offset]);
 
         res.json({
             logs,
