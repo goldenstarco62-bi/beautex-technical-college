@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import { isStudentEnrolledInCourse } from '../utils/courseUtils';
 import {
     BookOpen, Award, Search, Plus, X, Edit, Trash2, Users, CheckCircle,
-    FileDown, Printer, History, ChevronDown, ChevronUp, TrendingUp, GraduationCap, Layers, AlertTriangle
+    FileDown, Printer, History, ChevronDown, ChevronUp, TrendingUp, GraduationCap, Layers, AlertTriangle,
+    CheckSquare, Square
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -94,6 +95,11 @@ export default function UnitsCovered() {
     // Transcript state
     const [printTarget, setPrintTarget]   = useState(null); // { student, marks }
     const [viewTarget, setViewTarget]     = useState(null);
+
+    // Bulk transcript download state (admin/teacher)
+    const [selectedTranscriptKeys, setSelectedTranscriptKeys] = useState(new Set()); // keys = `${studentId}|${courseId}`
+    const [bulkTranscriptBusy, setBulkTranscriptBusy]         = useState(false);
+    const [bulkTranscriptProgress, setBulkTranscriptProgress] = useState(null); // { current, total, name }
 
     // Inline transcript editing state (for canManage users)
     const [editingTranscriptMark, setEditingTranscriptMark] = useState(null); // { unit_id, student_id, course_id }
@@ -290,7 +296,13 @@ export default function UnitsCovered() {
         if (entries.length === 0) return showToast('No marks entered.', 'error');
         try {
             setSubmittingBatch(true);
-            await studentUnitMarksAPI.batchSave({ course_id: selectedCourse, unit_id: batchUnit, entries });
+            const unitObj = units.find(u => String(u.id) === String(batchUnit));
+            await studentUnitMarksAPI.batchSave({
+                course_id: selectedCourse,
+                unit_id: batchUnit,
+                unit_name: unitObj?.name || '',
+                entries
+            });
             setShowBatchModal(false);
             setBatchUnit('');
             await loadAll();
@@ -317,8 +329,13 @@ export default function UnitsCovered() {
         }
         try {
             const course = courses.find(c => c.id === singleForm.course_id);
+            const unitObj = units.find(u => String(u.id) === String(singleForm.unit_id));
             const lecturerToPass = course?.instructor || (isTeacher ? user?.name : undefined);
-            await studentUnitMarksAPI.saveMark({ ...singleForm, lecturer: lecturerToPass });
+            await studentUnitMarksAPI.saveMark({
+                ...singleForm,
+                unit_name: unitObj?.name || editingMark?.unit_name || '',
+                lecturer: lecturerToPass
+            });
             setShowModal(false);
             setEditingMark(null);
             setSingleForm({ student_id: '', course_id: '', unit_id: '', marks: '' });
@@ -368,6 +385,7 @@ export default function UnitsCovered() {
                 student_id: editingTranscriptMark.student_id,
                 course_id:  editingTranscriptMark.course_id,
                 unit_id:    editingTranscriptMark.unit_id,
+                unit_name:  editingTranscriptMark.original_unit_name,
                 marks:      marksNum,
             });
             // Save the unit name if it changed
@@ -426,22 +444,7 @@ export default function UnitsCovered() {
         setViewTarget({ student, marks: studentMarks, courseId });
     };
 
-    const handleDownloadTranscript = async (studentId, courseId, customStyle = null) => {
-        if (!courseId) return showToast('Course ID is required.', 'error');
-        const student = students.find(s => String(s.id) === String(studentId));
-        if (!student) return showToast('Student not found.', 'error');
-        
-        // Filter marks for this student and this course only
-        const studentMarks = marks.filter(m => String(m.student_id) === String(studentId) && String(m.course_id) === String(courseId));
-        if (!studentMarks || studentMarks.length === 0) {
-            return showToast("No completed academic records were found for the selected course.", 'error');
-        }
-        
-        const completionDate = student.completion_date || student.expected_completion;
-        if (!completionDate) {
-            return showToast("No completed academic records were found for the selected course (Missing Completion Date).", 'error');
-        }
-
+    const generateTranscriptPdf = async (student, studentMarks, customStyle) => {
         // Helper to convert image URL to base64 data URL
         const urlToBase64 = async (url) => {
             if (!url) return '';
@@ -487,15 +490,16 @@ export default function UnitsCovered() {
             style: customStyle || null
         });
 
-        setTimeout(async () => {
-            const wrapper = document.getElementById('units-printable-report');
-            const element = document.getElementById('units-print-a4-inner');
-            if (!element || !wrapper) {
-                showToast('Could not find transcript template. Please try again.', 'error');
-                setPrintTarget(null);
-                return;
-            }
-            try {
+        // Wait for the print template to mount, then render it to PDF
+        await new Promise(r => setTimeout(r, 1200));
+
+        const wrapper = document.getElementById('units-printable-report');
+        const element = document.getElementById('units-print-a4-inner');
+        if (!element || !wrapper) {
+            setPrintTarget(null);
+            throw new Error('Could not find transcript template. Please try again.');
+        }
+        try {
                 // Move wrapper to a visible position BEHIND the loading overlay (z-9998)
                 // so html2canvas can fully render it, but the user only sees the spinner
                 const prevStyle = wrapper.getAttribute('style');
@@ -572,11 +576,79 @@ export default function UnitsCovered() {
                 pdf.save(`${student.name.replace(/\s+/g, '_')}_Transcript_${courseName.replace(/\s+/g, '_')}.pdf`);
             } catch (err) {
                 console.error('Transcript PDF error:', err);
-                showToast(`Failed to generate transcript PDF. Error: ${err.message || String(err)}`, 'error');
+                try {
+                    wrapper.style.position   = 'absolute';
+                    wrapper.style.left       = '-9999px';
+                    wrapper.style.top        = '0px';
+                    wrapper.style.zIndex     = '-1';
+                    wrapper.style.visibility = 'hidden';
+                    wrapper.style.opacity    = '0';
+                } catch (e) { /* ignore restore failure */ }
+                throw err;
             } finally {
                 setPrintTarget(null);
             }
-        }, 1200);
+    };
+
+    // Single-download entry point: validates, generates, and reports errors via toast
+    const handleDownloadTranscript = async (studentId, courseId, customStyle = null) => {
+        if (!courseId) { showToast('Course ID is required.', 'error'); return false; }
+        const student = students.find(s => String(s.id) === String(studentId));
+        if (!student) { showToast('Student not found.', 'error'); return false; }
+
+        const studentMarks = marks.filter(m => String(m.student_id) === String(studentId) && String(m.course_id) === String(courseId));
+        if (!studentMarks || studentMarks.length === 0) {
+            showToast('No completed academic records were found for the selected course.', 'error');
+            return false;
+        }
+
+        const completionDate = student.completion_date || student.expected_completion;
+        if (!completionDate) {
+            showToast('No completed academic records were found for the selected course (Missing Completion Date).', 'error');
+            return false;
+        }
+
+        try {
+            await generateTranscriptPdf(student, studentMarks, customStyle);
+            return true;
+        } catch (err) {
+            showToast(`Failed to generate transcript PDF. Error: ${err.message || String(err)}`, 'error');
+            return false;
+        }
+    };
+
+    // ── Bulk transcript download (admin/teacher) ───────────────────────────────
+    const toggleTranscriptSelection = (key) => {
+        setSelectedTranscriptKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            return next;
+        });
+    };
+
+    const toggleAllTranscriptSelections = () => {
+        setSelectedTranscriptKeys(prev => prev.size > 0 ? new Set() : new Set(transcriptRowKeys));
+    };
+
+    const handleBulkTranscriptDownload = async () => {
+        if (bulkTranscriptBusy || selectedTranscriptKeys.size === 0) return;
+        const keys = Array.from(selectedTranscriptKeys);
+        setBulkTranscriptBusy(true);
+        let done = 0, failed = 0;
+        for (const key of keys) {
+            const [sid, cid] = key.split('|');
+            setBulkTranscriptProgress({ current: done + 1, total: keys.length, name: students.find(s => String(s.id) === String(sid))?.name || sid });
+            const ok = await handleDownloadTranscript(sid, cid);
+            if (!ok) failed++;
+            done++;
+            await new Promise(r => setTimeout(r, 500));
+        }
+        setBulkTranscriptBusy(false);
+        setBulkTranscriptProgress(null);
+        setSelectedTranscriptKeys(new Set());
+        showToast(failed === 0
+            ? `Downloaded ${done} transcript PDF${done === 1 ? '' : 's'}.`
+            : `Downloaded ${done - failed} of ${done} transcripts (${failed} failed).`, failed === 0 ? 'success' : 'error');
     };
 
     // ── Computed data ──────────────────────────────────────────────────────────
@@ -605,6 +677,12 @@ export default function UnitsCovered() {
         studentCourseMap[sid].courses[cid].units.push(m);
     });
     const studentRows = Object.values(studentCourseMap).sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+    // All selectable transcript rows (student × course) for bulk download
+    const transcriptRowKeys = studentRows.flatMap(row =>
+        Object.values(row.courses).map(course => `${row.studentId}|${course.courseId}`)
+    );
+    const allTranscriptsSelected = transcriptRowKeys.length > 0 && selectedTranscriptKeys.size === transcriptRowKeys.length;
 
     // For student view: group own marks by course
     const ownByCourse = {};
@@ -660,18 +738,20 @@ export default function UnitsCovered() {
                     </button>
                     {isStudent && (
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 const sid = user.student_id || user.id;
                                 const courseIds = Object.keys(ownByCourse);
                                 if (courseIds.length === 0) {
                                     alert("No completed academic records were found for the selected course.");
                                     return;
                                 }
-                                courseIds.forEach((cid, index) => {
-                                    setTimeout(() => {
-                                        handleDownloadTranscript(sid, cid);
-                                    }, index * 1600);
-                                });
+                                let failed = 0;
+                                for (const cid of courseIds) {
+                                    const ok = await handleDownloadTranscript(sid, cid);
+                                    if (!ok) failed++;
+                                    await new Promise(r => setTimeout(r, 500));
+                                }
+                                if (failed > 0) showToast(`${failed} of ${courseIds.length} transcripts failed to download.`, 'error');
                             }}
                             className="flex-grow sm:flex-grow-0 bg-gradient-to-r from-maroon to-maroon/90 text-gold px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:shadow-maroon/30 hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest shadow-lg border border-gold/20"
                         >
@@ -680,6 +760,15 @@ export default function UnitsCovered() {
                     )}
                     {canManage && (
                         <>
+                            {selectedTranscriptKeys.size > 0 && (
+                                <button
+                                    onClick={handleBulkTranscriptDownload}
+                                    disabled={bulkTranscriptBusy}
+                                    className="flex-grow sm:flex-grow-0 bg-gradient-to-r from-gold to-gold/80 text-maroon px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 hover:shadow-gold/40 hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 font-black text-xs uppercase tracking-widest shadow-lg border border-maroon/20 disabled:opacity-50 disabled:hover:scale-100"
+                                >
+                                    <FileDown className="w-5 h-5" /> Download Transcripts ({selectedTranscriptKeys.size})
+                                </button>
+                            )}
                             <button
                                 onClick={() => {
                                     if (!selectedCourse) return alert('Select a course first.');
@@ -903,7 +992,19 @@ export default function UnitsCovered() {
                                 <table className="w-full">
                                     <thead>
                                         <tr className="bg-maroon/[0.03] border-b border-black/5">
-                                            <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em] sticky left-0 bg-maroon/[0.03] z-10 min-w-[200px]">Student</th>
+                                            <th className="px-4 py-5 text-center w-12">
+                                                <button
+                                                    onClick={toggleAllTranscriptSelections}
+                                                    className="p-1.5 rounded-lg hover:bg-maroon/10 transition-colors text-maroon/70"
+                                                    title={allTranscriptsSelected ? 'Clear selection' : 'Select all transcripts'}
+                                                    aria-label={allTranscriptsSelected ? 'Clear transcript selection' : 'Select all transcripts'}
+                                                >
+                                                    {allTranscriptsSelected
+                                                        ? <CheckSquare className="w-4 h-4" />
+                                                        : <Square className="w-4 h-4" />}
+                                                </button>
+                                            </th>
+                                            <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em] sticky left-[56px] bg-maroon/[0.03] z-10 min-w-[200px]">Student</th>
                                             <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em] min-w-[160px]">Course</th>
                                             <th className="px-6 py-5 text-left text-[10px] font-black text-black/40 uppercase tracking-[0.2em]">Units Recorded</th>
                                             <th className="px-6 py-5 text-center text-[10px] font-black text-black/40 uppercase tracking-[0.2em] min-w-[100px]">Avg</th>
@@ -918,9 +1019,22 @@ export default function UnitsCovered() {
                                                     ? Math.round(course.units.reduce((a, u) => a + parseFloat(u.marks || 0), 0) / course.units.length)
                                                     : 0;
                                                 const grade = calcGradeLabel(avg, thresholds);
+                                                const rowKey = `${row.studentId}-${course.courseId}`;
+                                                const selKey = `${row.studentId}|${course.courseId}`;
+                                                const isSelected = selectedTranscriptKeys.has(selKey);
                                                 return (
-                                                    <tr key={`${row.studentId}-${course.courseId}`} className="hover:bg-maroon/[0.015] transition-colors group">
-                                                        <td className="px-6 py-5 sticky left-0 bg-white group-hover:bg-maroon/[0.015] z-10 border-r border-black/5">
+                                                    <tr key={rowKey} className={`hover:bg-maroon/[0.015] transition-colors group ${isSelected ? 'bg-maroon/[0.04]' : ''}`}>
+                                                        <td className="px-4 py-5 text-center sticky left-0 z-10 bg-white group-hover:bg-maroon/[0.015]">
+                                                            <button
+                                                                onClick={() => toggleTranscriptSelection(selKey)}
+                                                                className={`p-1.5 rounded-lg transition-colors ${isSelected ? 'text-maroon bg-maroon/10' : 'text-black/25 hover:bg-maroon/5'}`}
+                                                                title={isSelected ? 'Deselect transcript' : 'Select transcript for bulk download'}
+                                                                aria-label={`${isSelected ? 'Deselect' : 'Select'} transcript for ${row.studentName} - ${course.courseName}`}
+                                                            >
+                                                                {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-6 py-5 sticky left-[56px] bg-white group-hover:bg-maroon/[0.015] z-10 border-r border-black/5">
                                                             <p className="text-sm font-black text-black uppercase tracking-tight">{row.studentName}</p>
                                                             <p className="text-[8px] font-bold text-black/30 mt-0.5">{row.studentId}</p>
                                                         </td>
@@ -1052,6 +1166,9 @@ export default function UnitsCovered() {
                                         <select required value={singleForm.unit_id} onChange={e => setSingleForm({ ...singleForm, unit_id: e.target.value })}
                                             className="w-full bg-gray-50/50 border border-gray-200 focus:border-maroon focus:ring-1 focus:ring-maroon outline-none rounded-xl pl-11 pr-10 py-3 text-xs font-semibold text-gray-800 transition-all appearance-none shadow-sm">
                                             <option value="">Select Unit</option>
+                                            {singleForm.unit_id && !units.some(u => String(u.id) === String(singleForm.unit_id)) && (
+                                                <option value={singleForm.unit_id}>{editingMark?.unit_name || 'Current unit'}</option>
+                                            )}
                                             {units.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                                         </select>
                                         <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1072,7 +1189,13 @@ export default function UnitsCovered() {
 
                             {/* Warn if mark already exists */}
                             {singleForm.student_id && singleForm.course_id && singleForm.unit_id && (() => {
-                                const match = marks.find(m => String(m.student_id) === String(singleForm.student_id) && String(m.course_id) === String(singleForm.course_id) && String(m.unit_id) === String(singleForm.unit_id));
+                                const selUnitName = (units.find(u => String(u.id) === String(singleForm.unit_id))?.name || '').trim().toLowerCase();
+                                const match = marks.find(m =>
+                                    String(m.student_id) === String(singleForm.student_id) &&
+                                    String(m.course_id) === String(singleForm.course_id) &&
+                                    (String(m.unit_id) === String(singleForm.unit_id) ||
+                                        (selUnitName && (m.unit_name || '').trim().toLowerCase() === selUnitName))
+                                );
                                 if (match && (!editingMark || String(editingMark.id) !== String(match.id))) {
                                     return (
                                         <div className="text-[10px] font-black text-amber-700 uppercase tracking-wider bg-amber-50/70 p-4 rounded-2xl border border-amber-200/50 leading-relaxed">
@@ -1784,6 +1907,29 @@ export default function UnitsCovered() {
                         </div>
                     </div>
                 </>
+            )}
+            {/* ── BULK TRANSCRIPT DOWNLOAD PROGRESS ── */}
+            {bulkTranscriptBusy && (
+                <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+                    <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl border border-black/5 p-8 text-center animate-in zoom-in-95 duration-300">
+                        <div className="mx-auto w-14 h-14 border-4 border-maroon border-t-transparent rounded-full animate-spin" />
+                        <p className="mt-6 text-xs font-black uppercase tracking-[0.25em] text-maroon">Generating Transcripts</p>
+                        <p className="mt-2 text-lg font-black text-black uppercase tracking-tight truncate">
+                            {bulkTranscriptProgress?.name || '…'}
+                        </p>
+                        <p className="mt-2 text-[10px] font-bold text-black/40 uppercase tracking-widest">
+                            File {bulkTranscriptProgress?.current || 0} of {bulkTranscriptProgress?.total || 0}
+                        </p>
+                        <div className="mt-5 h-2 w-full rounded-full bg-black/5 overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-maroon to-gold rounded-full transition-all duration-300"
+                                style={{ width: `${bulkTranscriptProgress && bulkTranscriptProgress.total > 0 ? Math.round((bulkTranscriptProgress.current / bulkTranscriptProgress.total) * 100) : 0}%` }}
+                            />
+                        </div>
+                        <p className="mt-4 text-[9px] font-bold text-black/30 uppercase tracking-[0.2em]">Keep this page open until all files download</p>
+                    </div>
+                </div>
             )}
             {/* ── TOAST NOTIFICATION ── */}
             {toast && (

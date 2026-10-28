@@ -428,13 +428,15 @@ export async function createStudent(req, res) {
             };
         }
 
-        // Respond immediately — notifications are fire-and-forget (non-blocking)
-        res.status(201).json(savedStudent);
-
-        // Send email notification asynchronously (does not block the response)
-        sendWelcomeEmail(email, 'student', temporaryPassword)
-            .then(() => console.log(`[student] Welcome email dispatched to: ${email}`))
-            .catch(err => console.error('[student] Failed to send welcome email:', err.message));
+        // Deliver credentials before responding so the admin knows whether they went out.
+        const emailSent = await sendWelcomeEmail(email, 'student', temporaryPassword);
+        res.status(201).json({
+            ...savedStudent,
+            email_sent: emailSent,
+            ...(emailSent ? {} : {
+                email_error: 'The student account was created, but the login credentials email could not be sent. Check the SMTP settings under Settings → Communications.'
+            })
+        });
 
         // Send SMS notification asynchronously if contact is provided
         if (contact) {

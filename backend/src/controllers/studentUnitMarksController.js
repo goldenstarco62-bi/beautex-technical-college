@@ -77,6 +77,43 @@ async function getTeacherAllowedCourseIds(req) {
     return allowedCourses;
 }
 
+// Unit ids arrive from two id spaces: the unit pickers list global_units ids linked
+// through program_units, while marks recorded before the unit-library refactor
+// reference legacy course_units ids. Resolve either into a course_units row,
+// matching by name first so one unit never splits across both id spaces.
+async function resolveCourseUnit(courseId, unitId, unitName) {
+    const wantedName = String(unitName || '').trim();
+    if (wantedName) {
+        const byName = await queryOne(
+            'SELECT * FROM course_units WHERE course_id = ? AND LOWER(name) = LOWER(?)',
+            [courseId, wantedName]
+        );
+        if (byName) return byName;
+    }
+
+    const globalUnit = await queryOne(
+        `SELECT gu.id, gu.unit_name FROM global_units gu
+         JOIN program_units pu ON pu.unit_id = gu.id
+         WHERE gu.id = ? AND pu.course_id = ?
+         LIMIT 1`,
+        [unitId, courseId]
+    );
+    if (globalUnit) {
+        const mirror = await queryOne(
+            'SELECT * FROM course_units WHERE course_id = ? AND LOWER(name) = LOWER(?)',
+            [courseId, globalUnit.unit_name]
+        );
+        if (mirror) return mirror;
+        const created = await run(
+            'INSERT INTO course_units (course_id, name, sort_order) VALUES (?, ?, 0)',
+            [courseId, globalUnit.unit_name]
+        );
+        return queryOne('SELECT * FROM course_units WHERE id = ?', [created.lastID]);
+    }
+
+    return queryOne('SELECT * FROM course_units WHERE id = ? AND course_id = ?', [unitId, courseId]);
+}
+
 // ─── GET /api/student-unit-marks ─────────────────────────────────────────────
 
 /**
@@ -164,7 +201,7 @@ export async function getStudentUnitMarks(req, res) {
  */
 export async function saveStudentUnitMark(req, res) {
     try {
-        const { student_id, course_id, unit_id, marks, lecturer } = req.body;
+        const { student_id, course_id, unit_id, marks, lecturer, unit_name } = req.body;
 
         if (!student_id || !course_id || !unit_id || marks === undefined) {
             return res.status(400).json({ error: 'student_id, course_id, unit_id and marks are required' });
@@ -201,10 +238,7 @@ export async function saveStudentUnitMark(req, res) {
         }
 
         // Verify unit exists and belongs to course
-        const unit = await queryOne(
-            'SELECT * FROM course_units WHERE id = ? AND course_id = ?',
-            [unit_id, course_id]
-        );
+        const unit = await resolveCourseUnit(course_id, unit_id, unit_name);
         if (!unit) return res.status(404).json({ error: 'Unit not found for this course' });
 
         const thresholds = await getGradingThresholds();
@@ -235,7 +269,7 @@ export async function saveStudentUnitMark(req, res) {
         // Upsert
         const existing = await queryOne(
             'SELECT id FROM student_unit_marks WHERE student_id = ? AND course_id = ? AND unit_id = ?',
-            [student_id, course_id, unit_id]
+            [student_id, course_id, unit.id]
         );
 
         if (existing) {
@@ -254,7 +288,7 @@ export async function saveStudentUnitMark(req, res) {
             `INSERT INTO student_unit_marks
                 (student_id, course_id, unit_id, unit_name, marks, grade, lecturer)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [student_id, course_id, unit_id, unit.name, marksNum, grade, recLecturer]
+            [student_id, course_id, unit.id, unit.name, marksNum, grade, recLecturer]
         );
         const created = await queryOne('SELECT * FROM student_unit_marks WHERE id = ?', [result.lastID]);
         res.status(201).json(created);
@@ -273,7 +307,7 @@ export async function saveStudentUnitMark(req, res) {
  */
 export async function batchSaveUnitMarks(req, res) {
     try {
-        const { course_id, unit_id, entries } = req.body;
+        const { course_id, unit_id, entries, unit_name } = req.body;
 
         if (!course_id || !unit_id || !Array.isArray(entries) || entries.length === 0) {
             return res.status(400).json({ error: 'course_id, unit_id and entries are required' });
@@ -287,10 +321,7 @@ export async function batchSaveUnitMarks(req, res) {
             }
         }
 
-        const unit = await queryOne(
-            'SELECT * FROM course_units WHERE id = ? AND course_id = ?',
-            [unit_id, course_id]
-        );
+        const unit = await resolveCourseUnit(course_id, unit_id, unit_name);
         if (!unit) return res.status(404).json({ error: 'Unit not found for this course' });
 
         const courseObj = await queryOne('SELECT id, name FROM courses WHERE id = ?', [course_id]);
@@ -335,7 +366,7 @@ export async function batchSaveUnitMarks(req, res) {
         // Pre-load all existing marks for this course/unit to avoid sequential SELECT queries
         const existingMarks = await query(
             'SELECT id, student_id FROM student_unit_marks WHERE course_id = ? AND unit_id = ?',
-            [course_id, unit_id]
+            [course_id, unit.id]
         );
         const existingMap = new Map(existingMarks.map(m => [String(m.student_id).trim(), m.id]));
 
@@ -378,7 +409,7 @@ export async function batchSaveUnitMarks(req, res) {
                         `INSERT INTO student_unit_marks
                             (student_id, course_id, unit_id, unit_name, marks, grade, lecturer)
                          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                        [student_id, course_id, unit_id, unit.name, marksNum, grade, recLecturer]
+                        [student_id, course_id, unit.id, unit.name, marksNum, grade, recLecturer]
                     );
                 }
                 saved++;

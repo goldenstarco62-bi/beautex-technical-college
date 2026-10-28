@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
-import { certificatesAPI, settingsAPI } from '../services/api';
+import { certificatesAPI, settingsAPI, catResultsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil } from 'lucide-react';
+import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil, PackageOpen, FileDown, Square, CheckSquare, BarChart3, GraduationCap } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -484,10 +484,26 @@ export default function Certificates() {
     const certRef = useRef(null);
     const scaleRef = useRef(null);
 
+    // Bulk download state
+    const [selectedCerts, setSelectedCerts] = useState(new Set());
+    const [bulkBusy, setBulkBusy] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, name: '' });
+    const bulkCertRef = useRef(null);
+    const [bulkRenderData, setBulkRenderData] = useState(null); // current cert being rendered off-screen
+
+    // Transcripts state
+    const [transcripts, setTranscripts] = useState([]); // list of students with results for transcripts
+    const [transcriptLoading, setTranscriptLoading] = useState(false);
+    const [selectedTranscripts, setSelectedTranscripts] = useState(new Set());
+    const [transcriptSearch, setTranscriptSearch] = useState('');
+    const [transcriptBusy, setTranscriptBusy] = useState(false);
+    const [transcriptProgress, setTranscriptProgress] = useState({ current: 0, total: 0, name: '' });
+
     const notify = (msg, kind = 'info') => { setToast({ msg, kind }); setTimeout(() => setToast(null), 4000); };
 
     useEffect(() => { load(); }, []);
-    useEffect(() => { if (tab === 'issued') loadIssued(); }, [tab, issuedFilter]);
+    useEffect(() => { if (tab === 'issued') { loadIssued(); setSelectedCerts(new Set()); } }, [tab, issuedFilter]);
+    useEffect(() => { if (tab === 'transcripts') loadTranscripts(); }, [tab]);
 
     async function load() {
         setLoading(true); setError('');
@@ -502,6 +518,31 @@ export default function Certificates() {
     async function loadIssued() {
         try { const { data } = await certificatesAPI.getAll({ status: issuedFilter }); setIssued(data || []); }
         catch (e) { notify(e.response?.data?.error || 'Failed to load certificates.', 'error'); }
+    }
+
+    async function loadTranscripts() {
+        setTranscriptLoading(true);
+        try {
+            // Fetch all CAT results grouped by student
+            const { data } = await catResultsAPI.getResults({ workflow_status: 'Published' });
+            const byStudent = {};
+            (data || []).forEach(r => {
+                const sid = String(r.student_id);
+                if (!byStudent[sid]) {
+                    byStudent[sid] = {
+                        student_id: r.student_id,
+                        student_name: r.student_name,
+                        student_reg_id: r.student_reg_id,
+                        course_name: r.student_main_course || r.course_name || '',
+                        results: []
+                    };
+                }
+                byStudent[sid].results.push(r);
+            });
+            setTranscripts(Object.values(byStudent));
+        } catch (e) {
+            notify('Failed to load transcript data.', 'error');
+        } finally { setTranscriptLoading(false); }
     }
 
     const filteredEligible = useMemo(() => {
@@ -627,6 +668,268 @@ export default function Certificates() {
         } finally { setBusy(false); }
     }
 
+    // ── Bulk Certificate Download ─────────────────────────────────────────────
+    function toggleCert(id) {
+        setSelectedCerts(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }
+    function toggleAllCerts() {
+        const issuedIds = issued.filter(c => c.status === 'Issued').map(c => c.id);
+        if (selectedCerts.size === issuedIds.length) {
+            setSelectedCerts(new Set());
+        } else {
+            setSelectedCerts(new Set(issuedIds));
+        }
+    }
+
+    async function handleBulkDownload() {
+        const toDownload = issued.filter(c => selectedCerts.has(c.id) && c.status === 'Issued');
+        if (toDownload.length === 0) { notify('Select at least one issued certificate.', 'error'); return; }
+        setBulkBusy(true);
+        setBulkProgress({ current: 0, total: toDownload.length, name: '' });
+        let failCount = 0;
+        for (let i = 0; i < toDownload.length; i++) {
+            const c = toDownload[i];
+            setBulkProgress({ current: i + 1, total: toDownload.length, name: c.student_name });
+            try {
+                const data = await buildData({ ...c, student_id: c.student_id, photo: c.student_photo, already_issued: true });
+                setBulkRenderData(data);
+                // Give React a tick to mount the hidden template
+                await new Promise(r => setTimeout(r, 120));
+                const el = bulkCertRef.current;
+                if (!el) { failCount++; continue; }
+                const holder = document.createElement('div');
+                holder.style.cssText = `position:fixed;left:-9999px;top:0;width:${CERT_W}px;height:${CERT_H}px;z-index:99999;background:${IVORY};`;
+                const parent = el.parentElement;
+                const next = el.nextSibling;
+                document.body.appendChild(holder);
+                holder.appendChild(el);
+                try {
+                    const canvas = await captureCertificate(el);
+                    const pw = 297;
+                    const ph = Math.round(pw * (canvas.height / canvas.width));
+                    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pw, ph] });
+                    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pw, ph, undefined, 'SLOW');
+                    const safeName = (c.student_name || 'certificate').replace(/\s+/g, '_');
+                    pdf.save(`${safeName}_${c.certificate_number || 'CERT'}.pdf`);
+                    // Small delay between downloads to avoid browser blocking
+                    await new Promise(r => setTimeout(r, 400));
+                } finally {
+                    if (parent) parent.insertBefore(el, next);
+                    holder.remove();
+                }
+            } catch (e) {
+                failCount++;
+                console.error('Bulk cert failed for', c.student_name, e);
+            }
+        }
+        setBulkRenderData(null);
+        setBulkBusy(false);
+        setBulkProgress({ current: 0, total: 0, name: '' });
+        if (failCount > 0) notify(`Downloaded ${toDownload.length - failCount} certificates. ${failCount} failed.`, 'error');
+        else notify(`✓ Downloaded ${toDownload.length} certificate${toDownload.length > 1 ? 's' : ''} successfully!`, 'success');
+    }
+
+    // ── Transcript PDF Generation ─────────────────────────────────────────────
+    function toggleTranscript(id) {
+        setSelectedTranscripts(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }
+    function toggleAllTranscripts() {
+        if (selectedTranscripts.size === transcripts.length) {
+            setSelectedTranscripts(new Set());
+        } else {
+            setSelectedTranscripts(new Set(transcripts.map(t => t.student_id)));
+        }
+    }
+
+    const filteredTranscripts = useMemo(() => {
+        const q = transcriptSearch.toLowerCase().trim();
+        if (!q) return transcripts;
+        return transcripts.filter(t =>
+            t.student_name?.toLowerCase().includes(q) ||
+            String(t.student_reg_id || '').toLowerCase().includes(q) ||
+            t.course_name?.toLowerCase().includes(q)
+        );
+    }, [transcripts, transcriptSearch]);
+
+    async function generateTranscriptPDF(student) {
+        const { student_name, student_reg_id, course_name, results } = student;
+        // Group results by period
+        const periodMap = {};
+        results.forEach(r => {
+            const pid = r.cat_period_id;
+            const pLabel = r.period_academic_year && r.period_term_name
+                ? `${r.period_academic_year} ${r.period_term_name} — ${r.period_cat_name || ''}`
+                : (r.cat_period_id ? `Period #${r.cat_period_id}` : 'General');
+            if (!periodMap[pid]) periodMap[pid] = { label: pLabel, rows: [] };
+            periodMap[pid].rows.push(r);
+        });
+        const validAll = results.filter(r => r.percentage !== null);
+        const cumAvg = validAll.length > 0
+            ? Math.round((validAll.reduce((a, r) => a + parseFloat(r.percentage), 0) / validAll.length) * 10) / 10
+            : null;
+        let cumGrade = '—';
+        if (cumAvg !== null) {
+            if (cumAvg >= 70) cumGrade = 'Distinction';
+            else if (cumAvg >= 60) cumGrade = 'Credit';
+            else if (cumAvg >= 50) cumGrade = 'Pass';
+            else cumGrade = 'Fail';
+        }
+
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const PW = pdf.internal.pageSize.getWidth();
+        const PH = pdf.internal.pageSize.getHeight();
+        const MAROON_HEX = '#800000';
+        const GOLD_HEX = '#C9A227';
+        let y = 18;
+
+        // Header band
+        pdf.setFillColor(128, 0, 0);
+        pdf.rect(0, 0, PW, 30, 'F');
+        pdf.setTextColor(201, 162, 39);
+        pdf.setFontSize(16); pdf.setFont('helvetica', 'bold');
+        pdf.text('BEAUTEX TECHNICAL COLLEGE', PW / 2, 12, { align: 'center' });
+        pdf.setFontSize(9); pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(255, 255, 255);
+        pdf.text('OFFICIAL ACADEMIC TRANSCRIPT', PW / 2, 20, { align: 'center' });
+        pdf.text(`Generated: ${new Date().toLocaleDateString('en-KE', { year: 'numeric', month: 'long', day: 'numeric' })}`, PW / 2, 27, { align: 'center' });
+
+        y = 40;
+        // Student info box
+        pdf.setFillColor(251, 246, 233);
+        pdf.roundedRect(10, y - 4, PW - 20, 24, 3, 3, 'F');
+        pdf.setTextColor(128, 0, 0); pdf.setFontSize(10); pdf.setFont('helvetica', 'bold');
+        pdf.text(`Student Name: ${student_name || '—'}`, 15, y + 4);
+        pdf.text(`Reg. No.: ${student_reg_id || '—'}`, 15, y + 11);
+        pdf.text(`Programme: ${course_name || '—'}`, 15, y + 18);
+        y += 32;
+
+        // Results by period
+        for (const [, period] of Object.entries(periodMap)) {
+            if (y > PH - 40) { pdf.addPage(); y = 20; }
+            pdf.setFillColor(128, 0, 0);
+            pdf.rect(10, y - 4, PW - 20, 8, 'F');
+            pdf.setTextColor(201, 162, 39); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+            pdf.text(period.label.toUpperCase(), 14, y + 1);
+            y += 10;
+
+            // Table header
+            pdf.setFillColor(245, 240, 230);
+            pdf.rect(10, y - 3, PW - 20, 7, 'F');
+            pdf.setTextColor(60, 20, 20); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold');
+            pdf.text('UNIT / SUBJECT', 14, y + 1);
+            pdf.text('MARKS', 110, y + 1, { align: 'right' });
+            pdf.text('%', 130, y + 1, { align: 'right' });
+            pdf.text('GRADE', 150, y + 1, { align: 'right' });
+            pdf.text('REMARKS', 195, y + 1, { align: 'right' });
+            y += 10;
+
+            period.rows.forEach((r, idx) => {
+                if (y > PH - 20) { pdf.addPage(); y = 20; }
+                if (idx % 2 === 0) { pdf.setFillColor(250, 248, 244); pdf.rect(10, y - 3, PW - 20, 7, 'F'); }
+                pdf.setTextColor(30, 30, 30); pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+                const uLabel = r.unit_id ? (r.unit_display_name || r.unit_name || '—') : `${r.student_main_course || r.course_name || 'Programme'} — Overall`;
+                pdf.text(String(uLabel).slice(0, 52), 14, y + 1);
+                pdf.text(r.marks !== null ? String(r.marks) : '—', 110, y + 1, { align: 'right' });
+                pdf.text(r.percentage !== null ? `${r.percentage}%` : '—', 130, y + 1, { align: 'right' });
+                pdf.setFont('helvetica', 'bold');
+                const gradeColor = r.grade === 'Distinction' ? [5, 150, 105] : r.grade === 'Credit' ? [37, 99, 235] : r.grade === 'Pass' ? [217, 119, 6] : r.grade === 'Fail' ? [220, 38, 38] : [60, 60, 60];
+                pdf.setTextColor(...gradeColor);
+                pdf.text(r.grade || '—', 150, y + 1, { align: 'right' });
+                pdf.setTextColor(100, 100, 100); pdf.setFont('helvetica', 'normal');
+                pdf.text(String(r.remarks || '').slice(0, 20), 195, y + 1, { align: 'right' });
+                y += 8;
+            });
+
+            // Period subtotal
+            const pValid = period.rows.filter(r => r.percentage !== null);
+            if (pValid.length > 0) {
+                const pAvg = Math.round((pValid.reduce((a, r) => a + parseFloat(r.percentage), 0) / pValid.length) * 10) / 10;
+                if (y > PH - 20) { pdf.addPage(); y = 20; }
+                pdf.setFillColor(201, 162, 39);
+                pdf.rect(10, y - 2, PW - 20, 7, 'F');
+                pdf.setTextColor(128, 0, 0); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold');
+                pdf.text(`Period Average`, 14, y + 2);
+                pdf.text(`${pAvg}%`, 130, y + 2, { align: 'right' });
+                y += 12;
+            } else { y += 4; }
+        }
+
+        // Cumulative summary
+        if (cumAvg !== null) {
+            if (y > PH - 35) { pdf.addPage(); y = 20; }
+            y += 4;
+            pdf.setFillColor(128, 0, 0);
+            pdf.roundedRect(10, y - 4, PW - 20, 22, 3, 3, 'F');
+            pdf.setTextColor(201, 162, 39); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
+            pdf.text('CUMULATIVE ACADEMIC PERFORMANCE SUMMARY', PW / 2, y + 3, { align: 'center' });
+            pdf.setTextColor(255, 255, 255); pdf.setFontSize(8);
+            pdf.text(`Overall Average: ${cumAvg}%   |   Overall Grade: ${cumGrade}   |   Units Evaluated: ${validAll.length}`, PW / 2, y + 12, { align: 'center' });
+            y += 30;
+        }
+
+        // Signatures
+        if (y > PH - 30) { pdf.addPage(); y = 20; }
+        pdf.setTextColor(80, 80, 80); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal');
+        pdf.line(15, y + 10, 70, y + 10);
+        pdf.line(PW - 70, y + 10, PW - 15, y + 10);
+        pdf.text('Head of Academics', 42, y + 15, { align: 'center' });
+        pdf.text('College Registrar', PW - 42, y + 15, { align: 'center' });
+
+        // Footer
+        pdf.setFillColor(240, 235, 220);
+        pdf.rect(0, PH - 10, PW, 10, 'F');
+        pdf.setTextColor(128, 0, 0); pdf.setFontSize(6.5); pdf.setFont('helvetica', 'italic');
+        pdf.text('This is an official academic transcript of Beautex Technical College. Unauthorized alteration is a criminal offence.', PW / 2, PH - 4, { align: 'center' });
+
+        const safeName = (student_name || 'transcript').replace(/\s+/g, '_');
+        pdf.save(`Transcript_${safeName}_${student_reg_id || ''}.pdf`);
+    }
+
+    async function handleBulkTranscriptDownload() {
+        const toDownload = transcripts.filter(t => selectedTranscripts.has(t.student_id));
+        if (toDownload.length === 0) { notify('Select at least one student for transcript download.', 'error'); return; }
+        setTranscriptBusy(true);
+        setTranscriptProgress({ current: 0, total: toDownload.length, name: '' });
+        let failCount = 0;
+        for (let i = 0; i < toDownload.length; i++) {
+            const student = toDownload[i];
+            setTranscriptProgress({ current: i + 1, total: toDownload.length, name: student.student_name });
+            try {
+                await generateTranscriptPDF(student);
+                await new Promise(r => setTimeout(r, 300));
+            } catch (e) {
+                failCount++;
+                console.error('Transcript failed for', student.student_name, e);
+            }
+        }
+        setTranscriptBusy(false);
+        setTranscriptProgress({ current: 0, total: 0, name: '' });
+        if (failCount > 0) notify(`Downloaded ${toDownload.length - failCount} transcripts. ${failCount} failed.`, 'error');
+        else notify(`✓ Downloaded ${toDownload.length} transcript${toDownload.length > 1 ? 's' : ''} successfully!`, 'success');
+    }
+
+    // Core html2canvas capture — takes an explicit DOM element.
+    // Used both by the preview flow (via captureCanvas) and bulk download.
+    async function captureCertificate(el) {
+        return await html2canvas(el, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: IVORY,
+            logging: false,
+            width: CERT_W,
+            height: CERT_H,
+        });
+    }
+
     async function captureCanvas() {
         const el = certRef.current;
         if (!el) throw new Error('Template not ready.');
@@ -651,6 +954,7 @@ export default function Certificates() {
             holder.remove();
         }
     }
+
 
     async function handleDownload() {
         setBusy(true);
@@ -689,15 +993,56 @@ export default function Certificates() {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* ── Hidden off-screen certificate for bulk rendering ── */}
+            {bulkRenderData && (
+                <div style={{ position: 'fixed', left: -9999, top: 0, width: CERT_W, height: CERT_H, overflow: 'hidden', zIndex: -1 }}>
+                    <CertificateTemplate data={bulkRenderData} innerRef={bulkCertRef} />
+                </div>
+            )}
+
+            {/* ── Bulk progress overlay ── */}
+            {(bulkBusy || transcriptBusy) && (
+                <div className="fixed inset-0 bg-maroon/60 backdrop-blur-md z-[200] flex flex-col items-center justify-center gap-6">
+                    <div className="bg-white rounded-3xl p-10 max-w-sm w-full shadow-2xl flex flex-col items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-maroon/10 flex items-center justify-center">
+                            <Loader2 className="w-7 h-7 text-maroon animate-spin" />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-maroon/50 mb-1">
+                                {transcriptBusy ? 'Generating Transcripts' : 'Generating Certificates'}
+                            </p>
+                            <p className="text-xl font-black text-maroon">
+                                {transcriptBusy ? transcriptProgress.current : bulkProgress.current} / {transcriptBusy ? transcriptProgress.total : bulkProgress.total}
+                            </p>
+                            <p className="text-xs font-bold text-black/60 mt-2 truncate max-w-[220px]">
+                                {transcriptBusy ? transcriptProgress.name : bulkProgress.name}
+                            </p>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-maroon to-gold rounded-full transition-all duration-300"
+                                style={{
+                                    width: `${transcriptBusy
+                                        ? (transcriptProgress.total > 0 ? (transcriptProgress.current / transcriptProgress.total) * 100 : 0)
+                                        : (bulkProgress.total > 0 ? (bulkProgress.current / bulkProgress.total) * 100 : 0)
+                                    }%`
+                                }}
+                            />
+                        </div>
+                        <p className="text-[10px] font-bold text-black/40 text-center">PDFs are being saved to your Downloads folder</p>
+                    </div>
+                </div>
+            )}
+
             <div className="flex items-end justify-between">
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-black text-maroon uppercase tracking-tight">Certificates</h1>
                     <p className="text-xs text-maroon/40 font-bold tracking-widest mt-1">Qualification Award &amp; Issuance Register</p>
                 </div>
                 <div className="flex gap-2">
-                    {['generate', 'issued'].map(t => (
+                    {['generate', 'issued', 'transcripts'].map(t => (
                         <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${tab === t ? 'bg-maroon text-gold border-maroon' : 'bg-white text-maroon border-maroon/10 hover:border-maroon/30'}`}>
-                            {t === 'generate' ? 'Generate' : 'Issued'}
+                            {t === 'generate' ? 'Generate' : t === 'issued' ? 'Issued' : 'Transcripts'}
                         </button>
                     ))}
                 </div>
@@ -748,18 +1093,41 @@ export default function Certificates() {
 
             {tab === 'issued' && (
                 <div className="card-light p-5 sm:p-6 overflow-x-auto">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
                         <p className="text-[11px] font-black uppercase tracking-widest text-maroon/40">{issuedFilter === 'Issued' ? 'Active Certificates' : 'Revoked Certificates'}</p>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                             {['Issued', 'Revoked'].map(f => (
                                 <button key={f} onClick={() => setIssuedFilter(f)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${issuedFilter === f ? 'bg-maroon text-gold border-maroon' : 'bg-white text-maroon border-maroon/10 hover:border-maroon/30'}`}>{f === 'Issued' ? 'Active' : 'Revoked'}</button>
                             ))}
+                            {issuedFilter === 'Issued' && selectedCerts.size > 0 && (
+                                <button
+                                    onClick={handleBulkDownload}
+                                    disabled={bulkBusy}
+                                    className="px-3 py-1.5 rounded-lg bg-maroon text-gold text-[10px] font-black uppercase tracking-wider border border-maroon hover:bg-maroon/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+                                >
+                                    <PackageOpen className="w-3.5 h-3.5" />
+                                    Download {selectedCerts.size} PDF{selectedCerts.size > 1 ? 's' : ''}
+                                </button>
+                            )}
                         </div>
                     </div>
                     {issued.length === 0 ? <p className="text-maroon/40 font-bold text-sm py-8 text-center">{issuedFilter === 'Issued' ? 'No active certificates issued yet.' : 'No revoked certificates.'}</p> : (
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="text-[10px] font-black uppercase tracking-widest text-maroon/40 border-b border-maroon/10">
+                                    {issuedFilter === 'Issued' && (
+                                        <th className="py-3 px-2">
+                                            <button
+                                                onClick={toggleAllCerts}
+                                                className="text-maroon/40 hover:text-maroon transition-colors"
+                                                title={selectedCerts.size === issued.filter(c => c.status === 'Issued').length ? 'Deselect all' : 'Select all'}
+                                            >
+                                                {selectedCerts.size === issued.filter(c => c.status === 'Issued').length && issued.filter(c => c.status === 'Issued').length > 0
+                                                    ? <CheckSquare className="w-4 h-4" />
+                                                    : <Square className="w-4 h-4" />}
+                                            </button>
+                                        </th>
+                                    )}
                                     <th className="py-3 px-3">Certificate No.</th>
                                     <th className="py-3 px-3">Student</th>
                                     <th className="py-3 px-3">Qualification</th>
@@ -771,7 +1139,17 @@ export default function Certificates() {
                             </thead>
                             <tbody>
                                 {issued.map(c => (
-                                    <tr key={c.id} className="border-b border-maroon/5">
+                                    <tr key={c.id} className={`border-b border-maroon/5 transition-colors ${selectedCerts.has(c.id) ? 'bg-gold/5' : 'hover:bg-maroon/[0.02]'}`}>
+                                        {issuedFilter === 'Issued' && (
+                                            <td className="py-3 px-2">
+                                                <button
+                                                    onClick={() => toggleCert(c.id)}
+                                                    className={`transition-colors ${selectedCerts.has(c.id) ? 'text-maroon' : 'text-maroon/20 hover:text-maroon/50'}`}
+                                                >
+                                                    {selectedCerts.has(c.id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                                </button>
+                                            </td>
+                                        )}
                                         <td className="py-3 px-3 font-black text-maroon text-[11px]">{c.certificate_number}</td>
                                         <td className="py-3 px-3 text-[11px] font-bold text-black/70">{c.student_name}</td>
                                         <td className="py-3 px-3 text-[11px] font-bold text-black/60">{c.course_name}</td>
@@ -782,6 +1160,37 @@ export default function Certificates() {
                                             : <td className="py-3 px-3 text-[11px] font-bold text-red-600/80"><div>{formatDate(c.revoked_at)}</div><div className="text-black/50 font-semibold normal-case">"{c.revoke_reason || '—'}"</div></td>}
                                         <td className="py-3 px-3 text-right whitespace-nowrap">
                                             <button onClick={() => openPreview({ ...c, student_name: c.student_name, student_id: c.student_id, photo: c.student_photo, already_issued: true })} className="px-3 py-1.5 rounded-lg bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-wider hover:border-maroon/40">View</button>
+                                            {issuedFilter === 'Issued' && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setBusy(true);
+                                                        try {
+                                                            const data = await buildData({ ...c, student_id: c.student_id, photo: c.student_photo, already_issued: true });
+                                                            setBulkRenderData(data);
+                                                            await new Promise(r => setTimeout(r, 150));
+                                                            const el = bulkCertRef.current;
+                                                            if (!el) { notify('Render error.', 'error'); return; }
+                                                            const holder = document.createElement('div');
+                                                            holder.style.cssText = `position:fixed;left:-9999px;top:0;width:${CERT_W}px;height:${CERT_H}px;z-index:99999;background:${IVORY};`;
+                                                            const parent = el.parentElement; const next = el.nextSibling;
+                                                            document.body.appendChild(holder); holder.appendChild(el);
+                                                            try {
+                                                                const canvas = await captureCertificate(el);
+                                                                const pw = 297; const ph = Math.round(pw * (canvas.height / canvas.width));
+                                                                const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [pw, ph] });
+                                                                pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pw, ph, undefined, 'SLOW');
+                                                                pdf.save(`${(c.student_name || 'cert').replace(/\s+/g, '_')}_${c.certificate_number}.pdf`);
+                                                                notify('Certificate PDF downloaded!', 'success');
+                                                            } finally { if (parent) parent.insertBefore(el, next); holder.remove(); setBulkRenderData(null); }
+                                                        } catch (e) { notify('PDF failed: ' + (e.message || ''), 'error'); setBulkRenderData(null); } finally { setBusy(false); }
+                                                    }}
+                                                    disabled={busy || bulkBusy}
+                                                    className="ml-2 px-3 py-1.5 rounded-lg bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-wider hover:border-maroon/40 disabled:opacity-40 inline-flex items-center gap-1"
+                                                    title="Download PDF"
+                                                >
+                                                    <FileDown className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                             {issuedFilter === 'Issued' && canIssue && (
                                                 <button onClick={() => openEdit(c)} className="ml-2 px-3 py-1.5 rounded-lg bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-wider hover:border-maroon/40 inline-flex items-center gap-1"><Pencil className="w-3.5 h-3.5" /> Edit</button>
                                             )}
@@ -793,6 +1202,121 @@ export default function Certificates() {
                                 ))}
                             </tbody>
                         </table>
+                    )}
+                </div>
+            )}
+
+            {/* ── Transcripts Tab ─────────────────────────────────────────────────── */}
+            {tab === 'transcripts' && (
+                <div className="card-light p-5 sm:p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
+                        <div>
+                            <p className="text-[11px] font-black uppercase tracking-widest text-maroon/40">Academic Transcripts</p>
+                            <p className="text-[10px] font-bold text-black/40 mt-0.5">Generated from published CAT assessment results</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {selectedTranscripts.size > 0 && (
+                                <button
+                                    onClick={handleBulkTranscriptDownload}
+                                    disabled={transcriptBusy}
+                                    className="px-4 py-2 rounded-lg bg-maroon text-gold text-[10px] font-black uppercase tracking-wider border border-maroon hover:bg-maroon/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+                                >
+                                    <PackageOpen className="w-3.5 h-3.5" />
+                                    Download {selectedTranscripts.size} Transcript{selectedTranscripts.size > 1 ? 's' : ''}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Search */}
+                    <div className="relative mb-4 max-w-md">
+                        <Search className="w-4 h-4 text-maroon/30 absolute left-4 top-1/2 -translate-y-1/2" />
+                        <input
+                            value={transcriptSearch}
+                            onChange={e => setTranscriptSearch(e.target.value)}
+                            placeholder="Search student name, reg ID or course…"
+                            className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10"
+                        />
+                    </div>
+
+                    {transcriptLoading ? (
+                        <div className="flex items-center gap-2 text-maroon/50 font-bold text-sm py-8 justify-center">
+                            <Loader2 className="w-5 h-5 animate-spin" /> Loading transcript data…
+                        </div>
+                    ) : filteredTranscripts.length === 0 ? (
+                        <div className="text-center py-12">
+                            <div className="w-16 h-16 mx-auto rounded-2xl bg-maroon/5 flex items-center justify-center mb-4">
+                                <GraduationCap className="w-8 h-8 text-maroon/30" />
+                            </div>
+                            <p className="text-maroon/40 font-bold text-sm">No published results found. Transcripts require at least one published CAT result per student.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="text-[10px] font-black uppercase tracking-widest text-maroon/40 border-b border-maroon/10">
+                                        <th className="py-3 px-2">
+                                            <button
+                                                onClick={toggleAllTranscripts}
+                                                className="text-maroon/40 hover:text-maroon transition-colors"
+                                                title={selectedTranscripts.size === filteredTranscripts.length ? 'Deselect all' : 'Select all'}
+                                            >
+                                                {selectedTranscripts.size === filteredTranscripts.length && filteredTranscripts.length > 0
+                                                    ? <CheckSquare className="w-4 h-4" />
+                                                    : <Square className="w-4 h-4" />}
+                                            </button>
+                                        </th>
+                                        <th className="py-3 px-3">Student</th>
+                                        <th className="py-3 px-3">Reg. No.</th>
+                                        <th className="py-3 px-3">Programme</th>
+                                        <th className="py-3 px-3">Results</th>
+                                        <th className="py-3 px-3 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredTranscripts.map(t => {
+                                        const validR = t.results.filter(r => r.percentage !== null);
+                                        const avg = validR.length > 0
+                                            ? Math.round((validR.reduce((a, r) => a + parseFloat(r.percentage), 0) / validR.length) * 10) / 10
+                                            : null;
+                                        return (
+                                            <tr key={t.student_id} className={`border-b border-maroon/5 transition-colors ${selectedTranscripts.has(t.student_id) ? 'bg-gold/5' : 'hover:bg-maroon/[0.02]'}`}>
+                                                <td className="py-3 px-2">
+                                                    <button
+                                                        onClick={() => toggleTranscript(t.student_id)}
+                                                        className={`transition-colors ${selectedTranscripts.has(t.student_id) ? 'text-maroon' : 'text-maroon/20 hover:text-maroon/50'}`}
+                                                    >
+                                                        {selectedTranscripts.has(t.student_id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                                    </button>
+                                                </td>
+                                                <td className="py-3 px-3 font-black text-maroon text-sm">{t.student_name}</td>
+                                                <td className="py-3 px-3 text-[11px] font-bold text-black/50">{t.student_reg_id || '—'}</td>
+                                                <td className="py-3 px-3 text-[11px] font-bold text-black/70">{t.course_name || '—'}</td>
+                                                <td className="py-3 px-3">
+                                                    <span className="text-[10px] font-black text-maroon/60">{t.results.length} units</span>
+                                                    {avg !== null && (
+                                                        <span className={`ml-2 px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
+                                                            avg >= 70 ? 'bg-emerald-50 text-emerald-700' :
+                                                            avg >= 60 ? 'bg-blue-50 text-blue-700' :
+                                                            avg >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
+                                                        }`}>{avg}% avg</span>
+                                                    )}
+                                                </td>
+                                                <td className="py-3 px-3 text-right">
+                                                    <button
+                                                        onClick={() => generateTranscriptPDF(t)}
+                                                        disabled={transcriptBusy}
+                                                        className="px-3 py-1.5 rounded-lg bg-maroon text-gold text-[10px] font-black uppercase tracking-wider hover:bg-maroon/90 disabled:opacity-40 inline-flex items-center gap-1"
+                                                    >
+                                                        <FileDown className="w-3.5 h-3.5" /> PDF
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
             )}

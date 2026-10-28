@@ -6,7 +6,7 @@ import {
     Award, BookOpen, Users, Search, Plus, X, Edit, Trash2, CheckCircle,
     FileDown, Printer, History, TrendingUp, GraduationCap, Layers, AlertTriangle,
     ChevronDown, ChevronUp, Send, Check, Lock, Eye, BarChart3, Filter, Clock,
-    Sparkles, RefreshCw, FileText, CheckSquare, ShieldCheck
+    Sparkles, RefreshCw, FileText, CheckSquare, ShieldCheck, Square, PackageOpen
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -120,11 +120,18 @@ export default function Results() {
     // Toast & Confirm
     const [toast, setToast] = useState(null);
     const showToast = useCallback((message, type = 'success') => setToast({ message, type }), []);
+    // Auto-dismiss toast after 4 seconds
+    useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 4000); return () => clearTimeout(t); } }, [toast]);
     const [confirmDialog, setConfirmDialog] = useState(null);
     const openConfirm = (message, onConfirm) => setConfirmDialog({ message, onConfirm });
 
     // Logo base64 state for html2canvas PDF rendering
     const [logoBase64, setLogoBase64] = useState('');
+
+    // Bulk result slip selection state
+    const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+    const [bulkSlipBusy, setBulkSlipBusy] = useState(false);
+    const [bulkSlipProgress, setBulkSlipProgress] = useState({ current: 0, total: 0, name: '' });
 
     useEffect(() => {
         let isMounted = true;
@@ -513,6 +520,160 @@ export default function Results() {
         }
     };
 
+    // ── Bulk Result Slip Download (admin/teacher) ───────────────────────────
+    // Groups all visible filtered results by student_id and renders
+    // a minimal jsPDF slip for each (no html2canvas — avoids off-screen DOM).
+    function uniqueStudentsFromResults(resultList) {
+        const map = {};
+        resultList.forEach(r => {
+            const sid = String(r.student_id);
+            if (!map[sid]) {
+                map[sid] = {
+                    student_id: r.student_id,
+                    name: r.student_name || 'Student',
+                    reg_id: r.student_reg_id || sid,
+                    course_name: r.student_main_course || r.course_name || '',
+                    rows: []
+                };
+            }
+            map[sid].rows.push(r);
+        });
+        return Object.values(map);
+    }
+
+    function generateSlipPDFDirect(student, period) {
+        const { name, reg_id, course_name, rows } = student;
+        const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const PW = pdf.internal.pageSize.getWidth();
+        const PH = pdf.internal.pageSize.getHeight();
+        let y = 15;
+
+        // Header
+        pdf.setFillColor(128, 0, 0);
+        pdf.rect(0, 0, PW, 28, 'F');
+        pdf.setTextColor(201, 162, 39); pdf.setFontSize(14); pdf.setFont('helvetica', 'bold');
+        pdf.text('BEAUTEX TECHNICAL COLLEGE', PW / 2, 11, { align: 'center' });
+        pdf.setFontSize(8); pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(255, 255, 255);
+        pdf.text('OFFICIAL CONTINUOUS ASSESSMENT STATEMENT', PW / 2, 18, { align: 'center' });
+        pdf.text(period ? `${period.academic_year || ''} ${period.term_name || ''} — ${period.cat_name || ''}` : 'All Periods', PW / 2, 24, { align: 'center' });
+        y = 36;
+
+        // Student info
+        pdf.setFillColor(251, 246, 233);
+        pdf.roundedRect(10, y - 3, PW - 20, 20, 3, 3, 'F');
+        pdf.setTextColor(128, 0, 0); pdf.setFontSize(9); pdf.setFont('helvetica', 'bold');
+        pdf.text(`Student: ${name}`, 14, y + 4);
+        pdf.text(`Reg. No.: ${reg_id}`, 14, y + 11);
+        pdf.text(`Programme: ${course_name || '—'}`, 90, y + 4);
+        pdf.text(`Date: ${new Date().toLocaleDateString('en-KE')}`, 90, y + 11);
+        y += 26;
+
+        // Table header
+        pdf.setFillColor(245, 240, 230);
+        pdf.rect(10, y - 2, PW - 20, 7, 'F');
+        pdf.setTextColor(60, 20, 20); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'bold');
+        pdf.text('UNIT / SUBJECT', 14, y + 2);
+        pdf.text('MARKS', 110, y + 2, { align: 'right' });
+        pdf.text('%', 130, y + 2, { align: 'right' });
+        pdf.text('GRADE', 155, y + 2, { align: 'right' });
+        pdf.text('STATUS', 195, y + 2, { align: 'right' });
+        y += 10;
+
+        rows.forEach((r, idx) => {
+            if (y > PH - 25) { pdf.addPage(); y = 15; }
+            if (idx % 2 === 0) { pdf.setFillColor(250, 248, 244); pdf.rect(10, y - 2, PW - 20, 7, 'F'); }
+            pdf.setTextColor(30, 30, 30); pdf.setFontSize(7); pdf.setFont('helvetica', 'normal');
+            const uLabel = r.unit_id ? (r.unit_display_name || r.unit_name || '—') : `${r.student_main_course || r.course_name || 'Programme'} — Overall`;
+            pdf.text(String(uLabel).slice(0, 52), 14, y + 2);
+            pdf.text(r.marks !== null ? String(r.marks) : '—', 110, y + 2, { align: 'right' });
+            pdf.text(r.percentage !== null ? `${r.percentage}%` : '—', 130, y + 2, { align: 'right' });
+            pdf.setFont('helvetica', 'bold');
+            const gc = r.grade === 'Distinction' ? [5, 150, 105] : r.grade === 'Credit' ? [37, 99, 235] : r.grade === 'Pass' ? [217, 119, 6] : r.grade === 'Fail' ? [220, 38, 38] : [60, 60, 60];
+            pdf.setTextColor(...gc);
+            pdf.text(r.grade || '—', 155, y + 2, { align: 'right' });
+            pdf.setTextColor(80, 80, 80); pdf.setFont('helvetica', 'normal');
+            pdf.text(r.status || '—', 195, y + 2, { align: 'right' });
+            y += 8;
+        });
+
+        // Summary row
+        const valid = rows.filter(r => r.percentage !== null);
+        if (valid.length > 0) {
+            const avg = Math.round((valid.reduce((a, r) => a + parseFloat(r.percentage), 0) / valid.length) * 10) / 10;
+            let grade = 'Fail';
+            if (avg >= 70) grade = 'Distinction';
+            else if (avg >= 60) grade = 'Credit';
+            else if (avg >= 50) grade = 'Pass';
+            if (y > PH - 20) { pdf.addPage(); y = 15; }
+            pdf.setFillColor(201, 162, 39);
+            pdf.rect(10, y, PW - 20, 8, 'F');
+            pdf.setTextColor(128, 0, 0); pdf.setFontSize(8); pdf.setFont('helvetica', 'bold');
+            pdf.text(`OVERALL AVERAGE: ${avg}%   |   GRADE: ${grade}   |   ${valid.length} UNITS EVALUATED`, PW / 2, y + 5, { align: 'center' });
+            y += 14;
+        }
+
+        // Signatures
+        if (y > PH - 28) { pdf.addPage(); y = 15; }
+        y += 6;
+        pdf.setTextColor(100, 100, 100); pdf.setFontSize(7.5); pdf.setFont('helvetica', 'normal');
+        pdf.line(15, y + 8, 65, y + 8);
+        pdf.line(PW - 65, y + 8, PW - 15, y + 8);
+        pdf.text('Head of Academics', 40, y + 13, { align: 'center' });
+        pdf.text('College Registrar', PW - 40, y + 13, { align: 'center' });
+
+        // Footer
+        pdf.setFillColor(240, 235, 220);
+        pdf.rect(0, PH - 10, PW, 10, 'F');
+        pdf.setTextColor(128, 0, 0); pdf.setFontSize(6.5); pdf.setFont('helvetica', 'italic');
+        pdf.text('This is an official CAT result statement of Beautex Technical College.', PW / 2, PH - 4, { align: 'center' });
+
+        const safeName = name.replace(/\s+/g, '_');
+        pdf.save(`CAT_Slip_${safeName}_${reg_id}.pdf`);
+    }
+
+    function toggleStudentSlip(studentId) {
+        setSelectedStudentIds(prev => {
+            const next = new Set(prev);
+            next.has(studentId) ? next.delete(studentId) : next.add(studentId);
+            return next;
+        });
+    }
+
+    function toggleAllStudentSlips() {
+        const allStudents = uniqueStudentsFromResults(filteredResults);
+        if (selectedStudentIds.size === allStudents.length) {
+            setSelectedStudentIds(new Set());
+        } else {
+            setSelectedStudentIds(new Set(allStudents.map(s => s.student_id)));
+        }
+    }
+
+    async function handleBulkSlipDownload() {
+        const allStudents = uniqueStudentsFromResults(filteredResults);
+        const toDownload = allStudents.filter(s => selectedStudentIds.has(s.student_id));
+        if (toDownload.length === 0) { showToast('Select at least one student.', 'error'); return; }
+        setBulkSlipBusy(true);
+        setBulkSlipProgress({ current: 0, total: toDownload.length, name: '' });
+        let failCount = 0;
+        for (let i = 0; i < toDownload.length; i++) {
+            const student = toDownload[i];
+            setBulkSlipProgress({ current: i + 1, total: toDownload.length, name: student.name });
+            try {
+                generateSlipPDFDirect(student, currentPeriodObj);
+                await new Promise(r => setTimeout(r, 300));
+            } catch (e) {
+                failCount++;
+                console.error('Slip failed for', student.name, e);
+            }
+        }
+        setBulkSlipBusy(false);
+        setBulkSlipProgress({ current: 0, total: 0, name: '' });
+        setSelectedStudentIds(new Set());
+        if (failCount > 0) showToast(`Downloaded ${toDownload.length - failCount} slips. ${failCount} failed.`, 'error');
+        else showToast(`✓ Downloaded ${toDownload.length} result slip${toDownload.length > 1 ? 's' : ''} successfully!`, 'success');
+    }
+
     // ── Filtered & Paginated Results List ─────────────────────────────────────
     const filteredResults = useMemo(() => {
         return results.filter(r => {
@@ -593,7 +754,31 @@ export default function Results() {
     return (
         <div className="max-w-7xl mx-auto space-y-8 py-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20 px-4 sm:px-6">
 
-            {/* ── Toast ──────────────────────────────────────────────────────── */}
+            {/* ── Bulk Slip Progress Overlay ────────────────────────────────── */}
+            {bulkSlipBusy && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[200] flex flex-col items-center justify-center gap-6">
+                    <div className="bg-white rounded-3xl p-10 max-w-sm w-full shadow-2xl flex flex-col items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-maroon/10 flex items-center justify-center">
+                            <FileDown className="w-7 h-7 text-maroon animate-bounce" />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-[11px] font-black uppercase tracking-widest text-maroon/50 mb-1">Generating Result Slips</p>
+                            <p className="text-2xl font-black text-maroon">{bulkSlipProgress.current} / {bulkSlipProgress.total}</p>
+                            <p className="text-xs font-bold text-black/60 mt-2 truncate max-w-[220px]">{bulkSlipProgress.name}</p>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-maroon to-amber-500 rounded-full transition-all duration-300"
+                                style={{ width: `${bulkSlipProgress.total > 0 ? (bulkSlipProgress.current / bulkSlipProgress.total) * 100 : 0}%` }}
+                            />
+                        </div>
+                        <p className="text-[10px] font-bold text-black/40 text-center">PDFs are being saved to your Downloads folder</p>
+                    </div>
+                </div>
+            )}
+
+
+            {/* ── Toast ─────────────────────────────────────────────────────── */}
             {toast && (
                 <div className={`fixed bottom-6 right-6 z-[9999] px-5 py-4 rounded-2xl shadow-2xl text-white text-sm font-black uppercase tracking-wider flex items-center gap-3 animate-in slide-in-from-bottom-4 duration-300 ${
                     toast.type === 'error' ? 'bg-red-600' : toast.type === 'info' ? 'bg-blue-600' : 'bg-emerald-600'
@@ -1034,19 +1219,31 @@ export default function Results() {
                             </select>
                         </div>
 
-                        {/* Search Bar */}
-                        <div className="flex items-center gap-2 bg-white border border-black/10 px-4 py-2 rounded-2xl w-full md:w-80">
-                            <Search className="w-4 h-4 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search student name, reg #, unit…"
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                                className="w-full text-xs font-bold text-black outline-none uppercase placeholder:text-black/30"
-                            />
-                            {searchTerm && (
-                                <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-black">
-                                    <X className="w-3.5 h-3.5" />
+                        {/* Search Bar + Bulk Download */}
+                        <div className="flex items-center gap-2 w-full md:w-auto">
+                            <div className="flex items-center gap-2 bg-white border border-black/10 px-4 py-2 rounded-2xl w-full md:w-80">
+                                <Search className="w-4 h-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search student name, reg #, unit…"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                    className="w-full text-xs font-bold text-black outline-none uppercase placeholder:text-black/30"
+                                />
+                                {searchTerm && (
+                                    <button onClick={() => setSearchTerm('')} className="text-gray-400 hover:text-black">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                            {selectedStudentIds.size > 0 && (
+                                <button
+                                    onClick={handleBulkSlipDownload}
+                                    disabled={bulkSlipBusy}
+                                    className="flex-shrink-0 bg-maroon text-gold px-4 py-2 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 hover:bg-maroon/90 shadow-md border border-gold/10 disabled:opacity-50"
+                                >
+                                    <PackageOpen className="w-4 h-4" />
+                                    {selectedStudentIds.size} Slip{selectedStudentIds.size > 1 ? 's' : ''}
                                 </button>
                             )}
                         </div>
@@ -1063,6 +1260,18 @@ export default function Results() {
                                 <table className="w-full">
                                     <thead>
                                         <tr className="bg-black/[0.02] border-b border-black/5">
+                                            <th className="px-4 py-3">
+                                                {/* Select all visible students */}
+                                                <button
+                                                    onClick={toggleAllStudentSlips}
+                                                    className="text-black/30 hover:text-maroon transition-colors"
+                                                    title="Select/deselect all students"
+                                                >
+                                                    {selectedStudentIds.size > 0 && selectedStudentIds.size === uniqueStudentsFromResults(filteredResults).length
+                                                        ? <CheckSquare className="w-4 h-4 text-maroon" />
+                                                        : <Square className="w-4 h-4" />}
+                                                </button>
+                                            </th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Student</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Course Registered</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Unit & Marks</th>
@@ -1074,7 +1283,16 @@ export default function Results() {
                                     </thead>
                                     <tbody className="divide-y divide-black/5">
                                         {paginatedResults.map(r => (
-                                            <tr key={r.id} className="hover:bg-black/[0.005] transition-colors">
+                                            <tr key={r.id} className={`transition-colors ${selectedStudentIds.has(r.student_id) ? 'bg-amber-50/50' : 'hover:bg-black/[0.005]'}`}>
+                                                <td className="px-4 py-3">
+                                                    <button
+                                                        onClick={() => toggleStudentSlip(r.student_id)}
+                                                        className={`transition-colors ${selectedStudentIds.has(r.student_id) ? 'text-maroon' : 'text-black/20 hover:text-black/50'}`}
+                                                        title="Toggle selection"
+                                                    >
+                                                        {selectedStudentIds.has(r.student_id) ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                                    </button>
+                                                </td>
                                                 <td className="px-4 py-3">
                                                     <p className="text-[11px] font-black text-black uppercase">{r.student_name}</p>
                                                     <p className="text-[9px] font-bold text-black/40 uppercase">{r.student_reg_id}</p>

@@ -226,6 +226,7 @@ export default function Students() {
 
         setSaving(true);
         try {
+            let createdWithEmailWarning = null;
             if (editingStudent) {
                 const res = await studentsAPI.update(editingStudent.id, formData);
                 const updatedList = allStudents.map(s => s.id === editingStudent.id ? { ...s, ...formData } : s);
@@ -235,17 +236,19 @@ export default function Students() {
                     alert(`✅ Student details updated!\n\nSince the email address was updated to:\n📧 ${formData.email}\n\nA password reset email with new temporary credentials has been sent to the new email address.`);
                 }
             } else {
-                await studentsAPI.create(formData);
+                const res = await studentsAPI.create(formData);
                 const newStudent = { ...formData, course: Array.isArray(formData.course) ? formData.course : [formData.course] };
                 const updatedList = [newStudent, ...allStudents];
                 setAllStudents(updatedList);
                 setStudents(updatedList);
                 setCurrentPage(1);
+                if (res.data?.email_sent === false) createdWithEmailWarning = res.data.email_error;
             }
             setShowModal(false);
             setEditingStudent(null);
             resetForm();
             setTimeout(() => fetchStudents(), 800);
+            if (createdWithEmailWarning) alert(`Student registered, but the login credentials email was NOT sent.\n\n${createdWithEmailWarning}`);
         } catch (error) {
             console.error('Error saving student:', error);
             const msg = error.response?.data?.error || error.message;
