@@ -391,24 +391,32 @@ export default function UnitCoverage() {
         const order = newUnits.map((u, i) => ({ id: u.id, sort_order: i }));
         try {
             setUnits(newUnits);
-            await courseUnitsAPI.reorderUnits(selectedCourse, order);
+            await unitCoverageAPI.reorderUnits(selectedCourse, order);
             showToast('Unit order updated', 'success');
         } catch (err) {
             console.error(err);
+            showToast(err.response?.data?.error || 'Failed to save the new unit order', 'error');
             loadCourseCoverageData(selectedCourse);
         }
     };
 
     const handleAddUnit = async (e) => {
         e.preventDefault();
-        if (!newUnitForm.name.trim() || !selectedCourse) return;
+        const name = newUnitForm.name.trim();
+        if (!name || !selectedCourse) return;
         try {
-            await courseUnitsAPI.createUnit(selectedCourse, { name: newUnitForm.name.trim(), sort_order: units.length });
+            const res = await courseUnitsAPI.createUnit(selectedCourse, {
+                name,
+                expected_duration: newUnitForm.expected_duration || undefined,
+                unit_remarks: newUnitForm.unit_remarks || undefined,
+            });
             setNewUnitForm({ name: '', description: '', expected_duration: '', unit_remarks: '' });
             loadCourseCoverageData(selectedCourse);
-            showToast('Unit added successfully', 'success');
+            showToast(res.data?.attached
+                ? 'Unit already in the library — added to this course.'
+                : 'Unit added successfully', 'success');
         } catch (err) {
-            showToast('Failed to add unit', 'error');
+            showToast(err.response?.data?.error || 'Failed to add unit', 'error');
         }
     };
 
@@ -427,7 +435,7 @@ export default function UnitCoverage() {
             loadCourseCoverageData(selectedCourse);
             showToast('Unit updated', 'success');
         } catch (err) {
-            showToast('Failed to update unit', 'error');
+            showToast(err.response?.data?.error || 'Failed to update unit', 'error');
         }
     };
 

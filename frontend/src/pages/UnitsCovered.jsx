@@ -129,13 +129,15 @@ export default function UnitsCovered() {
         if (!canManage) return showToast('Unauthorized action.', 'error');
         if (!newUnitName.trim() || !selectedCourse) return;
         try {
-            await courseUnitsAPI.createUnit(selectedCourse, { name: newUnitName.trim() });
+            const res = await courseUnitsAPI.createUnit(selectedCourse, { name: newUnitName.trim() });
             setNewUnitName('');
             refreshUnits();
-            showToast('Unit added successfully.', 'success');
+            showToast(res.data?.attached
+                ? 'Unit already in the library — linked to this course.'
+                : 'Unit added successfully.', 'success');
         } catch (err) {
             console.error(err);
-            showToast('Failed to add unit.', 'error');
+            showToast(err.response?.data?.error || 'Failed to add unit.', 'error');
         }
     };
 
@@ -150,44 +152,23 @@ export default function UnitsCovered() {
             showToast('Unit updated successfully.', 'success');
         } catch (err) {
             console.error(err);
-            showToast('Failed to update unit.', 'error');
+            showToast(err.response?.data?.error || 'Failed to update unit.', 'error');
         }
     };
 
     const handleDeleteUnit = async (unitId) => {
         if (!canManage) return showToast('Unauthorized action.', 'error');
-        openConfirm('Delete this unit? This will also remove all student marks recorded for it.', async () => {
+        openConfirm('Remove this unit from the course? Recorded marks are kept.', async () => {
             try {
                 await courseUnitsAPI.deleteUnit(selectedCourse, unitId);
                 refreshUnits();
-                showToast('Unit deleted successfully.', 'success');
+                showToast('Unit removed from the course.', 'success');
             } catch (err) {
                 console.error(err);
-                showToast('Failed to delete unit.', 'error');
+                showToast(err.response?.data?.error || 'Failed to remove unit.', 'error');
             }
         });
     };
-
-    const handleMoveUnit = async (index, direction) => {
-        if (!canManage || !selectedCourse) return;
-        const newUnits = [...units];
-        const swapWith = direction === 'up' ? index - 1 : index + 1;
-        if (swapWith < 0 || swapWith >= newUnits.length) return;
-
-        const temp = newUnits[index];
-        newUnits[index] = newUnits[swapWith];
-        newUnits[swapWith] = temp;
-
-        const order = newUnits.map((u, i) => ({ id: u.id, sort_order: i }));
-        try {
-            setUnits(newUnits);
-            await courseUnitsAPI.reorderUnits(selectedCourse, order);
-        } catch (err) {
-            console.error(err);
-            refreshUnits();
-        }
-    };
-
 
     const thresholds = {
         distinction: parseFloat(settings.grading_distinction_min) || 80,
@@ -1540,7 +1521,7 @@ export default function UnitsCovered() {
                             {units.length === 0 ? (
                                 <p className="text-center text-xs font-bold text-black/30 py-8">No units defined yet for this course.</p>
                             ) : (
-                                units.map((u, index) => (
+                                units.map((u) => (
                                     <div key={u.id} className="flex items-center justify-between p-4 bg-gray-50 border border-black/5 rounded-2xl hover:border-maroon/20 transition-all">
                                         {editingUnitId === u.id ? (
                                             <div className="flex-1 flex gap-2">
@@ -1557,26 +1538,6 @@ export default function UnitsCovered() {
                                             <>
                                                 <span className="text-xs font-black text-black uppercase tracking-tight">{u.name}</span>
                                                 <div className="flex items-center gap-2">
-                                                    {/* Move Up */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleMoveUnit(index, 'up')}
-                                                        disabled={index === 0}
-                                                        className="p-1.5 hover:bg-black/5 rounded-lg text-black/40 disabled:opacity-20 flex items-center justify-center"
-                                                        title="Move Up"
-                                                    >
-                                                        <ChevronUp className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    {/* Move Down */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleMoveUnit(index, 'down')}
-                                                        disabled={index === units.length - 1}
-                                                        className="p-1.5 hover:bg-black/5 rounded-lg text-black/40 disabled:opacity-20 flex items-center justify-center"
-                                                        title="Move Down"
-                                                    >
-                                                        <ChevronDown className="w-3.5 h-3.5" />
-                                                    </button>
                                                     {/* Edit */}
                                                     <button
                                                         type="button"

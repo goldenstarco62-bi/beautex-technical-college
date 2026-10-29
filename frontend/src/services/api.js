@@ -511,6 +511,7 @@ export const unitCoverageAPI = {
     getConfirmations: (params) => api.get('unit-coverage/confirmations', { params }),
     getStudentProgress: () => api.get('unit-coverage/student-progress'),
     updateUnit: (unitId, data) => api.put(`unit-coverage/units/${encodeURIComponent(unitId)}`, data),
+    reorderUnits: (courseId, order) => api.post(`unit-coverage/courses/${encodeURIComponent(courseId)}/units/reorder`, { order }),
 };
 
 // ── CAT Periods API ───────────────────────────────────────────────────────────

@@ -196,6 +196,7 @@ router.post('/unit-coverage/confirmations', authenticateToken, authorizeRoles('s
 router.get('/unit-coverage/confirmations', authenticateToken, unitCoverageController.getConfirmations);
 // FIX: Register previously missing unit update route (called by UnitCoverage.jsx manage units UI)
 router.put('/unit-coverage/units/:unitId', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.updateUnit);
+router.post('/unit-coverage/courses/:courseId/units/reorder', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), unitCoverageController.reorderCourseUnits);
 // ── CAT Periods Management ───────────────────────────────────────────────────
 router.get('/cat-periods', authenticateToken, catController.getCatPeriods);
 router.post('/cat-periods', authenticateToken, authorizeRoles('admin', 'superadmin'), catController.createCatPeriod);

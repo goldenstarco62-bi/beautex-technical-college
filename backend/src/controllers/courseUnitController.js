@@ -601,22 +601,88 @@ export async function getCourseUnits(req, res) {
     }
 }
 
+const cleanText = (value) => (typeof value === 'string' ? value.trim() : '');
+
+// Links a library unit to a course (idempotent).
+async function linkUnitToCourse(unitId, courseId) {    const link = await queryOne(
+        'SELECT id FROM program_units WHERE unit_id = ? AND course_id = ?',
+        [unitId, courseId]
+    );
+    if (!link) await run('INSERT INTO program_units (unit_id, course_id) VALUES (?, ?)', [unitId, courseId]);
+}
+
+/**
+ * Mirrors a library unit into the legacy course_units table so the unit-coverage
+ * module (which still reads course_units) sees the same curriculum as the rest
+ * of the app. Idempotent; returns the legacy row id.
+ */
+async function mirrorUnitInCourseUnits(courseId, name, description = null, expectedDuration = null, unitRemarks = null) {
+    const existing = await queryOne(
+        'SELECT id, is_archived FROM course_units WHERE course_id = ? AND LOWER(name) = LOWER(?)',
+        [courseId, name]
+    );
+    if (existing) {
+        // Re-adding a previously removed unit must make it visible again.
+        if (existing.is_archived) {
+            await run('UPDATE course_units SET is_archived = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [existing.id]);
+        }
+        return existing.id;
+    }
+
+    const maxRow = await queryOne(
+        'SELECT MAX(sort_order) AS max_order FROM course_units WHERE course_id = ?',
+        [courseId]
+    );
+    const nextOrder = Number(maxRow?.max_order ?? -1) + 1;
+    const created = await run(
+        'INSERT INTO course_units (course_id, name, description, expected_duration, unit_remarks, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+        [courseId, name, description || null, expectedDuration || null, unitRemarks || null, nextOrder]
+    );
+    return created.lastID;
+}
+
 /**
  * POST /api/courses/:courseId/units
- * Creates a new global unit AND assigns it to the course.
+ * Adds a unit to a course, creating it in the shared library when needed.
+ *
+ * A name that already exists in the library is attached to the course instead of
+ * rejected: teachers have no separate "attach" action, so a 409 here just looked
+ * like the unit could not be added at all.
  */
 export async function createCourseUnit(req, res) {
     try {
         const { courseId } = req.params;
-        const { name, unit_name, code, unit_code, description } = req.body;
-        const finalName = (unit_name || name || '').trim();
-        const finalCode = (unit_code || code || '').trim();
-        const isPg = getActiveDbEngine() === 'postgres';
+        const { name, unit_name, code, unit_code, description, expected_duration, unit_remarks } = req.body;
+        const finalName = cleanText(unit_name) || cleanText(name);
+        const finalCode = cleanText(unit_code) || cleanText(code);
 
         if (!finalName) return res.status(400).json({ error: 'Unit name is required' });
 
-        const course = await queryOne(`SELECT id FROM courses WHERE id = ${ph(1)}`, [courseId]);
+        const course = await queryOne('SELECT id FROM courses WHERE id = ?', [courseId]);
         if (!course) return res.status(404).json({ error: 'Course not found' });
+
+        const existingName = await queryOne(
+            'SELECT * FROM global_units WHERE LOWER(unit_name) = LOWER(?)', [finalName]
+        );
+        if (existingName) {
+            if (existingName.status && String(existingName.status).toLowerCase() !== 'active') {
+                return res.status(409).json({
+                    error: `"${existingName.unit_name}" is in the unit library but inactive. Ask an administrator to activate it, then add it again.`
+                });
+            }
+            await linkUnitToCourse(existingName.id, courseId);
+            await mirrorUnitInCourseUnits(
+                courseId, existingName.unit_name, existingName.description,
+                cleanText(expected_duration), cleanText(unit_remarks)
+            );
+            return res.status(200).json({ ...existingName, attached: true });
+        }
+
+        // Some units only ever existed in the legacy table for this course.
+        const legacySameName = await queryOne(
+            'SELECT * FROM course_units WHERE course_id = ? AND LOWER(name) = LOWER(?)',
+            [courseId, finalName]
+        );
 
         if (finalCode) {
             const codeOwner = await findExistingCode(finalCode);
@@ -624,31 +690,23 @@ export async function createCourseUnit(req, res) {
                 return res.status(409).json({ error: `Unit code "${finalCode}" is already used by "${codeOwner.unit_name}". Choose a different code.` });
             }
         }
-        const existingName = await queryOne(
-            `SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(${ph(1)})`, [finalName]
-        );
-        if (existingName) return res.status(409).json({ error: 'A unit with this name already exists in the library. Attach it instead of creating a duplicate.' });
-
         const autoCode = finalCode || await ensureUniqueCode(finalName.substring(0, 3).toUpperCase());
 
-        let unit;
-        if (isPg) {
-            const r = await query(
-                `INSERT INTO global_units (unit_code, unit_name, description, status) VALUES ($1, $2, $3, 'Active') RETURNING *`,
-                [autoCode, finalName, description?.trim() || null]
+        const created = await run(
+            `INSERT INTO global_units (unit_code, unit_name, description, status) VALUES (?, ?, ?, 'Active')`,
+            [autoCode, finalName, cleanText(description) || legacySameName?.description || null]
+        );
+        const unit = await queryOne('SELECT * FROM global_units WHERE id = ?', [created.lastID]);
+
+        await linkUnitToCourse(unit.id, courseId);
+        if (!legacySameName) {
+            await mirrorUnitInCourseUnits(
+                courseId, unit.unit_name, unit.description,
+                cleanText(expected_duration), cleanText(unit_remarks)
             );
-            unit = r[0];
-            await query(`INSERT INTO program_units (unit_id, course_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [unit.id, courseId]);
-        } else {
-            const r = await run(
-                `INSERT INTO global_units (unit_code, unit_name, description, status) VALUES (?, ?, ?, 'Active')`,
-                [autoCode, finalName, description?.trim() || null]
-            );
-            unit = await queryOne('SELECT * FROM global_units WHERE id=?', [r.lastID]);
-            await run(`INSERT OR IGNORE INTO program_units (unit_id, course_id) VALUES (?, ?)`, [unit.id, courseId]);
         }
 
-        res.status(201).json(unit);
+        res.status(201).json({ ...unit, attached: false });
     } catch (error) {
         console.error('createCourseUnit error:', error);
         res.status(500).json({ error: 'Failed to create course unit' });
@@ -663,7 +721,6 @@ export async function updateCourseUnit(req, res) {
     try {
         const { unitId } = req.params;
         const { name, unit_name, code, unit_code, description, status } = req.body;
-        const isPg = getActiveDbEngine() === 'postgres';
 
         const unit = await queryOne(`SELECT * FROM global_units WHERE id = ${ph(1)}`, [unitId]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
@@ -678,21 +735,21 @@ export async function updateCourseUnit(req, res) {
         const collision = await findUnitCollision(nameChanged ? updatedName : null, codeChanged ? updatedCode : null, unitId);
         if (collision) return res.status(409).json({ error: collision });
 
-        if (isPg) {
-            await query(
-                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, updated_at=CURRENT_TIMESTAMP WHERE id=$5',
-                [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
-            );
-            const updated = await queryOne('SELECT * FROM global_units WHERE id=$1', [unitId]);
-            res.json(updated);
-        } else {
+        await run(
+            'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+            [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
+        );
+
+        // Keep legacy mirror rows (unit coverage still reads course_units) in sync,
+        // otherwise the renamed unit is re-created as a duplicate under its old name.
+        if (nameChanged) {
             await run(
-                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-                [updatedName, updatedCode, updatedDesc, updatedStatus, unitId]
+                'UPDATE course_units SET name=?, updated_at=CURRENT_TIMESTAMP WHERE LOWER(name)=LOWER(?)',
+                [updatedName, unit.unit_name]
             );
-            const updated = await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]);
-            res.json(updated);
         }
+
+        res.json(await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]));
     } catch (error) {
         console.error('updateCourseUnit error:', error);
         res.status(500).json({ error: 'Failed to update unit' });
@@ -718,6 +775,15 @@ export async function deleteCourseUnit(req, res) {
 
         await run(`DELETE FROM program_units WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]);
         try { await run(`DELETE FROM trainer_unit_assignments WHERE unit_id = ${ph(1)} AND course_id = ${ph(2)}`, [unitId, courseId]); } catch (_) { /* table may not exist yet */ }
+
+        // Hide the unit-coverage copy too, so one course no longer shows a unit that
+        // was removed here. Archived (not deleted) so coverage logs keep their label.
+        try {
+            await run(
+                'UPDATE course_units SET is_archived = TRUE, updated_at = CURRENT_TIMESTAMP WHERE course_id = ? AND LOWER(name) = LOWER(?)',
+                [courseId, unit.unit_name]
+            );
+        } catch (_) { /* legacy table may not exist */ }
 
         const note = courseRecords > 0
             ? ` ${courseRecords} historical record(s) for this course were preserved; the unit remains active in the shared library.`

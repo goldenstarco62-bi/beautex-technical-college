@@ -875,9 +875,63 @@ export async function updateUnit(req, res) {
         );
 
         const updated = await queryOne('SELECT * FROM course_units WHERE id = ?', [unitId]);
+
+        // Keep the shared library name in step with the course copy, otherwise the
+        // other unit screens keep showing the old name and later re-create it as a
+        // separate unit.
+        const renamed = unit.name && updated?.name
+            && updated.name.toLowerCase() !== String(unit.name).toLowerCase();
+        if (renamed) {
+            const libraryUnit = await queryOne(
+                'SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(?)', [unit.name]
+            );
+            const nameTaken = libraryUnit
+                ? await queryOne(
+                    'SELECT id FROM global_units WHERE LOWER(unit_name) = LOWER(?) AND id <> ?',
+                    [updated.name, libraryUnit.id]
+                )
+                : null;
+            if (libraryUnit && !nameTaken) {
+                await run(
+                    'UPDATE global_units SET unit_name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                    [updated.name, libraryUnit.id]
+                );
+            }
+        }
+
         res.json(updated);
     } catch (error) {
         console.error('updateUnit error:', error);
         res.status(500).json({ error: 'Failed to update unit' });
+    }
+}
+
+/**
+ * POST /api/unit-coverage/courses/:courseId/units/reorder
+ * Persists the order of a course's units (Manage Units → move up/down).
+ */
+export async function reorderCourseUnits(req, res) {
+    try {
+        const { courseId } = req.params;
+        const { order } = req.body;
+
+        if (!Array.isArray(order) || order.length === 0) {
+            return res.status(400).json({ error: 'order must be a non-empty array of { id, sort_order }' });
+        }
+
+        for (const item of order) {
+            const unitId = parseInt(item?.id, 10);
+            const sortOrder = parseInt(item?.sort_order, 10);
+            if (!Number.isInteger(unitId) || !Number.isInteger(sortOrder)) continue;
+            await run(
+                'UPDATE course_units SET sort_order = ? WHERE id = ? AND course_id = ?',
+                [sortOrder, unitId, courseId]
+            );
+        }
+
+        res.json({ message: 'Unit order updated' });
+    } catch (error) {
+        console.error('reorderCourseUnits error:', error);
+        res.status(500).json({ error: 'Failed to reorder units' });
     }
 }

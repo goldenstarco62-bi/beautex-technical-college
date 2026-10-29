@@ -40,7 +40,10 @@ router.put('/users/:id/finance-permission', authenticateToken, authorizeRoles('s
 router.put('/users/:id/student-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateStudentPermission);
 
 // Settings Routes (Superadmin & Admin roles allowed, with file upload capability)
-router.get('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getSettings);
+// GET is also open to teachers: the marks screen needs the grading thresholds and
+// the shell needs theme colours. Credential/security keys are blanked for anyone
+// below Super Admin by settingsController.getSettings.
+router.get('/settings', authenticateToken, authorizeRoles('superadmin', 'admin', 'teacher'), settingsController.getSettings);
 router.put('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.updateSettings);
 router.post('/settings/upload', authenticateToken, authorizeRoles('superadmin', 'admin'), upload.single('file'), settingsController.uploadFileSetting);
 router.get('/settings/dashboard-stats', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getDashboardStats);
