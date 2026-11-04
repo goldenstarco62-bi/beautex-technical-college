@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { certificatesAPI, settingsAPI, catResultsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil, PackageOpen, FileDown, Square, CheckSquare, BarChart3, GraduationCap } from 'lucide-react';
+import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil, PackageOpen, FileDown, Square, CheckSquare, BarChart3, GraduationCap, Upload, Trash2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -53,6 +53,32 @@ async function urlToBase64(url) {
             reader.readAsDataURL(blob);
         });
     } catch { return ''; }
+}
+
+// Downscale an uploaded signature to the size it is actually printed at
+// (150×88 CSS px, with retina headroom). Keeps the stored data URI small so
+// saving the certificate stays fast.
+function compressSignature(file, maxW = 600, maxH = 300) {
+    return new Promise((resolve) => {
+        const objectUrl = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight);
+            const w = Math.max(1, Math.round(img.naturalWidth * scale));
+            const h = Math.max(1, Math.round(img.naturalHeight * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return resolve('');
+            ctx.drawImage(img, 0, 0, w, h);
+            const webp = canvas.toDataURL('image/webp', 0.85);
+            resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); resolve(''); };
+        img.src = objectUrl;
+    });
 }
 
 // ── The certificate is drawn on the sample's native 1536 x 1024 grid. ──────────
@@ -477,7 +503,8 @@ export default function Certificates() {
     const [revokeTarget, setRevokeTarget] = useState(null);     // certificate row pending revoke
     const [revokeReason, setRevokeReason] = useState('');
     const [editTarget, setEditTarget] = useState(null);         // certificate row being edited
-    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', hod_name: '', student_name: '', course_name: '' });
+    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', hod_name: '', hod_signature: '', student_name: '', course_name: '' });
+    const editOriginalSigRef = useRef('');
 
     const [preview, setPreview] = useState(null); // { data, record }
     const [busy, setBusy] = useState(false);
@@ -561,8 +588,11 @@ export default function Certificates() {
         const hod = hodForCourse(row.course_name);
         // Admin-editable override on the certificate record wins over the course→HOD map.
         const hodName = String(row.hod_name || '').trim() || hod.hod;
-        // Handwritten signature only when the printed name is the mapped HOD.
-        const hodSig = (hodName === hod.hod && hod.sig) ? await urlToBase64(hod.sig) : '';
+        // Uploaded per-certificate signature wins; otherwise use the mapped HOD's
+        // handwritten signature (only when the printed name is still that HOD).
+        const hodSig = row.hod_signature
+            ? await urlToBase64(String(row.hod_signature).trim())
+            : ((hodName === hod.hod && hod.sig) ? await urlToBase64(hod.sig) : '');
         return {
             bg, photo, seal, signature, nita, tveta, hodSig,
             studentName: row.student_name || row.name,
@@ -630,16 +660,40 @@ export default function Certificates() {
     }
 
     function openEdit(c) {
+        editOriginalSigRef.current = c.hod_signature || '';
         setEditForm({
             certificate_number: c.certificate_number || '',
             award_date: toInputDate(c.award_date),
             hod_name: c.hod_name || hodForCourse(c.course_name).hod || '',
+            hod_signature: c.hod_signature || '',
             student_name: c.student_name || '',
             course_name: c.course_name || ''
         });
         setEditTarget(c);
     }
     const closeEdit = () => setEditTarget(null);
+
+    async function handleHodSignatureFile(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!/^image\/(png|jpe?g|webp|gif|svg\+xml)$/.test(file.type)) {
+            notify('HOD signature must be a PNG, JPG, WEBP, GIF or SVG image.', 'error');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            notify('HOD signature must be under 2 MB.', 'error');
+            return;
+        }
+        // Re-encode to a small PNG before storing. Full-resolution photos become
+        // multi-MB base64 payloads that make the certificate save take 20-40s.
+        const dataUrl = await compressSignature(file);
+        if (!dataUrl) {
+            notify('Could not read that image. Try a different file.', 'error');
+            return;
+        }
+        setEditForm(f => ({ ...f, hod_signature: dataUrl }));
+    }
 
     async function handleEditSave() {
         if (!editTarget) return;
@@ -652,13 +706,19 @@ export default function Certificates() {
         if (!course_name) { notify('Course name is required.', 'error'); return; }
         setBusy(true);
         try {
-            await certificatesAPI.update(editTarget.id, {
+            const payload = {
                 certificate_number,
                 award_date: editForm.award_date,
                 hod_name: editForm.hod_name.trim(),
                 student_name,
                 course_name
-            });
+            };
+            // Only send the signature when it actually changed, so an existing
+            // (possibly large) image isn't re-uploaded on every edit.
+            if (editForm.hod_signature !== editOriginalSigRef.current) {
+                payload.hod_signature = editForm.hod_signature || '';
+            }
+            await certificatesAPI.update(editTarget.id, payload);
             notify(`Certificate ${certificate_number} updated.`, 'success');
             closeEdit();
             loadIssued();
@@ -1342,7 +1402,7 @@ export default function Certificates() {
             {/* Edit certificate modal */}
             {editTarget && (
                 <div className="fixed inset-0 bg-maroon/50 backdrop-blur-md flex items-center justify-center p-4 z-[70]" onClick={closeEdit}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                         <h3 className="text-sm font-black text-maroon uppercase tracking-widest mb-1">Edit Certificate</h3>
                         <p className="text-[12px] font-bold text-black/60 mb-4">
                             Update <span className="font-black text-maroon">{editTarget.certificate_number}</span> for {editTarget.student_name}. The certificate design stays unchanged.
@@ -1357,7 +1417,33 @@ export default function Certificates() {
                         <input type="date" value={editForm.award_date} onChange={e => setEditForm(f => ({ ...f, award_date: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
                         <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Head of Department</label>
                         <input value={editForm.hod_name} onChange={e => setEditForm(f => ({ ...f, hod_name: e.target.value }))} placeholder="Leave blank for default course HOD" className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-1" />
-                        <p className="text-[10px] font-bold text-black/40 mb-4">A blank field uses the automatic HOD for this course; the handwritten signature only appears for the automatic HOD.</p>
+                        <p className="text-[10px] font-bold text-black/40 mb-3">A blank field uses the automatic HOD for this course.</p>
+
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">HOD Signature</label>
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 mb-1">
+                            {editForm.hod_signature ? (
+                                <div className="flex items-center gap-3">
+                                    <div className="h-16 w-32 shrink-0 rounded-lg bg-white border border-gray-100 flex items-center justify-center overflow-hidden">
+                                        <img src={editForm.hod_signature} alt="HOD signature preview" className="max-h-full max-w-full object-contain" />
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-widest hover:border-maroon/40">
+                                            <Upload className="w-3.5 h-3.5" /> Replace
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" className="hidden" onChange={handleHodSignatureFile} />
+                                        </label>
+                                        <button type="button" onClick={() => setEditForm(f => ({ ...f, hod_signature: '' }))} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-red-200 text-red-600 text-[10px] font-black uppercase tracking-widest hover:border-red-300">
+                                            <Trash2 className="w-3.5 h-3.5" /> Remove
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <label className="cursor-pointer flex items-center justify-center gap-2 px-3 py-4 rounded-lg border border-dashed border-maroon/20 text-maroon/60 text-[11px] font-black uppercase tracking-widest hover:border-maroon/40 hover:text-maroon">
+                                    <Upload className="w-4 h-4" /> Upload HOD signature
+                                    <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" className="hidden" onChange={handleHodSignatureFile} />
+                                </label>
+                            )}
+                        </div>
+                        <p className="text-[10px] font-bold text-black/40 mb-4">PNG, JPG, WEBP or SVG up to 2 MB. The image is optimised automatically before saving. Without an upload the automatic HOD's signature is used when available.</p>
                         <div className="flex gap-3 justify-end mt-2">
                             <button onClick={closeEdit} disabled={busy} className="px-4 py-2.5 rounded-xl bg-white border border-maroon/20 text-maroon text-[11px] font-black uppercase tracking-widest hover:border-maroon/40 disabled:opacity-50">Cancel</button>
                             <button onClick={handleEditSave} disabled={busy} className="px-4 py-2.5 rounded-xl bg-maroon text-gold text-[11px] font-black uppercase tracking-widest hover:bg-elite-maroon disabled:opacity-50 inline-flex items-center gap-2">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />} Save Changes</button>

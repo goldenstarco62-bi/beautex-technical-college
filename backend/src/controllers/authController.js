@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { logActivity } from '../services/auditService.js';
-import { sendAdminResetPasswordEmail } from '../services/emailService.js';
+import { sendPasswordResetEmail, getFrontendUrl } from '../services/emailService.js';
 
 
 // Dynamic user lookup that works with both MongoDB and SQLite
@@ -369,7 +369,7 @@ export async function forgotPassword(req, res) {
         // Generate a cryptographically secure token
         const resetToken = crypto.randomBytes(32).toString('hex');
         const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-        const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+        const resetTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
         // Save hashed token and expiry to the user record
         if (!!process.env.MONGODB_URI) {
@@ -386,12 +386,13 @@ export async function forgotPassword(req, res) {
         }
 
         // Send reset email
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = getFrontendUrl();
         const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
         try {
-            await sendAdminResetPasswordEmail(email, `Your password reset link:\n${resetLink}\n\nThis link expires in 1 hour.`);
-            console.log(`[auth] Password reset email sent to ${email}`);
+            const sent = await sendPasswordResetEmail(email, resetLink);
+            if (sent) console.log(`[auth] Password reset email sent to ${email}`);
+            else console.error(`[auth] Password reset email could not be delivered to ${email} — check SMTP settings.`);
         } catch (emailErr) {
             console.error('[auth] Failed to send reset email:', emailErr.message);
             // Fall through — still return generic response for security

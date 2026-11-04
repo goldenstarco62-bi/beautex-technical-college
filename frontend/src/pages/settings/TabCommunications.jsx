@@ -52,6 +52,7 @@ export default function TabCommunications(ctx) {
                 <div>
                     <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">SMTP Mail Server Configuration</h4>
                     <p className="text-[9px] text-zinc-400 font-semibold mt-1">Credentials mapping the default SMTP server for system dispatch.</p>
+                    <p className="text-[9px] text-amber-600 font-semibold mt-2">Gmail: use the full address as the username and a 16-character App Password (Google Account → Security → 2-Step Verification → App passwords). The normal account password will not work.</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FieldRow label="SMTP Hostname"><Inp value={settings.smtp_host} onChange={e=>set('smtp_host',e.target.value)} placeholder="e.g. smtp.gmail.com" readOnly={!isSuperAdmin} /></FieldRow>

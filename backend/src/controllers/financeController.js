@@ -190,6 +190,120 @@ export async function createFeeStructure(req, res) {
 }
 
 // Student Fees Summary
+/**
+ * Builds a student's fee summary. Payments are the source of truth for money
+ * actually received; the stored student_fees row is only trusted for the
+ * agreed total_due. total_paid/balance/status are always recalculated so the
+ * student portal can never surface a stale ledger.
+ */
+export async function computeStudentFeeSummary(studentId, { persistMissing = false } = {}) {
+    if (isMongo()) {
+        const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
+        const Student = (await import('../models/mongo/Student.js')).default;
+        const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
+        const Course = (await import('../models/mongo/Course.js')).default;
+        const Payment = (await import('../models/mongo/Payment.js')).default;
+
+        const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(studentId).trim())}$`, 'i') } })
+            .lean()
+            .catch(() => null);
+        const canonicalId = student ? student.id : studentId;
+
+        const fee = await StudentFee.findOne({ student_id: canonicalId }).lean().catch(() => null);
+
+        const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${escapeRegExp(String(canonicalId).trim())}$`, 'i') } })
+            .select('amount payment_date')
+            .lean()
+            .catch(() => []);
+        const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+        let totalDue = Number(fee?.total_due || 0);
+        if (totalDue <= 0 && student?.course) {
+            const primaryCourseName = getPrimaryCourseName(student.course);
+            const courseObj = primaryCourseName
+                ? await Course.findOne({ name: { $regex: new RegExp(`^${escapeRegExp(primaryCourseName)}$`, 'i') } }).catch(() => null)
+                : null;
+            if (courseObj) {
+                const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' }).catch(() => null);
+                if (structure) totalDue = Number(structure.amount) || 0;
+            }
+        }
+
+        const balance = totalDue > 0 ? Math.max(0, totalDue - totalPaid) : 0;
+        const status = (balance <= 0 && totalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+        const paymentDates = payments.map(p => new Date(p.payment_date)).filter(d => !isNaN(d));
+        const lastPaymentDate = paymentDates.length > 0
+            ? new Date(Math.max(...paymentDates))
+            : (fee?.last_payment_date || null);
+
+        const summary = {
+            ...(fee || {}),
+            student_id: canonicalId,
+            total_due: totalDue,
+            total_paid: totalPaid,
+            balance,
+            status,
+            last_payment_date: lastPaymentDate,
+        };
+
+        if (!fee && persistMissing) {
+            await StudentFee.findOneAndUpdate(
+                { student_id: canonicalId },
+                { total_due: totalDue, total_paid: totalPaid, balance, status, last_payment_date: lastPaymentDate },
+                { upsert: true }
+            ).catch(() => {});
+        }
+
+        return summary;
+    }
+
+    // --- SQL path (SQLite / PostgreSQL) ---
+    const student = await queryOne('SELECT id, course FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [studentId]);
+    const canonicalId = student ? student.id : studentId;
+
+    const fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
+    const paidRow = await queryOne(
+        'SELECT COALESCE(SUM(amount), 0) AS total_paid, MAX(payment_date) AS last_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+        [canonicalId]
+    );
+    const totalPaid = parseFloat(paidRow?.total_paid || 0);
+
+    let totalDue = Number(fee?.total_due || 0);
+    if (totalDue <= 0 && student?.course) {
+        const primaryCourseName = getPrimaryCourseName(student.course);
+        const courseObj = primaryCourseName
+            ? await queryOne('SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))', [primaryCourseName])
+            : null;
+        if (courseObj) {
+            const structure = await queryOne(
+                "SELECT amount FROM fee_structures WHERE LOWER(TRIM(course_id)) = LOWER(TRIM(?)) AND category = 'Tuition Fee'",
+                [courseObj.id]
+            );
+            if (structure) totalDue = Number(structure.amount) || 0;
+        }
+    }
+
+    const balance = totalDue > 0 ? Math.max(0, totalDue - totalPaid) : 0;
+    const status = (balance <= 0 && totalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
+
+    if (!fee && persistMissing) {
+        await run(
+            'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
+            [canonicalId, totalDue, totalPaid, balance, status]
+        ).catch(() => {});
+    }
+
+    return {
+        ...(fee || {}),
+        student_id: canonicalId,
+        total_due: totalDue,
+        total_paid: totalPaid,
+        balance,
+        status,
+        last_payment_date: paidRow?.last_date || fee?.last_payment_date || null,
+    };
+}
+
 export async function getStudentFees(req, res) {
     try {
         const { studentId } = req.params;
@@ -209,90 +323,8 @@ export async function getStudentFees(req, res) {
             return res.status(403).json({ error: 'Access denied. Fee records are restricted to finance administrators.' });
         }
 
-        if (isMongo()) {
-            const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
-            const Student = (await import('../models/mongo/Student.js')).default;
-            const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
-            const Course = (await import('../models/mongo/Course.js')).default;
-            const Payment = (await import('../models/mongo/Payment.js')).default;
-
-            const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(studentId).trim())}$`, 'i') } });
-            const canonicalId = student ? student.id : studentId;
-
-            let fee = await StudentFee.findOne({ student_id: canonicalId });
-
-            if (!fee) {
-                // Auto-calculate from payments + fee structures
-                let totalDue = 0;
-
-                if (student?.course) {
-                    const primaryCourseName = getPrimaryCourseName(student.course);
-                    const courseObj = await Course.findOne({ name: { $regex: new RegExp(`^${escapeRegExp(primaryCourseName)}$`, 'i') } });
-                    if (courseObj) {
-                        const structure = await FeeStructure.findOne({ course_id: courseObj._id, category: 'Tuition Fee' });
-                        if (structure) totalDue = structure.amount;
-                    }
-                }
-
-                const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${escapeRegExp(String(canonicalId).trim())}$`, 'i') } });
-                const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-                const balance = Math.max(0, totalDue - totalPaid);
-                const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
-
-                // Upsert so future calls return quickly
-                fee = await StudentFee.findOneAndUpdate(
-                    { student_id: canonicalId },
-                    { total_due: totalDue, total_paid: totalPaid, balance, status },
-                    { upsert: true, new: true }
-                );
-            }
-
-            return res.json(fee);
-        }
-
-        // --- SQL path (SQLite / PostgreSQL) ---
-        const student = await queryOne('SELECT id, course FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [studentId]);
-        const canonicalId = student ? student.id : studentId;
-
-        let fee = await queryOne('SELECT * FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
-
-        if (!fee) {
-            // Auto-calculate from payments + fee structures
-            let totalDue = 0;
-
-            if (student?.course) {
-                const primaryCourseName = getPrimaryCourseName(student.course);
-                const courseObj = await queryOne(
-                    'SELECT id FROM courses WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))',
-                    [primaryCourseName]
-                );
-                if (courseObj) {
-                    const structure = await queryOne(
-                        "SELECT amount FROM fee_structures WHERE LOWER(TRIM(course_id)) = LOWER(TRIM(?)) AND category = 'Tuition Fee'",
-                        [courseObj.id]
-                    );
-                    if (structure) totalDue = Number(structure.amount);
-                }
-            }
-
-            const paidRow = await queryOne(
-                'SELECT COALESCE(SUM(amount), 0) as total_paid FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                [canonicalId]
-            );
-            const totalPaid = parseFloat(paidRow?.total_paid || 0);
-            const balance = Math.max(0, totalDue - totalPaid);
-            const status = balance <= 0 && totalDue > 0 ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending');
-
-            // Insert the auto-calculated row so subsequent requests are fast
-            await run(
-                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
-                [canonicalId, totalDue, totalPaid, balance, status]
-            );
-
-            fee = { student_id: canonicalId, total_due: totalDue, total_paid: totalPaid, balance, status };
-        }
-
-        res.json(fee);
+        const summary = await computeStudentFeeSummary(studentId, { persistMissing: true });
+        res.json(summary);
     } catch (error) {
         logger.error({ err: error }, 'getStudentFees: unhandled error');
         res.status(500).json({ error: 'Internal server error' });

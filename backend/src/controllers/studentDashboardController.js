@@ -6,6 +6,7 @@
  * then a single JSON payload is returned to the client.
  */
 import { query, queryOne } from '../config/database.js';
+import { computeStudentFeeSummary } from './financeController.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -44,7 +45,6 @@ async function getStudentDashboardMongo(req, res, studentId) {
         Announcement,
         Grade,
         Attendance,
-        StudentFee,
         Payment,
         StudentDailyReport,
         MonthlyFeeTracking,
@@ -54,7 +54,6 @@ async function getStudentDashboardMongo(req, res, studentId) {
         import('../models/mongo/Announcement.js').then(m => m.default).catch(() => null),
         import('../models/mongo/Grade.js').then(m => m.default),
         import('../models/mongo/Attendance.js').then(m => m.default),
-        import('../models/mongo/StudentFee.js').then(m => m.default).catch(() => null),
         import('../models/mongo/Payment.js').then(m => m.default).catch(() => null),
         import('../models/mongo/StudentDailyReport.js').then(m => m.default).catch(() => null),
         import('../models/mongo/MonthlyFeeTracking.js').then(m => m.default).catch(() => null),
@@ -78,7 +77,7 @@ async function getStudentDashboardMongo(req, res, studentId) {
             : Promise.resolve([]),
         Grade.find({ student_id: studentId }).sort({ created_at: -1 }).lean().catch(() => []),
         Attendance.find({ student_id: studentId }).lean().catch(() => []),
-        StudentFee ? StudentFee.findOne({ student_id: studentId }).lean().catch(() => null) : Promise.resolve(null),
+        computeStudentFeeSummary(studentId).catch(() => null),
         Payment
             ? Payment.find({ student_id: studentId }).sort({ payment_date: -1 }).limit(5).lean().catch(() => [])
             : Promise.resolve([]),
@@ -148,8 +147,8 @@ async function getStudentDashboardSQL(req, res, studentId) {
         // Attendance for this student
         query('SELECT * FROM attendance WHERE student_id = ?', [studentId]).catch(() => []),
 
-        // Student fee record
-        queryOne('SELECT * FROM student_fees WHERE student_id = ?', [studentId]).catch(() => null),
+        // Student fee record (total_paid/balance recomputed live from payments)
+        computeStudentFeeSummary(studentId).catch(() => null),
 
         // Last 5 payments
         query(

@@ -1,8 +1,19 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import { query } from '../config/database.js';
 import logger from '../utils/logger.js';
 dotenv.config();
+
+// Public site used in email links. Ignores the example placeholder so reset
+// links never point at "your-frontend-app.vercel.app".
+export const getFrontendUrl = () => {
+    const raw = (process.env.FRONTEND_URL || '').trim().replace(/\/+$/, '');
+    if (raw && !/your-frontend-app/i.test(raw)) return raw;
+    return process.env.NODE_ENV === 'production'
+        ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app'
+        : 'http://localhost:5173';
+};
 
 // SMTP config resolves from the Settings dashboard (system_settings) first,
 // falling back to .env so existing deployments keep working.
@@ -16,25 +27,43 @@ export const getSmtpConfig = async () => {
     }
     // A stored value of only asterisks is a masked placeholder, not a credential.
     const real = v => (v && !/^\*+$/.test(v) ? v : '');
-    const secureRaw = (dbVals.smtp_secure || '').toLowerCase();
+    const looksLikeEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v || '');
+
+    const dbUser = real(dbVals.smtp_user);
+    const envUser = (process.env.SMTP_USER || '').trim();
+
+    const host = real(dbVals.smtp_host) || (process.env.SMTP_HOST || '').trim() || 'smtp.gmail.com';
+    const port = parseInt(real(dbVals.smtp_port) || process.env.SMTP_PORT || '587', 10) || 587;
+    const secureRaw = (real(dbVals.smtp_secure) || (process.env.SMTP_SECURE || '')).toLowerCase();
+    const explicitSecure = secureRaw === 'true' || secureRaw === '1';
+    // Implicit TLS is only used on 465; 587/25 negotiate STARTTLS. This also
+    // corrects settings saved with "TLS enforced" while the host is Gmail:587.
+    const secure = port === 465 ? true : (port === 587 || port === 25 ? false : explicitSecure);
+
+    const rawPass = real(dbVals.smtp_pass) || (process.env.SMTP_PASS || '').trim();
+
     return {
-        host: real(dbVals.smtp_host) || 'smtp.gmail.com',
-        port: parseInt(real(dbVals.smtp_port) || '587', 10) || 587,
-        user: real(dbVals.smtp_user) || (process.env.SMTP_USER || '').trim(),
-        pass: real(dbVals.smtp_pass) || (process.env.SMTP_PASS || '').trim(),
-        secure: secureRaw ? (secureRaw === 'true' || secureRaw === '1') : false,
+        host,
+        port,
+        // An SMTP username must be an email address — ignore display names that
+        // were saved by mistake, so environment credentials still work.
+        user: looksLikeEmail(dbUser) ? dbUser : (looksLikeEmail(envUser) ? envUser : ''),
+        // Gmail shows App Passwords grouped as 4×4 letters; the spaces are not
+        // part of the credential.
+        pass: /gmail\.com$/i.test(host) ? rawPass.replace(/\s+/g, '') : rawPass,
+        secure,
     };
 };
 
 const requireCredentials = (cfg) => {
     if (!cfg.user || !cfg.pass) {
-        throw new Error('SMTP credentials missing: set smtp_user/smtp_pass in Settings, or SMTP_USER/SMTP_PASS environment variables.');
+        throw new Error('SMTP credentials missing or invalid: save an email address and password under Settings → Communications (Gmail requires an App Password), or set SMTP_USER/SMTP_PASS in the environment.');
     }
     return cfg;
 };
 
 let transporter = null;
-let transporterKey = null; // "host|port|user" — rebuilt when config changes
+let transporterKey = null; // host|port|user|pass hash — rebuilt when config changes
 let announcementsTransporterVerified = false;
 
 const createTransporter = async () => {
@@ -57,7 +86,8 @@ const createTransporter = async () => {
 // Returns the cached transporter, rebuilding it when the resolved config changes.
 const getTransporter = async () => {
     const cfg = requireCredentials(await getSmtpConfig());
-    const key = `${cfg.host}|${cfg.port}|${cfg.user}`;
+    const passHash = crypto.createHash('sha256').update(cfg.pass).digest('hex').slice(0, 12);
+    const key = `${cfg.host}|${cfg.port}|${cfg.user}|${passHash}`;
     if (!transporter || transporterKey !== key) {
         transporter = await createTransporter();
         transporterKey = key;
@@ -83,7 +113,7 @@ export const sendWelcomeEmail = async (email, role, tempPassword) => {
     try {
         const { transporter: t, cfg } = await getTransporter();
         const senderEmail = cfg.user;
-        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
+        const loginUrl = getFrontendUrl();
         console.log(`📧 Dispatching email: To: ${email}, Login: ${loginUrl}, Mode: ${process.env.NODE_ENV}`);
 
         const info = await t.sendMail({
@@ -142,7 +172,7 @@ export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
     try {
         const { transporter: t, cfg } = await getTransporter();
         const senderEmail = cfg.user;
-        const loginUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app' : 'http://localhost:5173');
+        const loginUrl = getFrontendUrl();
 
         const info = await t.sendMail({
             from: `"Academic Registry" <${senderEmail}>`,
@@ -187,6 +217,50 @@ export const sendAdminResetPasswordEmail = async (email, tempPassword) => {
     }
 };
 
+export const sendPasswordResetEmail = async (email, resetLink) => {
+    try {
+        const { transporter: t, cfg } = await getTransporter();
+        const senderEmail = cfg.user;
+
+        const info = await t.sendMail({
+            from: `"Beautex Technical Training College" <${senderEmail}>`,
+            to: email,
+            subject: 'Reset your Beautex portal password',
+            html: `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; color: #1a202c;">
+                    <div style="background-color: #800000; padding: 40px 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">Password Reset</h1>
+                        <p style="color: #ffd700; margin: 10px 0 0; font-size: 14px; font-weight: bold; letter-spacing: 1px;">BEAUTEX TECHNICAL TRAINING COLLEGE</p>
+                    </div>
+                    <div style="padding: 40px;">
+                        <h2 style="color: #800000; margin-top: 0; font-size: 18px;">Hello,</h2>
+                        <p style="line-height: 1.6; color: #4a5568;">We received a request to reset the password for <strong>${email}</strong>. Click the button below to choose a new password. This link expires in 24 hours.</p>
+                        <div style="text-align: center; margin: 36px 0;">
+                            <a href="${resetLink}" style="background-color: #800000; color: #ffffff; padding: 15px 35px; text-decoration: none; border-radius: 12px; font-weight: bold; display: inline-block;">Reset My Password</a>
+                        </div>
+                        <p style="font-size: 12px; color: #718096; line-height: 1.6;">If the button does not work, copy this link into your browser:</p>
+                        <p style="font-size: 12px; word-break: break-all;"><a href="${resetLink}" style="color: #800000;">${resetLink}</a></p>
+                        <div style="border-top: 1px solid #edf2f7; padding-top: 20px; margin-top: 24px;">
+                            <p style="font-size: 13px; color: #718096; line-height: 1.6;">
+                                <strong style="color: #e53e3e;">Didn't request this?</strong> You can safely ignore this email — your password will not change unless you open the link and set a new one.
+                            </p>
+                        </div>
+                    </div>
+                    <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #edf2f7;">
+                        <p style="margin: 0; font-size: 12px; color: #a0aec0;">&copy; 2026 Beautex Technical Training College. All rights reserved.</p>
+                    </div>
+                </div>
+            `,
+        });
+
+        console.log(`📧 Password reset email sent to ${email}: ${info.messageId}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to send password reset email:', error.message);
+        return false;
+    }
+};
+
 export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
     console.log(`📢 Announcement System: Preparing broadcast for ${recipientEmails.length} recipients...`);
     if (!recipientEmails || recipientEmails.length === 0) {
@@ -211,7 +285,7 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
         }
 
         const { title, content, author, category, priority } = announcement;
-        const portalUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const portalUrl = getFrontendUrl();
         const dateStr = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
         const priorityColors = { high: '#dc2626', medium: '#d97706', low: '#16a34a' };

@@ -60,7 +60,7 @@ function StudentFinanceView({ studentFee, payments }) {
     // Group payments by category for breakdown
     const categoryTotals = payments.reduce((acc, p) => {
         const cat = p.category || 'Tuition Fee';
-        acc[cat] = (acc[cat] || 0) + (p.amount || 0);
+        acc[cat] = (acc[cat] || 0) + (Number(p.amount) || 0);
         return acc;
     }, {});
 
