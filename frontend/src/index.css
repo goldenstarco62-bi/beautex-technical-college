@@ -436,3 +436,24 @@ input[type=number] {
         width: 100%;
     }
 }
+
+/* ── Small-screen legibility ─────────────────────────────────────────────
+   Tailwind inlines arbitrary micro sizes per utility, so override them by
+   attribute instead of editing a thousand class strings. */
+@media (max-width: 639px) {
+    [class*="text-[8px]"] {
+        font-size: 10px !important;
+    }
+
+    [class*="text-[9px]"] {
+        font-size: 11px !important;
+    }
+
+    /* iOS zooms any focused control below 16px. Keeping 16px here lets the
+       viewport allow pinch-zoom without the page jumping on every focus. */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}

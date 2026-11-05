@@ -851,7 +851,7 @@ export default function UnitsCovered() {
                                     className="bg-transparent border-none outline-none text-xs font-bold text-black placeholder:text-black/20 uppercase tracking-widest w-full font-sans"
                                 />
                                 {searchTerm && (
-                                    <button onClick={() => setSearchTerm('')} className="p-1 text-gray-400 hover:text-red-500 rounded-full">
+                                    <button onClick={() => setSearchTerm('')} className="p-2 text-gray-400 hover:text-red-500 rounded-full">
                                         <X className="w-3.5 h-3.5" />
                                     </button>
                                 )}

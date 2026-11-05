@@ -83,7 +83,7 @@ export default function Layout({ children }) {
                 </div>
 
                 {/* Page Content */}
-                <main className="flex-1 p-4 lg:p-6 pb-24 lg:pb-6 print:p-0 print:pt-4 overflow-x-hidden">
+                <main className="flex-1 p-4 lg:p-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6 print:p-0 print:pt-4 overflow-x-hidden">
                     {children}
                 </main>
 

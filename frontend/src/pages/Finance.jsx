@@ -791,42 +791,42 @@ function AdminFinanceView({
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-gray-50/70 border-b border-gray-100">
-                                        <th className="px-8 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">#</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Student Account</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Category</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Protocol / Ref</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Method</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Credit (KSh)</th>
-                                        <th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
+                                        <th className="hidden md:table-cell px-8 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">#</th>
+                                        <th className="px-4 sm:px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">Student Account</th>
+                                        <th className="hidden md:table-cell px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Category</th>
+                                        <th className="hidden md:table-cell px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Protocol / Ref</th>
+                                        <th className="hidden md:table-cell px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-center">Method</th>
+                                        <th className="px-4 sm:px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Credit (KSh)</th>
+                                        <th className="px-4 sm:px-10 py-6 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
                                     {filteredPayments.map((p, i) => (
                                         <tr key={p.id || p._id || i} className="hover:bg-gray-50/50 transition-all group">
-                                            <td className="px-8 py-6 text-[10px] font-black text-gray-300">{i + 1}</td>
-                                            <td className="px-10 py-6">
+                                            <td className="hidden md:table-cell px-8 py-6 text-[10px] font-black text-gray-300">{i + 1}</td>
+                                            <td className="px-4 sm:px-10 py-6">
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-black text-gray-800 uppercase tracking-tight group-hover:text-maroon transition-colors">{p.student_name || p.student_id}</span>
                                                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{p.student_id}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-10 py-6 text-center">
+                                            <td className="hidden md:table-cell px-10 py-6 text-center">
                                                 <span className="text-[9px] font-black text-gray-600 bg-gray-50 px-3 py-1 rounded-lg uppercase">{p.category || 'Tuition Fee'}</span>
                                             </td>
-                                            <td className="px-10 py-6 text-center">
+                                            <td className="hidden md:table-cell px-10 py-6 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <span className="text-[10px] font-black font-mono text-gray-500 uppercase bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">{p.transaction_ref}</span>
                                                     <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tighter mt-1">{new Date(p.payment_date).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-10 py-6 text-center">
+                                            <td className="hidden md:table-cell px-10 py-6 text-center">
                                                 <span className="text-[9px] font-black px-3 py-1.5 bg-maroon/5 text-maroon rounded-lg uppercase tracking-widest">{p.method}</span>
                                             </td>
-                                            <td className="px-10 py-6 text-right">
+                                            <td className="px-4 sm:px-10 py-6 text-right">
                                                 <span className="text-sm font-black text-emerald-700 tracking-tight">KSh {fmt(p.amount)}</span>
                                             </td>
-                                            <td className="px-10 py-6 text-right">
-                                                <div className="flex justify-end gap-2">
+                                            <td className="px-4 sm:px-10 py-6 text-right">
+                                                <div className="flex flex-wrap justify-end gap-2">
                                                     <button onClick={() => onViewReport({ ...p, type: 'payment' })} className="p-2.5 bg-maroon/5 hover:bg-maroon hover:text-white rounded-xl transition-all shadow-sm" title="View Receipt">
                                                         <Eye className="w-3.5 h-3.5" />
                                                     </button>
@@ -856,13 +856,16 @@ function AdminFinanceView({
                                 {filteredPayments.length > 0 && (
                                     <tfoot>
                                         <tr className="bg-maroon/5 border-t-2 border-maroon/10">
-                                            <td colSpan="5" className="px-10 py-6 text-[10px] font-black text-maroon uppercase tracking-[0.3em]">
+                                            <td colSpan="5" className="hidden md:table-cell px-10 py-6 text-[10px] font-black text-maroon uppercase tracking-[0.3em]">
                                                 Total Payment Collections ({filteredPayments.length} Records)
                                             </td>
-                                            <td className="px-10 py-6 text-lg font-black text-emerald-700 text-right tracking-tight">
+                                            <td className="md:hidden px-4 py-6 text-[9px] font-black text-maroon uppercase tracking-widest">
+                                                Total ({filteredPayments.length})
+                                            </td>
+                                            <td className="px-4 sm:px-10 py-6 text-lg font-black text-emerald-700 text-right tracking-tight">
                                                 KSh {fmt(totalRegistryAmount)}
                                             </td>
-                                            <td className="px-10 py-6"></td>
+                                            <td className="px-4 sm:px-10 py-6"></td>
                                         </tr>
                                     </tfoot>
                                 )}

@@ -189,7 +189,7 @@ export default function Navbar({ onMenuClick, onSearchClick }) {
                                             <CheckCheck className="w-3 h-3" /> All Read
                                         </button>
                                     )}
-                                    <button onClick={() => setShowNotifications(false)} className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all">
+                                    <button onClick={() => setShowNotifications(false)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all">
                                         <X className="w-3.5 h-3.5" />
                                     </button>
                                 </div>

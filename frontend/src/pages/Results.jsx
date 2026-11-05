@@ -1140,22 +1140,22 @@ export default function Results() {
                                     <thead>
                                         <tr className="bg-black/[0.02] border-b border-black/5">
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Unit Title</th>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Course</th>
+                                            <th className="hidden md:table-cell px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Course</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Marks (Max)</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Percentage</th>
                                             <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Grade</th>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Remarks</th>
+                                            <th className="hidden md:table-cell px-6 py-4 text-left text-[10px] font-black text-black/40 uppercase tracking-widest">Remarks</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-black/5">
                                         {ownStudentResults.map(r => (
                                             <tr key={r.id} className="hover:bg-black/[0.005]">
                                                 <td className="px-6 py-4 text-xs font-black text-black uppercase">{unitLabel(r)}</td>
-                                                <td className="px-6 py-4 text-xs font-bold text-black/60 uppercase">{courseLabel(r)}</td>
+                                                <td className="hidden md:table-cell px-6 py-4 text-xs font-bold text-black/60 uppercase">{courseLabel(r)}</td>
                                                 <td className="px-6 py-4 text-xs font-black text-black">{r.marks !== null ? `${r.marks} / ${r.period_max_marks || 100}` : '—'}</td>
                                                 <td className="px-6 py-4 text-xs font-black text-maroon">{r.percentage !== null ? `${r.percentage}%` : '—'}</td>
                                                 <td className="px-6 py-4"><GradeChip grade={r.grade} percentage={r.percentage} /></td>
-                                                <td className="px-6 py-4 text-xs text-black/50">{r.remarks || '—'}</td>
+                                                <td className="hidden md:table-cell px-6 py-4 text-xs text-black/50">{r.remarks || '—'}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1267,11 +1267,11 @@ export default function Results() {
                                                 </button>
                                             </th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Student</th>
-                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Course Registered</th>
+                                            <th className="hidden md:table-cell px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Course Registered</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Unit & Marks</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Grade</th>
                                             <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Status</th>
-                                            <th className="px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Workflow</th>
+                                            <th className="hidden md:table-cell px-4 py-3 text-left text-[9px] font-black text-black/50 uppercase tracking-widest">Workflow</th>
                                             <th className="px-4 py-3 text-right text-[9px] font-black text-black/50 uppercase tracking-widest">Actions</th>
                                         </tr>
                                     </thead>
@@ -1291,7 +1291,7 @@ export default function Results() {
                                                     <p className="text-[11px] font-black text-black uppercase">{r.student_name}</p>
                                                     <p className="text-[9px] font-bold text-black/40 uppercase">{r.student_reg_id}</p>
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="hidden md:table-cell px-4 py-3">
                                                     <p className="text-[11px] font-black text-maroon uppercase">{courseLabel(r)}</p>
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -1320,7 +1320,7 @@ export default function Results() {
                                                         {r.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="hidden md:table-cell px-4 py-3">
                                                     <WorkflowChip status={r.workflow_status} />
                                                 </td>
                                                 <td className="px-4 py-3 text-right">

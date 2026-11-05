@@ -135,7 +135,7 @@ const PWAInstallPrompt = () => {
                                 <p className="text-sm font-bold leading-tight">Add to Home Screen</p>
                             </div>
                         </div>
-                        <button id="pwa-ios-dismiss-btn" onClick={handleDismiss} className="p-1 text-yellow-400/50 hover:text-yellow-400 transition-colors">
+                        <button id="pwa-ios-dismiss-btn" onClick={handleDismiss} className="p-2 text-yellow-400/50 hover:text-yellow-400 transition-colors">
                             <X className="w-5 h-5" />
                         </button>
                     </div>

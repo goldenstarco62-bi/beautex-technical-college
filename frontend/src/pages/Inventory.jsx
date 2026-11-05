@@ -15,7 +15,7 @@ const Toast = ({ message, type, onClose }) => (
         type === 'error' ? 'bg-rose-500 text-white border-rose-400' : 'bg-[#111] text-gold border-white/10'
     }`}>
         <p className="text-[10px] font-black uppercase tracking-[0.2em]">{message}</p>
-        <button onClick={onClose} className="p-1 hover:rotate-90 transition-transform"><X className="w-4 h-4" /></button>
+        <button onClick={onClose} className="p-2 hover:rotate-90 transition-transform"><X className="w-4 h-4" /></button>
     </div>
 );
 
@@ -355,7 +355,7 @@ function ItemsTab() {
                         {filterDate && (
                             <button
                                 onClick={() => setFilterDate('')}
-                                className="ml-1 p-1 hover:text-maroon text-gray-300 transition-colors rounded-lg"
+                                className="ml-1 p-2 hover:text-maroon text-gray-300 transition-colors rounded-lg"
                                 title="Clear date filter"
                             >
                                 <X className="w-3 h-3" />

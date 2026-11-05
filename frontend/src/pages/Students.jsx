@@ -675,7 +675,7 @@ export default function Students() {
                             <button
                                 onClick={() => { setSearchQuery(''); setShowSuggestions(false); searchInputRef.current?.focus(); }}
                                 title="Clear search (Esc)"
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-200 transition-all z-10"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-200 transition-all z-10"
                             >
                                 <X className="w-3.5 h-3.5" />
                             </button>
@@ -768,7 +768,7 @@ export default function Students() {
                 {/* Table wrapper for horizontal scroll with right-edge affordance */}
                 <div className="bg-white border border-gray-100 rounded-2xl shadow-xl overflow-hidden scroll-table-wrapper">
                     <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[1000px]">
+                    <table className="w-full text-left min-w-[560px] md:min-w-[1000px]">
                         <thead>
                             <tr className="bg-gray-50/50 border-b border-gray-100">
                                 <th className="px-6 py-5 w-10">
@@ -779,8 +779,18 @@ export default function Students() {
                                         onChange={toggleSelectAll}
                                     />
                                 </th>
-                                {['Admission Number', 'Name', 'Course', 'Intake', 'Enrolled Date', 'Remaining', 'Status', 'Contact', 'Actions'].map(h => (
-                                    <th key={h} className="px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-widest">{h}</th>
+                                {[
+                                    { label: 'Admission Number', hide: true },
+                                    { label: 'Name' },
+                                    { label: 'Course', hide: true },
+                                    { label: 'Intake', hide: true },
+                                    { label: 'Enrolled Date', hide: true },
+                                    { label: 'Remaining', hide: true },
+                                    { label: 'Status' },
+                                    { label: 'Contact', hide: true },
+                                    { label: 'Actions' },
+                                ].map(({ label, hide }) => (
+                                    <th key={label} className={`px-6 py-5 text-[11px] font-black text-gray-400 uppercase tracking-widest ${hide ? 'hidden md:table-cell' : ''}`}>{label}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -797,7 +807,7 @@ export default function Students() {
                                         />
                                     </td>
 
-                                    <td className="px-6 py-5">
+                                    <td className="hidden md:table-cell px-6 py-5">
                                                                                 <span className="text-xs font-bold text-gray-500">
                                             {student.id}
                                         </span>
@@ -827,14 +837,14 @@ export default function Students() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5 text-xs font-bold text-gray-600">
+                                    <td className="hidden md:table-cell px-6 py-5 text-xs font-bold text-gray-600">
                                         {Array.isArray(student.course) ? student.course.join(', ') : student.course}
                                     </td>
-                                    <td className="px-6 py-5 text-xs font-bold text-gray-400">{student.intake || student.semester || 'N/A'}</td>
-                                    <td className="px-6 py-5 text-[10px] font-black text-gray-500 uppercase">
+                                    <td className="hidden md:table-cell px-6 py-5 text-xs font-bold text-gray-400">{student.intake || student.semester || 'N/A'}</td>
+                                    <td className="hidden md:table-cell px-6 py-5 text-[10px] font-black text-gray-500 uppercase">
                                         {student.enrolled_date ? new Date(student.enrolled_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
                                     </td>
-                                    <td className="px-6 py-5">
+                                    <td className="hidden md:table-cell px-6 py-5">
                                         <div className="flex flex-col">
                                             <span className={`text-[10px] font-black uppercase ${calculateRemainingTime(student.completion_date).isExpired ? 'text-red-500' : 'text-emerald-600'}`}>
                                                 {calculateRemainingTime(student.completion_date).formatted}
@@ -849,11 +859,11 @@ export default function Students() {
                                             {student.status || 'Active'}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-5 text-xs font-bold text-gray-400">
+                                    <td className="hidden md:table-cell px-6 py-5 text-xs font-bold text-gray-400">
                                         {student.contact || 'No contact'}
                                     </td>
                                     <td className="px-6 py-5">
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
                                             <button onClick={() => { setProfileStudentData(student); setShowProfileModal(student); }} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Profile"><Eye className="w-3.5 h-3.5" /></button>
                                             <button onClick={() => navigate(`/reports?studentId=${student.id}`)} className="p-2 text-primary/20 hover:text-maroon transition-colors border border-gray-100 rounded-lg" title="View Academic Reports"><FileBarChart className="w-3.5 h-3.5" /></button>
                                             {isAdmin && (

@@ -129,7 +129,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
                 />
             )}
 
-            <div className={`fixed left-0 top-0 h-screen w-64 flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-2xl overflow-hidden
+            <div className={`fixed left-0 top-0 h-[100dvh] w-64 flex flex-col z-[60] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] transform shadow-2xl overflow-hidden
                 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
                 style={{ background: 'linear-gradient(175deg, #6b0000 0%, #800000 35%, #8a0000 65%, #6b0000 100%)' }}>
 
