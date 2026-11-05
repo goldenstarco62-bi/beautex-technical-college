@@ -3,6 +3,7 @@ import notificationService from '../services/notificationService.js';
 import { syncStudentMonthlyFeeTracking } from './monthlyFeeController.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import { isProductionRuntime } from '../utils/runtimeEnv.js';
 
 
 const isMongo = () => !!process.env.MONGODB_URI;
@@ -984,7 +985,7 @@ export async function mpesaCallback(req, res) {
     const providedToken = String(req.query?.token || req.headers['x-mpesa-verification'] || '').trim();
 
     if (!expectedToken) {
-        if (process.env.NODE_ENV === 'production') {
+        if (isProductionRuntime()) {
             console.error('[mpesa] MPESA_CALLBACK_TOKEN is not configured — rejecting callback.');
             return res.status(503).json({ ResultCode: 1, ResultDesc: 'Webhook not configured' });
         }

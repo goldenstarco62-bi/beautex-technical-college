@@ -10,6 +10,7 @@ import pinoHttp from 'pino-http';
 import { initializeDatabase, getDb, query, queryOne, run, getProcessedDatabaseUrl } from './config/database.js';
 import { authenticateToken, authorizeRoles } from './middleware/auth.js';
 import { sanitizeMiddleware } from './utils/sanitize.js';
+import { isProductionRuntime } from './utils/runtimeEnv.js';
 import logger from './utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +34,7 @@ app.use(express.urlencoded({ extended: true, limit: '15mb', parameterLimit: 2000
 app.use(sanitizeMiddleware);
 
 // HTTPS Redirection for Production (Vercel/Heroku/Cloud)
-if (process.env.NODE_ENV === 'production') {
+if (isProductionRuntime()) {
     app.use((req, res, next) => {
         if (req.headers['x-forwarded-proto'] !== 'https') {
             return res.redirect(`https://${req.headers.host}${req.url}`);
@@ -77,11 +78,12 @@ const allowedOrigins = [
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
     // Deployed frontend — always allowed
+    'https://beautex-technical-college-pvk4.vercel.app',
+    'https://frontend-three-zeta-83.vercel.app',
+    'https://frontend-douglasndinyo5-8641s-projects.vercel.app',
     'https://bttc.vercel.app',
     'https://beautexcollege-01.vercel.app',
     'https://beautex-technical-college.vercel.app',
-    'https://beautex-technical-college-pvk4.vercel.app',
-    'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app',
     'https://beautex-technical-college-tkp1.vercel.app'
 ];
 
@@ -102,7 +104,7 @@ app.use(cors({
         if (!origin) return callback(null, true);
 
         // If in development, allow all
-        if (process.env.NODE_ENV !== 'production') {
+        if (!isProductionRuntime()) {
             return callback(null, true);
         }
 
@@ -125,7 +127,7 @@ app.use(cors({
 
 // Rate Limiting Configuration: Brute Force Protection
 // In development, skip all rate limiting so local testing is never blocked.
-const authLimiter = process.env.NODE_ENV !== 'production'
+const authLimiter = !isProductionRuntime()
     ? (_req, _res, next) => next()  // No-op in development
     : rateLimit({
         windowMs: 15 * 60 * 1000, // 15-minute block window
@@ -246,13 +248,14 @@ app.get('/', async (req, res) => {
     else dbType = 'SQLite';
 
     const isVercel = !!process.env.VERCEL;
-    const isProduction = process.env.NODE_ENV === 'production';
+    const isProduction = isProductionRuntime();
 
     res.json({
         message: 'Welcome to BTTC Management System API',
         status: 'Operational',
         environment: {
             node_env: process.env.NODE_ENV,
+            vercel_env: process.env.VERCEL_ENV || null,
             is_vercel: isVercel,
             is_production: isProduction
         },

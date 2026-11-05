@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { query } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { isProductionRuntime } from '../utils/runtimeEnv.js';
 dotenv.config();
 
 // Public site used in email links. Ignores the example placeholder so reset
@@ -10,8 +11,8 @@ dotenv.config();
 export const getFrontendUrl = () => {
     const raw = (process.env.FRONTEND_URL || '').trim().replace(/\/+$/, '');
     if (raw && !/your-frontend-app/i.test(raw)) return raw;
-    return process.env.NODE_ENV === 'production'
-        ? 'https://beautex-technical-college-pvk4-6cpns98oy.vercel.app'
+    return isProductionRuntime()
+        ? 'https://beautex-technical-college-pvk4.vercel.app'
         : 'http://localhost:5173';
 };
 
