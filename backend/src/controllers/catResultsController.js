@@ -383,14 +383,11 @@ export async function createResult(req, res) {
             cat_period_id, marks, status, remarks
         } = req.body;
 
-        if (!student_id || !cat_period_id || !unit_name) {
-            return res.status(400).json({ error: 'student_id, cat_period_id and unit_name are required.' });
+        if (!student_id || !cat_period_id) {
+            return res.status(400).json({ error: 'student_id and cat_period_id are required.' });
         }
-        // Marks must be tied to a real unit (directly or via an offering) — no more
-        // free-text "general assessment" rows.
-        if (!unit_id) {
-            return res.status(400).json({ error: 'A unit is required — select the unit this mark belongs to.' });
-        }
+        // Unit selection is optional: a general exam may not cover a specific unit.
+        const unitLabel = String(unit_name || '').trim() || 'General Assessment';
 
         // Offering-driven entry: the offering decides the course and the permission, so a
         // common unit taught across courses works without touching course-level rules.
@@ -467,7 +464,7 @@ export async function createResult(req, res) {
             // plus (unit_id, or the unit_name label when no unit was chosen) — course_id must
             // be part of it because units are shared across courses.
             const { existing, adopt } = await findResultTarget({
-                offering, studentId: student_id, courseId: effectiveCourseId, unitId: unit_id, unitName: unit_name, catPeriodId: cat_period_id
+                offering, studentId: student_id, courseId: effectiveCourseId, unitId: unit_id, unitName: unitLabel, catPeriodId: cat_period_id
             });
 
             if (existing) {
@@ -490,7 +487,7 @@ export async function createResult(req, res) {
                 );
 
                 await writeAuditLog({
-                    result_id: existing.id, student_id, unit_name, cat_period_id,
+                    result_id: existing.id, student_id, unit_name: unitLabel, cat_period_id,
                     action: 'updated', new_marks: marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                     new_status: existing.workflow_status, changed_by: enteredBy, changed_by_name: trainerName
                 });
@@ -506,7 +503,7 @@ export async function createResult(req, res) {
                   entered_by, trainer_name, remarks)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`,
                 [
-                    student_id, effectiveCourseId, unit_id || offering?.unit_id || null, unit_name, offering?.id || null, cat_period_id,
+                    student_id, effectiveCourseId, unit_id || offering?.unit_id || null, unitLabel, offering?.id || null, cat_period_id,
                     marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                     percentage, grade,
                     status || 'Present',
@@ -515,7 +512,7 @@ export async function createResult(req, res) {
             );
 
             await writeAuditLog({
-                result_id: result.lastID || result.insertId, student_id, unit_name, cat_period_id,
+                result_id: result.lastID || result.insertId, student_id, unit_name: unitLabel, cat_period_id,
                 action: 'created', new_marks: marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                 new_status: 'Draft', changed_by: enteredBy, changed_by_name: trainerName
             });
@@ -547,9 +544,11 @@ export async function batchCreateResults(req, res) {
 
         const { cat_period_id, course_id, unit_id, unit_name, offering_id, entries } = req.body;
 
-        if (!cat_period_id || !unit_name || !Array.isArray(entries)) {
-            return res.status(400).json({ error: 'cat_period_id, unit_name and entries[] are required.' });
+        if (!cat_period_id || !Array.isArray(entries)) {
+            return res.status(400).json({ error: 'cat_period_id and entries[] are required.' });
         }
+        // Unit selection is optional: a general exam may not cover a specific unit.
+        const unitLabel = String(unit_name || '').trim() || 'General Assessment';
 
         // Offering-scoped batch: roster + lecturer ownership replace the course-level gate,
         // which is what lets one common unit be marked per group across different courses.
@@ -572,12 +571,6 @@ export async function batchCreateResults(req, res) {
             if (!teacherAccess || !teacherAccess.allowedCourseIds.includes(String(course_id).trim())) {
                 return res.status(403).json({ error: 'You are only authorized to enter results for your assigned courses.' });
             }
-        }
-
-        // Marks must be tied to a real unit (directly, or through the offering's unit) —
-        // no more free-text "general assessment" batch rows.
-        if (!unit_id && !offering?.unit_id) {
-            return res.status(400).json({ error: 'A unit is required — select the unit these marks belong to.' });
         }
 
         const period = await queryOne('SELECT * FROM cat_periods WHERE id = ?', [cat_period_id]);
@@ -654,7 +647,7 @@ export async function batchCreateResults(req, res) {
                 // Upsert: offering-keyed rows match on the offering; otherwise student +
                 // course + (unit_id, or unit_name when no unit was chosen).
                 const { existing, adopt } = await findResultTarget({
-                    offering, studentId: student_id, courseId: entryCourseId, unitId: unit_id, unitName: unit_name, catPeriodId: cat_period_id
+                    offering, studentId: student_id, courseId: entryCourseId, unitId: unit_id, unitName: unitLabel, catPeriodId: cat_period_id
                 });
 
                 if (existing) {
@@ -677,7 +670,7 @@ export async function batchCreateResults(req, res) {
                             existing.id
                         ]
                     );
-                    await writeAuditLog({ result_id: existing.id, student_id, unit_name, cat_period_id,
+                    await writeAuditLog({ result_id: existing.id, student_id, unit_name: unitLabel, cat_period_id,
                         action: 'updated (batch)', new_marks: marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                         new_status: existing.workflow_status, changed_by: enteredBy, changed_by_name: trainerName });
                     saved.push(existing.id);
@@ -687,13 +680,13 @@ export async function batchCreateResults(req, res) {
                           marks, percentage, grade, status, workflow_status, entered_by, trainer_name, remarks)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Draft', ?, ?, ?)`,
                         [
-                            student_id, entryCourseId, unit_id || offering?.unit_id || null, unit_name, offering?.id || null, cat_period_id,
+                            student_id, entryCourseId, unit_id || offering?.unit_id || null, unitLabel, offering?.id || null, cat_period_id,
                             marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                             percentage, grade, status || 'Present',
                             enteredBy, trainerName, remarks || null
                         ]
                     );
-                    await writeAuditLog({ result_id: result.lastID || result.insertId, student_id, unit_name, cat_period_id,
+                    await writeAuditLog({ result_id: result.lastID || result.insertId, student_id, unit_name: unitLabel, cat_period_id,
                         action: 'created (batch)', new_marks: marks !== '' && marks !== null && marks !== undefined ? parseFloat(marks) : null,
                         new_status: 'Draft', changed_by: enteredBy, changed_by_name: trainerName });
                     saved.push(result.lastID || result.insertId);

@@ -270,16 +270,13 @@ export default function Results() {
         if (!singleForm.cat_period_id || !singleForm.course_id || !singleForm.student_id) {
             return showToast('Please select period, course, and student.', 'error');
         }
-        if (!singleForm.unit_id) {
-            return showToast('Please select the unit this mark belongs to.', 'error');
-        }
 
         const courseObj = courses.find(c => String(c.id) === String(singleForm.course_id));
         const unitObj = singleUnits.find(u => String(u.id) === String(singleForm.unit_id));
         const payload = {
             ...singleForm,
-            unit_id: singleForm.unit_id,
-            unit_name: singleForm.unit_name || unitObj?.unit_name || unitObj?.name || '',
+            unit_id: singleForm.unit_id || null,
+            unit_name: singleForm.unit_name || unitObj?.unit_name || unitObj?.name || 'General Assessment',
             trainer_name: courseObj?.instructor || (isTeacher ? user?.name : undefined)
         };
 
@@ -382,10 +379,7 @@ export default function Results() {
         const selectedUnitObj = batchUnits.find(u => String(u.id) === String(batchUnit));
         const chosenOffering = batchOfferings.find(o => String(o.id) === String(batchOffering));
         const effectiveUnitId = selectedUnitObj?.id || chosenOffering?.unit_id || null;
-        if (!effectiveUnitId) {
-            return showToast('Select the unit these marks belong to.', 'error');
-        }
-        const unitName = selectedUnitObj?.unit_name || selectedUnitObj?.name || chosenOffering?.offering_name || '';
+        const unitName = selectedUnitObj?.unit_name || selectedUnitObj?.name || chosenOffering?.offering_name || 'General Assessment';
 
         const entriesArr = Object.entries(batchEntries)
             .filter(([, val]) => {
@@ -1384,6 +1378,11 @@ export default function Results() {
                                                                         status: r.status || 'Present',
                                                                         remarks: r.remarks || ''
                                                                     });
+                                                                    if (r.course_id) {
+                                                                        courseUnitsAPI.getUnits(r.course_id)
+                                                                            .then(res => setSingleUnits(res.data || []))
+                                                                            .catch(() => setSingleUnits([]));
+                                                                    }
                                                                     setShowSingleModal(true);
                                                                 }}
                                                                 className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -1504,7 +1503,7 @@ export default function Results() {
                             </div>
 
                             <div>
-                                <label className="text-[10px] font-black uppercase text-black/60">Unit / Subject</label>
+                                <label className="text-[10px] font-black uppercase text-black/60">Unit / Subject <span className="normal-case font-bold text-black/40">(optional)</span></label>
                                 <select
                                     value={singleForm.unit_id}
                                     onChange={e => {
@@ -1518,7 +1517,7 @@ export default function Results() {
                                     }}
                                     className="w-full mt-1 p-3 bg-gray-50 border rounded-2xl text-xs font-black uppercase outline-none cursor-pointer"
                                 >
-                                    <option value="">Select a unit…</option>
+                                    <option value="">No unit — General Assessment</option>
                                     {singleUnits.map(u => (
                                         <option key={u.id} value={u.id}>
                                             {u.unit_code ? `${u.unit_code} - ${u.unit_name || u.name}` : (u.unit_name || u.name)}
