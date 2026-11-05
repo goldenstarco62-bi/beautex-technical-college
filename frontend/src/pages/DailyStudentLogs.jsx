@@ -475,7 +475,7 @@ export default function DailyStudentLogs() {
                         <div className="absolute inset-0 bg-maroon/20 backdrop-blur-xl" onClick={() => setViewingLog(null)} />
                         <div className="relative w-full max-w-2xl bg-white rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                             {/* Modal Header */}
-                            <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-maroon/[0.02]">
+                            <div className="p-5 sm:p-10 border-b border-gray-100 flex justify-between items-center bg-maroon/[0.02]">
                                 <div className="flex items-center gap-4">
                                     <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-maroon/5 flex items-center justify-center text-maroon">
                                         <FileText className="w-8 h-8" />
@@ -490,9 +490,9 @@ export default function DailyStudentLogs() {
                                 </button>
                             </div>
 
-                            <div className="p-10 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            <div className="p-5 sm:p-10 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
                                 {/* Meta */}
-                                <div className="grid grid-cols-2 gap-8">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8">
                                     <div className="space-y-1">
                                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Student Information</p>
                                         <p className="text-sm font-black text-gray-800 uppercase">{viewingLog.student_name}</p>

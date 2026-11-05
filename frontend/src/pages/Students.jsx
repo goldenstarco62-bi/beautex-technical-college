@@ -635,8 +635,8 @@ export default function Students() {
                     </div>
                 </div>
 
-                {/* Statistics Row — always 3 cols, compact on mobile */}
-                <div className="grid grid-cols-3 gap-3 sm:gap-6">
+                {/* Statistics Row — 2 cols + full-width third on phones */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6">
                     {[
                         { label: 'Total Students', value: students.length, color: 'text-gray-800' },
                         { label: 'Active', value: students.filter(s => s.status === 'Active').length, color: 'text-gray-800' },
@@ -650,7 +650,7 @@ export default function Students() {
                             color: 'text-gray-800'
                         },
                     ].map((stat, i) => (
-                        <div key={i} className="bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border border-gray-100 shadow-sm transition-transform hover:-translate-y-1">
+                        <div key={i} className={`bg-white p-3 sm:p-6 rounded-xl sm:rounded-2xl border border-gray-100 shadow-sm transition-transform hover:-translate-y-1 ${i === 2 ? 'col-span-2 sm:col-span-1' : ''}`}>
                             <p className="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 sm:mb-2 leading-tight">{stat.label}</p>
                             <p className={`text-xl sm:text-2xl font-black ${stat.color}`}>{stat.value}</p>
                         </div>
@@ -1156,7 +1156,7 @@ export default function Students() {
                             {(student.guardian_name || student.guardian_contact) && (
                                 <div className="bg-maroon/3 rounded-2xl p-5 border border-maroon/8 mb-5">
                                     <p className="text-[9px] font-black text-maroon/30 uppercase tracking-widest mb-3">Guardian Information</p>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <p className="text-[9px] text-maroon/30 uppercase tracking-widest font-bold">Name</p>
                                             <p className="text-sm font-bold text-maroon mt-0.5">{student.guardian_name || 'N/A'}</p>
@@ -1242,7 +1242,7 @@ export default function Students() {
                                         </div>
                                     </div>
                                     <div className="flex-1 space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div className="space-y-1">
                                                 <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Admission Number</label>
                                                 <input
@@ -1284,7 +1284,7 @@ export default function Students() {
                             <div className="space-y-6 pt-6 border-t border-maroon/5">
                                 <h3 className="text-[10px] font-black text-gold uppercase tracking-widest">Academic & Contact</h3>
                                 <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div className="space-y-1">
                                             <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Email</label>
                                             <input
@@ -1400,7 +1400,7 @@ export default function Students() {
                                         </select>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Cumulative GPA</label>
                                         <input
@@ -1426,7 +1426,7 @@ export default function Students() {
                                         </select>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Department</label>
                                         <select
@@ -1456,7 +1456,7 @@ export default function Students() {
                                         </select>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Enrollment Date</label>
                                         <input

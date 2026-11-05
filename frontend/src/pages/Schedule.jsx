@@ -247,7 +247,7 @@ export default function Schedule() {
                                                         {(user?.role === 'admin' || user?.role === 'superadmin') && (
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); handleDelete(session.id); }}
-                                                                className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-2 hover:bg-red-600 rounded-lg transition-all z-20"
+                                                                className="absolute top-3 right-3 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-2 hover:bg-red-600 rounded-lg transition-all z-20"
                                                             >
                                                                 <Trash2 className="w-3 h-3" />
                                                             </button>

@@ -542,7 +542,7 @@ function AdminFinanceView({
                         </div>
 
                         {/* Recent Protocol Feed */}
-                        <div className="lg:col-span-4 bg-white rounded-[3.5rem] border border-gray-100 shadow-2xl p-10 flex flex-col h-full relative overflow-hidden">
+                        <div className="lg:col-span-4 bg-white rounded-[2rem] lg:rounded-[3.5rem] border border-gray-100 shadow-2xl p-6 lg:p-10 flex flex-col h-full relative overflow-hidden">
                             <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none bg-[radial-gradient(circle_at_100%_100%,#800000_0%,transparent_50%)]" />
                             <div className="flex justify-between items-center mb-10 relative z-10">
                                 <div>
@@ -575,13 +575,13 @@ function AdminFinanceView({
                                                         <>
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); onEditPayment(p); }}
-                                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-amber-100 text-amber-600 rounded-lg transition-all"
+                                                                className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1.5 hover:bg-amber-100 text-amber-600 rounded-lg transition-all"
                                                             >
                                                                 <Pencil className="w-3 h-3" />
                                                             </button>
                                                             <button
                                                                 onClick={(e) => { e.stopPropagation(); onDeletePayment(p.id || p._id); }}
-                                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-all"
+                                                                className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-all"
                                                             >
                                                                 <Trash2 className="w-3 h-3" />
                                                             </button>
@@ -1576,7 +1576,7 @@ export default function Finance() {
                                                     <h3 className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Financial Parameters</h3>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-6">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                     <div className="space-y-3">
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Amount (KSh)</label>
                                                         <input
@@ -1601,7 +1601,7 @@ export default function Finance() {
                                                     </div>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-6">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                     <div className="space-y-3">
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Transaction Date</label>
                                                         <input
@@ -1632,7 +1632,7 @@ export default function Finance() {
                                                     <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Academic Period</h3>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-6">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                     <div className="space-y-3">
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee Category</label>
                                                         <select
@@ -2081,8 +2081,8 @@ export default function Finance() {
                         </div>
 
                         {/* Content Preview */}
-                        <div className="flex-1 overflow-y-auto p-10 bg-gray-50/30">
-                            <div className="bg-white rounded-3xl p-10 border border-gray-100 shadow-sm space-y-8">
+                        <div className="flex-1 overflow-y-auto p-5 sm:p-10 bg-gray-50/30">
+                            <div className="bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-10 border border-gray-100 shadow-sm space-y-8">
                                 {/* Header */}
                                 <div className="flex justify-between items-start pb-6 border-b-2 border-maroon">
                                     <div className="flex items-center gap-4">

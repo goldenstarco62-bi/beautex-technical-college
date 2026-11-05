@@ -406,7 +406,7 @@ export default function Announcements() {
                                     </div>
 
                                     {(user?.role === 'admin' || user?.role === 'superadmin') && (
-                                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 duration-500">
+                                        <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all translate-x-0 lg:translate-x-4 lg:group-hover:translate-x-0 duration-500">
                                             <button 
                                                 onClick={() => togglePin(ann.id || ann._id)} 
                                                 className={`p-3 rounded-xl transition-all shadow-sm border ${
@@ -570,7 +570,7 @@ export default function Announcements() {
                                     <div className="max-w-3xl mx-auto animate-in fade-in zoom-in-95 duration-500">
                                         <div className="text-[11px] font-black text-gold uppercase tracking-[.4em] mb-12 text-center py-4 bg-maroon/5 rounded-full border border-maroon/5 shadow-inner">Simulated Broadcast Display</div>
                                         
-                                        <div className="bg-white rounded-[3.5rem] p-12 border border-maroon/5 shadow-4xl relative overflow-hidden border-l-[12px] border-l-maroon">
+                                        <div className="bg-white rounded-[2rem] sm:rounded-[3.5rem] p-5 sm:p-12 border border-maroon/5 shadow-4xl relative overflow-hidden border-l-[8px] sm:border-l-[12px] border-l-maroon">
                                             <div className="flex justify-between items-center mb-12">
                                                 <div className="flex gap-2">
                                                     <div className="px-6 py-2.5 bg-maroon/5 text-maroon text-[10px] font-black uppercase tracking-[.25em] rounded-2xl border border-maroon/10">

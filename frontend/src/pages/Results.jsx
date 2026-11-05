@@ -1543,7 +1543,7 @@ export default function Results() {
                                 </select>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-black/60">Marks Score</label>
                                     <input
@@ -1749,7 +1749,7 @@ export default function Results() {
                         </div>
 
                         <form onSubmit={handleSavePeriod} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-black/60">Academic Year</label>
                                     <input
@@ -1774,7 +1774,7 @@ export default function Results() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-[10px] font-black uppercase text-black/60">CAT Name</label>
                                     <input

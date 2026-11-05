@@ -1483,7 +1483,7 @@ export default function ActivityReports() {
                         </div>
 
                         {deptReportText && (
-                            <div className="max-w-4xl mx-auto bg-white p-12 rounded-[3rem] shadow-4xl border border-maroon/5 animate-in fade-in slide-in-from-bottom-10 duration-700">
+                            <div className="max-w-4xl mx-auto bg-white p-5 sm:p-12 rounded-[2rem] sm:rounded-[3rem] shadow-4xl border border-maroon/5 animate-in fade-in slide-in-from-bottom-10 duration-700">
                                 <div className="flex justify-between items-center mb-8 border-b border-maroon/5 pb-6">
                                     <h3 className="text-2xl font-black text-maroon uppercase tracking-tight">Consolidated Department Report</h3>
                                     <button 

@@ -427,7 +427,7 @@ export default function AcademicMaster() {
 
             {/* ── STUDENT PROMOTION TAB ── */}
             {activeTab === 'promotion' && (
-                <section className="bg-maroon/2 border border-maroon/[0.08] rounded-[3rem] p-10">
+                <section className="bg-maroon/2 border border-maroon/[0.08] rounded-[3rem] p-5 sm:p-10">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
                         <div>
                             <h2 className="text-xs font-black text-maroon uppercase tracking-[0.3em] flex items-center gap-2 mb-2">
@@ -512,7 +512,7 @@ export default function AcademicMaster() {
             {/* Department Modal */}
             {showDeptModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
-                    <div className="bg-white border border-maroon/10 rounded-[2.5rem] p-10 max-w-lg w-full shadow-2xl relative">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-lg w-full shadow-2xl relative">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
                         <div className="flex justify-between items-center mb-8">
                             <div>
@@ -571,7 +571,7 @@ export default function AcademicMaster() {
             {/* Period Modal */}
             {showPeriodModal && (
                 <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
-                    <div className="bg-white border border-maroon/10 rounded-[2.5rem] p-10 max-w-lg w-full shadow-2xl relative">
+                    <div className="bg-white border border-maroon/10 rounded-2xl sm:rounded-[2.5rem] p-5 sm:p-10 max-w-lg w-full shadow-2xl relative">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
                         <div className="flex justify-between items-center mb-8">
                             <div>

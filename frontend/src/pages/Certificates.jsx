@@ -1063,7 +1063,7 @@ export default function Certificates() {
             {/* ── Bulk progress overlay ── */}
             {(bulkBusy || transcriptBusy) && (
                 <div className="fixed inset-0 bg-maroon/60 backdrop-blur-md z-[200] flex flex-col items-center justify-center gap-6">
-                    <div className="bg-white rounded-3xl p-10 max-w-sm w-full shadow-2xl flex flex-col items-center gap-5">
+                    <div className="bg-white rounded-3xl p-6 sm:p-10 max-w-sm w-full shadow-2xl flex flex-col items-center gap-5">
                         <div className="w-14 h-14 rounded-2xl bg-maroon/10 flex items-center justify-center">
                             <Loader2 className="w-7 h-7 text-maroon animate-spin" />
                         </div>

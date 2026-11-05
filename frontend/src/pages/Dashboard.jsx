@@ -353,8 +353,8 @@ function AdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Top Banner Right Sub-cards — always 3 columns, compact on mobile */}
-                        <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full lg:w-auto shrink-0">
+                        {/* Top Banner Right Sub-cards — 2 cols + full-width third on phones */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 w-full lg:w-auto shrink-0">
                             
                             {/* Card 1: Current Term */}
                             <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-4">
@@ -386,7 +386,7 @@ function AdminDashboard() {
                             </div>
 
                             {/* Card 3: Fee Defaulters */}
-                            <div className="bg-amber-950/40 backdrop-blur-md border border-amber-500/25 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between">
+                            <div className="col-span-2 sm:col-span-1 bg-amber-950/40 backdrop-blur-md border border-amber-500/25 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex flex-col justify-between">
                                 <div>
                                     <div className="flex items-center gap-1 sm:gap-1.5 text-amber-300 mb-1 sm:mb-1.5">
                                         <AlertCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
