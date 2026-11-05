@@ -776,7 +776,7 @@ export async function getStudentProgress(req, res) {
         const studentRecord = await queryOne('SELECT * FROM students WHERE id = ?', [studentId]);
         if (!studentRecord) return res.status(404).json({ error: 'Student not found' });
 
-        const studentCourses = normaliseCourseField(studentRecord.course);
+        const studentCourses = parseCoursesField(studentRecord.course);
         if (studentCourses.length === 0) return res.json([]);
 
         // Get all courses from courses table that match the student's courses (case-insensitive)
