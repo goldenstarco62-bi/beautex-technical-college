@@ -172,7 +172,7 @@ export async function getDb() {
 let isInitializing = false;
 // Bump this whenever a new migration block is added below — the version gate
 // then re-runs the full (idempotent) migration sweep once on next boot.
-const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-03-01';
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-06-01';
 
 export async function initializeDatabase() {
     if (isInitializing) return;
@@ -1379,6 +1379,8 @@ async function runPostgresMigrations(database) {
         await database.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS hod_name TEXT');
         // Admin-uploaded HOD signature (image data URI; empty = fall back to the mapped signature).
         await database.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS hod_signature TEXT');
+        // Per-certificate passport photo override (image data URI; empty = use the student's photo).
+        await database.query('ALTER TABLE certificates ADD COLUMN IF NOT EXISTS passport_photo TEXT');
         // Per-category, per-year sequence for certificate numbering.
         await database.query(`
             CREATE TABLE IF NOT EXISTS certificate_sequences (
@@ -2393,6 +2395,9 @@ async function runSqliteMigrations(database) {
         }
         if (!certInfo.some(col => col.name === 'hod_signature')) {
             await database.run('ALTER TABLE certificates ADD COLUMN hod_signature TEXT');
+        }
+        if (!certInfo.some(col => col.name === 'passport_photo')) {
+            await database.run('ALTER TABLE certificates ADD COLUMN passport_photo TEXT');
         }
         await database.run(`
             CREATE TABLE IF NOT EXISTS certificate_sequences (

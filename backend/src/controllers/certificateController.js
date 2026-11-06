@@ -4,6 +4,17 @@ import logger from '../utils/logger.js';
 const isPostgres = () => !!process.env.DATABASE_URL?.trim();
 const TEMPLATE_VERSION = 'bttc-cert-2026-10-15-01';
 
+// Validate an uploaded image data URI. Empty input is allowed (clears the override).
+function parseImageDataUri(raw, label) {
+    const value = String(raw || '').trim();
+    if (!value) return { value: null };
+    const match = /^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,([A-Za-z0-9+/=\s]+)$/.exec(value);
+    if (!match) return { error: `${label} must be an image file.` };
+    const bytes = Math.floor(match[2].replace(/\s+/g, '').length * 3 / 4);
+    if (bytes > 2 * 1024 * 1024) return { error: `${label} must be under 2 MB.` };
+    return { value };
+}
+
 // Parse the students.course JSON name array (main course first).
 function parseCourseArray(raw) {
     if (Array.isArray(raw)) return raw.filter(Boolean);
@@ -306,7 +317,8 @@ export async function revokeCertificate(req, res) {
 
 // PUT /certificates/:id — admin correction of an issued certificate.
 // Editable: certificate_number, award_date, hod_name (override of the course→HOD mapping),
-// hod_signature (image data URI for that certificate), student_name, course_name.
+// hod_signature (image data URI for that certificate), passport_photo (image data URI that
+// replaces the student's photo on this certificate only), student_name, course_name.
 // The rendered design is untouched; only the stored variable fields change (these are
 // snapshot columns; student/course records are not modified).
 export async function updateCertificate(req, res) {
@@ -335,14 +347,14 @@ export async function updateCertificate(req, res) {
             updates.push('hod_name = ?'); params.push(hod || null);
         }
         if (req.body?.hod_signature !== undefined) {
-            const sig = String(req.body.hod_signature || '').trim();
-            if (sig) {
-                const match = /^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,([A-Za-z0-9+/=\s]+)$/.exec(sig);
-                if (!match) return res.status(400).json({ error: 'HOD signature must be an image file.' });
-                const bytes = Math.floor(match[2].replace(/\s+/g, '').length * 3 / 4);
-                if (bytes > 2 * 1024 * 1024) return res.status(400).json({ error: 'HOD signature must be under 2 MB.' });
-            }
-            updates.push('hod_signature = ?'); params.push(sig || null);
+            const parsed = parseImageDataUri(req.body.hod_signature, 'HOD signature');
+            if (parsed.error) return res.status(400).json({ error: parsed.error });
+            updates.push('hod_signature = ?'); params.push(parsed.value);
+        }
+        if (req.body?.passport_photo !== undefined) {
+            const parsed = parseImageDataUri(req.body.passport_photo, 'Passport photo');
+            if (parsed.error) return res.status(400).json({ error: parsed.error });
+            updates.push('passport_photo = ?'); params.push(parsed.value);
         }
         if (req.body?.student_name !== undefined) {
             const name = String(req.body.student_name).trim();

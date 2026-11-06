@@ -55,10 +55,9 @@ async function urlToBase64(url) {
     } catch { return ''; }
 }
 
-// Downscale an uploaded signature to the size it is actually printed at
-// (150×88 CSS px, with retina headroom). Keeps the stored data URI small so
-// saving the certificate stays fast.
-function compressSignature(file, maxW = 600, maxH = 300) {
+// Downscale an uploaded image to the size it is actually printed at.
+// Keeps the stored data URI small so saving the certificate stays fast.
+function compressImage(file, maxW = 600, maxH = 300) {
     return new Promise((resolve) => {
         const objectUrl = URL.createObjectURL(file);
         const img = new Image();
@@ -464,25 +463,25 @@ function CertificateTemplate({ data, innerRef }) {
             {/* ── Passport photo frame ────────────────────────────────────────
                 Photo zone confirmed 100% clear ivory (0 non-ivory pixels found in
                 x=1245-1445, y=310-540 zone). Frame is sized/positioned to stay
-                inside that clear area.                                           */}
-            <div
-                style={abs({
-                    left: 1258, top: 318, width: 172, height: 214,
-                    background: '#fff',
-                    border: `3px solid ${MAROON}`,
-                    outline: `3px solid ${GOLD}`,
-                    outlineOffset: '-8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    boxShadow: '0 2px 8px rgba(0,0,0,.28)',
-                })}
-            >
-                {photo
-                    ? <img src={photo} alt="student" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: 13, color: '#9a9a9a', textAlign: 'center', lineHeight: 1.2 }}>No<br />photo</span>}
-            </div>
+                inside that clear area. Omitted entirely when no photo exists.   */}
+            {photo && (
+                <div
+                    style={abs({
+                        left: 1258, top: 318, width: 172, height: 214,
+                        background: '#fff',
+                        border: `3px solid ${MAROON}`,
+                        outline: `3px solid ${GOLD}`,
+                        outlineOffset: '-8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        boxShadow: '0 2px 8px rgba(0,0,0,.28)',
+                    })}
+                >
+                    <img src={photo} alt="student" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+            )}
         </div>
     );
 }
@@ -503,8 +502,9 @@ export default function Certificates() {
     const [revokeTarget, setRevokeTarget] = useState(null);     // certificate row pending revoke
     const [revokeReason, setRevokeReason] = useState('');
     const [editTarget, setEditTarget] = useState(null);         // certificate row being edited
-    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', hod_name: '', hod_signature: '', student_name: '', course_name: '' });
+    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', hod_name: '', hod_signature: '', passport_photo: '', student_name: '', course_name: '' });
     const editOriginalSigRef = useRef('');
+    const editOriginalPhotoRef = useRef('');
 
     const [preview, setPreview] = useState(null); // { data, record }
     const [busy, setBusy] = useState(false);
@@ -579,7 +579,7 @@ export default function Certificates() {
     }, [eligible, search]);
 
     async function buildData(row) {
-        const photo = row.photo ? await urlToBase64(String(row.photo).trim()) : '';
+        const photo = await urlToBase64(String(row.passport_photo || row.photo || '').trim());
         const bg = await urlToBase64('/certificate-bg.png');
         const seal = await urlToBase64('/certificate-seal.png');
         const signature = await urlToBase64('/principal-signature.png');
@@ -661,11 +661,13 @@ export default function Certificates() {
 
     function openEdit(c) {
         editOriginalSigRef.current = c.hod_signature || '';
+        editOriginalPhotoRef.current = c.passport_photo || '';
         setEditForm({
             certificate_number: c.certificate_number || '',
             award_date: toInputDate(c.award_date),
             hod_name: c.hod_name || hodForCourse(c.course_name).hod || '',
             hod_signature: c.hod_signature || '',
+            passport_photo: c.passport_photo || '',
             student_name: c.student_name || '',
             course_name: c.course_name || ''
         });
@@ -687,12 +689,34 @@ export default function Certificates() {
         }
         // Re-encode to a small PNG before storing. Full-resolution photos become
         // multi-MB base64 payloads that make the certificate save take 20-40s.
-        const dataUrl = await compressSignature(file);
+        const dataUrl = await compressImage(file);
         if (!dataUrl) {
             notify('Could not read that image. Try a different file.', 'error');
             return;
         }
         setEditForm(f => ({ ...f, hod_signature: dataUrl }));
+    }
+
+    async function handlePassportFile(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+            notify('Passport photo must be a PNG, JPG or WEBP image.', 'error');
+            return;
+        }
+        if (file.size > 8 * 1024 * 1024) {
+            notify('Passport photo must be under 8 MB.', 'error');
+            return;
+        }
+        // The printed frame is 172×214; 420×520 keeps it sharp on retina prints
+        // without a multi-MB payload.
+        const dataUrl = await compressImage(file, 420, 520);
+        if (!dataUrl) {
+            notify('Could not read that image. Try a different file.', 'error');
+            return;
+        }
+        setEditForm(f => ({ ...f, passport_photo: dataUrl }));
     }
 
     async function handleEditSave() {
@@ -717,6 +741,9 @@ export default function Certificates() {
             // (possibly large) image isn't re-uploaded on every edit.
             if (editForm.hod_signature !== editOriginalSigRef.current) {
                 payload.hod_signature = editForm.hod_signature || '';
+            }
+            if (editForm.passport_photo !== editOriginalPhotoRef.current) {
+                payload.passport_photo = editForm.passport_photo || '';
             }
             await certificatesAPI.update(editTarget.id, payload);
             notify(`Certificate ${certificate_number} updated.`, 'success');
@@ -1415,6 +1442,36 @@ export default function Certificates() {
                         <input value={editForm.certificate_number} onChange={e => setEditForm(f => ({ ...f, certificate_number: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-black text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
                         <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Award Date</label>
                         <input type="date" value={editForm.award_date} onChange={e => setEditForm(f => ({ ...f, award_date: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
+
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Passport Photo</label>
+                        <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 mb-1">
+                            <div className="flex items-center gap-3">
+                                <div className="h-20 w-16 shrink-0 rounded-lg bg-white border border-gray-100 flex items-center justify-center overflow-hidden">
+                                    {(editForm.passport_photo || editTarget.student_photo) ? (
+                                        <img src={editForm.passport_photo || editTarget.student_photo} alt="Passport preview" className="h-full w-full object-cover" />
+                                    ) : (
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-black/30 text-center px-1">No photo</span>
+                                    )}
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-maroon/20 text-maroon text-[10px] font-black uppercase tracking-widest hover:border-maroon/40">
+                                        <Upload className="w-3.5 h-3.5" /> {editForm.passport_photo ? 'Replace' : 'Upload'}
+                                        <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handlePassportFile} />
+                                    </label>
+                                    {editForm.passport_photo && (
+                                        <button type="button" onClick={() => setEditForm(f => ({ ...f, passport_photo: '' }))} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-red-200 text-red-600 text-[10px] font-black uppercase tracking-widest hover:border-red-300">
+                                            <Trash2 className="w-3.5 h-3.5" /> Use Student Photo
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        <p className="text-[10px] font-bold text-black/40 mb-4">
+                            {editForm.passport_photo
+                                ? 'This photo appears on this certificate only — the student record is unchanged.'
+                                : "Currently using the student's photo from their record."}
+                        </p>
+
                         <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Head of Department</label>
                         <input value={editForm.hod_name} onChange={e => setEditForm(f => ({ ...f, hod_name: e.target.value }))} placeholder="Leave blank for default course HOD" className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-1" />
                         <p className="text-[10px] font-bold text-black/40 mb-3">A blank field uses the automatic HOD for this course.</p>
