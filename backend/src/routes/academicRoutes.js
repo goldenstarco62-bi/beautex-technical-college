@@ -23,7 +23,7 @@ import * as catResultsController from '../controllers/catResultsController.js';
 import * as trainerUnitController from '../controllers/trainerUnitController.js';
 import * as unitOfferingController from '../controllers/unitOfferingController.js';
 import * as certificateController from '../controllers/certificateController.js';
-import { authenticateToken, authorizeRoles } from '../middleware/auth.js';
+import { authenticateToken, authorizeRoles, authorizeCertificateIssue } from '../middleware/auth.js';
 import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
@@ -222,8 +222,8 @@ router.delete('/cat-results/:id', authenticateToken, authorizeRoles('teacher', '
 router.get('/certificates/eligible', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.getEligibleStudents);
 router.get('/certificates', authenticateToken, certificateController.getCertificates);
 router.get('/certificates/:id', authenticateToken, certificateController.getCertificate);
-router.post('/certificates/issue', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.issueCertificate);
-router.post('/certificates/:id/revoke', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.revokeCertificate);
-router.put('/certificates/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), certificateController.updateCertificate);
+router.post('/certificates/issue', authenticateToken, authorizeRoles('admin', 'superadmin'), authorizeCertificateIssue, certificateController.issueCertificate);
+router.post('/certificates/:id/revoke', authenticateToken, authorizeRoles('admin', 'superadmin'), authorizeCertificateIssue, certificateController.revokeCertificate);
+router.put('/certificates/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), authorizeCertificateIssue, certificateController.updateCertificate);
 
 export default router;

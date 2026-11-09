@@ -222,6 +222,7 @@ export const usersAPI = {
     delete: (id) => api.delete(`users/${encodeURIComponent(id)}`),
     updateFinancePermission: (id, can_edit_finance) => api.put(`users/${encodeURIComponent(id)}/finance-permission`, { can_edit_finance }),
     updateStudentPermission: (id, can_edit_students) => api.put(`users/${encodeURIComponent(id)}/student-permission`, { can_edit_students }),
+    updateCertificatePermission: (id, can_issue_certificates) => api.put(`users/${encodeURIComponent(id)}/certificate-permission`, { can_issue_certificates }),
     getAuditLogs: (params) => api.get('audit-logs', { params }),
 };
 

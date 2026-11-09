@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
     Shield, User, Mail, Trash2, CheckCircle, XCircle,
     Key, Lock, Unlock, FileText, EyeOff,
-    Printer, Download, Eye, Clock, UserPlus, DollarSign,
+    Printer, Download, Eye, Clock, UserPlus, DollarSign, Award,
     ChevronLeft, ChevronRight, AlertCircle, Plus
 } from 'lucide-react';
 
@@ -155,6 +155,34 @@ const UserDetailModal = ({ user, onClose, currentUser, handleRoleChange, handleS
                                                 }`}
                                         >
                                             {user.can_edit_students ? 'Revoke' : 'Grant'}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="p-4 rounded-2xl border-2 border-dashed border-emerald-500/40 bg-emerald-500/5">
+                                    <p className="text-[10px] text-gray-400 uppercase font-black mb-3 flex items-center gap-2">
+                                        <Award className="w-3 h-3 text-emerald-600" />
+                                        Certificate Generation Access
+                                    </p>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                                                {user.can_issue_certificates ? '✅ Certificate Access: GRANTED' : '🔒 Certificate Access: RESTRICTED'}
+                                            </p>
+                                            <p className="text-[9px] text-gray-400 mt-0.5">
+                                                {user.can_issue_certificates
+                                                    ? 'This admin can generate, edit and revoke certificates.'
+                                                    : 'Only the Super Administrator can generate certificates.'}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleCertificatePermission(user.id, !!user.can_issue_certificates)}
+                                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${user.can_issue_certificates
+                                                    ? 'bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white border border-red-500/20'
+                                                    : 'bg-emerald-500/20 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-500/40'
+                                                }`}
+                                        >
+                                            {user.can_issue_certificates ? 'Revoke' : 'Grant'}
                                         </button>
                                     </div>
                                 </div>
@@ -361,6 +389,23 @@ export default function Users() {
             toast.success(`Student registry permission ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
         } catch (error) {
             toast.error(error.response?.data?.error || 'Failed to update student permission');
+        }
+    };
+
+    const handleCertificatePermission = async (userId, currentFlag) => {
+        const msg = currentFlag
+            ? 'Revoke certificate generation rights from this admin?'
+            : 'Grant certificate generation rights to this admin? They will be able to generate, edit and revoke certificates.';
+        if (!window.confirm(msg)) return;
+        try {
+            await usersAPI.updateCertificatePermission(userId, !currentFlag);
+            fetchUsers();
+            if (selectedUser?.id === userId) {
+                setSelectedUser(prev => ({ ...prev, can_issue_certificates: !currentFlag }));
+            }
+            toast.success(`Certificate generation ${!currentFlag ? 'granted' : 'revoked'} successfully.`);
+        } catch (error) {
+            toast.error(error.response?.data?.error || 'Failed to update certificate permission');
         }
     };
 

@@ -34,7 +34,7 @@ export async function getAllUsers(req, res) {
         }
 
         const users = await query(
-            'SELECT id, email, role, status, name, photo, created_at, last_seen_at, can_edit_finance, can_edit_students FROM users ORDER BY email'
+            'SELECT id, email, role, status, name, photo, created_at, last_seen_at, can_edit_finance, can_edit_students, can_issue_certificates FROM users ORDER BY email'
         );
 
         const enriched = users.map(u => ({
@@ -386,5 +386,43 @@ export async function updateStudentPermission(req, res) {
     } catch (error) {
         console.error('Update student permission error:', error);
         res.status(500).json({ error: 'Failed to update student permission' });
+    }
+}
+
+/**
+ * Grant or revoke certificate generation permission for a user.
+ * Only accessible by superadmin.
+ */
+export async function updateCertificatePermission(req, res) {
+    try {
+        const { can_issue_certificates } = req.body;
+        const userId = req.params.id;
+
+        if (typeof can_issue_certificates === 'undefined') {
+            return res.status(400).json({ error: 'can_issue_certificates field is required' });
+        }
+
+        const flag = can_issue_certificates ? true : false;
+
+        if (await isMongo()) {
+            const User = (await import('../models/mongo/User.js')).default;
+            const user = await User.findByIdAndUpdate(userId, { can_issue_certificates: flag }, { new: true }).select('-password');
+            if (!user) return res.status(404).json({ error: 'User not found' });
+            return res.json({ message: 'Certificate permission updated', can_issue_certificates: flag });
+        }
+
+        const user = await queryOne('SELECT id, role FROM users WHERE id = ?', [userId]);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Only admins can be granted certificate generation rights
+        if (!['admin', 'superadmin'].includes(user.role)) {
+            return res.status(400).json({ error: 'Certificate generation rights can only be granted to admins' });
+        }
+
+        await run('UPDATE users SET can_issue_certificates = ? WHERE id = ?', [flag, userId]);
+        res.json({ message: `Certificate generation ${flag ? 'granted' : 'revoked'} successfully`, can_issue_certificates: flag });
+    } catch (error) {
+        console.error('Update certificate permission error:', error);
+        res.status(500).json({ error: 'Failed to update certificate permission' });
     }
 }

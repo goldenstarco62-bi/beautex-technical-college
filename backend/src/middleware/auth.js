@@ -169,3 +169,47 @@ export async function authorizeStudentEdit(req, res, next) {
         res.status(500).json({ error: 'Internal server error verifying permissions' });
     }
 }
+
+/**
+ * Middleware: allows superadmin always; allows admin only if can_issue_certificates is true in DB.
+ * Certificate generation, editing, and revocation are blocked for admins who have
+ * not been approved by the Super Administrator.
+ */
+export async function authorizeCertificateIssue(req, res, next) {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const role = String(req.user.role || '').toLowerCase().trim();
+    if (role === 'superadmin') {
+        return next();
+    }
+
+    if (role !== 'admin') {
+        return res.status(403).json({ error: 'Access denied. Certificate generation is restricted to authorized administrators.' });
+    }
+
+    try {
+        const { queryOne } = await import('../config/database.js');
+        let userRecord;
+
+        if (!!process.env.MONGODB_URI) {
+            const User = (await import('../models/mongo/User.js')).default;
+            userRecord = await User.findById(req.user.id);
+        } else {
+            userRecord = await queryOne('SELECT can_issue_certificates FROM users WHERE id = ?', [req.user.id]);
+        }
+
+        if (userRecord && userRecord.can_issue_certificates) {
+            return next();
+        }
+
+        return res.status(403).json({
+            error: 'Access denied. Certificate generation requires explicit approval from the Super Administrator.'
+        });
+    } catch (err) {
+        logger.error({ err }, 'AuthorizeCertificateIssue DB check failed');
+        if (req.user.can_issue_certificates) return next();
+        res.status(500).json({ error: 'Internal server error verifying permissions' });
+    }
+}

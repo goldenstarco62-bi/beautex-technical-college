@@ -172,7 +172,7 @@ export async function getDb() {
 let isInitializing = false;
 // Bump this whenever a new migration block is added below — the version gate
 // then re-runs the full (idempotent) migration sweep once on next boot.
-const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-06-01';
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-06-02';
 
 export async function initializeDatabase() {
     if (isInitializing) return;
@@ -630,6 +630,16 @@ async function runPostgresMigrations(database) {
         if (checkStudentEditCol.rows.length === 0) {
             await database.query('ALTER TABLE users ADD COLUMN can_edit_students BOOLEAN DEFAULT FALSE');
             console.log('✅ can_edit_students column added to users');
+        }
+
+        // Check for can_issue_certificates column in users
+        const checkCertIssueCol = await database.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='users' AND column_name='can_issue_certificates'
+        `);
+        if (checkCertIssueCol.rows.length === 0) {
+            await database.query('ALTER TABLE users ADD COLUMN can_issue_certificates BOOLEAN DEFAULT FALSE');
+            console.log('✅ can_issue_certificates column added to users');
         }
 
         // --- Payments Table Migrations ---
@@ -1547,6 +1557,11 @@ async function runSqliteMigrations(database) {
             console.log('🔄 Applying SQLite migration: Adding can_edit_students to users...');
             await database.run('ALTER TABLE users ADD COLUMN can_edit_students INTEGER DEFAULT 0');
             console.log('✅ can_edit_students column added to SQLite users');
+        }
+        if (!userInfo.some(col => col.name === 'can_issue_certificates')) {
+            console.log('🔄 Applying SQLite migration: Adding can_issue_certificates to users...');
+            await database.run('ALTER TABLE users ADD COLUMN can_issue_certificates INTEGER DEFAULT 0');
+            console.log('✅ can_issue_certificates column added to SQLite users');
         }
 
         // Daily activity reports - add missing columns

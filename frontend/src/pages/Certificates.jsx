@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { certificatesAPI, settingsAPI, catResultsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil, PackageOpen, FileDown, Square, CheckSquare, BarChart3, GraduationCap, Upload, Trash2 } from 'lucide-react';
+import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil, PackageOpen, FileDown, Square, CheckSquare, BarChart3, GraduationCap, Upload, Trash2, Lock } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -489,7 +489,7 @@ function CertificateTemplate({ data, innerRef }) {
 export default function Certificates() {
     const { user } = useAuth();
     const role = (user?.role || '').toLowerCase().trim();
-    const canIssue = role === 'admin' || role === 'superadmin';
+    const canIssue = role === 'superadmin' || (role === 'admin' && !!user?.can_issue_certificates);
     const [tab, setTab] = useState('generate');
     const [eligible, setEligible] = useState([]);
     const [issued, setIssued] = useState([]);
@@ -1134,6 +1134,16 @@ export default function Certificates() {
                     ))}
                 </div>
             </div>
+
+            {role === 'admin' && !canIssue && (
+                <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                    <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-[11px] font-black uppercase tracking-widest text-amber-800">Certificate generation is restricted</p>
+                        <p className="text-[11px] font-bold text-amber-700 mt-1">You can preview certificates, but issuing, editing and revoking require approval from the Super Administrator.</p>
+                    </div>
+                </div>
+            )}
 
             {tab === 'generate' && (
                 <div className="card-light p-5 sm:p-6">

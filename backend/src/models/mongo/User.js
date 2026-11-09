@@ -51,6 +51,10 @@ const userSchema = new mongoose.Schema({
     can_edit_students: {
         type: Boolean,
         default: false
+    },
+    can_issue_certificates: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },

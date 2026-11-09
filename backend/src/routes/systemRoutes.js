@@ -38,6 +38,7 @@ router.delete('/users/:id', authenticateToken, authorizeRoles('superadmin'), use
 router.get('/audit-logs', authenticateToken, authorizeRoles('superadmin'), userController.getAuditLogs);
 router.put('/users/:id/finance-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateFinancePermission);
 router.put('/users/:id/student-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateStudentPermission);
+router.put('/users/:id/certificate-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateCertificatePermission);
 
 // Settings Routes (Superadmin & Admin roles allowed, with file upload capability)
 // GET is also open to teachers: the marks screen needs the grading thresholds and

@@ -51,7 +51,7 @@ async function findUserById(id) {
         return await User.findById(id).select('-password');
     }
 
-    return await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio, can_edit_finance, can_edit_students FROM users WHERE id = ?', [id]);
+    return await queryOne('SELECT id, email, role, status, name, photo, phone, address, bio, can_edit_finance, can_edit_students, can_issue_certificates FROM users WHERE id = ?', [id]);
 }
 
 async function createUser(email, hashedPassword, role) {
@@ -208,6 +208,7 @@ export async function login(req, res) {
                 student_id,
                 can_edit_finance: !!user.can_edit_finance,
                 can_edit_students: !!user.can_edit_students,
+                can_issue_certificates: !!user.can_issue_certificates,
             },
             process.env.JWT_SECRET,
             { expiresIn: '24h' }
@@ -256,6 +257,8 @@ export async function login(req, res) {
                 name: user.name,
                 phone: user.phone,
                 can_edit_finance: !!user.can_edit_finance,
+                can_edit_students: !!user.can_edit_students,
+                can_issue_certificates: !!user.can_issue_certificates,
                 student_id
             }
         });
