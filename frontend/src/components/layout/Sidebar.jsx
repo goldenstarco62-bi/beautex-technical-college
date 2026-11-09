@@ -84,7 +84,7 @@ const navSections = [
         items: [
             { name: 'Users', path: '/users', icon: Shield, roles: ['superadmin'] },
             { name: 'Departments', path: '/academic-master', icon: Building2, roles: ['superadmin', 'admin'] },
-            { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['superadmin', 'admin'] },
+            { name: 'Settings', path: '/settings', icon: SettingsIcon, roles: ['superadmin'] },
             { name: 'Audit Logs', path: '/audit-logs', icon: History, roles: ['superadmin'] },
         ]
     },

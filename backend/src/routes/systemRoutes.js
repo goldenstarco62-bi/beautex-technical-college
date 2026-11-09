@@ -40,17 +40,16 @@ router.put('/users/:id/finance-permission', authenticateToken, authorizeRoles('s
 router.put('/users/:id/student-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateStudentPermission);
 router.put('/users/:id/certificate-permission', authenticateToken, authorizeRoles('superadmin'), userController.updateCertificatePermission);
 
-// Settings Routes (Superadmin & Admin roles allowed, with file upload capability)
-// GET is also open to teachers: the marks screen needs the grading thresholds and
-// the shell needs theme colours. Credential/security keys are blanked for anyone
-// below Super Admin by settingsController.getSettings.
+// Settings Routes (Super Admin only). GET stays open to staff because the shell
+// needs theme colours and the marks/grading screens need the grading thresholds;
+// credential/security keys are blanked for anyone below Super Admin.
 router.get('/settings', authenticateToken, authorizeRoles('superadmin', 'admin', 'teacher'), settingsController.getSettings);
-router.put('/settings', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.updateSettings);
-router.post('/settings/upload', authenticateToken, authorizeRoles('superadmin', 'admin'), upload.single('file'), settingsController.uploadFileSetting);
-router.get('/settings/dashboard-stats', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getDashboardStats);
-router.get('/settings/integrations/status', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.getIntegrationStatus);
+router.put('/settings', authenticateToken, authorizeRoles('superadmin'), settingsController.updateSettings);
+router.post('/settings/upload', authenticateToken, authorizeRoles('superadmin'), upload.single('file'), settingsController.uploadFileSetting);
+router.get('/settings/dashboard-stats', authenticateToken, authorizeRoles('superadmin'), settingsController.getDashboardStats);
+router.get('/settings/integrations/status', authenticateToken, authorizeRoles('superadmin'), settingsController.getIntegrationStatus);
 router.get('/settings/backup', authenticateToken, authorizeRoles('superadmin'), settingsController.downloadBackup);
-router.get('/settings/backup/export', authenticateToken, authorizeRoles('superadmin', 'admin'), settingsController.exportFullBackup);
+router.get('/settings/backup/export', authenticateToken, authorizeRoles('superadmin'), settingsController.exportFullBackup);
 router.post('/settings/backup/restore', authenticateToken, authorizeRoles('superadmin'), upload.single('file'), settingsController.restoreFullBackup);
 
 export default router;
