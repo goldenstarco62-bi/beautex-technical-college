@@ -4,6 +4,7 @@ import fs from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import pg from 'pg';
 import mongoose from 'mongoose';
+import { withPgRetry, READ_ATTEMPTS, WRITE_ATTEMPTS } from '../utils/pgRetry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,12 +110,14 @@ export async function getDb() {
                     connectionString: processedUrl,
                     ssl: { rejectUnauthorized: false },
                     connectionTimeoutMillis: 10000, // 10s timeout
-                    idleTimeoutMillis: 30000,       // drop idle clients after 30s so dead connections don't linger
+                    // Close our idle sockets before the remote pooler does, so a
+                    // dead connection is not handed to the next query.
+                    idleTimeoutMillis: 15000,
                     keepAlive: true,                // TCP keep-alive survives laptop sleep / short Wi-Fi drops
                 });
                 pgPool.on('error', (err) => {
                     // Errors on idle/removed clients surface here; the client is evicted automatically.
-                    console.error('Unexpected error on idle Postgres client:', err.message);
+                    console.error(`Unexpected error on idle Postgres client${err.code ? ` [${err.code}]` : ''}:`, err.message);
                 });
                 // Test the connection
                 const client = await pgPool.connect();
@@ -2701,18 +2704,24 @@ async function getExecutor() {
     return getDb();
 }
 
+const logPgRetry = (err, attempt, attempts) => {
+    console.warn(`🐘 Postgres connection lost (${err.message}); retrying ${attempt}/${attempts - 1}`);
+};
+
 /**
  * Generic query function
  */
 export async function query(sql, params = []) {
-    const database = await getExecutor();
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
-        let pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
+        const pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
         try {
-            const result = await database.query(pgSql, sanitizedParams);
-            return result.rows;
+            return await withPgRetry(async () => {
+                const database = await getExecutor();
+                const result = await database.query(pgSql, sanitizedParams);
+                return result.rows;
+            }, { maxAttempts: READ_ATTEMPTS, retry: !txStore.getStore(), onRetry: logPgRetry });
         } catch (err) {
             console.error('🐘 Postgres Query Error:', err.message);
             console.error('SQL:', pgSql);
@@ -2720,6 +2729,7 @@ export async function query(sql, params = []) {
             throw err;
         }
     }
+    const database = await getExecutor();
     return database.all(sql, sanitizedParams);
 }
 
@@ -2727,20 +2737,23 @@ export async function query(sql, params = []) {
  * Generic query one function
  */
 export async function queryOne(sql, params = []) {
-    const database = await getExecutor();
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
-        let pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
+        const pgSql = translateSqlForPostgres(sql).replace(/\?/g, () => `$${++paramCount}`);
         try {
-            const result = await database.query(pgSql, sanitizedParams);
-            return result.rows[0];
+            return await withPgRetry(async () => {
+                const database = await getExecutor();
+                const result = await database.query(pgSql, sanitizedParams);
+                return result.rows[0];
+            }, { maxAttempts: READ_ATTEMPTS, retry: !txStore.getStore(), onRetry: logPgRetry });
         } catch (err) {
             console.error('🐘 Postgres QueryOne Error:', err.message);
             console.error('SQL:', pgSql);
             throw err;
         }
     }
+    const database = await getExecutor();
     return database.get(sql, sanitizedParams);
 }
 
@@ -2748,7 +2761,6 @@ export async function queryOne(sql, params = []) {
  * Generic run function for write operations
  */
 export async function run(sql, params = []) {
-    const database = await getExecutor();
     const sanitizedParams = (params || []).map(p => p === undefined ? null : p);
     if (getProcessedDatabaseUrl()) {
         let paramCount = 0;
@@ -2776,10 +2788,13 @@ export async function run(sql, params = []) {
         }
 
         try {
-            const result = await database.query(pgSql, sanitizedParams);
-            // For Postgres, the result of RETURNING id is in result.rows[0].id
-            const lastID = (result.rows && result.rows[0]) ? (result.rows[0].id || result.rows[0].ID) : null;
-            return { lastID, changes: result.rowCount };
+            return await withPgRetry(async () => {
+                const database = await getExecutor();
+                const result = await database.query(pgSql, sanitizedParams);
+                // For Postgres, the result of RETURNING id is in result.rows[0].id
+                const lastID = (result.rows && result.rows[0]) ? (result.rows[0].id || result.rows[0].ID) : null;
+                return { lastID, changes: result.rowCount };
+            }, { maxAttempts: WRITE_ATTEMPTS, retry: !txStore.getStore(), onRetry: logPgRetry });
         } catch (err) {
             console.error('🐘 Postgres Run Error:', err.message);
             console.error('SQL:', pgSql);
@@ -2787,6 +2802,7 @@ export async function run(sql, params = []) {
             throw err;
         }
     }
+    const database = await getExecutor();
     return database.run(sql, sanitizedParams);
 }
 
@@ -2822,16 +2838,20 @@ export async function withTransaction(fn) {
         // COMMIT all run on the same connection. Inner query/run/queryOne calls
         // pick this up via txStore (see getExecutor).
         const client = await database.connect();
+        let failure;
         try {
             await client.query('BEGIN');
             const result = await txStore.run({ client }, () => fn(client));
             await client.query('COMMIT');
             return result;
         } catch (err) {
+            failure = err;
             await client.query('ROLLBACK').catch(() => {});
             throw err;
         } finally {
-            client.release();
+            // Passing the error destroys the client instead of returning a
+            // connection with a dead socket to the pool.
+            client.release(failure);
         }
     } else {
         await database.run('BEGIN IMMEDIATE');
