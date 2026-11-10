@@ -36,6 +36,44 @@ export default function TabStudent(ctx) {
 
             <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
                 <div>
+                    <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Admissions Pipeline</h4>
+                    <p className="text-[9px] text-zinc-400 font-semibold mt-1">Controls for the online application portal, numbering and offer letters.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                    <div className="space-y-2">
+                        <FieldRow label="Online Applications" description="Allow applicants to submit an application from the public portal.">
+                            <Toggle value={settings.admissions_application_open} onChange={v=>set('admissions_application_open',v)} />
+                        </FieldRow>
+                        <FieldRow label="Auto-Reply Email" description="Email applicants a confirmation when they submit.">
+                            <Toggle value={settings.admissions_auto_reply_enabled} onChange={v=>set('admissions_auto_reply_enabled',v)} />
+                        </FieldRow>
+                        <FieldRow label="Offer Validity (Days)" description="How long an issued offer stays open for acceptance.">
+                            <Inp type="number" value={settings.admissions_offer_valid_days} onChange={e=>set('admissions_offer_valid_days',e.target.value)} />
+                        </FieldRow>
+                    </div>
+                    <div className="space-y-2">
+                        <FieldRow label="Application Number Template" description="Use {YEAR} and {SEQ} as placeholders.">
+                            <Inp value={settings.admissions_number_format} onChange={e=>set('admissions_number_format',e.target.value)} mono />
+                            <div className="mt-2.5 p-3.5 bg-gray-50 dark:bg-white/[0.02] border border-dashed border-gray-200 dark:border-white/10 rounded-2xl text-left">
+                                <span className="text-[7.5px] font-black text-zinc-400 uppercase tracking-widest block mb-1">Generated Example Preview</span>
+                                <span className="text-xs font-mono font-black text-maroon dark:text-gold">{(settings.admissions_number_format || 'APP/{YEAR}/{SEQ}').replace('{YEAR}', new Date().getFullYear()).replace('{SEQ}', '001')}</span>
+                            </div>
+                        </FieldRow>
+                        <FieldRow label="Max Document Size (MB)" description="Upper limit for each uploaded supporting document.">
+                            <Inp type="number" value={settings.admissions_document_max_mb} onChange={e=>set('admissions_document_max_mb',e.target.value)} />
+                        </FieldRow>
+                        <FieldRow label="Admissions Notification Email" description="Where new applications are announced. Blank uses the college email.">
+                            <Inp type="email" value={settings.admissions_notify_email} onChange={e=>set('admissions_notify_email',e.target.value)} placeholder="admissions@beautex.edu" />
+                        </FieldRow>
+                    </div>
+                </div>
+                <FieldRow label="Required Documents" description="Checklist applicants must upload. Also shown on the public form.">
+                    <TagInputList value={settings.admissions_required_documents} onChange={val=>set('admissions_required_documents',val)} placeholder="e.g. KCSE Certificate" />
+                </FieldRow>
+            </div>
+
+            <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-4 shadow-sm">
+                <div>
                     <h4 className="text-xs font-black uppercase tracking-widest text-maroon dark:text-gold border-b border-gray-100 dark:border-white/5 pb-2">Student Portal Access Controls</h4>
                     <p className="text-[9px] text-zinc-400 font-semibold mt-1">Configure student access permissions inside the personal dashboard.</p>
                 </div>

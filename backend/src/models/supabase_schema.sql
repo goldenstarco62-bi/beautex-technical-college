@@ -560,3 +560,59 @@ CREATE TABLE IF NOT EXISTS trainer_unit_assignments (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(trainer_id, course_id, unit_id)
 );
+
+-- Admissions Module: Applicants
+CREATE TABLE IF NOT EXISTS applicants (
+    id TEXT PRIMARY KEY,
+    applicant_number TEXT UNIQUE NOT NULL,
+    full_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    gender TEXT,
+    dob DATE,
+    programme_id TEXT,
+    programme_name TEXT,
+    intake TEXT,
+    registration_type TEXT DEFAULT 'Full-Time',
+    prior_school TEXT,
+    prior_qualification TEXT,
+    guardian_name TEXT,
+    guardian_phone TEXT,
+    address TEXT,
+    source TEXT DEFAULT 'Online',
+    status TEXT NOT NULL DEFAULT 'Submitted' CHECK (status IN (
+        'Submitted','Under Review','Shortlisted','Offered','Accepted','Enrolled','Rejected','Withdrawn'
+    )),
+    reviewer_id TEXT,
+    reviewer_name TEXT,
+    notes TEXT,
+    offer_token TEXT UNIQUE,
+    offered_at TIMESTAMP,
+    offer_expires_at TIMESTAMP,
+    decided_at TIMESTAMP,
+    converted_student_id TEXT,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_applicants_status ON applicants(status);
+CREATE INDEX IF NOT EXISTS idx_applicants_intake ON applicants(intake);
+CREATE INDEX IF NOT EXISTS idx_applicants_programme ON applicants(programme_id);
+CREATE INDEX IF NOT EXISTS idx_applicants_email ON applicants(email);
+CREATE INDEX IF NOT EXISTS idx_applicants_submitted ON applicants(submitted_at);
+
+-- Admissions Module: Supporting Documents (content is base64; never SELECT it in lists)
+CREATE TABLE IF NOT EXISTS applicant_documents (
+    id TEXT PRIMARY KEY,
+    applicant_id TEXT NOT NULL REFERENCES applicants(id) ON DELETE CASCADE,
+    doc_type TEXT NOT NULL,
+    filename TEXT,
+    mime_type TEXT,
+    file_size INTEGER,
+    content TEXT,
+    verified BOOLEAN DEFAULT FALSE,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_applicant_documents_applicant ON applicant_documents(applicant_id);

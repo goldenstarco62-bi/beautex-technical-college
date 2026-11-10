@@ -120,6 +120,35 @@ export const studentsAPI = {
         api.post(`students/${encodeURIComponent(id)}/document-log`, { docType, action }),
 };
 
+// Admissions
+export const applicantAPI = {
+    list: (params) => api.get('applicants', { params }),
+    stats: () => api.get('applicants/stats'),
+    get: (id) => api.get(`applicants/${encodeURIComponent(id)}`),
+    create: (data) => api.post('applicants', data),
+    update: (id, data) => api.put(`applicants/${encodeURIComponent(id)}`, data),
+    updateStatus: (id, status, notes) => api.patch(`applicants/${encodeURIComponent(id)}/status`, { status, notes }),
+    remove: (id) => api.delete(`applicants/${encodeURIComponent(id)}`),
+    listDocuments: (id) => api.get(`applicants/${encodeURIComponent(id)}/documents`),
+    uploadDocument: (id, formData) => api.post(
+        `applicants/${encodeURIComponent(id)}/documents`,
+        formData,
+        // The instance sets a JSON Content-Type by default; clear it so the
+        // browser adds the multipart boundary (otherwise multer sees no file).
+        { headers: { 'Content-Type': undefined } }
+    ),
+    downloadDocument: (id, docId) => api.get(
+        `applicants/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}/download`,
+        { responseType: 'blob' }
+    ),
+    verifyDocument: (id, docId, verified) => api.patch(
+        `applicants/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`, { verified }
+    ),
+    deleteDocument: (id, docId) => api.delete(
+        `applicants/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`
+    ),
+};
+
 
 // Courses
 export const coursesAPI = {

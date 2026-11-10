@@ -36,6 +36,7 @@ const ResetPassword = safeLazy(() => import('./pages/ResetPassword'));
 const ChangePassword = safeLazy(() => import('./pages/ChangePassword'));
 const Dashboard = safeLazy(() => import('./pages/Dashboard'));
 const Students = safeLazy(() => import('./pages/Students'));
+const Admissions = safeLazy(() => import('./pages/Admissions'));
 const Faculty = safeLazy(() => import('./pages/Faculty'));
 const Courses = safeLazy(() => import('./pages/Courses'));
 const Settings = safeLazy(() => import('./pages/Settings'));
@@ -135,6 +136,7 @@ function App() {
 
                                 <Route path="/dashboard" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
                                 <Route path="/students" element={<ProtectedRoute allowedRoles={['admin', 'superadmin', 'teacher']}><Layout><Students /></Layout></ProtectedRoute>} />
+                                <Route path="/admissions" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Admissions /></Layout></ProtectedRoute>} />
                                 <Route path="/faculty" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Faculty /></Layout></ProtectedRoute>} />
                                 <Route path="/courses" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Courses /></Layout></ProtectedRoute>} />
                                 <Route path="/academics" element={<ProtectedRoute><Layout><AcademicsHub /></Layout></ProtectedRoute>} />

@@ -4,6 +4,7 @@ import studentRoutes from './studentRoutes.js';
 import academicRoutes from './academicRoutes.js';
 import financeRoutes from './financeRoutes.js';
 import inventoryRoutes from './inventoryRoutes.js';
+import applicantRoutes from './applicantRoutes.js';
 import systemRoutes from './systemRoutes.js';
 
 const router = express.Router();
@@ -16,6 +17,7 @@ router.use('/', academicRoutes);
 router.use('/', studentRoutes);
 router.use('/', financeRoutes);
 router.use('/inventory', inventoryRoutes);
+router.use('/applicants', applicantRoutes);
 router.use('/', systemRoutes);
 
 // Multer error handler (file size & type errors)

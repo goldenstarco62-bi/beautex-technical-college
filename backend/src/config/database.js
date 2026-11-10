@@ -175,7 +175,7 @@ export async function getDb() {
 let isInitializing = false;
 // Bump this whenever a new migration block is added below — the version gate
 // then re-runs the full (idempotent) migration sweep once on next boot.
-const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-06-02';
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-10-01';
 
 export async function initializeDatabase() {
     if (isInitializing) return;
@@ -1432,6 +1432,73 @@ async function runPostgresMigrations(database) {
     } catch (e) {
         console.warn('⚠️ student_programmes migration warning (PostgreSQL):', e.message);
     }
+
+    // ── Admissions module (PostgreSQL) ────────────────────────────────────────
+    // applicants holds every application from first submission through to either
+    // enrolment (converted_student_id) or rejection/withdrawal. programme_name is
+    // snapshotted so historical applications survive programme renames.
+    try {
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS applicants (
+                id TEXT PRIMARY KEY,
+                applicant_number TEXT UNIQUE NOT NULL,
+                full_name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT,
+                gender TEXT,
+                dob DATE,
+                programme_id TEXT,
+                programme_name TEXT,
+                intake TEXT,
+                registration_type TEXT DEFAULT 'Full-Time',
+                prior_school TEXT,
+                prior_qualification TEXT,
+                guardian_name TEXT,
+                guardian_phone TEXT,
+                address TEXT,
+                source TEXT DEFAULT 'Online',
+                status TEXT NOT NULL DEFAULT 'Submitted' CHECK (status IN (
+                    'Submitted','Under Review','Shortlisted','Offered','Accepted','Enrolled','Rejected','Withdrawn'
+                )),
+                reviewer_id TEXT,
+                reviewer_name TEXT,
+                notes TEXT,
+                offer_token TEXT UNIQUE,
+                offered_at TIMESTAMP,
+                offer_expires_at TIMESTAMP,
+                decided_at TIMESTAMP,
+                converted_student_id TEXT,
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_applicants_status ON applicants(status)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_applicants_intake ON applicants(intake)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_applicants_programme ON applicants(programme_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_applicants_email ON applicants(email)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_applicants_submitted ON applicants(submitted_at)');
+
+        // Uploaded supporting documents are stored in the DB (base64) because the
+        // serverless filesystem is ephemeral. Lists must never SELECT content.
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS applicant_documents (
+                id TEXT PRIMARY KEY,
+                applicant_id TEXT NOT NULL REFERENCES applicants(id) ON DELETE CASCADE,
+                doc_type TEXT NOT NULL,
+                filename TEXT,
+                mime_type TEXT,
+                file_size INTEGER,
+                content TEXT,
+                verified BOOLEAN DEFAULT FALSE,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_applicant_documents_applicant ON applicant_documents(applicant_id)');
+        console.log('✅ Admissions module tables ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ admissions migration warning (PostgreSQL):', e.message);
+    }
 }
 
 
@@ -2583,6 +2650,68 @@ async function runSqliteMigrations(database) {
     } catch (e) {
         console.warn('⚠️ notifications columns migration warning (SQLite):', e.message);
     }
+
+    // ── Admissions module (SQLite) ────────────────────────────────────────────
+    try {
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS applicants (
+                id TEXT PRIMARY KEY,
+                applicant_number TEXT UNIQUE NOT NULL,
+                full_name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT,
+                gender TEXT,
+                dob TEXT,
+                programme_id TEXT,
+                programme_name TEXT,
+                intake TEXT,
+                registration_type TEXT DEFAULT 'Full-Time',
+                prior_school TEXT,
+                prior_qualification TEXT,
+                guardian_name TEXT,
+                guardian_phone TEXT,
+                address TEXT,
+                source TEXT DEFAULT 'Online',
+                status TEXT NOT NULL DEFAULT 'Submitted' CHECK (status IN (
+                    'Submitted','Under Review','Shortlisted','Offered','Accepted','Enrolled','Rejected','Withdrawn'
+                )),
+                reviewer_id TEXT,
+                reviewer_name TEXT,
+                notes TEXT,
+                offer_token TEXT UNIQUE,
+                offered_at DATETIME,
+                offer_expires_at DATETIME,
+                decided_at DATETIME,
+                converted_student_id TEXT,
+                submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_applicants_status ON applicants(status)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_applicants_intake ON applicants(intake)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_applicants_programme ON applicants(programme_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_applicants_email ON applicants(email)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_applicants_submitted ON applicants(submitted_at)');
+
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS applicant_documents (
+                id TEXT PRIMARY KEY,
+                applicant_id TEXT NOT NULL REFERENCES applicants(id) ON DELETE CASCADE,
+                doc_type TEXT NOT NULL,
+                filename TEXT,
+                mime_type TEXT,
+                file_size INTEGER,
+                content TEXT,
+                verified INTEGER DEFAULT 0,
+                uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_applicant_documents_applicant ON applicant_documents(applicant_id)');
+        console.log('✅ Admissions module tables ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ admissions migration warning (SQLite):', e.message);
+    }
 }
 
 /**
@@ -2894,6 +3023,13 @@ export async function seedNewSettings(database) {
         intake_rolling_capacity: '100',
         intake_online_app_enabled: 'true',
         admission_number_format: 'BTC/2026/001',
+        admissions_application_open: 'true',
+        admissions_number_format: 'APP/{YEAR}/{SEQ}',
+        admissions_required_documents: 'KCSE Certificate/Result Slip, National ID/Passport, Passport Photo, Birth Certificate',
+        admissions_auto_reply_enabled: 'true',
+        admissions_offer_valid_days: '14',
+        admissions_document_max_mb: '2',
+        admissions_notify_email: '',
         student_categories: 'Full-Time, Part-Time, Weekend, Online, Short Course',
         student_statuses: 'Active, Completed, Graduated, Deferred, Suspended, Expelled',
         student_portal_results: 'true',

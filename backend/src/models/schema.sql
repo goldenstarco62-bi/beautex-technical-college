@@ -620,3 +620,60 @@ CREATE TABLE IF NOT EXISTS trainer_unit_assignments (
     FOREIGN KEY (unit_id) REFERENCES global_units(id) ON DELETE CASCADE,
     UNIQUE(trainer_id, course_id, unit_id)
 );
+
+-- Admissions Module: Applicants
+CREATE TABLE IF NOT EXISTS applicants (
+    id TEXT PRIMARY KEY,
+    applicant_number TEXT UNIQUE NOT NULL,
+    full_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    gender TEXT,
+    dob TEXT,
+    programme_id TEXT,
+    programme_name TEXT,
+    intake TEXT,
+    registration_type TEXT DEFAULT 'Full-Time',
+    prior_school TEXT,
+    prior_qualification TEXT,
+    guardian_name TEXT,
+    guardian_phone TEXT,
+    address TEXT,
+    source TEXT DEFAULT 'Online',
+    status TEXT NOT NULL DEFAULT 'Submitted' CHECK (status IN (
+        'Submitted','Under Review','Shortlisted','Offered','Accepted','Enrolled','Rejected','Withdrawn'
+    )),
+    reviewer_id TEXT,
+    reviewer_name TEXT,
+    notes TEXT,
+    offer_token TEXT UNIQUE,
+    offered_at DATETIME,
+    offer_expires_at DATETIME,
+    decided_at DATETIME,
+    converted_student_id TEXT,
+    submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_applicants_status ON applicants(status);
+CREATE INDEX IF NOT EXISTS idx_applicants_intake ON applicants(intake);
+CREATE INDEX IF NOT EXISTS idx_applicants_programme ON applicants(programme_id);
+CREATE INDEX IF NOT EXISTS idx_applicants_email ON applicants(email);
+CREATE INDEX IF NOT EXISTS idx_applicants_submitted ON applicants(submitted_at);
+
+-- Admissions Module: Supporting Documents (content is base64; never SELECT it in lists)
+CREATE TABLE IF NOT EXISTS applicant_documents (
+    id TEXT PRIMARY KEY,
+    applicant_id TEXT NOT NULL,
+    doc_type TEXT NOT NULL,
+    filename TEXT,
+    mime_type TEXT,
+    file_size INTEGER,
+    content TEXT,
+    verified INTEGER DEFAULT 0,
+    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (applicant_id) REFERENCES applicants(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_applicant_documents_applicant ON applicant_documents(applicant_id);
