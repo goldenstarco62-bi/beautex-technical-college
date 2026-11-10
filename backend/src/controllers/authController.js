@@ -388,17 +388,28 @@ export async function forgotPassword(req, res) {
             );
         }
 
-        // Send reset email
+        // Dispatch the email after responding: the SMTP handshake takes several
+        // seconds and the token is already persisted, so there is nothing left
+        // for the caller to wait on.
         const frontendUrl = getFrontendUrl();
         const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
-        try {
-            const sent = await sendPasswordResetEmail(email, resetLink);
-            if (sent) console.log(`[auth] Password reset email sent to ${email}`);
-            else console.error(`[auth] Password reset email could not be delivered to ${email} — check SMTP settings.`);
-        } catch (emailErr) {
-            console.error('[auth] Failed to send reset email:', emailErr.message);
-            // Fall through — still return generic response for security
+        const emailJob = sendPasswordResetEmail(email, resetLink)
+            .then(sent => {
+                if (sent) console.log(`[auth] Password reset email sent to ${email}`);
+                else console.error(`[auth] Password reset email could not be delivered to ${email} — check SMTP settings.`);
+            })
+            .catch(emailErr => console.error('[auth] Failed to send reset email:', emailErr.message));
+
+        // Vercel freezes the function once the response ends, so ask the
+        // platform to keep this invocation alive until the send completes.
+        if (process.env.VERCEL) {
+            try {
+                const { waitUntil } = await import('@vercel/functions');
+                waitUntil(emailJob);
+            } catch (waitErr) {
+                console.error('[auth] waitUntil unavailable, reset email may be interrupted:', waitErr.message);
+            }
         }
 
         res.json(genericResponse);

@@ -76,6 +76,13 @@ const createTransporter = async () => {
         requireTLS: !cfg.secure,
         connectionTimeout: 10000, // 10s
         greetingTimeout: 10000,   // 10s
+        socketTimeout: 20000,     // 20s
+        // Reuse the TCP/TLS session between sends instead of paying the Gmail
+        // handshake (~5s) on every message.
+        pool: true,
+        maxConnections: 2,
+        maxMessages: 50,
+        maxIdleTime: 30000,
         auth: { user: cfg.user, pass: cfg.pass },
         tls: { rejectUnauthorized: true }
     };
@@ -98,13 +105,14 @@ const getTransporter = async () => {
 };
 
 /**
- * Call at server startup to ensure the SMTP connection is ready before
- * the first request arrives.
+ * Call at server startup to verify SMTP connectivity/credentials before a
+ * user request needs to send mail.
  */
 export const warmupEmailService = async () => {
     try {
-        await getTransporter();
-        console.log('📧 Email service ready.');
+        const { transporter: t } = await getTransporter();
+        await t.verify();
+        console.log('📧 Email service ready (SMTP verified).');
     } catch (err) {
         console.warn('⚠️ Email warmup failed:', err.message);
     }

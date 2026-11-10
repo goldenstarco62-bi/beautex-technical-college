@@ -195,7 +195,13 @@ const startServices = () => {
         logger.info('🏗️  Initializing database & services...');
         dbInitPromise = (async () => {
             await initializeDatabase();
-            
+
+            // Verify SMTP connectivity in the background so a bad mail config
+            // surfaces at boot instead of silently failing a user's reset.
+            import('./services/emailService.js')
+                .then(m => m.warmupEmailService())
+                .catch(emailErr => logger.warn({ err: emailErr }, '⚠️  Email warmup import failed'));
+
             // Auto initialize monthly fee records in background (NON-BLOCKING)
             import('./controllers/monthlyFeeController.js')
                 .then(m => m.autoInitializeCurrentMonth())
