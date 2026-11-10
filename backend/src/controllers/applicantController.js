@@ -1,5 +1,7 @@
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { query, queryOne, run, getActiveDbEngine } from '../config/database.js';
+import { sendApplicationReceivedEmail, sendAdmissionsNotificationEmail } from '../services/emailService.js';
 import logger from '../utils/logger.js';
 
 const STATUSES = [
@@ -20,7 +22,16 @@ const ALLOWED_TRANSITIONS = {
 };
 
 const REGISTRATION_TYPES = ['Diploma', 'Short Course'];
+const PUBLIC_INTAKES = ['January Intake', 'May Intake', 'September Intake', 'Short Course'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_RE = /^[+()\d\s-]{7,20}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Applicants may keep uploading while their application is live. Rejected,
+// withdrawn and enrolled applications are read-only on the public portal.
+const PORTAL_UPLOAD_STATUSES = ['Submitted', 'Under Review', 'Shortlisted', 'Offered', 'Accepted'];
+const PORTAL_TOKEN_TTL_SECONDS = 30 * 60;
+const MAX_PORTAL_DOCUMENTS = 12;
 
 const isPostgres = () => getActiveDbEngine() === 'postgres';
 const str = (v) => (typeof v === 'string' ? v.trim() : '');
@@ -30,6 +41,11 @@ const nullable = (v) => {
 };
 const parseCount = (row) => parseInt(row?.count ?? row?.COUNT ?? 0, 10) || 0;
 const searchTerm = (v) => str(v).replace(/[%_\\]/g, '');
+const settingIsTrue = (v, fallback = false) => {
+    if (v === undefined || v === null || v === '') return fallback;
+    return ['true', '1', 'yes', 'on'].includes(String(v).toLowerCase());
+};
+const tooLong = (value, max) => str(value).length > max;
 
 function monthStartParam() {
     const now = new Date();
@@ -46,6 +62,11 @@ async function getAdmissionsSettings() {
         numberFormat: map.admissions_number_format || 'APP/{YEAR}/{SEQ}',
         maxDocMb: Math.max(1, parseInt(map.admissions_document_max_mb, 10) || 2),
         offerValidDays: Math.max(1, parseInt(map.admissions_offer_valid_days, 10) || 14),
+        applicationOpen: settingIsTrue(map.admissions_application_open, true),
+        autoReply: settingIsTrue(map.admissions_auto_reply_enabled, true),
+        notifyEmail: str(map.admissions_notify_email),
+        requiredDocuments: str(map.admissions_required_documents)
+            .split(',').map(s => s.trim()).filter(Boolean),
     };
 }
 
@@ -94,7 +115,59 @@ function applicantView(row) {
 
 async function resolveProgramme(programmeId) {
     if (!programmeId) return null;
-    return queryOne('SELECT id, name FROM courses WHERE id = ?', [programmeId]);
+    return queryOne('SELECT id, name, status FROM courses WHERE id = ?', [programmeId]);
+}
+
+async function findActiveDuplicate(email, programmeId, intake) {
+    return queryOne(
+        `SELECT id, applicant_number FROM applicants
+         WHERE email = ? AND COALESCE(programme_id, '') = ? AND COALESCE(intake, '') = ?
+           AND status NOT IN ('Rejected', 'Withdrawn')
+         ORDER BY created_at DESC LIMIT 1`,
+        [email, programmeId || '', intake || '']
+    );
+}
+
+async function insertApplication(fields) {
+    const { numberFormat } = await getAdmissionsSettings();
+    const id = crypto.randomUUID();
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const applicantNumber = await generateApplicantNumber(numberFormat);
+        try {
+            await run(
+                `INSERT INTO applicants (
+                    id, applicant_number, full_name, email, phone, gender, dob,
+                    programme_id, programme_name, intake, registration_type,
+                    prior_school, prior_qualification, guardian_name, guardian_phone,
+                    address, source, status, notes, submitted_at
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', ?, CURRENT_TIMESTAMP)`,
+                [
+                    id, applicantNumber, fields.fullName, fields.email, fields.phone,
+                    fields.gender, fields.dob, fields.programmeId, fields.programmeName,
+                    fields.intake, fields.registrationType, fields.priorSchool,
+                    fields.priorQualification, fields.guardianName, fields.guardianPhone,
+                    fields.address, fields.source, fields.notes,
+                ]
+            );
+            return { id, applicantNumber };
+        } catch (err) {
+            if (!isUniqueViolation(err) || attempt === 2) throw err;
+        }
+    }
+    throw new Error('Unable to allocate a unique applicant number');
+}
+
+function dispatchEmail(promise) {
+    const job = promise
+        .then(sent => { if (!sent) logger.warn('Admissions email was not delivered'); })
+        .catch(err => logger.error({ err }, 'Admissions email failed'));
+    // Vercel freezes the function once the response ends, so keep it alive.
+    if (process.env.VERCEL) {
+        import('@vercel/functions')
+            .then(({ waitUntil }) => waitUntil(job))
+            .catch(() => {});
+    }
 }
 
 function validateRegistrationType(value) {
@@ -207,13 +280,7 @@ export async function createApplicant(req, res) {
 
         const intake = nullable(req.body.intake);
 
-        const duplicate = await queryOne(
-            `SELECT id, applicant_number FROM applicants
-             WHERE email = ? AND COALESCE(programme_id, '') = ? AND COALESCE(intake, '') = ?
-               AND status NOT IN ('Rejected', 'Withdrawn')
-             ORDER BY created_at DESC LIMIT 1`,
-            [email, programmeId, intake || '']
-        );
+        const duplicate = await findActiveDuplicate(email, programmeId, intake);
         if (duplicate) {
             return res.status(409).json({
                 error: `An active application already exists for this email (${duplicate.applicant_number}).`,
@@ -221,35 +288,24 @@ export async function createApplicant(req, res) {
             });
         }
 
-        const { numberFormat } = await getAdmissionsSettings();
-        const id = crypto.randomUUID();
-        const source = nullable(req.body.source) || 'Walk-in';
-
-        let applicantNumber = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            applicantNumber = await generateApplicantNumber(numberFormat);
-            try {
-                await run(
-                    `INSERT INTO applicants (
-                        id, applicant_number, full_name, email, phone, gender, dob,
-                        programme_id, programme_name, intake, registration_type,
-                        prior_school, prior_qualification, guardian_name, guardian_phone,
-                        address, source, status, submitted_at
-                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Submitted', CURRENT_TIMESTAMP)`,
-                    [
-                        id, applicantNumber, fullName, email, nullable(req.body.phone),
-                        nullable(req.body.gender), nullable(req.body.dob),
-                        programmeId || null, programmeName, intake, registrationType,
-                        nullable(req.body.prior_school), nullable(req.body.prior_qualification),
-                        nullable(req.body.guardian_name), nullable(req.body.guardian_phone),
-                        nullable(req.body.address), source,
-                    ]
-                );
-                break;
-            } catch (err) {
-                if (!isUniqueViolation(err) || attempt === 2) throw err;
-            }
-        }
+        const { id } = await insertApplication({
+            fullName,
+            email,
+            phone: nullable(req.body.phone),
+            gender: nullable(req.body.gender),
+            dob: nullable(req.body.dob),
+            programmeId: programmeId || null,
+            programmeName,
+            intake,
+            registrationType,
+            priorSchool: nullable(req.body.prior_school),
+            priorQualification: nullable(req.body.prior_qualification),
+            guardianName: nullable(req.body.guardian_name),
+            guardianPhone: nullable(req.body.guardian_phone),
+            address: nullable(req.body.address),
+            source: nullable(req.body.source) || 'Walk-in',
+            notes: nullable(req.body.notes),
+        });
 
         const applicant = await queryOne('SELECT * FROM applicants WHERE id = ?', [id]);
         res.status(201).json({ message: 'Application created', applicant: applicantView(applicant) });
@@ -527,6 +583,315 @@ export async function deleteDocument(req, res) {
     } catch (error) {
         logger.error({ err: error }, 'Delete applicant document failed');
         res.status(500).json({ error: 'Failed to delete document' });
+    }
+}
+
+// ─── Public admissions portal ────────────────────────────────────────────────
+
+function publicApplicantView(row) {
+    return {
+        applicant_number: row.applicant_number,
+        full_name: row.full_name,
+        email: row.email,
+        programme_name: row.programme_name,
+        intake: row.intake,
+        registration_type: row.registration_type,
+        status: row.status,
+        submitted_at: row.submitted_at,
+    };
+}
+
+export async function getPublicAdmissionsInfo(req, res) {
+    try {
+        const settings = await getAdmissionsSettings();
+        const programmes = await query(
+            `SELECT id, name, programme_type, duration, department
+             FROM courses WHERE status = 'Active'
+             ORDER BY programme_type, name`
+        );
+        res.json({
+            open: settings.applicationOpen,
+            auto_reply: settings.autoReply,
+            programmes,
+            intakes: PUBLIC_INTAKES,
+            registration_types: REGISTRATION_TYPES,
+            required_documents: settings.requiredDocuments,
+            max_document_mb: settings.maxDocMb,
+        });
+    } catch (error) {
+        logger.error({ err: error }, 'Public admissions info failed');
+        res.status(500).json({ error: 'Failed to load the application form' });
+    }
+}
+
+export async function createPublicApplication(req, res) {
+    try {
+        const settings = await getAdmissionsSettings();
+        if (!settings.applicationOpen) {
+            return res.status(403).json({ error: 'Applications are currently closed. Please check back later.' });
+        }
+        // Hidden field: only bots fill it in.
+        if (str(req.body.company_website)) {
+            return res.status(400).json({ error: 'Invalid submission.' });
+        }
+
+        const fullName = str(req.body.full_name);
+        const email = str(req.body.email).toLowerCase();
+        const phone = str(req.body.phone);
+        const programmeId = str(req.body.programme_id);
+        const intake = str(req.body.intake);
+        const dob = str(req.body.dob);
+
+        if (!fullName) return res.status(400).json({ error: 'Full name is required' });
+        if (tooLong(fullName, 120)) return res.status(400).json({ error: 'Full name is too long' });
+        if (!EMAIL_RE.test(email) || tooLong(email, 254)) {
+            return res.status(400).json({ error: 'A valid email address is required' });
+        }
+        if (!PHONE_RE.test(phone)) {
+            return res.status(400).json({ error: 'A valid phone number is required' });
+        }
+        if (!programmeId) return res.status(400).json({ error: 'Please choose a programme' });
+        if (!PUBLIC_INTAKES.includes(intake)) {
+            return res.status(400).json({ error: `Intake must be one of: ${PUBLIC_INTAKES.join(', ')}` });
+        }
+        if (dob && (!DATE_RE.test(dob) || Number.isNaN(new Date(dob).getTime()) || new Date(dob).getTime() > Date.now())) {
+            return res.status(400).json({ error: 'Date of birth is not valid' });
+        }
+
+        const fieldLimits = {
+            gender: 30, prior_school: 160, prior_qualification: 120,
+            guardian_name: 120, guardian_phone: 30, address: 240,
+        };
+        for (const [field, max] of Object.entries(fieldLimits)) {
+            if (tooLong(req.body[field], max)) {
+                return res.status(400).json({ error: `${field.replace(/_/g, ' ')} is too long` });
+            }
+        }
+
+        const registrationType = validateRegistrationType(req.body.registration_type);
+        if (!registrationType) {
+            return res.status(400).json({ error: `Registration type must be one of: ${REGISTRATION_TYPES.join(', ')}` });
+        }
+
+        const programme = await resolveProgramme(programmeId);
+        if (!programme || programme.status !== 'Active') {
+            return res.status(400).json({ error: 'The selected programme is not open for applications.' });
+        }
+
+        const duplicate = await findActiveDuplicate(email, programmeId, intake);
+        if (duplicate) {
+            return res.status(409).json({
+                error: 'An active application already exists for this email, programme and intake. Contact the admissions office if you need to make changes.',
+            });
+        }
+
+        const { id, applicantNumber } = await insertApplication({
+            fullName,
+            email,
+            phone,
+            gender: nullable(req.body.gender),
+            dob: nullable(dob),
+            programmeId,
+            programmeName: programme.name,
+            intake,
+            registrationType,
+            priorSchool: nullable(req.body.prior_school),
+            priorQualification: nullable(req.body.prior_qualification),
+            guardianName: nullable(req.body.guardian_name),
+            guardianPhone: nullable(req.body.guardian_phone),
+            address: nullable(req.body.address),
+            source: 'Online',
+            notes: null,
+        });
+
+        const created = await queryOne('SELECT * FROM applicants WHERE id = ?', [id]);
+        res.status(201).json({ message: 'Application submitted', applicant: publicApplicantView(created) });
+
+        if (settings.autoReply) {
+            dispatchEmail(sendApplicationReceivedEmail({
+                email, fullName, applicantNumber,
+                programmeName: programme.name, intake,
+            }));
+        }
+        if (settings.notifyEmail) {
+            dispatchEmail(sendAdmissionsNotificationEmail(settings.notifyEmail, {
+                fullName, applicantNumber, email, phone,
+                programmeName: programme.name, intake,
+            }));
+        }
+    } catch (error) {
+        logger.error({ err: error }, 'Public application submission failed');
+        res.status(500).json({ error: 'Failed to submit the application. Please try again.' });
+    }
+}
+
+// Portal tokens are scoped and signed with a derived secret so they can never
+// be accepted by the staff authentication middleware.
+function portalTokenSecret() {
+    return `${process.env.JWT_SECRET || ''}::applicant-portal`;
+}
+
+function issuePortalToken(applicantId) {
+    return jwt.sign(
+        { sub: applicantId, scope: 'applicant-portal' },
+        portalTokenSecret(),
+        { expiresIn: PORTAL_TOKEN_TTL_SECONDS }
+    );
+}
+
+function verifyPortalToken(req) {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    if (!token) return null;
+    try {
+        const payload = jwt.verify(token, portalTokenSecret());
+        return payload.scope === 'applicant-portal' ? payload.sub : null;
+    } catch {
+        return null;
+    }
+}
+
+function publicDocumentView(row) {
+    return {
+        id: row.id,
+        doc_type: row.doc_type,
+        filename: row.filename,
+        mime_type: row.mime_type,
+        file_size: row.file_size,
+        verified: !!row.verified,
+        uploaded_at: row.uploaded_at,
+    };
+}
+
+export async function trackApplication(req, res) {
+    try {
+        const applicantNumber = str(req.body.applicant_number);
+        const email = str(req.body.email).toLowerCase();
+        if (!applicantNumber || !EMAIL_RE.test(email)) {
+            return res.status(400).json({ error: 'Enter your application number and the email you used to apply.' });
+        }
+
+        const applicant = await queryOne(
+            `SELECT * FROM applicants
+             WHERE LOWER(applicant_number) = LOWER(?) AND LOWER(email) = LOWER(?)`,
+            [applicantNumber, email]
+        );
+        if (!applicant) {
+            // Same message for "wrong number" and "wrong email" so the portal
+            // cannot be used to probe which applications exist.
+            return res.status(404).json({ error: 'No application matches that number and email address.' });
+        }
+
+        const settings = await getAdmissionsSettings();
+        const documents = await query(
+            `SELECT id, doc_type, filename, mime_type, file_size, verified, uploaded_at
+             FROM applicant_documents WHERE applicant_id = ? ORDER BY uploaded_at DESC`,
+            [applicant.id]
+        );
+
+        res.json({
+            applicant: {
+                ...publicApplicantView(applicant),
+                phone: applicant.phone,
+                offered_at: applicant.offered_at,
+                offer_expires_at: applicant.offer_expires_at,
+                offer_expired: applicantView(applicant).offer_expired,
+                decided_at: applicant.decided_at,
+                can_upload: PORTAL_UPLOAD_STATUSES.includes(applicant.status),
+            },
+            documents: documents.map(publicDocumentView),
+            required_documents: settings.requiredDocuments,
+            max_document_mb: settings.maxDocMb,
+            access_token: issuePortalToken(applicant.id),
+            expires_in: PORTAL_TOKEN_TTL_SECONDS,
+        });
+    } catch (error) {
+        logger.error({ err: error }, 'Public application lookup failed');
+        res.status(500).json({ error: 'Failed to look up the application' });
+    }
+}
+
+export async function uploadPublicDocument(req, res) {
+    try {
+        const applicantId = verifyPortalToken(req);
+        if (!applicantId) {
+            return res.status(401).json({ error: 'Your session has expired. Look up your application again.' });
+        }
+
+        const applicant = await queryOne('SELECT id, status FROM applicants WHERE id = ?', [applicantId]);
+        if (!applicant) return res.status(404).json({ error: 'Applicant not found' });
+        if (!PORTAL_UPLOAD_STATUSES.includes(applicant.status)) {
+            return res.status(409).json({ error: 'This application is closed, so documents can no longer be uploaded.' });
+        }
+
+        const docType = str(req.body.doc_type);
+        if (!docType) return res.status(400).json({ error: 'Document type is required' });
+        if (tooLong(docType, 80)) return res.status(400).json({ error: 'Document type is too long' });
+        if (!req.file) return res.status(400).json({ error: 'A file is required' });
+
+        const countRow = await queryOne(
+            'SELECT COUNT(*) AS count FROM applicant_documents WHERE applicant_id = ?',
+            [applicantId]
+        );
+        if (parseCount(countRow) >= MAX_PORTAL_DOCUMENTS) {
+            return res.status(409).json({ error: `You can upload up to ${MAX_PORTAL_DOCUMENTS} documents.` });
+        }
+
+        const { maxDocMb } = await getAdmissionsSettings();
+        if (req.file.size > maxDocMb * 1024 * 1024) {
+            return res.status(413).json({ error: `Document exceeds the ${maxDocMb} MB limit.` });
+        }
+
+        const id = crypto.randomUUID();
+        await run(
+            `INSERT INTO applicant_documents (id, applicant_id, doc_type, filename, mime_type, file_size, content)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [id, applicantId, docType, req.file.originalname, req.file.mimetype, req.file.size,
+             req.file.buffer.toString('base64')]
+        );
+
+        res.status(201).json({
+            message: 'Document uploaded',
+            document: publicDocumentView({
+                id,
+                doc_type: docType,
+                filename: req.file.originalname,
+                mime_type: req.file.mimetype,
+                file_size: req.file.size,
+                verified: false,
+                uploaded_at: new Date().toISOString(),
+            }),
+        });
+    } catch (error) {
+        logger.error({ err: error }, 'Public document upload failed');
+        res.status(500).json({ error: 'Failed to upload the document' });
+    }
+}
+
+export async function deletePublicDocument(req, res) {
+    try {
+        const applicantId = verifyPortalToken(req);
+        if (!applicantId) {
+            return res.status(401).json({ error: 'Your session has expired. Look up your application again.' });
+        }
+
+        const applicant = await queryOne('SELECT status FROM applicants WHERE id = ?', [applicantId]);
+        if (!applicant) return res.status(404).json({ error: 'Applicant not found' });
+        if (!PORTAL_UPLOAD_STATUSES.includes(applicant.status)) {
+            return res.status(409).json({ error: 'This application is closed, so documents can no longer be changed.' });
+        }
+
+        const result = await run(
+            'DELETE FROM applicant_documents WHERE id = ? AND applicant_id = ?',
+            [req.params.docId, applicantId]
+        );
+        if (!result || result.changes === 0) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+        res.json({ message: 'Document deleted' });
+    } catch (error) {
+        logger.error({ err: error }, 'Public document delete failed');
+        res.status(500).json({ error: 'Failed to delete the document' });
     }
 }
 

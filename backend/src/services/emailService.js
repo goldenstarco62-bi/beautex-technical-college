@@ -270,6 +270,104 @@ export const sendPasswordResetEmail = async (email, resetLink) => {
     }
 };
 
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+export const sendApplicationReceivedEmail = async ({ email, fullName, applicantNumber, programmeName, intake }) => {
+    try {
+        const { transporter: t, cfg } = await getTransporter();
+        const senderEmail = cfg.user;
+
+        const info = await t.sendMail({
+            from: `"Beautex Technical Training College" <${senderEmail}>`,
+            to: email,
+            subject: `Application received — ${applicantNumber}`,
+            html: `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; color: #1a202c;">
+                    <div style="background-color: #800000; padding: 40px 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: 2px;">Beautex Technical Training College</h1>
+                        <p style="color: #ffd700; margin: 10px 0 0; font-size: 13px; font-weight: bold; letter-spacing: 1px;">ADMISSIONS OFFICE</p>
+                    </div>
+                    <div style="padding: 40px;">
+                        <h2 style="color: #800000; margin-top: 0; font-size: 20px;">Application received</h2>
+                        <p style="line-height: 1.6; color: #4a5568;">Dear ${escapeHtml(fullName)},</p>
+                        <p style="line-height: 1.6; color: #4a5568;">
+                            Thank you for applying to study <strong>${escapeHtml(programmeName)}</strong> (${escapeHtml(intake)}) at Beautex Technical Training College. Your application is now in our review queue.
+                        </p>
+                        <div style="background-color: #fff9f0; border: 1px solid #e2e8f0; border-left: 4px solid #800000; padding: 24px; border-radius: 8px; margin: 28px 0; text-align: center;">
+                            <p style="margin: 0 0 8px; font-size: 11px; color: #800000; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Your application number</p>
+                            <p style="margin: 0; font-size: 22px; font-weight: 900; font-family: monospace; color: #1a202c;">${escapeHtml(applicantNumber)}</p>
+                        </div>
+                        <p style="line-height: 1.6; color: #4a5568; font-weight: bold;">What happens next</p>
+                        <ol style="line-height: 1.8; color: #4a5568; padding-left: 20px; margin-top: 8px;">
+                            <li>The admissions office reviews your application.</li>
+                            <li>We may contact you if we need supporting documents or clarification.</li>
+                            <li>You will receive the decision by email. Keep your application number safe for any correspondence.</li>
+                        </ol>
+                        <div style="border-top: 1px solid #edf2f7; padding-top: 25px; margin-top: 30px;">
+                            <p style="font-size: 13px; color: #718096; line-height: 1.6;">
+                                If you did not make this application, please contact the admissions office immediately.
+                            </p>
+                        </div>
+                    </div>
+                    <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #edf2f7;">
+                        <p style="margin: 0; font-size: 12px; color: #a0aec0;">&copy; 2026 Beautex Technical Training College. All rights reserved.</p>
+                        <p style="margin: 5px 0 0; font-size: 11px; color: #cbd5e0;">Excellence in Technical Education</p>
+                    </div>
+                </div>
+            `,
+        });
+
+        console.log(`📧 Application received email sent to ${email}: ${info.messageId}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to send application received email:', error.message);
+        return false;
+    }
+};
+
+export const sendAdmissionsNotificationEmail = async (to, { fullName, applicantNumber, email, phone, programmeName, intake }) => {
+    try {
+        const { transporter: t, cfg } = await getTransporter();
+        const senderEmail = cfg.user;
+
+        const info = await t.sendMail({
+            from: `"Beautex Admissions" <${senderEmail}>`,
+            to,
+            subject: `New application: ${applicantNumber} — ${fullName}`,
+            html: `
+                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background-color: #ffffff; color: #1a202c;">
+                    <div style="background-color: #800000; padding: 32px 20px; text-align: center;">
+                        <h1 style="color: #ffffff; margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 2px;">New Application Received</h1>
+                        <p style="color: #ffd700; margin: 8px 0 0; font-size: 12px; font-weight: bold; letter-spacing: 1px;">${escapeHtml(applicantNumber)}</p>
+                    </div>
+                    <div style="padding: 32px;">
+                        <p style="line-height: 1.6; color: #4a5568; margin-top: 0;">A new application was submitted through the public portal and is waiting for review.</p>
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; color: #2d3748;">
+                            <tr><td style="padding: 8px 0; color: #718096;">Applicant</td><td style="padding: 8px 0; font-weight: bold;">${escapeHtml(fullName)}</td></tr>
+                            <tr><td style="padding: 8px 0; color: #718096;">Email</td><td style="padding: 8px 0;">${escapeHtml(email)}</td></tr>
+                            <tr><td style="padding: 8px 0; color: #718096;">Phone</td><td style="padding: 8px 0;">${escapeHtml(phone)}</td></tr>
+                            <tr><td style="padding: 8px 0; color: #718096;">Programme</td><td style="padding: 8px 0;">${escapeHtml(programmeName)}</td></tr>
+                            <tr><td style="padding: 8px 0; color: #718096;">Intake</td><td style="padding: 8px 0;">${escapeHtml(intake)}</td></tr>
+                        </table>
+                        <p style="font-size: 12px; color: #a0aec0; margin-top: 28px;">Sign in to the staff portal and open Admissions to review this application.</p>
+                    </div>
+                </div>
+            `,
+        });
+
+        console.log(`📧 Admissions notification sent to ${to}: ${info.messageId}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to send admissions notification:', error.message);
+        return false;
+    }
+};
+
 export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
     console.log(`📢 Announcement System: Preparing broadcast for ${recipientEmails.length} recipients...`);
     if (!recipientEmails || recipientEmails.length === 0) {

@@ -146,8 +146,37 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+// Application submissions are anonymous, so cap them harder than the global
+// limiter. Development sessions are never blocked.
+const publicApplyLimiter = !isProductionRuntime()
+    ? (_req, _res, next) => next()
+    : rateLimit({
+        windowMs: 60 * 60 * 1000, // 1 hour
+        limit: 8, // per IP
+        // Only the submission POST counts; tracking and document uploads do not.
+        skip: (req) => req.method !== 'POST' || !/\/api\/public\/admissions\/?$/.test((req.originalUrl || '').split('?')[0]),
+        message: { error: 'Too many applications submitted from this network. Please try again later.' },
+        standardHeaders: 'draft-7',
+        legacyHeaders: false,
+    });
+
+// Tracking lookups are anonymous credential checks — throttle guessing.
+const publicTrackLimiter = !isProductionRuntime()
+    ? (_req, _res, next) => next()
+    : rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: 20,
+        message: { error: 'Too many tracking attempts. Please try again in 15 minutes.' },
+        standardHeaders: 'draft-7',
+        legacyHeaders: false,
+    });
+
 // Apply global rate limiter
 app.use('/api/', apiLimiter);
+
+// Public application submissions
+app.use('/api/public/admissions', publicApplyLimiter);
+app.use('/api/public/admissions/track', publicTrackLimiter);
 
 // Specific limiter for sensitive auth routes
 app.use('/api/auth/login', authLimiter);

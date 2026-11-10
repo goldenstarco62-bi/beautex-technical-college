@@ -32,6 +32,8 @@ const safeLazy = (importFn) => lazy(async () => {
 
 // Safe lazy load page components for code splitting & faster bundle loading
 const Login = safeLazy(() => import('./pages/Login'));
+const Apply = safeLazy(() => import('./pages/Apply'));
+const Track = safeLazy(() => import('./pages/Track'));
 const ResetPassword = safeLazy(() => import('./pages/ResetPassword'));
 const ChangePassword = safeLazy(() => import('./pages/ChangePassword'));
 const Dashboard = safeLazy(() => import('./pages/Dashboard'));
@@ -131,6 +133,8 @@ function App() {
                         <Suspense fallback={<SplashLoader />}>
                             <Routes>
                                 <Route path="/login" element={<Login />} />
+                                <Route path="/apply" element={<Apply />} />
+                                <Route path="/track" element={<Track />} />
                                 <Route path="/change-password" element={<SemiProtectedRoute><ChangePassword /></SemiProtectedRoute>} />
                                 <Route path="/reset-password" element={<ResetPassword />} />
 

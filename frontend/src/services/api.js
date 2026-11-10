@@ -11,6 +11,15 @@ const api = axios.create({
     },
 });
 
+// Public portal client: no staff token injection and no global 401 logout, so
+// an applicant's lookup error can never clear a staff session.
+const publicHttp = axios.create({
+    baseURL: API_BASE_URL,
+    headers: {
+        'Content-Type': 'application/json',
+    },
+});
+
 // Add token to every outgoing request
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem('token');
@@ -146,6 +155,24 @@ export const applicantAPI = {
     ),
     deleteDocument: (id, docId) => api.delete(
         `applicants/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}`
+    ),
+};
+
+// Public admissions portal (no authentication)
+export const publicAPI = {
+    admissionsInfo: () => publicHttp.get('public/admissions'),
+    submitApplication: (data) => publicHttp.post('public/admissions', data),
+    trackApplication: (data) => publicHttp.post('public/admissions/track', data),
+    uploadDocument: (token, formData) => publicHttp.post('public/admissions/documents', formData, {
+        headers: {
+            // Clear the JSON default so the browser adds the multipart boundary.
+            'Content-Type': undefined,
+            Authorization: `Bearer ${token}`,
+        },
+    }),
+    deleteDocument: (token, docId) => publicHttp.delete(
+        `public/admissions/documents/${encodeURIComponent(docId)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
     ),
 };
 

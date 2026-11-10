@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogIn, GraduationCap, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
@@ -149,7 +149,14 @@ export default function Login() {
 
                 </div>
 
-                <div className="mt-12 text-center">
+                <Link
+                    to="/apply"
+                    className="mt-5 w-full flex items-center justify-center gap-2 rounded-xl border border-gold/40 px-4 py-3.5 text-[10px] font-black uppercase tracking-widest text-gold hover:bg-gold hover:text-maroon transition-all"
+                >
+                    <GraduationCap className="w-4 h-4" /> New applicant? Apply online
+                </Link>
+
+                <div className="mt-8 text-center">
                     <p className="text-[10px] font-black text-white/50 uppercase tracking-[0.3em]">
                         © 2026 Beautex Technical Training College
                     </p>

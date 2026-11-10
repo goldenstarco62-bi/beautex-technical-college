@@ -5,6 +5,7 @@ import academicRoutes from './academicRoutes.js';
 import financeRoutes from './financeRoutes.js';
 import inventoryRoutes from './inventoryRoutes.js';
 import applicantRoutes from './applicantRoutes.js';
+import publicRoutes from './publicRoutes.js';
 import systemRoutes from './systemRoutes.js';
 
 const router = express.Router();
@@ -18,12 +19,13 @@ router.use('/', studentRoutes);
 router.use('/', financeRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/applicants', applicantRoutes);
+router.use('/public', publicRoutes);
 router.use('/', systemRoutes);
 
 // Multer error handler (file size & type errors)
 router.use((err, req, res, next) => {
     if (err && err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(413).json({ error: 'File is too large. Maximum size is 50 MB.' });
+        return res.status(413).json({ error: 'File is too large. Maximum size is 10 MB.' });
     }
     if (err && err.message && err.message.startsWith('File type not allowed')) {
         return res.status(415).json({ error: err.message });
