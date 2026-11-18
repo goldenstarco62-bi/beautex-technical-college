@@ -24,6 +24,33 @@ async function resolveFaculty(req) {
 }
 
 /**
+ * New offerings default to the active academic period, so the term text and the
+ * period reference cannot drift apart. An explicit id must exist; a typed term
+ * name is matched to a period first, and only unmatched terms fall back to active.
+ */
+async function resolvePeriod(input, nameHint) {
+    if (input !== undefined && input !== null && input !== '') {
+        const period = await queryOne(`SELECT * FROM academic_periods WHERE id = ${ph(1)}`, [input]);
+        return period ? { period, error: null } : { period: null, error: 'Academic period not found' };
+    }
+    if (nameHint) {
+        const period = await queryOne(
+            `SELECT * FROM academic_periods WHERE LOWER(name) = LOWER(${ph(1)}) ORDER BY id DESC LIMIT 1`,
+            [String(nameHint).trim()]
+        );
+        return { period: period || null, error: null };
+    }
+    const period = await queryOne(
+        `SELECT * FROM academic_periods WHERE is_active = ${ph(1)} ORDER BY start_date DESC LIMIT 1`,
+        [true]
+    );
+    return { period: period || null, error: null };
+}
+
+const periodYear = (period) =>
+    period?.start_date ? String(new Date(period.start_date).getFullYear()) : null;
+
+/**
  * GET /api/unit-offerings
  * Admin: all offerings. Teacher: only offerings they lecture.
  * Query: unit_id, course_id, faculty_id, status
@@ -35,13 +62,14 @@ export async function getOfferings(req, res) {
 
         let sql = `
             SELECT o.*, gu.unit_name, gu.unit_code, c.name AS course_name,
-                   f.email AS faculty_email,
+                   f.email AS faculty_email, p.name AS academic_period_name,
                    (SELECT CAST(COUNT(*) AS INTEGER) FROM offering_students os WHERE os.offering_id = o.id) AS student_count,
                    (SELECT CAST(COUNT(*) AS INTEGER) FROM cat_results cr WHERE cr.offering_id = o.id) AS marks_count
             FROM unit_offerings o
             LEFT JOIN global_units gu ON gu.id = o.unit_id
             LEFT JOIN courses c ON c.id = o.course_id
             LEFT JOIN faculty f ON f.id = o.faculty_id
+            LEFT JOIN academic_periods p ON p.id = o.academic_period_id
             WHERE 1=1
         `;
         const params = [];
@@ -76,11 +104,13 @@ export async function getMyOfferings(req, res) {
 
         const rows = await query(`
             SELECT o.id, o.unit_id, o.course_id, o.offering_name, o.group_label, o.term, o.academic_year,
+                   o.academic_period_id, p.name AS academic_period_name,
                    o.status, gu.unit_name, gu.unit_code, gu.is_common, c.name AS course_name,
                    (SELECT CAST(COUNT(*) AS INTEGER) FROM offering_students os WHERE os.offering_id = o.id) AS student_count
             FROM unit_offerings o
             LEFT JOIN global_units gu ON gu.id = o.unit_id
             LEFT JOIN courses c ON c.id = o.course_id
+            LEFT JOIN academic_periods p ON p.id = o.academic_period_id
             WHERE o.faculty_id = ${ph(1)} AND o.status = 'Active'
             ORDER BY gu.unit_name ASC, o.group_label ASC
         `, [faculty.id]);
@@ -128,11 +158,14 @@ export async function getOffering(req, res) {
  */
 export async function createOffering(req, res) {
     try {
-        const { unit_id, course_id, offering_name, faculty_id, group_label, term, academic_year } = req.body;
+        const { unit_id, course_id, offering_name, faculty_id, group_label, term, academic_year, academic_period_id } = req.body;
         if (!unit_id) return res.status(400).json({ error: 'unit_id is required' });
 
         const unit = await queryOne(`SELECT id, unit_name FROM global_units WHERE id = ${ph(1)}`, [unit_id]);
         if (!unit) return res.status(404).json({ error: 'Unit not found' });
+
+        const { period, error: periodError } = await resolvePeriod(academic_period_id, term);
+        if (periodError) return res.status(400).json({ error: periodError });
 
         const courseId = course_id ? String(course_id).trim() : null;
         if (courseId) {
@@ -148,7 +181,11 @@ export async function createOffering(req, res) {
         }
 
         const group = String(group_label || 'Default').trim() || 'Default';
-        const dedupeKey = buildDedupeKey({ unit_id, course_id: courseId, faculty_id: facId, group_label: group, term });
+        // The period is the term reference; the free-text term mirrors its name
+        // so existing screens and the dedupe key keep working.
+        const finalTerm = term || period?.name || null;
+        const finalYear = academic_year || periodYear(period);
+        const dedupeKey = buildDedupeKey({ unit_id, course_id: courseId, faculty_id: facId, group_label: group, term: finalTerm });
         const clash = await queryOne(
             `SELECT id, offering_name FROM unit_offerings WHERE dedupe_key = ${ph(1)}`, [dedupeKey]
         );
@@ -161,10 +198,10 @@ export async function createOffering(req, res) {
         const result = await run(`
             INSERT INTO unit_offerings
               (unit_id, course_id, offering_name, faculty_id, faculty_name, group_label, term, academic_year,
-               is_default, status, dedupe_key, created_by)
-            VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}, ${ph(4)}, ${ph(5)}, ${ph(6)}, ${ph(7)}, ${ph(8)}, FALSE, 'Active', ${ph(9)}, ${ph(10)})
+               academic_period_id, is_default, status, dedupe_key, created_by)
+            VALUES (${ph(1)}, ${ph(2)}, ${ph(3)}, ${ph(4)}, ${ph(5)}, ${ph(6)}, ${ph(7)}, ${ph(8)}, ${ph(9)}, FALSE, 'Active', ${ph(10)}, ${ph(11)})
         `, [unit_id, courseId, String(offering_name || unit.unit_name).trim(), facId, facName, group,
-            term || null, academic_year || null, dedupeKey, String(req.user?.id || req.user?.email || '')]);
+            finalTerm, finalYear, period?.id || null, dedupeKey, String(req.user?.id || req.user?.email || '')]);
 
         const id = typeof result === 'object' ? (result.lastID ?? result.insertId ?? null) : null;
         const created = id ? await queryOne(`SELECT * FROM unit_offerings WHERE id = ${ph(1)}`, [id])
@@ -198,7 +235,27 @@ export async function updateOffering(req, res) {
 
         const updatedName = req.body.offering_name !== undefined ? String(req.body.offering_name).trim() : existing.offering_name;
         const updatedStatus = req.body.status !== undefined ? req.body.status : existing.status;
-        const updatedYear = req.body.academic_year !== undefined ? (req.body.academic_year || null) : existing.academic_year;
+        let updatedYear = req.body.academic_year !== undefined ? (req.body.academic_year || null) : existing.academic_year;
+
+        let nextPeriodId = existing.academic_period_id ?? null;
+        let periodRow = null;
+        if (req.body.academic_period_id !== undefined) {
+            if (!req.body.academic_period_id) {
+                nextPeriodId = null;
+            } else {
+                const { period, error: periodError } = await resolvePeriod(req.body.academic_period_id);
+                if (periodError) return res.status(400).json({ error: periodError });
+                nextPeriodId = period.id;
+                periodRow = period;
+            }
+        } else if (req.body.term !== undefined && next.term) {
+            const { period } = await resolvePeriod(undefined, next.term);
+            nextPeriodId = period?.id || null;
+            periodRow = period;
+        }
+        // Keep the term label aligned with the chosen period when one was not typed.
+        if (!next.term && periodRow) next.term = periodRow.name;
+        if (!updatedYear && periodRow) updatedYear = periodYear(periodRow);
 
         let facName = existing.faculty_name;
         if (next.faculty_id && next.faculty_id !== existing.faculty_id) {
@@ -217,10 +274,10 @@ export async function updateOffering(req, res) {
             UPDATE unit_offerings
             SET unit_id = ${ph(1)}, course_id = ${ph(2)}, faculty_id = ${ph(3)}, faculty_name = ${ph(4)},
                 group_label = ${ph(5)}, term = ${ph(6)}, academic_year = ${ph(7)}, offering_name = ${ph(8)},
-                status = ${ph(9)}, dedupe_key = ${ph(10)}, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${ph(11)}
+                status = ${ph(9)}, dedupe_key = ${ph(10)}, academic_period_id = ${ph(11)}, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${ph(12)}
         `, [unitId, next.course_id, next.faculty_id, facName, next.group_label, next.term, updatedYear,
-            updatedName, updatedStatus, dedupeKey, id]);
+            updatedName, updatedStatus, dedupeKey, nextPeriodId, id]);
 
         res.json(await queryOne(`SELECT * FROM unit_offerings WHERE id = ${ph(1)}`, [id]));
     } catch (error) {

@@ -68,6 +68,8 @@ const AttendanceSummary = safeLazy(() => import('./pages/AttendanceSummary'));
 const MonthlyAttendanceSummary = safeLazy(() => import('./pages/MonthlyAttendanceSummary'));
 const NotFound = safeLazy(() => import('./pages/NotFound'));
 const UnitManagement = safeLazy(() => import('./pages/UnitManagement'));
+const ReportCard = safeLazy(() => import('./pages/ReportCard'));
+const TrainerAttendance = safeLazy(() => import('./pages/TrainerAttendance'));
 
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -145,9 +147,11 @@ function App() {
                                 <Route path="/courses" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Courses /></Layout></ProtectedRoute>} />
                                 <Route path="/academics" element={<ProtectedRoute><Layout><AcademicsHub /></Layout></ProtectedRoute>} />
                                 <Route path="/attendance" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Attendance /></Layout></ProtectedRoute>} />
+                                <Route path="/trainer-attendance" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'superadmin']}><Layout><TrainerAttendance /></Layout></ProtectedRoute>} />
                                 <Route path="/grades" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitsCovered /></Layout></ProtectedRoute>} />
                                 <Route path="/unit-coverage" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><UnitCoverage /></Layout></ProtectedRoute>} />
                                 <Route path="/results" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Results /></Layout></ProtectedRoute>} />
+                                <Route path="/report-card" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><ReportCard /></Layout></ProtectedRoute>} />
                                 <Route path="/certificates" element={<ProtectedRoute allowedRoles={['admin', 'superadmin']}><Layout><Certificates /></Layout></ProtectedRoute>} />
                                 <Route path="/schedule" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Schedule /></Layout></ProtectedRoute>} />
                                 <Route path="/announcements" element={<ProtectedRoute allowedRoles={['admin', 'teacher', 'student', 'superadmin']}><Layout><Announcements /></Layout></ProtectedRoute>} />

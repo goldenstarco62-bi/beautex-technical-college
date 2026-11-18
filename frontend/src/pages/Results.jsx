@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { catPeriodsAPI, catResultsAPI, coursesAPI, studentsAPI, courseUnitsAPI, unitOfferingsAPI } from '../services/api';
 import { isStudentEnrolledInCourse } from '../utils/courseUtils';
+import useGradingScale, { gradeFor } from '../hooks/useGradingScale';
 import {
     Award, BookOpen, Users, Search, Plus, X, Edit, Trash2, CheckCircle,
     FileDown, Printer, History, TrendingUp, GraduationCap, Layers, AlertTriangle,
@@ -65,6 +66,7 @@ export default function Results() {
     const isTeacher = userRole === 'teacher';
     const isAdmin = ['admin', 'superadmin'].includes(userRole);
     const isSuperAdmin = userRole === 'superadmin';
+    const gradeScale = useGradingScale();
 
     // ── Core State ────────────────────────────────────────────────────────────
     const [periods, setPeriods] = useState([]);
@@ -595,10 +597,7 @@ export default function Results() {
         const valid = rows.filter(r => r.percentage !== null);
         if (valid.length > 0) {
             const avg = Math.round((valid.reduce((a, r) => a + parseFloat(r.percentage), 0) / valid.length) * 10) / 10;
-            let grade = 'Fail';
-            if (avg >= 70) grade = 'Distinction';
-            else if (avg >= 60) grade = 'Credit';
-            else if (avg >= 50) grade = 'Pass';
+            const grade = gradeFor(avg, gradeScale);
             if (y > PH - 20) { pdf.addPage(); y = 15; }
             pdf.setFillColor(201, 162, 39);
             pdf.rect(10, y, PW - 20, 8, 'F');
@@ -710,10 +709,7 @@ export default function Results() {
             ? Math.round((valid.reduce((acc, r) => acc + parseFloat(r.percentage), 0) / valid.length) * 10) / 10
             : 0;
 
-        let overallGrade = 'Fail';
-        if (avgPct >= 70) overallGrade = 'Distinction';
-        else if (avgPct >= 60) overallGrade = 'Credit';
-        else if (avgPct >= 50) overallGrade = 'Pass';
+        const overallGrade = gradeFor(avgPct, gradeScale);
 
         let topUnit = null;
         let maxP = -1;
@@ -729,7 +725,7 @@ export default function Results() {
         });
 
         return { avgPct, overallGrade, topUnit, distinctionCount: dist, creditCount: cred, passCount: pass, failCount: fail };
-    }, [ownStudentResults]);
+    }, [ownStudentResults, gradeScale]);
 
 
     if (loading) {
@@ -1106,9 +1102,9 @@ export default function Results() {
                                                     <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                                                         <div
                                                             className={`h-full rounded-full transition-all duration-1000 ${
-                                                                r.percentage >= 70 ? 'bg-emerald-500' :
-                                                                r.percentage >= 60 ? 'bg-blue-500' :
-                                                                r.percentage >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                                                                r.percentage >= gradeScale.distinction ? 'bg-emerald-500' :
+                                                                r.percentage >= gradeScale.credit ? 'bg-blue-500' :
+                                                                r.percentage >= gradeScale.pass ? 'bg-amber-500' : 'bg-red-500'
                                                             }`}
                                                             style={{ width: `${Math.min(r.percentage, 100)}%` }}
                                                         />
@@ -1964,10 +1960,7 @@ export default function Results() {
                                         const validScores = slipStudentTarget.results.filter(r => r.percentage !== null && r.percentage !== undefined);
                                         if (validScores.length === 0) return null;
                                         const avgPct = Math.round((validScores.reduce((acc, r) => acc + parseFloat(r.percentage), 0) / validScores.length) * 10) / 10;
-                                        let overallGrade = 'Fail';
-                                        if (avgPct >= 70) overallGrade = 'Distinction';
-                                        else if (avgPct >= 60) overallGrade = 'Credit';
-                                        else if (avgPct >= 50) overallGrade = 'Pass';
+                                        const overallGrade = gradeFor(avgPct, gradeScale);
 
                                         return (
                                             <tr className="border-t-2 border-maroon bg-maroon/5 text-[10px] font-bold">
@@ -1984,10 +1977,10 @@ export default function Results() {
                             {/* Grading Scale Key */}
                             <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 text-[8px] font-medium text-gray-600 flex flex-wrap justify-between items-center gap-1.5">
                                 <span className="font-bold uppercase text-maroon">Grade Key:</span>
-                                <span>Distinction: 70–100%</span>
-                                <span>Credit: 60–69%</span>
-                                <span>Pass: 50–59%</span>
-                                <span className="text-red-600">Fail: 0–49%</span>
+                                <span>Distinction: {gradeScale.distinction}–100%</span>
+                                <span>Credit: {gradeScale.credit}–{gradeScale.distinction - 1}%</span>
+                                <span>Pass: {gradeScale.pass}–{gradeScale.credit - 1}%</span>
+                                <span className="text-red-600">Fail: {gradeScale.fail}–{gradeScale.pass - 1}%</span>
                             </div>
 
                             {/* Footer Signatures */}

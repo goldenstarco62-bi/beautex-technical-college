@@ -175,7 +175,7 @@ export async function getDb() {
 let isInitializing = false;
 // Bump this whenever a new migration block is added below — the version gate
 // then re-runs the full (idempotent) migration sweep once on next boot.
-const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-10-01';
+const SCHEMA_MIGRATION_VERSION = 'pg-2026-11-18-01';
 
 export async function initializeDatabase() {
     if (isInitializing) return;
@@ -991,6 +991,7 @@ async function runPostgresMigrations(database) {
                 max_marks REAL DEFAULT 100,
                 start_date DATE,
                 end_date DATE,
+                academic_period_id INTEGER,
                 status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Closed', 'Draft')),
                 created_by TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1103,11 +1104,13 @@ async function runPostgresMigrations(database) {
                 unit_code TEXT UNIQUE NOT NULL,
                 unit_name TEXT NOT NULL,
                 description TEXT,
+                credit_hours DOUBLE PRECISION DEFAULT 1,
                 status TEXT DEFAULT 'Active',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        await database.query('ALTER TABLE global_units ADD COLUMN IF NOT EXISTS credit_hours DOUBLE PRECISION DEFAULT 1');
         console.log('✅ global_units table ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ global_units migration warning (PostgreSQL):', e.message);
@@ -1188,6 +1191,7 @@ async function runPostgresMigrations(database) {
                 group_label TEXT DEFAULT 'Default',
                 academic_year TEXT,
                 term TEXT,
+                academic_period_id INTEGER,
                 is_default BOOLEAN DEFAULT FALSE,
                 status TEXT DEFAULT 'Active',
                 dedupe_key TEXT UNIQUE NOT NULL,
@@ -1235,6 +1239,39 @@ async function runPostgresMigrations(database) {
         console.log('✅ cat_results.offering_id ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ cat_results.offering_id migration warning (PostgreSQL):', e.message);
+    }
+
+    // ── Academic period links (PostgreSQL) ───────────────────────────────────
+    // Offerings and CAT periods reference the same academic_periods row, so the
+    // term is an id rather than three independent free-text fields.
+    try {
+        await database.query('ALTER TABLE cat_periods ADD COLUMN IF NOT EXISTS academic_period_id INTEGER');
+        await database.query('ALTER TABLE unit_offerings ADD COLUMN IF NOT EXISTS academic_period_id INTEGER');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_cat_periods_academic_period ON cat_periods(academic_period_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_offerings_academic_period ON unit_offerings(academic_period_id)');
+        // Best-effort relink of legacy rows whose free-text term matches a period name.
+        await database.query(`
+            UPDATE cat_periods
+            SET academic_period_id = (
+                SELECT p.id FROM academic_periods p
+                WHERE LOWER(p.name) = LOWER(cat_periods.term_name || ' ' || cat_periods.academic_year)
+                   OR LOWER(p.name) = LOWER(cat_periods.term_name)
+                ORDER BY p.id LIMIT 1
+            )
+            WHERE academic_period_id IS NULL
+        `);
+        await database.query(`
+            UPDATE unit_offerings
+            SET academic_period_id = (
+                SELECT p.id FROM academic_periods p
+                WHERE LOWER(p.name) = LOWER(unit_offerings.term)
+                ORDER BY p.id LIMIT 1
+            )
+            WHERE academic_period_id IS NULL AND term IS NOT NULL AND term <> ''
+        `);
+        console.log('✅ academic period links ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ academic period link migration warning (PostgreSQL):', e.message);
     }
 
     try {
@@ -1498,6 +1535,64 @@ async function runPostgresMigrations(database) {
         console.log('✅ Admissions module tables ensured (PostgreSQL)');
     } catch (e) {
         console.warn('⚠️ admissions migration warning (PostgreSQL):', e.message);
+    }
+
+    // ── Attendance module (PostgreSQL) ───────────────────────────────────────
+    // Records are dated; linking them to an academic period lets reports and
+    // alerts scope to a term without recomputing date ranges per query.
+    try {
+        await database.query('ALTER TABLE attendance ADD COLUMN IF NOT EXISTS academic_period_id INTEGER REFERENCES academic_periods(id) ON DELETE SET NULL');
+        // The original constraint only allowed three statuses; Settings exposes
+        // Sick and Excused, so widen it to match the configured list.
+        await database.query('ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_status_check');
+        await database.query(`ALTER TABLE attendance ADD CONSTRAINT attendance_status_check CHECK (status IN ('Present','Absent','Late','Sick','Excused'))`);
+        await database.query(`
+            UPDATE attendance a SET academic_period_id = p.id
+            FROM academic_periods p
+            WHERE a.academic_period_id IS NULL
+              AND p.start_date IS NOT NULL AND p.end_date IS NOT NULL
+              AND a.date BETWEEN p.start_date AND p.end_date
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_attendance_period ON attendance(academic_period_id)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date)');
+
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS trainer_attendance (
+                id SERIAL PRIMARY KEY,
+                faculty_id TEXT REFERENCES faculty(id) ON DELETE SET NULL,
+                trainer_name TEXT NOT NULL,
+                trainer_email TEXT,
+                department TEXT,
+                date DATE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Present' CHECK (status IN ('Present','Absent','Late','Sick','Excused')),
+                notes TEXT,
+                marked_by TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_trainer_attendance_unique ON trainer_attendance(faculty_id, date)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_trainer_attendance_date ON trainer_attendance(date)');
+        await database.query('CREATE INDEX IF NOT EXISTS idx_trainer_attendance_email ON trainer_attendance(trainer_email)');
+
+        // Generated PDFs live in the DB (base64) — the serverless filesystem is
+        // read-only and not shared between invocations. Lists never SELECT content.
+        await database.query(`
+            CREATE TABLE IF NOT EXISTS attendance_reports (
+                id TEXT PRIMARY KEY,
+                department TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                file_size INTEGER,
+                content TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (department, report_date)
+            )
+        `);
+        await database.query('CREATE INDEX IF NOT EXISTS idx_attendance_reports_created ON attendance_reports(created_at)');
+        console.log('✅ Attendance module schema ensured (PostgreSQL)');
+    } catch (e) {
+        console.warn('⚠️ attendance migration warning (PostgreSQL):', e.message);
     }
 }
 
@@ -2113,6 +2208,7 @@ async function runSqliteMigrations(database) {
                 max_marks REAL DEFAULT 100,
                 start_date DATE,
                 end_date DATE,
+                academic_period_id INTEGER,
                 status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Closed', 'Draft')),
                 created_by TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2192,11 +2288,18 @@ async function runSqliteMigrations(database) {
                 unit_code TEXT UNIQUE NOT NULL,
                 unit_name TEXT NOT NULL,
                 description TEXT,
+                credit_hours REAL DEFAULT 1,
                 status TEXT DEFAULT 'Active',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try {
+            const unitCols = await database.all('PRAGMA table_info(global_units)');
+            if (!unitCols.some(c => c.name === 'credit_hours')) {
+                await database.run('ALTER TABLE global_units ADD COLUMN credit_hours REAL DEFAULT 1');
+            }
+        } catch (_) { /* table creation above is authoritative */ }
         console.log('✅ global_units table ensured (SQLite)');
     } catch (e) {
         console.warn('⚠️ global_units migration warning (SQLite):', e.message);
@@ -2273,6 +2376,7 @@ async function runSqliteMigrations(database) {
                 group_label TEXT DEFAULT 'Default',
                 academic_year TEXT,
                 term TEXT,
+                academic_period_id INTEGER,
                 is_default INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'Active',
                 dedupe_key TEXT UNIQUE NOT NULL,
@@ -2288,6 +2392,42 @@ async function runSqliteMigrations(database) {
         console.log('✅ unit_offerings table ensured (SQLite)');
     } catch (e) {
         console.warn('⚠️ unit_offerings migration warning (SQLite):', e.message);
+    }
+
+    // ── Academic period links (SQLite) ──────────────────────────────────────
+    try {
+        const catCols = await database.all("PRAGMA table_info('cat_periods')");
+        if (!catCols.some(c => c.name === 'academic_period_id')) {
+            await database.run('ALTER TABLE cat_periods ADD COLUMN academic_period_id INTEGER');
+        }
+        const offeringCols = await database.all("PRAGMA table_info('unit_offerings')");
+        if (!offeringCols.some(c => c.name === 'academic_period_id')) {
+            await database.run('ALTER TABLE unit_offerings ADD COLUMN academic_period_id INTEGER');
+        }
+        await database.run('CREATE INDEX IF NOT EXISTS idx_cat_periods_academic_period ON cat_periods(academic_period_id)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_offerings_academic_period ON unit_offerings(academic_period_id)');
+        await database.run(`
+            UPDATE cat_periods
+            SET academic_period_id = (
+                SELECT p.id FROM academic_periods p
+                WHERE LOWER(p.name) = LOWER(cat_periods.term_name || ' ' || cat_periods.academic_year)
+                   OR LOWER(p.name) = LOWER(cat_periods.term_name)
+                ORDER BY p.id LIMIT 1
+            )
+            WHERE academic_period_id IS NULL
+        `);
+        await database.run(`
+            UPDATE unit_offerings
+            SET academic_period_id = (
+                SELECT p.id FROM academic_periods p
+                WHERE LOWER(p.name) = LOWER(unit_offerings.term)
+                ORDER BY p.id LIMIT 1
+            )
+            WHERE academic_period_id IS NULL AND term IS NOT NULL AND term <> ''
+        `);
+        console.log('✅ academic period links ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ academic period link migration warning (SQLite):', e.message);
     }
 
     try {
@@ -2712,6 +2852,75 @@ async function runSqliteMigrations(database) {
     } catch (e) {
         console.warn('⚠️ admissions migration warning (SQLite):', e.message);
     }
+
+    // ── Attendance module (SQLite) ──────────────────────────────────────────
+    try {
+        const attCols = await database.all("PRAGMA table_info('attendance')");
+        if (attCols.length > 0 && !attCols.some(c => c.name === 'academic_period_id')) {
+            await database.run('ALTER TABLE attendance ADD COLUMN academic_period_id INTEGER');
+        }
+
+        // Rebuild only when the table still carries the original three-status CHECK.
+        const tableRow = await database.all("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'attendance'");
+        const tableSql = tableRow[0]?.sql || '';
+        if (tableSql && !tableSql.includes("'Sick'")) {
+            await database.run('ALTER TABLE attendance RENAME TO attendance_legacy');
+            await database.run(`
+                CREATE TABLE attendance (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    student_id TEXT NOT NULL,
+                    course TEXT NOT NULL,
+                    date DATE NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('Present', 'Absent', 'Late', 'Sick', 'Excused')),
+                    academic_period_id INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+                    UNIQUE(student_id, course, date)
+                )
+            `);
+            await database.run(`
+                INSERT INTO attendance (id, student_id, course, date, status, academic_period_id, created_at)
+                SELECT id, student_id, course, date, status, academic_period_id, created_at FROM attendance_legacy
+            `);
+            await database.run('DROP TABLE attendance_legacy');
+            console.log('✅ attendance table rebuilt with configurable statuses (SQLite)');
+        }
+
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS trainer_attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                faculty_id TEXT,
+                trainer_name TEXT NOT NULL,
+                trainer_email TEXT,
+                department TEXT,
+                date DATE NOT NULL,
+                status TEXT NOT NULL DEFAULT 'Present' CHECK (status IN ('Present', 'Absent', 'Late', 'Sick', 'Excused')),
+                notes TEXT,
+                marked_by TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await database.run('CREATE UNIQUE INDEX IF NOT EXISTS idx_trainer_attendance_unique ON trainer_attendance(faculty_id, date)');
+        await database.run('CREATE INDEX IF NOT EXISTS idx_trainer_attendance_date ON trainer_attendance(date)');
+
+        await database.run(`
+            CREATE TABLE IF NOT EXISTS attendance_reports (
+                id TEXT PRIMARY KEY,
+                department TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                file_size INTEGER,
+                content TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(department, report_date)
+            )
+        `);
+        await database.run('CREATE INDEX IF NOT EXISTS idx_attendance_reports_created ON attendance_reports(created_at)');
+        console.log('✅ Attendance module schema ensured (SQLite)');
+    } catch (e) {
+        console.warn('⚠️ attendance migration warning (SQLite):', e.message);
+    }
 }
 
 /**
@@ -3043,6 +3252,10 @@ export async function seedNewSettings(database) {
         grading_credit_min: '60',
         grading_pass_min: '50',
         grading_fail_min: '0',
+        grading_distinction_points: '4',
+        grading_credit_points: '3',
+        grading_pass_points: '2',
+        grading_fail_points: '0',
         attendance_mode: 'daily',
         attendance_status_types: 'Present, Absent, Late, Sick, Excused',
         fee_categories: 'Registration Fee, Tuition Fee, Practical Fee, Examination Fee, Graduation Fee, Accommodation Fee',

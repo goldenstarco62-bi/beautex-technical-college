@@ -11,11 +11,17 @@ export default function TabExams(ctx) {
     const credit = bandVal('grading_credit_min', 60);
     const pass = bandVal('grading_pass_min', 50);
     const fail = bandVal('grading_fail_min', 0);
+    const distPts = bandVal('grading_distinction_points', 4);
+    const creditPts = bandVal('grading_credit_points', 3);
+    const passPts = bandVal('grading_pass_points', 2);
+    const failPts = bandVal('grading_fail_points', 0);
     const bandErrors = [];
     if (dist > 100 || credit > 100 || pass > 100 || fail < 0) bandErrors.push('Grade boundaries must sit between 0 and 100%.');
     if (!(dist > credit)) bandErrors.push('Distinction minimum must be higher than the Credit minimum.');
     if (!(credit > pass)) bandErrors.push('Credit minimum must be higher than the Pass minimum.');
     if (!(pass > fail)) bandErrors.push('Pass minimum must be higher than the Fail minimum.');
+    if ([distPts, creditPts, passPts, failPts].some(v => v < 0 || v > 10)) bandErrors.push('Grade points must sit between 0 and 10.');
+    if (!(distPts >= creditPts && creditPts >= passPts && passPts >= failPts)) bandErrors.push('Grade points must not increase from Distinction down to Fail.');
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-300">
             <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-white/5 p-6 space-y-5 shadow-sm">
@@ -41,6 +47,22 @@ export default function TabExams(ctx) {
                         </div>
                     ))}
                 </div>
+
+                <p className="text-[9.5px] font-black text-zinc-400 uppercase tracking-widest border-b border-gray-100 dark:border-white/5 pb-2 pt-2">Grade Points (GPA)</p>
+                <div className="grid grid-cols-2 gap-4">
+                    {[
+                        {key:'grading_distinction_points',label:'Distinction Points'},
+                        {key:'grading_credit_points',label:'Credit Points'},
+                        {key:'grading_pass_points',label:'Pass Points'},
+                        {key:'grading_fail_points',label:'Fail Points'},
+                    ].map(p=>(
+                        <div key={p.key} className="p-4 border rounded-2xl text-left border-zinc-200 dark:border-white/10 bg-zinc-50/50 dark:bg-zinc-950/20 flex justify-between items-center">
+                            <span className="text-[9px] font-black uppercase tracking-widest block leading-none text-zinc-600 dark:text-zinc-300">{p.label}</span>
+                            <input type="number" step="0.1" min="0" max="10" value={settings[p.key]||''} onChange={e=>set(p.key,e.target.value)} className="w-16 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-center text-xs font-black outline-none focus:ring-1 focus:ring-maroon" />
+                        </div>
+                    ))}
+                </div>
+                <p className="text-[9px] text-zinc-400 font-semibold">Term GPA = Σ (grade points × credit hours) ÷ Σ credit hours.</p>
 
                 {bandErrors.length > 0 && (
                     <div role="alert" className="p-3.5 rounded-xl border border-red-200 dark:border-red-950/40 bg-red-50/70 dark:bg-red-950/10 space-y-1 text-left">

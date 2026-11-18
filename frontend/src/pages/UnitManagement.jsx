@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { masterUnitsAPI, coursesAPI, facultyAPI, trainerUnitsAPI, unitOfferingsAPI, studentsAPI } from '../services/api';
+import { masterUnitsAPI, coursesAPI, facultyAPI, trainerUnitsAPI, unitOfferingsAPI, studentsAPI, academicAPI } from '../services/api';
 import {
     Plus, Edit2, Trash2, Search, BookOpen, CheckCircle2,
     XCircle, AlertCircle, X, Layers, Link2, Unlink,
@@ -64,6 +64,7 @@ function UnitFormModal({ unit, onClose, onSave }) {
         description: unit?.description || '',
         status: unit?.status || 'Active',
         is_common: !!unit?.is_common,
+        credit_hours: unit?.credit_hours ?? 1,
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -145,6 +146,18 @@ function UnitFormModal({ unit, onClose, onSave }) {
                                 <option value="Active">Active</option>
                                 <option value="Inactive">Inactive</option>
                             </select>
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Credit hours</label>
+                            <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                value={form.credit_hours}
+                                onChange={e => setForm(f => ({ ...f, credit_hours: e.target.value }))}
+                                style={inputStyle}
+                            />
+                            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Weights this unit in term GPA and credit totals.</p>
                         </div>
                         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: form.is_common ? '#f0fdf4' : '#f8fafc', border: `1px solid ${form.is_common ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '12px 14px' }}>
                             <input
@@ -701,13 +714,14 @@ function OfferingRow({ offering: o, canManage, setModal }) {
     );
 }
 
-function OfferingFormModal({ offering, initialUnitId, units, courses, faculty, onClose, onSaved }) {
+function OfferingFormModal({ offering, initialUnitId, units, courses, faculty, periods, onClose, onSaved }) {
     const isEdit = !!offering;
     const [form, setForm] = useState({
         unit_id: offering?.unit_id || initialUnitId || '',
         course_id: offering?.course_id || '',
         faculty_id: offering?.faculty_id || '',
         group_label: offering?.group_label || 'Default',
+        academic_period_id: offering?.academic_period_id || '',
         term: offering?.term || '',
         academic_year: offering?.academic_year || '',
         status: offering?.status || 'Active',
@@ -715,6 +729,19 @@ function OfferingFormModal({ offering, initialUnitId, units, courses, faculty, o
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
     const set = (k) => (e) => setForm(prev => ({ ...prev, [k]: e.target.value }));
+
+    const selectPeriod = (e) => {
+        const periodId = e.target.value;
+        const period = periods.find(p => String(p.id) === String(periodId));
+        setForm(prev => ({
+            ...prev,
+            academic_period_id: periodId,
+            ...(period ? {
+                term: period.name,
+                academic_year: period.start_date ? String(new Date(period.start_date).getFullYear()) : prev.academic_year,
+            } : {}),
+        }));
+    };
 
     const submit = async () => {
         if (!form.unit_id) { setError('Choose the unit this offering teaches.'); return; }
@@ -731,6 +758,7 @@ function OfferingFormModal({ offering, initialUnitId, units, courses, faculty, o
                 academic_year: form.academic_year || null,
                 status: form.status,
             };
+            if (form.academic_period_id) payload.academic_period_id = form.academic_period_id;
             const res = isEdit
                 ? await unitOfferingsAPI.update(offering.id, payload)
                 : await unitOfferingsAPI.create(payload);
@@ -797,6 +825,14 @@ function OfferingFormModal({ offering, initialUnitId, units, courses, faculty, o
                                 <option value="Inactive">Inactive</option>
                             </select>
                         </div>
+                    </div>
+
+                    <div>
+                        <label style={labelStyle}>Academic period</label>
+                        <select value={form.academic_period_id} onChange={selectPeriod} style={inputStyle}>
+                            <option value="">Use the active period</option>
+                            {periods.map(p => <option key={p.id} value={p.id}>{p.name}{p.is_active ? ' (active)' : ''}</option>)}
+                        </select>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1029,6 +1065,7 @@ export default function UnitManagement() {
     const [units, setUnits] = useState([]);
     const [courses, setCourses] = useState([]);
     const [faculty, setFaculty] = useState([]);
+    const [periods, setPeriods] = useState([]);
     const [offerings, setOfferings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
@@ -1058,11 +1095,12 @@ export default function UnitManagement() {
         setLoading(true);
         setLoadError(null);
         try {
-            const [unitsRes, coursesRes, facultyRes, offeringsRes] = await Promise.allSettled([
+            const [unitsRes, coursesRes, facultyRes, offeringsRes, periodsRes] = await Promise.allSettled([
                 masterUnitsAPI.getAll({ status: filterStatus || undefined, search: search || undefined }),
                 coursesAPI.getAll(),
                 facultyAPI.getAll(),
                 unitOfferingsAPI.getAll(),
+                academicAPI.getPeriods(),
             ]);
             if (unitsRes.status === 'fulfilled') setUnits(Array.isArray(unitsRes.value.data) ? unitsRes.value.data : []);
             if (coursesRes.status === 'fulfilled') {
@@ -1076,6 +1114,10 @@ export default function UnitManagement() {
             if (offeringsRes.status === 'fulfilled') {
                 const oData = offeringsRes.value.data;
                 setOfferings(Array.isArray(oData) ? oData : []);
+            }
+            if (periodsRes.status === 'fulfilled') {
+                const pData = periodsRes.value.data;
+                setPeriods(Array.isArray(pData) ? pData : []);
             }
             const failed = [unitsRes, coursesRes, facultyRes, offeringsRes].filter(r => r.status === 'rejected');
             if (failed.length > 0) {
@@ -2052,6 +2094,7 @@ export default function UnitManagement() {
                     units={units}
                     courses={courses}
                     faculty={faculty}
+                    periods={periods}
                     onClose={() => setModal(null)}
                     onSaved={handleOfferingSaved}
                 />

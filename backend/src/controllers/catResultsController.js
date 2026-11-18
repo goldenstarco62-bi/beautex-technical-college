@@ -1,14 +1,6 @@
 import { query, queryOne, run } from '../config/database.js';
 import logger from '../utils/logger.js';
-
-// ── Grade calculation ─────────────────────────────────────────────────────────
-function calcGrade(percentage) {
-    const p = parseFloat(percentage) || 0;
-    if (p >= 70) return 'Distinction';
-    if (p >= 60) return 'Credit';
-    if (p >= 50) return 'Pass';
-    return 'Fail';
-}
+import { getGradeScale, gradeFor } from '../utils/grading.js';
 
 // ── Audit helper ──────────────────────────────────────────────────────────────
 async function writeAuditLog({ result_id, student_id, unit_name, cat_period_id, action,
@@ -29,7 +21,7 @@ async function writeAuditLog({ result_id, student_id, unit_name, cat_period_id, 
 }
 
 // Helper to resolve student ID for a logged in student
-async function resolveStudentId(req) {
+export async function resolveStudentId(req) {
     let studentId = req.user?.student_id;
     if (!studentId && req.user?.email) {
         const studentRec = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))', [req.user.email]);
@@ -40,7 +32,7 @@ async function resolveStudentId(req) {
 }
 
 // Helper to get allowed courses & registered students for a teacher
-async function getTeacherAllowedCoursesAndStudents(req) {
+export async function getTeacherAllowedCoursesAndStudents(req) {
     const userRole = (req.user?.role || '').toLowerCase().trim();
     if (userRole !== 'teacher') return null;
 
@@ -433,7 +425,7 @@ export async function createResult(req, res) {
                 return res.status(400).json({ error: `Marks must be between 0 and ${period.max_marks || 100}.` });
             }
             percentage = Math.round((marksNum / (period.max_marks || 100)) * 100 * 10) / 10;
-            grade = calcGrade(percentage);
+            grade = gradeFor(percentage, await getGradeScale());
         }
 
         const enteredBy = req.user?.email || req.user?.id;
@@ -600,6 +592,7 @@ export async function batchCreateResults(req, res) {
         const trainerName = defaultTrainerName;
         const maxMarks = period.max_marks || 100;
         const batchCourseId = course_id || offering?.course_id || null;
+        const gradeScale = await getGradeScale();
 
         const saved = [];
         const errors = [];
@@ -640,7 +633,7 @@ export async function batchCreateResults(req, res) {
                     continue;
                 }
                 percentage = Math.round((m / maxMarks) * 100 * 10) / 10;
-                grade = calcGrade(percentage);
+                grade = gradeFor(percentage, gradeScale);
             }
 
             try {
@@ -743,7 +736,7 @@ export async function updateResult(req, res) {
                 return res.status(400).json({ error: `Marks must be 0–${maxMarks}.` });
             }
             percentage = Math.round((m / maxMarks) * 100 * 10) / 10;
-            grade = calcGrade(percentage);
+            grade = gradeFor(percentage, await getGradeScale());
         }
 
         await run(

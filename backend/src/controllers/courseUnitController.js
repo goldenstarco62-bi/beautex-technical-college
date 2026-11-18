@@ -89,6 +89,12 @@ async function findUnitCollision(newName, newCode, excludeId) {
  * Returns all global units, optionally filtered by status or search term.
  * Each unit includes the list of courses it is assigned to.
  */
+const normalizeCreditHours = (value, fallback = 1) => {
+    const n = parseFloat(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.min(100, Math.round(n * 100) / 100);
+};
+
 export async function getAllUnits(req, res) {
     try {
         const { status, search, course_id } = req.query;
@@ -159,6 +165,7 @@ export async function getAllUnits(req, res) {
                 code: codeVal,
                 unit_name: nameVal,
                 unit_code: codeVal,
+                credit_hours: Number(u.credit_hours) || 1,
                 is_common: u.is_common === true || u.is_common === 1,
                 assigned_courses: coursesByUnit[u.id] || []
             };
@@ -177,10 +184,11 @@ export async function getAllUnits(req, res) {
  */
 export async function createUnit(req, res) {
     try {
-        const { name, unit_name, code, unit_code, description, status = 'Active', is_common } = req.body;
+        const { name, unit_name, code, unit_code, description, status = 'Active', is_common, credit_hours } = req.body;
         const finalName = (unit_name || name || '').trim();
         const finalCode = (unit_code || code || '').trim();
         const finalCommon = is_common === undefined ? false : (is_common === true || is_common === 1 || is_common === 'true');
+        const finalCredits = normalizeCreditHours(credit_hours, 1);
 
         if (!finalName) return res.status(400).json({ error: 'Unit name is required' });
 
@@ -210,14 +218,14 @@ export async function createUnit(req, res) {
         const commonVal = isPg ? finalCommon : (finalCommon ? 1 : 0);
         if (isPg) {
             result = await query(
-                'INSERT INTO global_units (unit_code, unit_name, description, status, is_common) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-                [autoCode, finalName, description?.trim() || null, status, commonVal]
+                'INSERT INTO global_units (unit_code, unit_name, description, status, is_common, credit_hours) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+                [autoCode, finalName, description?.trim() || null, status, commonVal, finalCredits]
             );
             res.status(201).json(result[0]);
         } else {
             result = await run(
-                'INSERT INTO global_units (unit_code, unit_name, description, status, is_common) VALUES (?, ?, ?, ?, ?)',
-                [autoCode, finalName, description?.trim() || null, status, commonVal]
+                'INSERT INTO global_units (unit_code, unit_name, description, status, is_common, credit_hours) VALUES (?, ?, ?, ?, ?, ?)',
+                [autoCode, finalName, description?.trim() || null, status, commonVal, finalCredits]
             );
             const unit = await queryOne('SELECT * FROM global_units WHERE id = ?', [result.lastID]);
             res.status(201).json(unit);
@@ -235,7 +243,7 @@ export async function createUnit(req, res) {
 export async function updateUnit(req, res) {
     try {
         const { unitId } = req.params;
-        const { name, unit_name, code, unit_code, description, status, is_common } = req.body;
+        const { name, unit_name, code, unit_code, description, status, is_common, credit_hours } = req.body;
         const isPg = getActiveDbEngine() === 'postgres';
 
         const unit = await queryOne(
@@ -251,6 +259,9 @@ export async function updateUnit(req, res) {
         const updatedCommon = is_common === undefined
             ? !!unit.is_common
             : (is_common === true || is_common === 1 || is_common === 'true');
+        const updatedCredits = credit_hours === undefined
+            ? normalizeCreditHours(unit.credit_hours, 1)
+            : normalizeCreditHours(credit_hours, normalizeCreditHours(unit.credit_hours, 1));
 
         const nameChanged = updatedName && updatedName.toLowerCase() !== String(unit.unit_name || '').toLowerCase();
         const codeChanged = updatedCode && updatedCode.toLowerCase() !== String(unit.unit_code || '').toLowerCase();
@@ -259,15 +270,15 @@ export async function updateUnit(req, res) {
 
         if (isPg) {
             await query(
-                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, is_common=$5, updated_at=CURRENT_TIMESTAMP WHERE id=$6',
-                [updatedName, updatedCode, updatedDesc, updatedStatus, updatedCommon, unitId]
+                'UPDATE global_units SET unit_name=$1, unit_code=$2, description=$3, status=$4, is_common=$5, credit_hours=$6, updated_at=CURRENT_TIMESTAMP WHERE id=$7',
+                [updatedName, updatedCode, updatedDesc, updatedStatus, updatedCommon, updatedCredits, unitId]
             );
             const updated = await queryOne('SELECT * FROM global_units WHERE id=$1', [unitId]);
             res.json(updated);
         } else {
             await run(
-                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, is_common=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
-                [updatedName, updatedCode, updatedDesc, updatedStatus, updatedCommon ? 1 : 0, unitId]
+                'UPDATE global_units SET unit_name=?, unit_code=?, description=?, status=?, is_common=?, credit_hours=?, updated_at=CURRENT_TIMESTAMP WHERE id=?',
+                [updatedName, updatedCode, updatedDesc, updatedStatus, updatedCommon ? 1 : 0, updatedCredits, unitId]
             );
             const updated = await queryOne('SELECT * FROM global_units WHERE id=?', [unitId]);
             res.json(updated);

@@ -3,6 +3,7 @@
  */
 import express from 'express';
 import * as attendanceController from '../controllers/attendanceController.js';
+import * as trainerAttendanceController from '../controllers/trainerAttendanceController.js';
 import * as gradeController from '../controllers/gradeController.js';
 import * as announcementController from '../controllers/announcementController.js';
 import notificationController from '../controllers/notificationController.js';
@@ -20,6 +21,7 @@ import * as studentUnitMarksController from '../controllers/studentUnitMarksCont
 import * as unitCoverageController from '../controllers/unitCoverageController.js';
 import * as catController from '../controllers/catController.js';
 import * as catResultsController from '../controllers/catResultsController.js';
+import * as academicReportController from '../controllers/academicReportController.js';
 import * as trainerUnitController from '../controllers/trainerUnitController.js';
 import * as unitOfferingController from '../controllers/unitOfferingController.js';
 import * as certificateController from '../controllers/certificateController.js';
@@ -35,10 +37,23 @@ router.get('/stats/search', authenticateToken, statsController.globalSearch);
 // ── Attendance ────────────────────────────────────────────────────────────────
 router.get('/attendance/monthly-summary', authenticateToken, attendanceController.getMonthlyAttendanceSummary);
 router.get('/attendance/summary', authenticateToken, authorizeRoles('admin', 'superadmin', 'teacher'), attendanceController.getAttendanceSummary);
+router.get('/attendance/config', authenticateToken, attendanceController.getAttendanceSettings);
+router.get('/attendance/alerts', authenticateToken, attendanceController.getAttendanceAlerts);
+router.post('/attendance/alerts/notify', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.notifyAttendanceAlerts);
+router.post('/attendance/batch', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.markAttendanceBatch);
 router.get('/attendance', authenticateToken, attendanceController.getAllAttendance);
 router.post('/attendance', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.markAttendance);
 router.put('/attendance/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), attendanceController.updateAttendance);
 router.delete('/attendance/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), attendanceController.deleteAttendance);
+
+// ── Trainer Attendance ────────────────────────────────────────────────────────
+router.get('/trainer-attendance/roster', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerAttendanceController.getTrainerAttendanceRoster);
+router.get('/trainer-attendance/summary', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerAttendanceController.getTrainerAttendanceSummary);
+router.post('/trainer-attendance/batch', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerAttendanceController.markTrainerAttendanceBatch);
+router.get('/trainer-attendance', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerAttendanceController.getAllTrainerAttendance);
+router.post('/trainer-attendance', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerAttendanceController.markTrainerAttendance);
+router.put('/trainer-attendance/:id', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), trainerAttendanceController.updateTrainerAttendance);
+router.delete('/trainer-attendance/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), trainerAttendanceController.deleteTrainerAttendance);
 
 // ── Grades ────────────────────────────────────────────────────────────────────
 router.get('/grades', authenticateToken, gradeController.getAllGrades);
@@ -117,9 +132,12 @@ router.put('/academic/departments/:id', authenticateToken, authorizeRoles('admin
 router.delete('/academic/departments/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.deleteDepartment);
 router.get('/academic/periods', authenticateToken, academicController.getAcademicPeriods);
 router.post('/academic/periods', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.createAcademicPeriod);
+router.put('/academic/periods/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.updateAcademicPeriod);
 router.put('/academic/periods/:id/activate', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.setActivePeriod);
 router.delete('/academic/periods/:id', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.deleteAcademicPeriod);
 router.post('/academic/promote', authenticateToken, authorizeRoles('admin', 'superadmin'), academicController.promoteStudents);
+router.get('/academic/grading-scale', authenticateToken, academicController.getGradingScale);
+router.get('/academic/report-card', authenticateToken, academicReportController.getReportCard);
 
 // ── Academic Reports ──────────────────────────────────────────────────────────
 router.get('/reports', authenticateToken, authorizeRoles('teacher', 'admin', 'superadmin'), reportController.getAllReports);

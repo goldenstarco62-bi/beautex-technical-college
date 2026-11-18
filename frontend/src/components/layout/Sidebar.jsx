@@ -31,6 +31,7 @@ import {
     Library,
     ScrollText,
     UserPlus,
+    FileCheck2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { academicAPI } from '../../services/api';
@@ -50,12 +51,14 @@ const navSections = [
             { name: 'Units Covered', path: '/grades', icon: GraduationCap, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Unit Coverage', path: '/unit-coverage', icon: CheckSquare, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
             { name: 'Results', path: '/results', icon: Award, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'Core' },
+            { name: 'Report Cards', path: '/report-card', icon: FileCheck2, roles: ['admin', 'teacher', 'student', 'superadmin'], highlight: 'New' },
             { name: 'Certificates', path: '/certificates', icon: ScrollText, roles: ['admin', 'superadmin'], highlight: 'Core' },
             { name: 'Admissions', path: '/admissions', icon: UserPlus, roles: ['admin', 'superadmin'], highlight: 'New' },
             { name: 'Students', path: '/students', icon: Users, roles: ['admin', 'superadmin', 'teacher'] },
             { name: 'Courses', path: '/courses', icon: BookOpen, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Faculty', path: '/faculty', icon: UserCheck, roles: ['admin', 'superadmin'] },
             { name: 'Attendance', path: '/attendance', icon: ClipboardList, roles: ['admin', 'teacher', 'student', 'superadmin'] },
+            { name: 'Trainer Attendance', path: '/trainer-attendance', icon: UserCheck, roles: ['admin', 'teacher', 'superadmin'], highlight: 'New' },
             { name: 'Timetable', path: '/schedule', icon: Calendar, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Daily Ledger', path: '/daily-student-logs', icon: History, roles: ['admin', 'teacher', 'student', 'superadmin'] },
             { name: 'Journal Entry', path: '/student-daily-reports', icon: FileText, roles: ['admin', 'superadmin', 'teacher'] },

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { attendanceAPI, coursesAPI } from '../services/api';
+import { attendanceAPI, academicAPI, coursesAPI } from '../services/api';
 import {
     Users, CheckCircle2, Clock, AlertCircle, Calendar,
     Filter, Search, RefreshCw, FileDown, ChevronDown, ChevronUp,
@@ -19,6 +19,9 @@ export default function AttendanceSummary() {
     
     // Filters
     const [selectedCourse, setSelectedCourse] = useState('');
+    const [periods, setPeriods] = useState([]);
+    const [selectedPeriod, setSelectedPeriod] = useState('');
+    const [attendanceConfig, setAttendanceConfig] = useState({ threshold: 90, thresholds: { excellent: 95, good: 85, fair: 75 } });
     const [searchQuery, setSearchQuery] = useState('');
     
     // Tabs: 'overall' | 'weekly' | 'monthly'
@@ -34,30 +37,38 @@ export default function AttendanceSummary() {
     const [downloadingPDF, setDownloadingPDF] = useState(false);
     const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
 
-    // Fetch courses on mount
+    // Fetch courses, academic periods and attendance configuration on mount
     useEffect(() => {
-        const fetchCourses = async () => {
-            try {
-                const res = await coursesAPI.getAll();
-                setCourses(res.data || res || []);
-            } catch (err) {
-                console.error('Error fetching courses:', err);
-                toast.error('Failed to load courses dropdown.');
+        const fetchLookups = async () => {
+            const [coursesRes, periodsRes, configRes] = await Promise.all([
+                coursesAPI.getAll().catch(() => ({ data: [] })),
+                academicAPI.getPeriods().catch(() => ({ data: [] })),
+                attendanceAPI.getConfig().catch(() => ({ data: null })),
+            ]);
+            setCourses(coursesRes.data || []);
+            const periodList = Array.isArray(periodsRes.data) ? periodsRes.data : [];
+            setPeriods(periodList);
+            const active = configRes.data?.active_period || periodList.find(p => p.is_active);
+            if (active) setSelectedPeriod(String(active.id));
+            if (configRes.data) {
+                setAttendanceConfig({
+                    threshold: Number(configRes.data.threshold) || 90,
+                    thresholds: configRes.data.thresholds || { excellent: 95, good: 85, fair: 75 },
+                });
             }
         };
-        fetchCourses();
+        fetchLookups();
     }, []);
 
-    // Fetch summary data when course filter changes
+    // Fetch summary data when course or term filter changes
     const fetchSummary = async () => {
         setLoading(true);
         try {
             const params = {};
-            if (selectedCourse) {
-                params.course = selectedCourse;
-            }
+            if (selectedCourse) params.course = selectedCourse;
+            if (selectedPeriod) params.academic_period_id = selectedPeriod;
             const res = await attendanceAPI.getSummary(params);
-            setSummaryData(res.data || res || []);
+            setSummaryData(res.data || []);
         } catch (err) {
             console.error('Error fetching attendance summary:', err);
             toast.error('Failed to load attendance summary.');
@@ -68,7 +79,7 @@ export default function AttendanceSummary() {
 
     useEffect(() => {
         fetchSummary();
-    }, [selectedCourse]);
+    }, [selectedCourse, selectedPeriod]);
 
     // Toggle expand row
     const toggleRow = (studentId) => {
@@ -174,11 +185,19 @@ export default function AttendanceSummary() {
     const bestWeek = getBestWeek();
     const bestMonth = getBestMonth();
 
-    // Helper: color-code attendance rate values
+    // Helper: color-code attendance rate values using the configured bands
     const getRateColor = (rate) => {
-        if (rate >= 90) return 'text-emerald-600 bg-emerald-50 border-emerald-100';
-        if (rate >= 75) return 'text-amber-600 bg-amber-50 border-amber-100';
+        if (rate >= (attendanceConfig.threshold ?? 90)) return 'text-emerald-600 bg-emerald-50 border-emerald-100';
+        if (rate >= (attendanceConfig.thresholds?.fair ?? 75)) return 'text-amber-600 bg-amber-50 border-amber-100';
         return 'text-rose-600 bg-rose-50 border-rose-100';
+    };
+
+    const bandFor = (rate) => {
+        const t = attendanceConfig.thresholds || {};
+        if (rate >= (t.excellent ?? 95)) return { label: 'Excellent', style: 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30' };
+        if (rate >= (t.good ?? 85)) return { label: 'Good', style: 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30' };
+        if (rate >= (t.fair ?? 75)) return { label: 'Fair', style: 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30' };
+        return { label: 'Needs Imp.', style: 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30' };
     };
 
     // Helper: find best and worst periods for a single student
@@ -275,24 +294,23 @@ export default function AttendanceSummary() {
         let csvContent = "\ufeffStudent Name,Student ID,Course Program,";
         
         if (activeTab === 'overall') {
-            csvContent += "Classes,Present,Late,Absent,Attendance Rate,Status\n";
+            csvContent += "Classes,Present,Late,Excused,Sick,Absent,Attendance Rate,Status\n";
             filteredData.forEach(s => {
                 const rate = s.overall?.rate || 0;
-                const status = rate >= 95 ? 'Excellent' : rate >= 85 ? 'Good' : rate >= 75 ? 'Fair' : 'Needs Improvement';
-                csvContent += `"${s.student_name}","${s.student_id}","${s.course}",${s.overall?.total || 0},${s.overall?.present || 0},${s.overall?.late || 0},${s.overall?.absent || 0},${rate}%,${status}\n`;
+                csvContent += `"${s.student_name}","${s.student_id}","${s.course}",${s.overall?.total || 0},${s.overall?.present || 0},${s.overall?.late || 0},${s.overall?.excused || 0},${s.overall?.sick || 0},${s.overall?.absent || 0},${rate}%,${bandFor(rate).label}\n`;
             });
         } else if (activeTab === 'weekly') {
-            csvContent += "Week,Classes,Present,Late,Absent,Weekly Rate\n";
+            csvContent += "Week,Classes,Present,Late,Excused,Sick,Absent,Weekly Rate\n";
             filteredData.forEach(s => {
                 (s.weekly || []).forEach(w => {
-                    csvContent += `"${s.student_name}","${s.student_id}","${s.course}","${w.week}",${w.total},${w.present},${w.late},${w.absent},${w.rate}%\n`;
+                    csvContent += `"${s.student_name}","${s.student_id}","${s.course}","${w.week}",${w.total},${w.present},${w.late},${w.excused || 0},${w.sick || 0},${w.absent},${w.rate}%\n`;
                 });
             });
         } else {
-            csvContent += "Month,Classes,Present,Late,Absent,Monthly Rate\n";
+            csvContent += "Month,Classes,Present,Late,Excused,Sick,Absent,Monthly Rate\n";
             filteredData.forEach(s => {
                 (s.monthly || []).forEach(m => {
-                    csvContent += `"${s.student_name}","${s.student_id}","${s.course}","${m.month}",${m.total},${m.present},${m.late},${m.absent},${m.rate}%\n`;
+                    csvContent += `"${s.student_name}","${s.student_id}","${s.course}","${m.month}",${m.total},${m.present},${m.late},${m.excused || 0},${m.sick || 0},${m.absent},${m.rate}%\n`;
                 });
             });
         }
@@ -374,7 +392,7 @@ export default function AttendanceSummary() {
             </div>
 
             {/* Filter Controls Bar */}
-            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xl grid grid-cols-1 md:grid-cols-3 gap-6 print:hidden">
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xl grid grid-cols-1 md:grid-cols-4 gap-6 print:hidden">
                 <div className="flex flex-col gap-1.5">
                     <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider">Select Course Program</label>
                     <div className="relative">
@@ -387,6 +405,24 @@ export default function AttendanceSummary() {
                             <option value="">All Course Programs</option>
                             {courses.map(course => (
                                 <option key={course.id || course._id} value={course.name}>{course.name}</option>
+                            ))}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider">Academic Term</label>
+                    <div className="relative">
+                        <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <select
+                            value={selectedPeriod}
+                            onChange={(e) => setSelectedPeriod(e.target.value)}
+                            className="w-full bg-gray-50 border-none rounded-2xl text-xs font-bold py-4 pl-12 pr-4 focus:ring-2 focus:ring-maroon/20 transition-all appearance-none"
+                        >
+                            <option value="">All-time</option>
+                            {periods.map(period => (
+                                <option key={period.id} value={period.id}>{period.name}{period.is_active ? ' • Active' : ''}</option>
                             ))}
                         </select>
                         <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -489,7 +525,7 @@ export default function AttendanceSummary() {
                                     {activeTab === 'overall' && (
                                         <>
                                             <th className="px-6 py-4.5 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center print:py-2">Classes</th>
-                                            <th className="px-6 py-4.5 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center print:py-2">Present/Late/Absent</th>
+                                            <th className="px-6 py-4.5 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center print:py-2">Present / Late / Excused / Sick / Absent</th>
                                             <th className="px-6 py-4.5 text-[9px] font-black text-gray-400 uppercase tracking-widest text-center print:py-2">Overall Rate</th>
                                             <th className="px-6 py-4.5 text-[9px] font-black text-gray-400 uppercase tracking-widest print:py-2">Monthly extremes</th>
                                         </>
@@ -547,10 +583,14 @@ export default function AttendanceSummary() {
                                                             <td className="px-6 py-4.5 text-center text-xs font-bold text-gray-700">
                                                                 {student.overall?.total || 0}
                                                             </td>
-                                                            <td className="px-6 py-4.5 text-center text-xs font-semibold">
+                                                            <td className="px-6 py-4.5 text-center text-xs font-semibold whitespace-nowrap">
                                                                 <span className="text-emerald-600">{student.overall?.present || 0}P</span>
                                                                 <span className="text-gray-400 mx-1">/</span>
                                                                 <span className="text-amber-600">{student.overall?.late || 0}L</span>
+                                                                <span className="text-gray-400 mx-1">/</span>
+                                                                <span className="text-violet-600">{student.overall?.excused || 0}E</span>
+                                                                <span className="text-gray-400 mx-1">/</span>
+                                                                <span className="text-sky-600">{student.overall?.sick || 0}S</span>
                                                                 <span className="text-gray-400 mx-1">/</span>
                                                                 <span className="text-rose-500">{student.overall?.absent || 0}A</span>
                                                             </td>
@@ -560,22 +600,10 @@ export default function AttendanceSummary() {
                                                                         {student.overall?.rate || 0}%
                                                                     </span>
                                                                     {(() => {
-                                                                        const r = student.overall?.rate || 0;
-                                                                        let badgeStyle = 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
-                                                                        let label = 'Needs Imp.';
-                                                                        if (r >= 95) {
-                                                                            badgeStyle = 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
-                                                                            label = 'Excellent';
-                                                                        } else if (r >= 85) {
-                                                                            badgeStyle = 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
-                                                                            label = 'Good';
-                                                                        } else if (r >= 75) {
-                                                                            badgeStyle = 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
-                                                                            label = 'Fair';
-                                                                        }
+                                                                        const band = bandFor(student.overall?.rate || 0);
                                                                         return (
-                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeStyle}`}>
-                                                                                {label}
+                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${band.style}`}>
+                                                                                {band.label}
                                                                             </span>
                                                                         );
                                                                     })()}
@@ -601,22 +629,10 @@ export default function AttendanceSummary() {
                                                                         {student.overall?.rate || 0}%
                                                                     </span>
                                                                     {(() => {
-                                                                        const r = student.overall?.rate || 0;
-                                                                        let badgeStyle = 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
-                                                                        let label = 'Needs Imp.';
-                                                                        if (r >= 95) {
-                                                                            badgeStyle = 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
-                                                                            label = 'Excellent';
-                                                                        } else if (r >= 85) {
-                                                                            badgeStyle = 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
-                                                                            label = 'Good';
-                                                                        } else if (r >= 75) {
-                                                                            badgeStyle = 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
-                                                                            label = 'Fair';
-                                                                        }
+                                                                        const band = bandFor(student.overall?.rate || 0);
                                                                         return (
-                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeStyle}`}>
-                                                                                {label}
+                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${band.style}`}>
+                                                                                {band.label}
                                                                             </span>
                                                                         );
                                                                     })()}
@@ -642,22 +658,10 @@ export default function AttendanceSummary() {
                                                                         {student.overall?.rate || 0}%
                                                                     </span>
                                                                     {(() => {
-                                                                        const r = student.overall?.rate || 0;
-                                                                        let badgeStyle = 'text-rose-600 bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30';
-                                                                        let label = 'Needs Imp.';
-                                                                        if (r >= 95) {
-                                                                            badgeStyle = 'text-emerald-600 bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30';
-                                                                            label = 'Excellent';
-                                                                        } else if (r >= 85) {
-                                                                            badgeStyle = 'text-blue-600 bg-blue-50 border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30';
-                                                                            label = 'Good';
-                                                                        } else if (r >= 75) {
-                                                                            badgeStyle = 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30';
-                                                                            label = 'Fair';
-                                                                        }
+                                                                        const band = bandFor(student.overall?.rate || 0);
                                                                         return (
-                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeStyle}`}>
-                                                                                {label}
+                                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${band.style}`}>
+                                                                                {band.label}
                                                                             </span>
                                                                         );
                                                                     })()}
@@ -714,7 +718,7 @@ export default function AttendanceSummary() {
                                                                                 <tr className="text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-1">
                                                                                     <th className="py-2">Week Period</th>
                                                                                     <th className="py-2 text-center">Classes</th>
-                                                                                    <th className="py-2 text-center">P / L / A</th>
+                                                                                    <th className="py-2 text-center">P / L / E / S / A</th>
                                                                                     <th className="py-2 text-right">Weekly Rate</th>
                                                                                 </tr>
                                                                             </thead>
@@ -737,7 +741,7 @@ export default function AttendanceSummary() {
                                                                                                 <span className="text-gray-300 mx-1">/</span>
                                                                                                 <span className="text-amber-600">{w.late}</span>
                                                                                                 <span className="text-gray-300 mx-1">/</span>
-                                                                                                <span className="text-rose-500">{w.absent}</span>
+                                                                                                <span className="text-violet-600">{w.excused || 0}</span><span className="text-gray-300 mx-1">/</span><span className="text-sky-600">{w.sick || 0}</span><span className="text-gray-300 mx-1">/</span><span className="text-rose-500">{w.absent}</span>
                                                                                             </td>
                                                                                             <td className="py-2.5 text-right font-black text-gray-800">
                                                                                                 <span className={`inline-block px-2 py-0.5 rounded text-[9px] border ${getRateColor(w.rate)}`}>
@@ -769,7 +773,7 @@ export default function AttendanceSummary() {
                                                                                 <tr className="text-[9px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-50 pb-1">
                                                                                     <th className="py-2">Month Period</th>
                                                                                     <th className="py-2 text-center">Classes</th>
-                                                                                    <th className="py-2 text-center">P / L / A</th>
+                                                                                    <th className="py-2 text-center">P / L / E / S / A</th>
                                                                                     <th className="py-2 text-right">Monthly Rate</th>
                                                                                 </tr>
                                                                             </thead>
@@ -795,7 +799,7 @@ export default function AttendanceSummary() {
                                                                                                     <span className="text-gray-300 mx-1">/</span>
                                                                                                     <span className="text-amber-600">{m.late}</span>
                                                                                                     <span className="text-gray-300 mx-1">/</span>
-                                                                                                    <span className="text-rose-500">{m.absent}</span>
+                                                                                                    <span className="text-violet-600">{m.excused || 0}</span><span className="text-gray-300 mx-1">/</span><span className="text-sky-600">{m.sick || 0}</span><span className="text-gray-300 mx-1">/</span><span className="text-rose-500">{m.absent}</span>
                                                                                                 </td>
                                                                                                 <td className="py-2.5 text-right font-black text-gray-800">
                                                                                                     <span className={`inline-block px-2 py-0.5 rounded text-[9px] border ${getRateColor(m.rate)}`}>
@@ -928,7 +932,7 @@ export default function AttendanceSummary() {
                                     {activeTab === 'overall' && (
                                         <>
                                             <th className="px-4 py-2 font-black text-gray-600 uppercase tracking-wider text-center">Classes</th>
-                                            <th className="px-4 py-2 font-black text-gray-600 uppercase tracking-wider text-center">P / L / A</th>
+                                            <th className="px-4 py-2 font-black text-gray-600 uppercase tracking-wider text-center">P / L / E / S / A</th>
                                             <th className="px-4 py-2 font-black text-gray-600 uppercase tracking-wider text-center">Overall Rate</th>
                                         </>
                                     )}
@@ -962,6 +966,10 @@ export default function AttendanceSummary() {
                                                         <span className="text-emerald-600">{student.overall?.present || 0}P</span>
                                                         <span className="text-gray-300 mx-1">/</span>
                                                         <span className="text-amber-500">{student.overall?.late || 0}L</span>
+                                                        <span className="text-gray-300 mx-1">/</span>
+                                                        <span className="text-violet-600">{student.overall?.excused || 0}E</span>
+                                                        <span className="text-gray-300 mx-1">/</span>
+                                                        <span className="text-sky-600">{student.overall?.sick || 0}S</span>
                                                         <span className="text-gray-300 mx-1">/</span>
                                                         <span className="text-rose-500">{student.overall?.absent || 0}A</span>
                                                     </td>

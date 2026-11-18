@@ -1,7 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { getDb, query, queryOne, run } from '../config/database.js';
+import {
+    generateDailyAttendanceReports,
+    listSavedAttendanceReports,
+    readSavedAttendanceReport
+} from '../services/attendanceReportService.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -307,8 +309,6 @@ export const updateReport = async (req, res) => {
 export const generateDailyAttendanceReport = async (req, res) => {
     try {
         const { date } = req.body;
-        const { generateDailyAttendanceReports } = await import('../services/attendanceReportService.js');
-        
         const results = await generateDailyAttendanceReports(date);
         
         res.json({
@@ -324,28 +324,12 @@ export const generateDailyAttendanceReport = async (req, res) => {
 
 export const listAttendanceReports = async (req, res) => {
     try {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        const REPORTS_DIR = path.join(__dirname, '../../uploads/attendance_reports');
+        const files = await listSavedAttendanceReports();
 
-        if (!fs.existsSync(REPORTS_DIR)) {
-            return res.json([]);
-        }
-
-        const files = fs.readdirSync(REPORTS_DIR)
-            .filter(file => file.endsWith('.pdf'))
-            .map(file => {
-                const stats = fs.statSync(path.join(REPORTS_DIR, file));
-                return {
-                    name: file,
-                    size: stats.size,
-                    createdAt: stats.birthtime,
-                    url: `/api/activity-reports/attendance-download/${encodeURIComponent(file)}`
-                };
-            })
-            .sort((a, b) => b.createdAt - a.createdAt);
-
-        res.json(files);
+        res.json(files.map(file => ({
+            ...file,
+            url: `/api/activity-reports/attendance-download/${encodeURIComponent(file.name)}`
+        })));
     } catch (error) {
         console.error('Error listing attendance reports:', error);
         res.status(500).json({ error: 'Failed to list reports' });
@@ -355,15 +339,21 @@ export const listAttendanceReports = async (req, res) => {
 export const downloadAttendanceReport = async (req, res) => {
     try {
         const { fileName } = req.params;
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        const filePath = path.join(__dirname, '../../uploads/attendance_reports', fileName);
 
-        if (!fs.existsSync(filePath)) {
+        if (!/\.pdf$/i.test(fileName) || /[\\/\u0000-\u001f]/.test(fileName)) {
+            return res.status(400).json({ error: 'Invalid report name' });
+        }
+
+        const buffer = await readSavedAttendanceReport(fileName);
+
+        if (!buffer) {
             return res.status(404).json({ error: 'Report not found' });
         }
 
-        res.download(filePath);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName.replace(/"/g, '')}"`);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
     } catch (error) {
         console.error('Error downloading attendance report:', error);
         res.status(500).json({ error: 'Failed to download report' });

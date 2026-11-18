@@ -210,10 +210,25 @@ export const attendanceAPI = {
     // FIX: Added studentId param so students can fetch only their own records server-side
     getAll: (course, date, studentId) => api.get('attendance', { params: { course, date, student_id: studentId } }),
     mark: (data) => api.post('attendance', data),
+    markBatch: (data) => api.post('attendance/batch', data),
     update: (id, data) => api.put(`attendance/${encodeURIComponent(id)}`, data),
     delete: (id) => api.delete(`attendance/${encodeURIComponent(id)}`),
     getSummary: (params) => api.get('attendance/summary', { params }),
     getMonthlySummary: (params) => api.get('attendance/monthly-summary', { params }),
+    getConfig: () => api.get('attendance/config'),
+    getAlerts: (params) => api.get('attendance/alerts', { params }),
+    notifyAlerts: (data) => api.post('attendance/alerts/notify', data),
+};
+
+// Trainer (staff) attendance
+export const trainerAttendanceAPI = {
+    getAll: (params) => api.get('trainer-attendance', { params }),
+    getRoster: (params) => api.get('trainer-attendance/roster', { params }),
+    getSummary: (params) => api.get('trainer-attendance/summary', { params }),
+    mark: (data) => api.post('trainer-attendance', data),
+    markBatch: (data) => api.post('trainer-attendance/batch', data),
+    update: (id, data) => api.put(`trainer-attendance/${encodeURIComponent(id)}`, data),
+    remove: (id) => api.delete(`trainer-attendance/${encodeURIComponent(id)}`),
 };
 
 
@@ -414,9 +429,12 @@ export const academicAPI = {
     deleteDepartment: (id) => api.delete(`academic/departments/${id}`),
     getPeriods: () => api.get('academic/periods'),
     createPeriod: (data) => api.post('academic/periods', data),
+    updatePeriod: (id, data) => api.put(`academic/periods/${id}`, data),
     activatePeriod: (id) => api.put(`academic/periods/${id}/activate`),
     deletePeriod: (id) => api.delete(`academic/periods/${id}`),
     promoteStudents: (data) => api.post('academic/promote', data),
+    getGradingScale: () => api.get('academic/grading-scale'),
+    getReportCard: (params) => api.get('academic/report-card', { params }),
 };
 
 // Settings

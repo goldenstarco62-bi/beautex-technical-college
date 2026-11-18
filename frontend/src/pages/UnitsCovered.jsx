@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { courseUnitsAPI, studentUnitMarksAPI, coursesAPI, studentsAPI, settingsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import useGradingScale from '../hooks/useGradingScale';
 import { isStudentEnrolledInCourse } from '../utils/courseUtils';
 import {
     BookOpen, Award, Search, Plus, X, Edit, Trash2, Users, CheckCircle,
@@ -14,7 +15,7 @@ import html2canvas from 'html2canvas';
 // ── Grade helpers ─────────────────────────────────────────────────────────────
 
 function calcGradeLabel(marks, thresholds) {
-    const { distinction = 80, credit = 65, pass = 50 } = thresholds || {};
+    const { distinction = 70, credit = 60, pass = 50 } = thresholds || {};
     if (marks >= distinction) return 'Distinction';
     if (marks >= credit)      return 'Credit';
     if (marks >= pass)        return 'Pass';
@@ -45,9 +46,10 @@ export default function UnitsCovered() {
     const isStudent  = (user?.role || '').toLowerCase() === 'student';
     const isTeacher  = (user?.role || '').toLowerCase() === 'teacher';
     const canManage  = ['admin', 'superadmin', 'teacher'].includes((user?.role || '').toLowerCase());
+    const gradeScale = useGradingScale();
 
     // ── State ─────────────────────────────────────────────────────────────────
-    const [settings, setSettings]     = useState({ grading_distinction_min: 80, grading_credit_min: 65, grading_pass_min: 50 });
+    const [settings, setSettings]     = useState({});
     const [courses, setCourses]       = useState([]);
     const [students, setStudents]     = useState([]);
     const [units, setUnits]           = useState([]);         // units for selected course
@@ -170,11 +172,7 @@ export default function UnitsCovered() {
         });
     };
 
-    const thresholds = {
-        distinction: parseFloat(settings.grading_distinction_min) || 80,
-        credit:      parseFloat(settings.grading_credit_min)      || 65,
-        pass:        parseFloat(settings.grading_pass_min)         || 50,
-    };
+    const thresholds = gradeScale;
 
     // ── Load Logo ──────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -1784,10 +1782,10 @@ export default function UnitsCovered() {
                                                 <div style={{ fontSize: '7.5px', fontWeight: 800, color: '#800000', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '6px' }}>Grading Scale</div>
                                                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                                                     {[
-                                                        { label: 'Distinction', range: `${thresholds.distinction || 80}\u2013100%`, color: '#166534', bg: '#f0fdf4' },
-                                                        { label: 'Credit',      range: `${thresholds.credit || 65}\u2013${(thresholds.distinction || 80) - 1}%`, color: '#1e40af', bg: '#eff6ff' },
-                                                        { label: 'Pass',        range: `${thresholds.pass || 50}\u2013${(thresholds.credit || 65) - 1}%`, color: '#92400e', bg: '#fffbeb' },
-                                                        { label: 'Fail',        range: `Below ${thresholds.pass || 50}%`, color: '#991b1b', bg: '#fef2f2' },
+                                                        { label: 'Distinction', range: `${thresholds.distinction}\u2013100%`, color: '#166534', bg: '#f0fdf4' },
+                                                        { label: 'Credit',      range: `${thresholds.credit}\u2013${thresholds.distinction - 1}%`, color: '#1e40af', bg: '#eff6ff' },
+                                                        { label: 'Pass',        range: `${thresholds.pass}\u2013${thresholds.credit - 1}%`, color: '#92400e', bg: '#fffbeb' },
+                                                        { label: 'Fail',        range: `Below ${thresholds.pass}%`, color: '#991b1b', bg: '#fef2f2' },
                                                     ].map(({ label, range, color, bg }) => (
                                                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                                                             <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: bg, border: `1.5px solid ${color}`, flexShrink: 0 }} />

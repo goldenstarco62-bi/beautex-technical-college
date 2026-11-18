@@ -130,9 +130,39 @@ CREATE TABLE IF NOT EXISTS attendance (
   student_id TEXT NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   course TEXT NOT NULL,
   date DATE NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('Present', 'Absent', 'Late')),
+  status TEXT NOT NULL CHECK(status IN ('Present', 'Absent', 'Late', 'Sick', 'Excused')),
+  academic_period_id INTEGER,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(student_id, course, date)
+);
+
+-- Generated attendance PDFs (content is base64; never SELECT it in lists)
+CREATE TABLE IF NOT EXISTS attendance_reports (
+  id TEXT PRIMARY KEY,
+  department TEXT NOT NULL,
+  report_date TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  file_size INTEGER,
+  content TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(department, report_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_reports_created ON attendance_reports(created_at);
+
+-- Daily trainer attendance register
+CREATE TABLE IF NOT EXISTS trainer_attendance (
+  id SERIAL PRIMARY KEY,
+  faculty_id TEXT,
+  trainer_name TEXT NOT NULL,
+  trainer_email TEXT,
+  department TEXT,
+  date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Present' CHECK(status IN ('Present', 'Absent', 'Late', 'Sick', 'Excused')),
+  notes TEXT,
+  marked_by TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Grades table

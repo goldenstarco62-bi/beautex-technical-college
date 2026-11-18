@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react';
 import { certificatesAPI, settingsAPI, catResultsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import useGradingScale, { gradeFor } from '../hooks/useGradingScale';
 import { Award, Download, Printer, X, Search, CheckCircle2, Loader2, FileCheck2, Pencil, PackageOpen, FileDown, Square, CheckSquare, BarChart3, GraduationCap, Upload, Trash2, Lock } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -490,6 +491,7 @@ export default function Certificates() {
     const { user } = useAuth();
     const role = (user?.role || '').toLowerCase().trim();
     const canIssue = role === 'superadmin' || (role === 'admin' && !!user?.can_issue_certificates);
+    const gradeScale = useGradingScale();
     const [tab, setTab] = useState('generate');
     const [eligible, setEligible] = useState([]);
     const [issued, setIssued] = useState([]);
@@ -864,10 +866,7 @@ export default function Certificates() {
             : null;
         let cumGrade = '—';
         if (cumAvg !== null) {
-            if (cumAvg >= 70) cumGrade = 'Distinction';
-            else if (cumAvg >= 60) cumGrade = 'Credit';
-            else if (cumAvg >= 50) cumGrade = 'Pass';
-            else cumGrade = 'Fail';
+            cumGrade = gradeFor(cumAvg, gradeScale);
         }
 
         const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1393,9 +1392,9 @@ export default function Certificates() {
                                                     <span className="text-[10px] font-black text-maroon/60">{t.results.length} units</span>
                                                     {avg !== null && (
                                                         <span className={`ml-2 px-2 py-0.5 rounded-md text-[9px] font-black uppercase ${
-                                                            avg >= 70 ? 'bg-emerald-50 text-emerald-700' :
-                                                            avg >= 60 ? 'bg-blue-50 text-blue-700' :
-                                                            avg >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
+                                                            avg >= gradeScale.distinction ? 'bg-emerald-50 text-emerald-700' :
+                                                            avg >= gradeScale.credit ? 'bg-blue-50 text-blue-700' :
+                                                            avg >= gradeScale.pass ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
                                                         }`}>{avg}% avg</span>
                                                     )}
                                                 </td>

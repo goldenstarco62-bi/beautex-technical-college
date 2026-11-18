@@ -1,7 +1,9 @@
 import { query, queryOne, run } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { getGradeScale } from '../utils/grading.js';
 
 const isMongo = () => !!process.env.MONGODB_URI;
+const PERIOD_STATUSES = ['Upcoming', 'Ongoing', 'Completed'];
 
 // Departments
 export async function getDepartments(req, res) {
@@ -93,20 +95,92 @@ export async function getAcademicPeriods(req, res) {
 
 export async function createAcademicPeriod(req, res) {
     try {
-        const { name, start_date, end_date } = req.body;
+        const { name, start_date, end_date, status } = req.body;
+        if (!name || !start_date || !end_date) {
+            return res.status(400).json({ error: 'Period name, start date and end date are required.' });
+        }
+        if (status && !PERIOD_STATUSES.includes(status)) {
+            return res.status(400).json({ error: `Status must be one of: ${PERIOD_STATUSES.join(', ')}` });
+        }
+        if (new Date(start_date) > new Date(end_date)) {
+            return res.status(400).json({ error: 'The start date must be on or before the end date.' });
+        }
         if (isMongo()) {
             const AcademicPeriod = (await import('../models/mongo/AcademicPeriod.js')).default;
-            const newPeriod = new AcademicPeriod({ name, start_date, end_date });
+            const newPeriod = new AcademicPeriod({ name, start_date, end_date, status: status || 'Upcoming' });
             await newPeriod.save();
             return res.status(201).json({ message: 'Academic period created' });
         }
-        await run(
-            'INSERT INTO academic_periods (name, start_date, end_date) VALUES (?, ?, ?)',
-            [name, start_date, end_date]
+        const result = await run(
+            'INSERT INTO academic_periods (name, start_date, end_date, status) VALUES (?, ?, ?, ?)',
+            [String(name).trim(), start_date, end_date, status || 'Upcoming']
         );
-        res.status(201).json({ message: 'Academic period created' });
+        const created = result?.lastID
+            ? await queryOne('SELECT * FROM academic_periods WHERE id = ?', [result.lastID])
+            : null;
+        res.status(201).json(created || { message: 'Academic period created' });
     } catch (error) {
         logger.error({ err: error }, 'createAcademicPeriod: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+export async function updateAcademicPeriod(req, res) {
+    try {
+        const { id } = req.params;
+        const { name, start_date, end_date, status } = req.body;
+
+        if (status !== undefined && !PERIOD_STATUSES.includes(status)) {
+            return res.status(400).json({ error: `Status must be one of: ${PERIOD_STATUSES.join(', ')}` });
+        }
+
+        if (isMongo()) {
+            const AcademicPeriod = (await import('../models/mongo/AcademicPeriod.js')).default;
+            const existing = await AcademicPeriod.findById(id);
+            if (!existing) return res.status(404).json({ error: 'Academic period not found' });
+            const patch = {};
+            if (name !== undefined) patch.name = String(name).trim();
+            if (start_date !== undefined) patch.start_date = start_date;
+            if (end_date !== undefined) patch.end_date = end_date;
+            if (status !== undefined) {
+                patch.status = status;
+                if (status === 'Completed') patch.is_active = false;
+            }
+            await AcademicPeriod.findByIdAndUpdate(id, patch);
+            return res.json(await AcademicPeriod.findById(id));
+        }
+
+        const existing = await queryOne('SELECT * FROM academic_periods WHERE id = ?', [id]);
+        if (!existing) return res.status(404).json({ error: 'Academic period not found' });
+
+        const nextName = name !== undefined ? String(name).trim() : existing.name;
+        const nextStart = start_date !== undefined ? start_date : existing.start_date;
+        const nextEnd = end_date !== undefined ? end_date : existing.end_date;
+        const nextStatus = status !== undefined ? status : existing.status;
+
+        if (!nextName) return res.status(400).json({ error: 'Period name is required.' });
+        if (!nextStart || !nextEnd) return res.status(400).json({ error: 'Start date and end date are required.' });
+        if (new Date(nextStart) > new Date(nextEnd)) {
+            return res.status(400).json({ error: 'The start date must be on or before the end date.' });
+        }
+
+        // Completing a period retires it as the current term so new offerings
+        // and CATs do not silently attach to a closed term.
+        if (nextStatus === 'Completed' && existing.is_active) {
+            await run(
+                'UPDATE academic_periods SET name = ?, start_date = ?, end_date = ?, status = ?, is_active = ? WHERE id = ?',
+                [nextName, nextStart, nextEnd, nextStatus, false, id]
+            );
+        } else {
+            await run(
+                'UPDATE academic_periods SET name = ?, start_date = ?, end_date = ?, status = ? WHERE id = ?',
+                [nextName, nextStart, nextEnd, nextStatus, id]
+            );
+        }
+
+        res.json(await queryOne('SELECT * FROM academic_periods WHERE id = ?', [id]));
+    } catch (error) {
+        logger.error({ err: error }, 'updateAcademicPeriod: unhandled error');
         res.status(500).json({ error: 'Internal server error' });
     }
 }
@@ -145,6 +219,17 @@ export async function deleteAcademicPeriod(req, res) {
         res.json({ message: 'Academic period deleted' });
     } catch (error) {
         logger.error({ err: error }, 'deleteAcademicPeriod: unhandled error');
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+// Grade scale — readable by every authenticated role so students and trainers
+// grade with the same boundaries the server writes.
+export async function getGradingScale(req, res) {
+    try {
+        res.json(await getGradeScale());
+    } catch (error) {
+        logger.error({ err: error }, 'getGradingScale: unhandled error');
         res.status(500).json({ error: 'Internal server error' });
     }
 }

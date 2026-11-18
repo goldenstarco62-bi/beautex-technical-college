@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { attendanceAPI, coursesAPI } from '../services/api';
+import { attendanceAPI, academicAPI, coursesAPI } from '../services/api';
 import {
     Calendar, Users, CheckCircle2, XCircle, Clock, TrendingUp,
     Filter, Search, RefreshCw, FileDown, ChevronDown, Award,
     AlertCircle, BarChart3, Star, ArrowUp, ArrowDown, Minus,
-    BookOpen, Printer, Activity
+    BookOpen, Printer, Activity, Thermometer, ShieldCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
@@ -69,6 +69,9 @@ export default function MonthlyAttendanceSummary() {
     const [loading, setLoading]         = useState(true);
     const [data, setData]               = useState([]);
     const [courses, setCourses]         = useState([]);
+    const [periods, setPeriods]         = useState([]);
+    const [selectedPeriod, setPeriod]   = useState('');
+    const [threshold, setThreshold]     = useState(90);
     const [selectedMonth, setMonth]     = useState(currentMonth);
     const [selectedCourse, setCourse]   = useState('');
     const [searchQuery, setSearch]      = useState('');
@@ -80,7 +83,11 @@ export default function MonthlyAttendanceSummary() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const params = { month: selectedMonth, sort: sortBy };
+            const params = { sort: sortBy, month: selectedMonth };
+            if (selectedPeriod) {
+                params.academic_period_id = selectedPeriod;
+                delete params.month;
+            }
             if (selectedCourse) params.course = selectedCourse;
             const res = await attendanceAPI.getMonthlySummary(params);
             setData(res.data || []);
@@ -90,15 +97,26 @@ export default function MonthlyAttendanceSummary() {
         } finally {
             setLoading(false);
         }
-    }, [selectedMonth, selectedCourse, sortBy]);
+    }, [selectedMonth, selectedPeriod, selectedCourse, sortBy]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
     useEffect(() => {
-        if (!isStudent) {
-            coursesAPI.getAll().then(r => setCourses(r.data || [])).catch(() => {});
-        }
+        const lookups = [
+            isStudent ? Promise.resolve({ data: [] }) : coursesAPI.getAll().catch(() => ({ data: [] })),
+            academicAPI.getPeriods().catch(() => ({ data: [] })),
+            attendanceAPI.getConfig().catch(() => ({ data: null })),
+        ];
+        Promise.all(lookups).then(([coursesRes, periodsRes, configRes]) => {
+            if (!isStudent) setCourses(coursesRes.data || []);
+            const periodList = Array.isArray(periodsRes.data) ? periodsRes.data : [];
+            setPeriods(periodList);
+            if (configRes.data) setThreshold(Number(configRes.data.threshold) || 90);
+        }).catch(() => {});
     }, [isStudent]);
+
+    const selectedPeriodName = periods.find(p => String(p.id) === String(selectedPeriod))?.name;
+    const windowLabel = selectedPeriodName || getMonthLabel(selectedMonth);
 
     // ── Filter ───────────────────────────────────────────────────────────────
     const filtered = data.filter(s => {
@@ -114,8 +132,8 @@ export default function MonthlyAttendanceSummary() {
     const avgPct          = totalStudents > 0
         ? Math.round(filtered.reduce((s, x) => s + x.percentage, 0) / totalStudents * 10) / 10
         : 0;
-    const above90         = filtered.filter(s => s.percentage >= 90).length;
-    const below75         = filtered.filter(s => s.percentage < 75).length;
+    const aboveThreshold  = filtered.filter(s => s.percentage >= threshold).length;
+    const belowThreshold  = filtered.filter(s => s.percentage < threshold).length;
     const excellent       = filtered.filter(s => s.status === 'Excellent').length;
     const needsHelp       = filtered.filter(s => s.status === 'Needs Improvement').length;
 
@@ -161,7 +179,7 @@ export default function MonthlyAttendanceSummary() {
                             Monthly Attendance Summary
                         </h1>
                         <p className="text-xs text-gray-400 font-bold mt-0.5">
-                            {getMonthLabel(selectedMonth)}
+                            {windowLabel}
                         </p>
                     </div>
                 </div>
@@ -186,16 +204,32 @@ export default function MonthlyAttendanceSummary() {
 
             {/* ── Filters Bar ── */}
             <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-xl print:hidden">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
                     {/* Month */}
                     <div className="flex flex-col gap-1.5">
                         <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider">Select Month</label>
                         <div className="relative">
                             <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <select value={selectedMonth} onChange={e => setMonth(e.target.value)}
-                                className="w-full bg-gray-50 border-none rounded-2xl text-xs font-bold py-4 pl-12 pr-4 focus:ring-2 focus:ring-maroon/20 transition-all appearance-none">
+                            <select value={selectedMonth} onChange={e => setMonth(e.target.value)} disabled={!!selectedPeriod}
+                                className="w-full bg-gray-50 border-none rounded-2xl text-xs font-bold py-4 pl-12 pr-4 focus:ring-2 focus:ring-maroon/20 transition-all appearance-none disabled:opacity-40 disabled:cursor-not-allowed">
                                 {monthOptions.map(o => (
                                     <option key={o.key} value={o.key}>{o.label}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                        </div>
+                    </div>
+
+                    {/* Academic Term */}
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider">Academic Term</label>
+                        <div className="relative">
+                            <Award className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <select value={selectedPeriod} onChange={e => setPeriod(e.target.value)}
+                                className="w-full bg-gray-50 border-none rounded-2xl text-xs font-bold py-4 pl-12 pr-4 focus:ring-2 focus:ring-maroon/20 transition-all appearance-none">
+                                <option value="">All-time</option>
+                                {periods.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}{p.is_active ? ' • Active' : ''}</option>
                                 ))}
                             </select>
                             <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -240,7 +274,7 @@ export default function MonthlyAttendanceSummary() {
                     )}
 
                     {/* Search */}
-                    <div className={`flex flex-col gap-1.5 ${isStudent ? 'md:col-span-3' : ''}`}>
+                    <div className={`flex flex-col gap-1.5 ${isStudent ? 'sm:col-span-2' : 'sm:col-span-2 xl:col-span-1'}`}>
                         <label className="text-[8px] font-black text-gray-400 uppercase tracking-wider">Search Student</label>
                         <div className="relative">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -258,8 +292,8 @@ export default function MonthlyAttendanceSummary() {
                     {[
                         { label: 'Total Students', value: totalStudents, icon: Users,         color: 'text-maroon',      bg: 'bg-maroon/5' },
                         { label: 'Avg Attendance',  value: `${avgPct}%`,  icon: TrendingUp,    color: 'text-blue-600',    bg: 'bg-blue-50'  },
-                        { label: 'Above 90%',       value: above90,       icon: Award,         color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                        { label: 'Below 75%',       value: below75,       icon: AlertCircle,   color: 'text-red-500',     bg: 'bg-red-50'   },
+                        { label: `Above ${threshold}%`, value: aboveThreshold, icon: Award,      color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                        { label: `Below ${threshold}%`, value: belowThreshold, icon: AlertCircle, color: 'text-red-500',    bg: 'bg-red-50'   },
                         { label: 'Excellent',       value: excellent,     icon: Star,          color: 'text-amber-500',   bg: 'bg-amber-50' },
                     ].map((c, i) => {
                         const Icon = c.icon;
@@ -298,7 +332,7 @@ export default function MonthlyAttendanceSummary() {
                 <div style={{ padding: 32, fontFamily: 'Arial, sans-serif', backgroundColor: '#fff' }}>
                     <div style={{ borderBottom: '3px solid #800000', paddingBottom: 16, marginBottom: 24 }}>
                         <h1 style={{ color: '#800000', fontSize: 22, fontWeight: 900, margin: 0 }}>MONTHLY ATTENDANCE SUMMARY</h1>
-                        <p style={{ color: '#666', fontSize: 12, margin: '4px 0 0' }}>{getMonthLabel(selectedMonth)} — Generated {new Date().toLocaleDateString()}</p>
+                        <p style={{ color: '#666', fontSize: 12, margin: '4px 0 0' }}>{windowLabel} — Generated {new Date().toLocaleDateString()}</p>
                         {selectedCourse && <p style={{ color: '#666', fontSize: 11 }}>Course: {selectedCourse}</p>}
                     </div>
                     {filtered.map((s, i) => {
@@ -316,12 +350,14 @@ export default function MonthlyAttendanceSummary() {
                                         <p style={{ fontSize: 10, color: '#6b7280', margin: '2px 0 0' }}>Attendance Rate</p>
                                     </div>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 8 }}>
                                     {[
-                                        { l: 'Total Classes', v: s.total,   c: '#1f2937' },
-                                        { l: 'Present',       v: s.present, c: '#059669' },
-                                        { l: 'Absent',        v: s.absent,  c: '#dc2626' },
-                                        { l: 'Late',          v: s.late,    c: '#d97706' },
+                                        { l: 'Total Classes', v: s.total,          c: '#1f2937' },
+                                        { l: 'Present',       v: s.present,        c: '#059669' },
+                                        { l: 'Late',          v: s.late,           c: '#d97706' },
+                                        { l: 'Excused',       v: s.excused || 0,   c: '#7c3aed' },
+                                        { l: 'Sick',          v: s.sick || 0,      c: '#0284c7' },
+                                        { l: 'Absent',        v: s.absent,         c: '#dc2626' },
                                     ].map((x, j) => (
                                         <div key={j} style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
                                             <p style={{ fontSize: 18, fontWeight: 900, color: x.c, margin: 0 }}>{x.v}</p>
@@ -348,7 +384,7 @@ export default function MonthlyAttendanceSummary() {
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-xl p-16 text-center">
                     <Calendar className="w-16 h-16 text-gray-200 mx-auto mb-4" />
                     <p className="text-sm font-black text-gray-400 uppercase tracking-widest">No attendance records found</p>
-                    <p className="text-xs text-gray-300 mt-2 font-medium">for {getMonthLabel(selectedMonth)}</p>
+                    <p className="text-xs text-gray-300 mt-2 font-medium">for {windowLabel}</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -395,18 +431,20 @@ export default function MonthlyAttendanceSummary() {
                                     </div>
 
                                     {/* Stats Grid */}
-                                    <div className="grid grid-cols-3 gap-3 mb-5">
+                                    <div className="grid grid-cols-5 gap-2 mb-5">
                                         {[
-                                            { label: 'Present', value: student.present, color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2 },
-                                            { label: 'Absent',  value: student.absent,  color: 'text-red-500',     bg: 'bg-red-50',     icon: XCircle     },
-                                            { label: 'Late',    value: student.late,    color: 'text-amber-500',   bg: 'bg-amber-50',   icon: Clock       },
+                                            { label: 'Present', value: student.present,        color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle2 },
+                                            { label: 'Late',    value: student.late,           color: 'text-amber-500',   bg: 'bg-amber-50',   icon: Clock },
+                                            { label: 'Excused', value: student.excused || 0,   color: 'text-violet-600',  bg: 'bg-violet-50',  icon: ShieldCheck },
+                                            { label: 'Sick',    value: student.sick || 0,      color: 'text-sky-600',     bg: 'bg-sky-50',     icon: Thermometer },
+                                            { label: 'Absent',  value: student.absent,         color: 'text-red-500',     bg: 'bg-red-50',     icon: XCircle },
                                         ].map((stat, i) => {
                                             const SIcon = stat.icon;
                                             return (
-                                                <div key={i} className={`${stat.bg} rounded-2xl p-3 text-center`}>
-                                                    <SIcon className={`w-4 h-4 ${stat.color} mx-auto mb-1`} />
-                                                    <p className={`text-xl font-black ${stat.color}`}>{stat.value}</p>
-                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">{stat.label}</p>
+                                                <div key={i} className={`${stat.bg} rounded-xl p-2 text-center`}>
+                                                    <SIcon className={`w-3.5 h-3.5 ${stat.color} mx-auto mb-1`} />
+                                                    <p className={`text-lg font-black leading-none ${stat.color}`}>{stat.value}</p>
+                                                    <p className="text-[7px] font-black text-gray-400 uppercase tracking-wide mt-1">{stat.label}</p>
                                                 </div>
                                             );
                                         })}
@@ -464,7 +502,7 @@ export default function MonthlyAttendanceSummary() {
             <div className="hidden print:flex items-center justify-between border-b-2 border-maroon pb-4 mb-6">
                 <div>
                     <h1 className="text-2xl font-black text-maroon uppercase">Monthly Attendance Summary</h1>
-                    <p className="text-sm text-gray-500">{getMonthLabel(selectedMonth)}</p>
+                    <p className="text-sm text-gray-500">{windowLabel}</p>
                 </div>
                 <p className="text-xs text-gray-400">Generated: {new Date().toLocaleDateString()}</p>
             </div>

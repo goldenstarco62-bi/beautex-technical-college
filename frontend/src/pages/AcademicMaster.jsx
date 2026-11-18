@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Building2, Calendar, Plus, Trash2, Edit, CheckCircle2, X, Search, Users, Shield } from 'lucide-react';
 
 const EMPTY_DEPT = { name: '', head_of_department: '', description: '' };
-const EMPTY_PERIOD = { name: '', start_date: '', end_date: '' };
+const EMPTY_PERIOD = { name: '', start_date: '', end_date: '', status: 'Upcoming' };
 
 export default function AcademicMaster() {
     const { user } = useAuth();
@@ -23,6 +23,7 @@ export default function AcademicMaster() {
     const [savingDept, setSavingDept] = useState(false);
 
     const [showPeriodModal, setShowPeriodModal] = useState(false);
+    const [editingPeriod, setEditingPeriod] = useState(null);
     const [periodForm, setPeriodForm] = useState(EMPTY_PERIOD);
     const [savingPeriod, setSavingPeriod] = useState(false);
 
@@ -139,6 +140,30 @@ export default function AcademicMaster() {
         }
     };
 
+    const openNewPeriod = () => {
+        setEditingPeriod(null);
+        setPeriodForm(EMPTY_PERIOD);
+        setShowPeriodModal(true);
+    };
+
+    const openEditPeriod = (period) => {
+        const toDateInput = (value) => {
+            if (!value) return '';
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return '';
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        };
+        setEditingPeriod(period);
+        setPeriodForm({
+            name: period.name || '',
+            start_date: toDateInput(period.start_date),
+            end_date: toDateInput(period.end_date),
+            status: period.status || 'Upcoming'
+        });
+        setShowPeriodModal(true);
+    };
+
     const handlePeriodSubmit = async (e) => {
         e.preventDefault();
         if (!periodForm.name || !periodForm.start_date || !periodForm.end_date) {
@@ -147,12 +172,17 @@ export default function AcademicMaster() {
         }
         try {
             setSavingPeriod(true);
-            await academicAPI.createPeriod(periodForm);
+            if (editingPeriod) {
+                await academicAPI.updatePeriod(editingPeriod.id, periodForm);
+            } else {
+                await academicAPI.createPeriod(periodForm);
+            }
             setShowPeriodModal(false);
             setPeriodForm(EMPTY_PERIOD);
+            setEditingPeriod(null);
             fetchData(true);
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to create academic period.');
+            alert(error.response?.data?.error || 'Failed to save academic period.');
         } finally {
             setSavingPeriod(false);
         }
@@ -330,7 +360,7 @@ export default function AcademicMaster() {
                         </h2>
                         {canEdit && (
                             <button
-                                onClick={() => { setPeriodForm(EMPTY_PERIOD); setShowPeriodModal(true); }}
+                                onClick={openNewPeriod}
                                 className="bg-maroon text-gold px-5 py-2.5 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-maroon/90 shadow-lg transition-all border border-gold/20"
                             >
                                 <Plus className="w-3.5 h-3.5" /> New Period
@@ -391,6 +421,15 @@ export default function AcademicMaster() {
                                                 )}
                                                 {canEdit && (
                                                     <button
+                                                        onClick={() => openEditPeriod(period)}
+                                                        className="p-2 text-gray-300 hover:text-maroon transition-colors"
+                                                        title="Edit period"
+                                                    >
+                                                        <Edit className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                                {canEdit && (
+                                                    <button
                                                         onClick={() => handlePeriodDelete(period.id)}
                                                         className="p-2 text-gray-300 hover:text-red-500 transition-colors"
                                                     >
@@ -409,7 +448,7 @@ export default function AcademicMaster() {
                                                 <p className="text-xs font-black text-gray-300 uppercase tracking-[0.2em]">No academic periods yet</p>
                                                 {canEdit && (
                                                     <button
-                                                        onClick={() => { setPeriodForm(EMPTY_PERIOD); setShowPeriodModal(true); }}
+                                                        onClick={openNewPeriod}
                                                         className="text-[10px] font-black text-maroon underline uppercase tracking-widest mt-1"
                                                     >
                                                         Create First Period
@@ -575,10 +614,10 @@ export default function AcademicMaster() {
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-maroon via-gold to-maroon opacity-60 rounded-t-[2.5rem]" />
                         <div className="flex justify-between items-center mb-8">
                             <div>
-                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">New Academic Period</h2>
+                                <h2 className="text-2xl font-black text-maroon uppercase tracking-tight">{editingPeriod ? 'Edit Academic Period' : 'New Academic Period'}</h2>
                                 <div className="w-10 h-0.5 bg-gold mt-2" />
                             </div>
-                            <button onClick={() => setShowPeriodModal(false)} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
+                            <button onClick={() => { setShowPeriodModal(false); setEditingPeriod(null); }} className="p-2 hover:bg-maroon/5 rounded-full transition-colors">
                                 <X className="w-6 h-6 text-maroon/30" />
                             </button>
                         </div>
@@ -616,12 +655,24 @@ export default function AcademicMaster() {
                                     />
                                 </div>
                             </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-maroon/40 uppercase tracking-widest ml-1">Status</label>
+                                <select
+                                    value={periodForm.status}
+                                    onChange={e => setPeriodForm({ ...periodForm, status: e.target.value })}
+                                    className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl text-maroon font-bold outline-none focus:ring-2 focus:ring-maroon/10"
+                                >
+                                    <option value="Upcoming">Upcoming</option>
+                                    <option value="Ongoing">Ongoing</option>
+                                    <option value="Completed">Completed</option>
+                                </select>
+                            </div>
                             <button
                                 type="submit"
                                 disabled={savingPeriod}
                                 className="w-full bg-maroon text-gold py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:bg-maroon/90 shadow-xl transition-all border border-gold/20 disabled:opacity-60"
                             >
-                                {savingPeriod ? 'Creating...' : 'Create Academic Period'}
+                                {savingPeriod ? 'Saving...' : (editingPeriod ? 'Update Academic Period' : 'Create Academic Period')}
                             </button>
                         </form>
                     </div>

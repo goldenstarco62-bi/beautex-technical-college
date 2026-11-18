@@ -1,5 +1,17 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { parseCoursesField } from '../utils/courseParser.js';
+import {
+    getAttendanceConfig,
+    normalizeStatus,
+    resolvePeriodForDate,
+    getPeriodRange,
+    attendanceRate,
+    attendanceBand,
+    emptyCounts,
+    countStatus,
+    toDateOnly,
+} from '../utils/attendance.js';
+import notificationService from '../services/notificationService.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -8,10 +20,26 @@ function parseFacultyCourses(coursesField) {
     return parseCoursesField(coursesField);
 }
 
+const dateOnly = toDateOnly;
+
+// SQL-only helper shared by batch marking and alerts.
+async function resolveTeacherCourses(email) {
+    const fac = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [String(email || '').toLowerCase().trim()]);
+    if (!fac) return [];
+    const assigned = parseFacultyCourses(fac.courses);
+    const instructed = await query('SELECT name FROM courses WHERE LOWER(instructor) = LOWER(?)', [fac.name]);
+    return [...new Set([...assigned, ...instructed.map(c => c.name)])];
+}
+
+function teacherOwnsCourse(teacherCourses, course) {
+    const target = String(course || '').toLowerCase().trim();
+    return teacherCourses.some(tc => String(tc).toLowerCase().trim() === target);
+}
+
 export async function getAllAttendance(req, res) {
     try {
         const { role, email } = req.user;
-        const { course, date, student_id } = req.query;
+        const { course, date, student_id, from, to, academic_period_id } = req.query;
         const mongo = await isMongo();
 
         let conditions = [];
@@ -73,6 +101,18 @@ export async function getAllAttendance(req, res) {
             conditions.push(mongo ? { date } : 'date = ?');
             if (!mongo) params.push(date);
         }
+        if (academic_period_id) {
+            conditions.push(mongo ? { academic_period_id: Number(academic_period_id) } : 'academic_period_id = ?');
+            if (!mongo) params.push(Number(academic_period_id));
+        }
+        if (from) {
+            conditions.push(mongo ? { date: { $gte: from } } : 'date >= ?');
+            if (!mongo) params.push(from);
+        }
+        if (to) {
+            conditions.push(mongo ? { date: { $lte: to } } : 'date <= ?');
+            if (!mongo) params.push(to);
+        }
 
         if (mongo) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
@@ -90,8 +130,11 @@ export async function getAllAttendance(req, res) {
         const attendance = await query(sql, params);
 
         // FIX: Normalize course names for Supabase/PostgreSQL (remove {"..."})
+        // and DATE columns, which pg returns as JS Dates and JSON-serializes as
+        // full ISO timestamps (student history compares them to YYYY-MM-DD).
         const cleanedAttendance = attendance.map(a => ({
             ...a,
+            date: dateOnly(a.date),
             course: typeof a.course === 'string' && a.course.startsWith('{') && a.course.endsWith('}')
                 ? a.course.slice(1, -1).replace(/"/g, '')
                 : a.course
@@ -113,10 +156,11 @@ export async function markAttendance(req, res) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Validate status value
-        const validStatuses = ['Present', 'Absent', 'Late'];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+        // Validate against the statuses configured in Settings → Attendance
+        const config = await getAttendanceConfig();
+        const canonicalStatus = normalizeStatus(status, config.statuses);
+        if (!canonicalStatus) {
+            return res.status(400).json({ error: `Invalid status. Must be one of: ${config.statuses.join(', ')}` });
         }
 
         // Authorization check for teachers
@@ -154,18 +198,22 @@ export async function markAttendance(req, res) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
             attendanceRecord = await Attendance.findOneAndUpdate(
                 { student_id, course, date },
-                { status, updated_at: new Date() },
+                { status: canonicalStatus, updated_at: new Date() },
                 { upsert: true, new: true }
             );
         } else {
+            const period = await resolvePeriodForDate(date);
             const existing = await queryOne('SELECT id FROM attendance WHERE student_id = ? AND course = ? AND date = ?', [student_id, course, date]);
             if (existing) {
-                await run('UPDATE attendance SET status = ? WHERE id = ?', [status, existing.id]);
+                await run(
+                    'UPDATE attendance SET status = ?, academic_period_id = COALESCE(?, academic_period_id) WHERE id = ?',
+                    [canonicalStatus, period?.id ?? null, existing.id]
+                );
                 attendanceRecord = await queryOne('SELECT * FROM attendance WHERE id = ?', [existing.id]);
             } else {
                 const result = await run(
-                    'INSERT INTO attendance (student_id, course, date, status) VALUES (?, ?, ?, ?)',
-                    [student_id, course, date, status]
+                    'INSERT INTO attendance (student_id, course, date, status, academic_period_id) VALUES (?, ?, ?, ?, ?)',
+                    [student_id, course, date, canonicalStatus, period?.id ?? null]
                 );
                 attendanceRecord = await queryOne('SELECT * FROM attendance WHERE id = ?', [result.lastID]);
             }
@@ -222,12 +270,32 @@ export async function updateAttendance(req, res) {
         const recordId = req.params.id;
         const { status, topics_covered, trainer_remarks } = req.body;
 
+        const config = await getAttendanceConfig();
+        const canonicalStatus = normalizeStatus(status, config.statuses);
+        if (!canonicalStatus) {
+            return res.status(400).json({ error: `Invalid status. Must be one of: ${config.statuses.join(', ')}` });
+        }
+
         let updated;
         if (await isMongo()) {
             const Attendance = (await import('../models/mongo/Attendance.js')).default;
-            updated = await Attendance.findByIdAndUpdate(recordId, { status }, { new: true });
+            updated = await Attendance.findByIdAndUpdate(recordId, { status: canonicalStatus }, { new: true });
         } else {
-            await run('UPDATE attendance SET status = ? WHERE id = ?', [status, recordId]);
+            const existing = await queryOne('SELECT * FROM attendance WHERE id = ?', [recordId]);
+            if (!existing) return res.status(404).json({ error: 'Attendance record not found' });
+
+            if (req.user.role === 'teacher') {
+                const teacherCourses = await resolveTeacherCourses(req.user.email);
+                if (!teacherOwnsCourse(teacherCourses, existing.course)) {
+                    return res.status(403).json({ error: 'Forbidden: You can only edit attendance for your own courses' });
+                }
+            }
+
+            const period = await resolvePeriodForDate(existing.date);
+            await run(
+                'UPDATE attendance SET status = ?, academic_period_id = COALESCE(academic_period_id, ?) WHERE id = ?',
+                [canonicalStatus, period?.id ?? null, recordId]
+            );
             updated = await queryOne('SELECT * FROM attendance WHERE id = ?', [recordId]);
         }
 
@@ -281,6 +349,272 @@ export async function updateAttendance(req, res) {
 
 
 /**
+ * GET /attendance/config
+ * Exposes the statuses, eligibility threshold and bands configured in Settings
+ * so the register can render the same options the server validates against.
+ */
+export async function getAttendanceSettings(req, res) {
+    try {
+        const config = await getAttendanceConfig();
+        const activePeriod = await queryOne('SELECT id, name FROM academic_periods WHERE is_active = TRUE LIMIT 1').catch(() => null);
+        return res.json({ ...config, active_period: activePeriod || null });
+    } catch (error) {
+        console.error('Get attendance config error:', error);
+        return res.status(500).json({ error: 'Failed to load attendance settings' });
+    }
+}
+
+/**
+ * POST /attendance/batch
+ * Saves a whole day's register in one request instead of one call per student.
+ * Body: { course, date, entries: [{ student_id, status }] }
+ */
+export async function markAttendanceBatch(req, res) {
+    try {
+        const { course, date, entries } = req.body;
+        const { role, email } = req.user;
+
+        if (!course || !date || !Array.isArray(entries) || entries.length === 0) {
+            return res.status(400).json({ error: 'course, date and a non-empty entries array are required' });
+        }
+        if (entries.length > 500) {
+            return res.status(400).json({ error: 'A register can hold at most 500 entries' });
+        }
+
+        if (role === 'teacher') {
+            const teacherCourses = await resolveTeacherCourses(email);
+            if (!teacherOwnsCourse(teacherCourses, course)) {
+                return res.status(403).json({ error: `You are not authorized to mark attendance for "${course}"` });
+            }
+        }
+
+        const config = await getAttendanceConfig();
+        const period = await resolvePeriodForDate(date);
+        const saved = [];
+        const skipped = [];
+
+        for (const entry of entries) {
+            const studentId = String(entry?.student_id || '').trim();
+            const status = normalizeStatus(entry?.status, config.statuses);
+            if (!studentId || !status) {
+                skipped.push({ student_id: studentId, status: entry?.status, reason: 'unknown student or status' });
+                continue;
+            }
+
+            const existing = await queryOne(
+                'SELECT id FROM attendance WHERE student_id = ? AND course = ? AND date = ?',
+                [studentId, course, date]
+            );
+            if (existing) {
+                await run(
+                    'UPDATE attendance SET status = ?, academic_period_id = COALESCE(?, academic_period_id) WHERE id = ?',
+                    [status, period?.id ?? null, existing.id]
+                );
+            } else {
+                await run(
+                    'INSERT INTO attendance (student_id, course, date, status, academic_period_id) VALUES (?, ?, ?, ?, ?)',
+                    [studentId, course, date, status, period?.id ?? null]
+                );
+            }
+            saved.push({ student_id: studentId, status });
+        }
+
+        return res.status(saved.length > 0 ? 201 : 200).json({
+            date,
+            course,
+            academic_period: period ? { id: period.id, name: period.name } : null,
+            saved: saved.length,
+            skipped,
+        });
+    } catch (error) {
+        console.error('Batch attendance error:', error);
+        return res.status(500).json({ error: 'Failed to save attendance register' });
+    }
+}
+
+async function computeAttendanceAlerts({ role, email, studentId, course, periodId, thresholdOverride }) {
+    const config = await getAttendanceConfig();
+    const threshold = Math.min(100, Math.max(0, parseFloat(thresholdOverride) || config.threshold));
+    const period = periodId ? await getPeriodRange(periodId) : null;
+    if (periodId && !period) {
+        const err = new Error('Academic period not found');
+        err.status = 404;
+        throw err;
+    }
+
+    let teacherCourses = null;
+    if (role === 'teacher') {
+        teacherCourses = await resolveTeacherCourses(email);
+        if (course && !teacherOwnsCourse(teacherCourses, course)) {
+            const err = new Error('You can only view alerts for courses you teach');
+            err.status = 403;
+            throw err;
+        }
+    }
+
+    const studentConds = [];
+    const studentParams = [];
+    if (studentId) {
+        studentConds.push('LOWER(TRIM(id)) = LOWER(TRIM(?))');
+        studentParams.push(studentId);
+    } else if (course) {
+        studentConds.push('LOWER(course) LIKE LOWER(?)');
+        studentParams.push(`%${String(course).trim()}%`);
+    } else if (teacherCourses) {
+        if (teacherCourses.length === 0) return { threshold, period, alerts: [] };
+        studentConds.push(`(${teacherCourses.map(() => 'LOWER(course) LIKE LOWER(?)').join(' OR ')})`);
+        teacherCourses.forEach(tc => studentParams.push(`%${tc}%`));
+    }
+
+    const students = await query(
+        `SELECT id, name, course FROM students${studentConds.length ? ' WHERE ' + studentConds.join(' AND ') : ''}`,
+        studentParams
+    );
+
+    const attConds = [];
+    const attParams = [];
+    if (period?.start_date && period?.end_date) {
+        attConds.push('a.date >= ? AND a.date <= ?');
+        attParams.push(period.start_date, period.end_date);
+    }
+    if (studentId) {
+        attConds.push('LOWER(TRIM(a.student_id)) = LOWER(TRIM(?))');
+        attParams.push(studentId);
+    }
+    if (course) {
+        attConds.push('LOWER(a.course) LIKE LOWER(?)');
+        attParams.push(`%${String(course).trim()}%`);
+    } else if (teacherCourses) {
+        attConds.push(`a.course IN (${teacherCourses.map(() => '?').join(',')})`);
+        attParams.push(...teacherCourses);
+    }
+
+    const records = await query(
+        `SELECT a.student_id, a.course, a.date, a.status, s.name AS student_name
+         FROM attendance a
+         LEFT JOIN students s ON LOWER(TRIM(a.student_id)) = LOWER(TRIM(s.id))
+         ${attConds.length ? 'WHERE ' + attConds.join(' AND ') : ''}`,
+        attParams
+    );
+
+    const buckets = new Map();
+    const bucketKey = (sid, courseName) => `${sid}||${courseName}`;
+    const ensureBucket = (sid, courseName, name) => {
+        const key = bucketKey(sid, courseName);
+        if (!buckets.has(key)) {
+            buckets.set(key, { student_id: sid, student_name: name || sid, course: courseName, counts: emptyCounts() });
+        }
+        return buckets.get(key);
+    };
+
+    for (const student of students) {
+        const sid = String(student.id || '').trim();
+        if (!sid) continue;
+        const courses = parseCoursesField(student.course);
+        for (const courseName of (courses.length ? courses : ['Unassigned'])) {
+            if (course && !courseName.toLowerCase().includes(String(course).toLowerCase().trim())) continue;
+            ensureBucket(sid, courseName.trim(), student.name);
+        }
+    }
+
+    for (const record of records) {
+        const sid = String(record.student_id || '').trim();
+        const courseName = String(record.course || '').trim();
+        if (!sid || !courseName) continue;
+        const bucket = ensureBucket(sid, courseName, record.student_name);
+        countStatus(bucket.counts, record.status);
+    }
+
+    const alerts = [];
+    for (const bucket of buckets.values()) {
+        if (bucket.counts.total === 0) continue;
+        const percentage = attendanceRate(bucket.counts);
+        if (percentage >= threshold) continue;
+        alerts.push({
+            student_id: bucket.student_id,
+            student_name: bucket.student_name,
+            course: bucket.course,
+            percentage,
+            threshold,
+            ...bucket.counts,
+            missed: bucket.counts.absent + bucket.counts.sick,
+            band: attendanceBand(percentage, config.thresholds),
+        });
+    }
+    alerts.sort((a, b) => a.percentage - b.percentage || a.student_name.localeCompare(b.student_name));
+
+    return { threshold, period: period ? { id: period.id, name: period.name } : null, alerts };
+}
+
+/**
+ * GET /attendance/alerts
+ * Students whose attendance percentage sits below the eligibility threshold.
+ */
+export async function getAttendanceAlerts(req, res) {
+    try {
+        const role = (req.user.role || '').toLowerCase().trim();
+        const studentId = role === 'student'
+            ? String(req.user.student_id || req.user.id || '').trim()
+            : (req.query.student_id || '');
+        const result = await computeAttendanceAlerts({
+            role,
+            email: req.user.email,
+            studentId,
+            course: req.query.course || '',
+            periodId: req.query.academic_period_id || null,
+            thresholdOverride: req.query.threshold,
+        });
+        return res.json(result);
+    } catch (error) {
+        console.error('Attendance alerts error:', error);
+        return res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to build attendance alerts' });
+    }
+}
+
+/**
+ * POST /attendance/alerts/notify
+ * Pushes an in-app notification to each student currently below the threshold.
+ */
+export async function notifyAttendanceAlerts(req, res) {
+    try {
+        const role = (req.user.role || '').toLowerCase().trim();
+        if (!['admin', 'superadmin', 'teacher'].includes(role)) {
+            return res.status(403).json({ error: 'You are not authorized to send attendance alerts' });
+        }
+        const result = await computeAttendanceAlerts({
+            role,
+            email: req.user.email,
+            studentId: '',
+            course: req.body?.course || '',
+            periodId: req.body?.academic_period_id || null,
+            thresholdOverride: req.body?.threshold,
+        });
+
+        const allowed = Array.isArray(req.body?.student_ids) && req.body.student_ids.length
+            ? new Set(req.body.student_ids.map(String))
+            : null;
+        const targets = result.alerts.filter(a => !allowed || allowed.has(String(a.student_id)));
+
+        let notified = 0;
+        for (const alert of targets.slice(0, 200)) {
+            const content = `Your attendance in ${alert.course} is ${alert.percentage}%, below the ${alert.threshold}% requirement. Please speak to your trainer.`;
+            await notificationService.notifyStudent(
+                alert.student_id,
+                'Attendance alert',
+                content,
+                'warning'
+            );
+            notified += 1;
+        }
+
+        return res.json({ notified, threshold: result.threshold, total_at_risk: result.alerts.length });
+    } catch (error) {
+        console.error('Notify attendance alerts error:', error);
+        return res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to send attendance alerts' });
+    }
+}
+
+/**
  * GET /attendance/summary
  * Returns per-student attendance totals grouped by week, month, and overall.
  * Restricted to admin / superadmin.
@@ -288,9 +622,10 @@ export async function updateAttendance(req, res) {
  */
 export async function getAttendanceSummary(req, res) {
     try {
-        const { course, student_id } = req.query;
+        const { course, student_id, academic_period_id } = req.query;
         const { role, email } = req.user;
         const mongo = await isMongo();
+        const period = academic_period_id ? await getPeriodRange(academic_period_id) : null;
 
         let allStudents = [];
         let records = [];
@@ -354,6 +689,9 @@ export async function getAttendanceSummary(req, res) {
                 mongoQuery.course = { $in: teacherAllowedCourses };
             }
             if (student_id) mongoQuery.student_id = String(student_id);
+            if (period?.start_date && period?.end_date) {
+                mongoQuery.date = { $gte: period.start_date, $lte: period.end_date };
+            }
             records = await Attendance.find(mongoQuery).sort({ date: 1 });
 
             // Enrich records with student names
@@ -402,6 +740,10 @@ export async function getAttendanceSummary(req, res) {
                 conditions.push('LOWER(TRIM(a.student_id)) = LOWER(TRIM(?))');
                 params.push(student_id);
             }
+            if (period?.start_date && period?.end_date) {
+                conditions.push('a.date >= ? AND a.date <= ?');
+                params.push(period.start_date, period.end_date);
+            }
 
             const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
             records = await query(`
@@ -440,7 +782,7 @@ export async function getAttendanceSummary(req, res) {
                     course: courseName,
                     weekly: {},
                     monthly: {},
-                    overall: { present: 0, absent: 0, late: 0, total: 0 }
+                    overall: emptyCounts()
                 };
             }
         }
@@ -450,14 +792,7 @@ export async function getAttendanceSummary(req, res) {
             const sid = String(record.student_id || '').trim();
             const courseName = String(record.course || '').trim();
             
-            let rawDate = '';
-            if (record.date) {
-                if (record.date instanceof Date) {
-                    rawDate = record.date.toISOString().split('T')[0];
-                } else {
-                    rawDate = String(record.date).split('T')[0];
-                }
-            }
+            const rawDate = dateOnly(record.date);
 
             const status = String(record.status || '').toLowerCase();
             if (!sid || !rawDate) continue;
@@ -475,7 +810,7 @@ export async function getAttendanceSummary(req, res) {
                     course: courseName,
                     weekly: {},
                     monthly: {},
-                    overall: { present: 0, absent: 0, late: 0, total: 0 }
+                    overall: emptyCounts()
                 };
             }
 
@@ -489,25 +824,17 @@ export async function getAttendanceSummary(req, res) {
             const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
             const entry = buckets[key];
-            if (!entry.weekly[weekKey])  entry.weekly[weekKey]  = { week: weekKey,   present: 0, absent: 0, late: 0, total: 0 };
-            if (!entry.monthly[monthKey]) entry.monthly[monthKey] = { month: monthKey, present: 0, absent: 0, late: 0, total: 0 };
+            if (!entry.weekly[weekKey])  entry.weekly[weekKey]  = { week: weekKey, ...emptyCounts() };
+            if (!entry.monthly[monthKey]) entry.monthly[monthKey] = { month: monthKey, ...emptyCounts() };
 
-            const inc = (b) => {
-                b.total++;
-                if (status === 'present') b.present++;
-                else if (status === 'absent') b.absent++;
-                else if (status === 'late')   b.late++;
-            };
+            const inc = (b) => countStatus(b, status);
             inc(entry.weekly[weekKey]);
             inc(entry.monthly[monthKey]);
             inc(entry.overall);
         }
 
         // ── Flatten, sort, and attach rates ──────────────────────────────────
-        const rate = (b) => ({
-            ...b,
-            rate: b.total > 0 ? Math.round(((b.present + b.late) / b.total) * 100) : 0
-        });
+        const rate = (b) => ({ ...b, rate: attendanceRate(b) });
 
         const result = Object.values(buckets).map(e => ({
             student_id:   e.student_id,
@@ -588,7 +915,7 @@ export async function deleteAttendance(req, res) {
  */
 export async function getMonthlyAttendanceSummary(req, res) {
     try {
-        const { month, course, student_id, sort = 'student_name' } = req.query;
+        const { month, course, student_id, sort = 'student_name', academic_period_id } = req.query;
         const { role, email } = req.user;
         const mongo = await isMongo();
 
@@ -601,28 +928,15 @@ export async function getMonthlyAttendanceSummary(req, res) {
         const lastDay = new Date(year, mon, 0).getDate();
         const monthEnd = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
 
-        // Read configurable thresholds from system_settings
-        let threshExcellent = 95, threshGood = 85, threshFair = 75;
-        if (!mongo) {
-            const { query: dbQuery } = await import('../config/database.js');
-            try {
-                const threshRows = await dbQuery(
-                    "SELECT key, value FROM system_settings WHERE key IN ('att_excellent','att_good','att_fair')"
-                );
-                threshRows.forEach(r => {
-                    if (r.key === 'att_excellent') threshExcellent = parseFloat(r.value) || 95;
-                    if (r.key === 'att_good') threshGood = parseFloat(r.value) || 85;
-                    if (r.key === 'att_fair') threshFair = parseFloat(r.value) || 75;
-                });
-            } catch (_) { /* use defaults */ }
-        }
+        // An explicitly selected academic period overrides the calendar month.
+        const period = academic_period_id ? await getPeriodRange(academic_period_id) : null;
+        if (academic_period_id && !period) return res.status(404).json({ error: 'Academic period not found' });
+        const rangeStart = period?.start_date || monthStart;
+        const rangeEnd = period?.end_date || monthEnd;
 
-        const getStatus = (pct) => {
-            if (pct >= threshExcellent) return 'Excellent';
-            if (pct >= threshGood) return 'Good';
-            if (pct >= threshFair) return 'Fair';
-            return 'Needs Improvement';
-        };
+        // Read configurable grade bands from system_settings
+        const config = await getAttendanceConfig();
+        const getStatus = (pct) => attendanceBand(pct, config.thresholds);
 
         // ── Resolve teacher courses ─────────────────────────────────────────
         let teacherAllowedCourses = null;
@@ -675,7 +989,7 @@ export async function getMonthlyAttendanceSummary(req, res) {
             else if (teacherAllowedCourses) studentQ.course = { $in: teacherAllowedCourses.map(c => new RegExp(c, 'i')) };
             allStudents = await Student.find(studentQ).lean();
 
-            const attQ = { date: { $gte: new Date(monthStart), $lte: new Date(monthEnd) } };
+            const attQ = { date: { $gte: new Date(rangeStart), $lte: new Date(rangeEnd) } };
             if (effectiveStudentId) attQ.student_id = effectiveStudentId;
             if (course) attQ.course = { $regex: new RegExp(course.trim(), 'i') };
             else if (teacherAllowedCourses) attQ.course = { $in: teacherAllowedCourses };
@@ -700,7 +1014,7 @@ export async function getMonthlyAttendanceSummary(req, res) {
             );
 
             let attConds = [`a.date >= ? AND a.date <= ?`];
-            let attParams = [monthStart, monthEnd];
+            let attParams = [rangeStart, rangeEnd];
             if (effectiveStudentId) { attConds.push('LOWER(TRIM(a.student_id)) = LOWER(TRIM(?))'); attParams.push(effectiveStudentId); }
             if (course) { attConds.push('LOWER(a.course) LIKE LOWER(?)'); attParams.push(`%${course.trim()}%`); }
             else if (teacherAllowedCourses) {
@@ -741,7 +1055,7 @@ export async function getMonthlyAttendanceSummary(req, res) {
                 buckets[key] = {
                     student_id: sid, student_name: student.name || sid,
                     course: cn, month: targetMonth,
-                    present: 0, absent: 0, late: 0, total: 0
+                    ...emptyCounts()
                 };
             }
         }
@@ -749,32 +1063,28 @@ export async function getMonthlyAttendanceSummary(req, res) {
         for (const rec of records) {
             const sid = String(rec.student_id || '').trim();
             const cn = String(rec.course || '').trim();
-            const status = String(rec.status || '').toLowerCase();
             if (!sid || !cn) continue;
             const key = `${sid}||${cn}`;
             if (!buckets[key]) {
                 buckets[key] = {
                     student_id: sid, student_name: rec.student_name || sid,
                     course: cn, month: targetMonth,
-                    present: 0, absent: 0, late: 0, total: 0
+                    ...emptyCounts()
                 };
             }
-            buckets[key].total++;
-            if (status === 'present') buckets[key].present++;
-            else if (status === 'absent') buckets[key].absent++;
-            else if (status === 'late') buckets[key].late++;
+            countStatus(buckets[key], rec.status);
         }
 
         // ── Build result with percentage + status ───────────────────────────
         let result = Object.values(buckets).map(b => {
-            const pct = b.total > 0
-                ? Math.round(((b.present + b.late) / b.total) * 100 * 100) / 100
-                : 0;
+            const pct = attendanceRate(b);
             return {
                 ...b,
                 percentage: pct,
                 status: getStatus(pct),
-                thresholds: { excellent: threshExcellent, good: threshGood, fair: threshFair }
+                below_threshold: pct < config.threshold,
+                thresholds: { ...config.thresholds, requirement: config.threshold },
+                period: period ? { id: period.id, name: period.name } : null
             };
         });
 

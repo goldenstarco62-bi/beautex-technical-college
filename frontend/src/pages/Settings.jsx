@@ -83,6 +83,7 @@ export default function Settings() {
         student_portal_materials: true, student_portal_certificates: true, student_portal_attendance: true,
         assessment_types: 'CAT, Practical Assessment, Mid-Term Exam, End-Term Exam, Final Examination',
         grading_distinction_min: '70', grading_credit_min: '60', grading_pass_min: '50', grading_fail_min: '0',
+        grading_distinction_points: '4', grading_credit_points: '3', grading_pass_points: '2', grading_fail_points: '0',
         attendance_mode: 'daily', attendance_status_types: 'Present, Absent, Late, Sick, Excused', attendance_threshold_percent: '90',
         fee_categories: 'Registration Fee, Tuition Fee, Practical Fee, Examination Fee, Graduation Fee, Accommodation Fee',
         payment_methods: 'M-Pesa, Bank Deposit, Bank Transfer, Cash, Card Payments',

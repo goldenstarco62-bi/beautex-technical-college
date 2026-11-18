@@ -1,33 +1,10 @@
 import { query, run, queryOne } from '../config/database.js';
 import { parseCoursesField } from '../utils/courseParser.js';
+import { getGradeScale, gradeFor } from '../utils/grading.js';
 
 // ─── Grade Calculation Helpers ──────────────────────────────────────────────
-
-async function getGradingThresholds() {
-    try {
-        const rows = await query(
-            `SELECT key, value FROM system_settings WHERE key IN (
-                'grading_distinction_min', 'grading_credit_min', 'grading_pass_min'
-            )`
-        );
-        const map = rows.reduce((acc, r) => { acc[r.key] = parseFloat(r.value); return acc; }, {});
-        return {
-            distinction: map.grading_distinction_min ?? 80,
-            credit:      map.grading_credit_min      ?? 65,
-            pass:        map.grading_pass_min         ?? 50,
-        };
-    } catch {
-        return { distinction: 80, credit: 65, pass: 50 };
-    }
-}
-
-export function calculateGrade(marks, thresholds) {
-    const { distinction, credit, pass } = thresholds;
-    if (marks >= distinction) return 'Distinction';
-    if (marks >= credit)      return 'Credit';
-    if (marks >= pass)        return 'Pass';
-    return 'Fail';
-}
+// Boundaries live in system_settings and are resolved by utils/grading.js so
+// manual and batch entry grade identically.
 
 // Helper to get allowed course IDs for a teacher
 async function getTeacherAllowedCourseIds(req) {
@@ -241,8 +218,8 @@ export async function saveStudentUnitMark(req, res) {
         const unit = await resolveCourseUnit(course_id, unit_id, unit_name);
         if (!unit) return res.status(404).json({ error: 'Unit not found for this course' });
 
-        const thresholds = await getGradingThresholds();
-        const grade      = calculateGrade(marksNum, thresholds);
+        const scale = await getGradeScale();
+        const grade = gradeFor(marksNum, scale);
 
         // Resolve lecturer: prefer explicit, else trainer assigned to unit, else course instructor
         let recLecturer = lecturer || null;
@@ -341,7 +318,7 @@ export async function batchSaveUnitMarks(req, res) {
         );
         const registeredStudentIds = new Set(students.map(s => String(s.id).trim()));
 
-        const thresholds = await getGradingThresholds();
+        const scale = await getGradeScale();
 
         // Resolve default lecturer for batch if not passed on individual entries
         let defaultLecturer = null;
@@ -391,7 +368,7 @@ export async function batchSaveUnitMarks(req, res) {
                 const marksNum = parseFloat(marks);
                 if (isNaN(marksNum) || marksNum < 0 || marksNum > 100) continue;
 
-                const grade       = calculateGrade(marksNum, thresholds);
+                const grade       = gradeFor(marksNum, scale);
                 const recLecturer = lecturer || defaultLecturer;
 
                 const existingId = existingMap.get(normalizedSid);
