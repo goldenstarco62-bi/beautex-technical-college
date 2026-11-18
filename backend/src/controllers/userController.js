@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { sendAdminResetPasswordEmail } from '../services/emailService.js';
+import { keepAlive } from '../utils/keepAlive.js';
 
 const isMongo = async () => !!process.env.MONGODB_URI;
 
@@ -120,10 +121,10 @@ export async function resetUserPassword(req, res) {
             user.must_change_password = true;
             await user.save();
 
-            res.json({ message: 'Password reset - temporary credentials emailed' });
-            sendAdminResetPasswordEmail(user.email, tempPassword)
+            const emailJob = sendAdminResetPasswordEmail(user.email, tempPassword)
                 .catch(err => console.error('[user] Failed to send reset email:', err.message));
-            return;
+            await keepAlive(emailJob);
+            return res.json({ message: 'Password reset - temporary credentials emailed' });
         }
 
         const user = await queryOne('SELECT id, email, role FROM users WHERE id = ?', [userId]);
@@ -137,9 +138,10 @@ export async function resetUserPassword(req, res) {
         await run('UPDATE users SET password = ?, must_change_password = ? WHERE id = ?', [hashedPassword, true, userId]);
 
         // Respond immediately — email is fire-and-forget (non-blocking)
-        res.json({ message: 'Password reset - temporary credentials emailed' });
-        sendAdminResetPasswordEmail(user.email, tempPassword)
+        const emailJob = sendAdminResetPasswordEmail(user.email, tempPassword)
             .catch(err => console.warn('[user] Email delivery failed for password reset:', err.message));
+        await keepAlive(emailJob);
+        res.json({ message: 'Password reset - temporary credentials emailed' });
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ error: 'Failed to reset password' });
@@ -269,10 +271,10 @@ export async function resetPasswordByEmail(req, res) {
                 await user.save();
             }
 
-            res.json({ message: 'Password reset - temporary credentials emailed' });
-            sendAdminResetPasswordEmail(user.email, tempPassword)
+            const emailJob = sendAdminResetPasswordEmail(user.email, tempPassword)
                 .catch(err => console.error('[user] Failed to send reset email:', err.message));
-            return;
+            await keepAlive(emailJob);
+            return res.json({ message: 'Password reset - temporary credentials emailed' });
         }
 
         let user = await queryOne('SELECT id, email, role FROM users WHERE LOWER(email) = LOWER(?)', [email]);
@@ -304,9 +306,10 @@ export async function resetPasswordByEmail(req, res) {
         }
 
         // Respond immediately — email is fire-and-forget (non-blocking)
-        res.json({ message: 'Password reset - temporary credentials emailed' });
-        sendAdminResetPasswordEmail(user.email || email, tempPassword)
+        const emailJob = sendAdminResetPasswordEmail(user.email || email, tempPassword)
             .catch(err => console.warn('[user] Email delivery failed for password reset by email:', err.message));
+        await keepAlive(emailJob);
+        res.json({ message: 'Password reset - temporary credentials emailed' });
     } catch (error) {
         console.error('Reset password by email error:', error);
         res.status(500).json({ error: 'Failed to reset password' });

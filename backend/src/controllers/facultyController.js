@@ -1,5 +1,6 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { sendWelcomeEmail, sendAdminResetPasswordEmail } from '../services/emailService.js';
+import { keepAlive } from '../utils/keepAlive.js';
 import { sendLoginCredentials } from '../services/smsService.js';
 import bcrypt from 'bcryptjs';
 
@@ -142,19 +143,23 @@ export async function createFaculty(req, res) {
         }
 
         // Respond immediately — notifications are fire-and-forget (non-blocking)
-        res.status(201).json(savedFaculty);
-
-        // Send email notification asynchronously (does not block the response)
-        sendWelcomeEmail(email, 'teacher', temporaryPassword)
-            .then(() => console.log(`[faculty] Welcome email dispatched to: ${email}`))
+        const emailJob = sendWelcomeEmail(email, 'teacher', temporaryPassword)
+            .then(sent => {
+                if (sent) console.log(`[faculty] Welcome email sent to ${email}`);
+                else console.error(`[faculty] Welcome email could not be delivered to ${email} — check SMTP settings.`);
+            })
             .catch(err => console.error('[faculty] Failed to send welcome email:', err.message));
+        const smsJob = contact
+            ? sendLoginCredentials(contact, email, temporaryPassword, 'teacher')
+                .then(sent => {
+                    if (sent) console.log(`[faculty] SMS sent to ${contact}`);
+                    else console.warn(`[faculty] SMS not sent to ${contact} — check the SMS gateway settings.`);
+                })
+                .catch(err => console.error('[faculty] Failed to send SMS:', err.message))
+            : null;
 
-        // Send SMS notification asynchronously if contact is provided
-        if (contact) {
-            sendLoginCredentials(contact, email, temporaryPassword, 'teacher')
-                .then(() => console.log(`[faculty] SMS dispatched to: ${contact}`))
-                .catch(err => console.error('[faculty] Failed to send SMS:', err.message));
-        }
+        await keepAlive(Promise.all([emailJob, smsJob].filter(Boolean)));
+        res.status(201).json(savedFaculty);
     } catch (error) {
         console.error('Create faculty error:', error);
         const isDuplicate =
@@ -225,9 +230,10 @@ export async function updateFaculty(req, res) {
                     await newUser.save();
                 }
 
-                sendAdminResetPasswordEmail(newEmail, tempPassword)
+                const emailJob = sendAdminResetPasswordEmail(newEmail, tempPassword)
                     .then(() => console.log(`[faculty] Password reset email sent to new address: ${newEmail}`))
                     .catch(err => console.error('[faculty] Failed to send reset email to new address:', err.message));
+                await keepAlive(emailJob);
                 passwordResetSent = true;
             }
 
@@ -285,9 +291,10 @@ export async function updateFaculty(req, res) {
                 await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldFaculty.name, newEmail, hashedPassword, 'teacher', 'Active', true]);
             }
 
-            sendAdminResetPasswordEmail(newEmail, tempPassword)
+            const emailJob = sendAdminResetPasswordEmail(newEmail, tempPassword)
                 .then(() => console.log(`[faculty] Password reset email sent to new address: ${newEmail}`))
                 .catch(err => console.error('[faculty] Failed to send reset email to new address:', err.message));
+            await keepAlive(emailJob);
             passwordResetSent = true;
         }
 

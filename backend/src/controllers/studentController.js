@@ -1,5 +1,6 @@
 import { getDb, query, queryOne, run, withTransaction } from '../config/database.js';
 import { sendWelcomeEmail, sendAdminResetPasswordEmail } from '../services/emailService.js';
+import { keepAlive } from '../utils/keepAlive.js';
 import { sendLoginCredentials } from '../services/smsService.js';
 import { logActivity } from '../services/auditService.js';
 import bcrypt from 'bcryptjs';
@@ -428,22 +429,26 @@ export async function createStudent(req, res) {
             };
         }
 
-        // Deliver credentials before responding so the admin knows whether they went out.
-        const emailSent = await sendWelcomeEmail(email, 'student', temporaryPassword);
-        res.status(201).json({
-            ...savedStudent,
-            email_sent: emailSent,
-            ...(emailSent ? {} : {
-                email_error: 'The student account was created, but the login credentials email could not be sent. Check the SMTP settings under Settings → Communications.'
+        // Respond immediately: the SMTP handshake can take several seconds and
+        // must not hold up the registration form. Both the credentials email and
+        // the SMS copy are dispatched in the background.
+        const emailJob = sendWelcomeEmail(email, 'student', temporaryPassword)
+            .then(sent => {
+                if (sent) console.log(`[student] Welcome email sent to ${email}`);
+                else console.error(`[student] Welcome email could not be delivered to ${email} — check SMTP settings.`);
             })
-        });
+            .catch(err => console.error('[student] Failed to send welcome email:', err.message));
+        const smsJob = contact
+            ? sendLoginCredentials(contact, email, temporaryPassword, 'student')
+                .then(sent => {
+                    if (sent) console.log(`[student] SMS sent to ${contact}`);
+                    else console.warn(`[student] SMS not sent to ${contact} — check the SMS gateway settings.`);
+                })
+                .catch(err => console.error('[student] Failed to send SMS:', err.message))
+            : null;
 
-        // Send SMS notification asynchronously if contact is provided
-        if (contact) {
-            sendLoginCredentials(contact, email, temporaryPassword, 'student')
-                .then(() => console.log(`[student] SMS dispatched to: ${contact}`))
-                .catch(err => console.error('[student] Failed to send SMS:', err.message));
-        }
+        await keepAlive(Promise.all([emailJob, smsJob].filter(Boolean)));
+        res.status(201).json(savedStudent);
     } catch (error) {
         console.error('Create student error:', error);
         
@@ -559,9 +564,10 @@ export async function updateStudent(req, res) {
                     await newUser.save();
                 }
 
-                sendAdminResetPasswordEmail(newEmail, tempPassword)
+                const emailJob = sendAdminResetPasswordEmail(newEmail, tempPassword)
                     .then(() => console.log(`[student] Password reset email sent to new address: ${newEmail}`))
                     .catch(err => console.error('[student] Failed to send reset email to new address:', err.message));
+                await keepAlive(emailJob);
                 passwordResetSent = true;
             }
 
@@ -691,9 +697,10 @@ export async function updateStudent(req, res) {
                 await run('INSERT INTO users (name, email, password, role, status, must_change_password) VALUES (?, ?, ?, ?, ?, ?)', [req.body.name || oldStudent.name, newEmail, hashedPassword, 'student', 'Active', true]);
             }
 
-            sendAdminResetPasswordEmail(newEmail, tempPassword)
+            const emailJob = sendAdminResetPasswordEmail(newEmail, tempPassword)
                 .then(() => console.log(`[student] Password reset email sent to new address: ${newEmail}`))
                 .catch(err => console.error('[student] Failed to send reset email to new address:', err.message));
+            await keepAlive(emailJob);
             passwordResetSent = true;
         }
 

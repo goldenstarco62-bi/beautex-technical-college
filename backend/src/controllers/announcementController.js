@@ -1,6 +1,7 @@
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { sendAnnouncementEmail } from '../services/emailService.js';
 import notificationService from '../services/notificationService.js';
+import { keepAlive } from '../utils/keepAlive.js';
 
 
 const isMongo = async () => !!process.env.MONGODB_URI;
@@ -92,39 +93,40 @@ export async function createAnnouncement(req, res) {
             const Announcement = (await import('../models/mongo/Announcement.js')).default;
             const newAnnouncement = new Announcement({ title, content, author, category, priority, date });
             savedAnnouncement = await newAnnouncement.save();
-            res.status(201).json(savedAnnouncement);
         } else {
             const result = await run(
                 'INSERT INTO announcements (title, content, author, category, priority, date) VALUES (?, ?, ?, ?, ?, ?)',
                 [title, content, author, category, priority, date || new Date().toISOString().split('T')[0]]
             );
             savedAnnouncement = await queryOne('SELECT * FROM announcements WHERE id = ?', [result.lastID]);
-            res.status(201).json(savedAnnouncement);
         }
 
-        // --- Create Global Notification ---
-        notificationService.notifyAll(
+        const notificationJob = notificationService.notifyAll(
             title,
             content.substring(0, 200) + (content.length > 200 ? '...' : ''),
             'announcement'
-        );
-
+        ).catch(err => console.error('[announcement] Failed to create global notification:', err.message));
 
         console.log('[announcement] Initiating background broadcast sequence...');
-        
-        getAllUserEmails()
+        const broadcastJob = getAllUserEmails()
             .then(emails => {
                 if (!emails || emails.length === 0) {
                     console.warn('[announcement] Broadcast Aborted: No active recipients found in registry.');
-                    return;
+                    return false;
                 }
-                
+
                 console.log(`[announcement] Dispatching to ${emails.length} members. (Author: ${author || 'Admin'})`);
                 return sendAnnouncementEmail(savedAnnouncement, emails);
             })
             .catch(err => {
                 console.error('[announcement] Critical failure in background broadcast path:', err.message);
             });
+
+        // Register both jobs before writing the response — Vercel freezes the
+        // function at that point, which previously dropped the broadcast.
+        await keepAlive(Promise.all([notificationJob, broadcastJob]));
+
+        res.status(201).json(savedAnnouncement);
 
     } catch (error) {
         console.error('Create announcement error:', error);

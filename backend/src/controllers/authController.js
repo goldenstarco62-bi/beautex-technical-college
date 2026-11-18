@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { getDb, query, queryOne, run } from '../config/database.js';
 import { logActivity } from '../services/auditService.js';
 import { sendPasswordResetEmail, getFrontendUrl } from '../services/emailService.js';
+import { keepAlive } from '../utils/keepAlive.js';
 
 
 // Dynamic user lookup that works with both MongoDB and SQLite
@@ -401,16 +402,9 @@ export async function forgotPassword(req, res) {
             })
             .catch(emailErr => console.error('[auth] Failed to send reset email:', emailErr.message));
 
-        // Vercel freezes the function once the response ends, so ask the
-        // platform to keep this invocation alive until the send completes.
-        if (process.env.VERCEL) {
-            try {
-                const { waitUntil } = await import('@vercel/functions');
-                waitUntil(emailJob);
-            } catch (waitErr) {
-                console.error('[auth] waitUntil unavailable, reset email may be interrupted:', waitErr.message);
-            }
-        }
+        // Keep the invocation alive until the send completes (Vercel freezes
+        // the function once the response ends).
+        await keepAlive(emailJob);
 
         res.json(genericResponse);
     } catch (error) {

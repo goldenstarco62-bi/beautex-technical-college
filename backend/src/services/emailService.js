@@ -452,21 +452,28 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
         `;
 
         console.log(`📡 [DISPATCH START] Initiating broadcast for: "${title}"`);
-        console.log(`� Target: ${recipientEmails.length} active members.`);
 
-        console.log(`🏁 Dispatching Bulletins to ${recipientEmails.length} members...`);
+        // BCC in batches: a handful of messages keeps a whole-college broadcast
+        // inside one serverless invocation, and recipients never see each other.
+        const BATCH_SIZE = 25;
+        const recipients = [...new Set(
+            recipientEmails
+                .map(e => String(e || '').toLowerCase().trim())
+                .filter(e => e.includes('@'))
+        )];
+
+        console.log(`🏁 Dispatching Bulletins to ${recipients.length} members in batches of ${BATCH_SIZE}...`);
 
         let successCount = 0;
         let failCount = 0;
 
-        for (const email of recipientEmails) {
+        for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+            const batch = recipients.slice(i, i + BATCH_SIZE);
             try {
-                // Throttle to adhere to Gmail intake pace (1.5s per email)
-                await new Promise(r => setTimeout(r, 1500));
-
                 await t.sendMail({
                     from: `"Beautex Technical Training College" <${senderEmail}>`,
-                    to: email,
+                    to: senderEmail,
+                    bcc: batch,
                     subject: `📢 Announcement: ${title}`,
                     html: htmlBody,
                     // Add importance headers
@@ -476,19 +483,21 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
                         'Importance': priority?.toLowerCase() === 'high' ? 'High' : 'Normal'
                     }
                 });
-                
-                successCount++;
-                if (successCount % 10 === 0 || successCount === recipientEmails.length) {
-                    console.log(`📡 Broadcast Progress: ${successCount}/${recipientEmails.length} delivered.`);
-                }
+
+                successCount += batch.length;
+                console.log(`📡 Broadcast Progress: ${successCount}/${recipients.length} delivered.`);
             } catch (err) {
-                console.error(`❌ Dispatch Failure [${email}]:`, err.message);
-                failCount++;
+                console.error(`❌ Dispatch Failure [batch ${Math.floor(i / BATCH_SIZE) + 1}, ${batch.length} recipients]:`, err.message);
+                failCount += batch.length;
                 // If it's a fatal SMTP error, stop the broadcast
                 if (err.message.includes('Invalid login') || err.message.includes('Connection refused')) {
                     console.error('⛔ Critical SMTP Error: Aborting remaining broadcast.');
                     break;
                 }
+            }
+            if (i + BATCH_SIZE < recipients.length) {
+                // Gmail throttles bursts; a short pause between batches is enough.
+                await new Promise(r => setTimeout(r, 1000));
             }
         }
 
@@ -504,7 +513,7 @@ export const sendAnnouncementEmail = async (announcement, recipientEmails) => {
                     <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
                         <h2 style="color: #800000;">Broadcast Summary</h2>
                         <p><strong>Announcement:</strong> ${title}</p>
-                        <p><strong>Total Recipients:</strong> ${recipientEmails.length}</p>
+                        <p><strong>Total Recipients:</strong> ${recipients.length}</p>
                         <hr/>
                         <p style="color: green;">✅ <strong>Successfully Delivered:</strong> ${successCount}</p>
                         <p style="color: red;">❌ <strong>Failed:</strong> ${failCount}</p>

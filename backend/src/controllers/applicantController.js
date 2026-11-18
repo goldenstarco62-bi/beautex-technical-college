@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { query, queryOne, run, getActiveDbEngine } from '../config/database.js';
 import { sendApplicationReceivedEmail, sendAdmissionsNotificationEmail } from '../services/emailService.js';
 import logger from '../utils/logger.js';
+import { keepAlive } from '../utils/keepAlive.js';
 
 const STATUSES = [
     'Submitted', 'Under Review', 'Shortlisted', 'Offered',
@@ -158,16 +159,13 @@ async function insertApplication(fields) {
     throw new Error('Unable to allocate a unique applicant number');
 }
 
-function dispatchEmail(promise) {
+// Await this before writing the response so the platform registers the job
+// while the invocation is still considered active.
+async function dispatchEmail(promise) {
     const job = promise
         .then(sent => { if (!sent) logger.warn('Admissions email was not delivered'); })
         .catch(err => logger.error({ err }, 'Admissions email failed'));
-    // Vercel freezes the function once the response ends, so keep it alive.
-    if (process.env.VERCEL) {
-        import('@vercel/functions')
-            .then(({ waitUntil }) => waitUntil(job))
-            .catch(() => {});
-    }
+    await keepAlive(job);
 }
 
 function validateRegistrationType(value) {
@@ -705,20 +703,21 @@ export async function createPublicApplication(req, res) {
         });
 
         const created = await queryOne('SELECT * FROM applicants WHERE id = ?', [id]);
-        res.status(201).json({ message: 'Application submitted', applicant: publicApplicantView(created) });
 
         if (settings.autoReply) {
-            dispatchEmail(sendApplicationReceivedEmail({
+            await dispatchEmail(sendApplicationReceivedEmail({
                 email, fullName, applicantNumber,
                 programmeName: programme.name, intake,
             }));
         }
         if (settings.notifyEmail) {
-            dispatchEmail(sendAdmissionsNotificationEmail(settings.notifyEmail, {
+            await dispatchEmail(sendAdmissionsNotificationEmail(settings.notifyEmail, {
                 fullName, applicantNumber, email, phone,
                 programmeName: programme.name, intake,
             }));
         }
+
+        res.status(201).json({ message: 'Application submitted', applicant: publicApplicantView(created) });
     } catch (error) {
         logger.error({ err: error }, 'Public application submission failed');
         res.status(500).json({ error: 'Failed to submit the application. Please try again.' });
