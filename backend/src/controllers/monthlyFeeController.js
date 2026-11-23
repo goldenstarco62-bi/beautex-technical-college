@@ -1,4 +1,5 @@
 import { query, queryOne, run } from '../config/database.js';
+import crypto from 'crypto';
 import pdfkit from 'pdfkit';
 import PDFTable from 'pdfkit-table';
 import ExcelJS from 'exceljs';
@@ -115,8 +116,8 @@ async function syncStudentFees(studentId) {
         const canonicalId = student ? student.id : studentId;
 
         const paidRow = await queryOne(
-            'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND status = ?',
-            [canonicalId, 'Completed']
+            'SELECT COALESCE(SUM(amount), 0) as total_paid, MAX(payment_date) as last_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+            [canonicalId]
         );
         const totalPaid = parseFloat(paidRow?.total_paid || 0);
         const lastDate = paidRow?.last_date;
@@ -264,8 +265,8 @@ export async function autoInitializeCurrentMonth(targetYear, targetMonth) {
 
             // Calculate how much was paid in this specific month
             const payments = await query(
-                'SELECT amount, payment_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?)) AND status = ?',
-                [student.id, 'Completed']
+                'SELECT amount, payment_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [student.id]
             );
             let paidThisMonth = 0;
             for (const p of payments) {
@@ -540,7 +541,7 @@ export async function recordMonthlyPayment(req, res) {
                 canonicalId,
                 numericAmount,
                 method,
-                transaction_ref || `TX-${Date.now()}`,
+                transaction_ref || `TX-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`,
                 recordedBy,
                 payment_date || new Date().toISOString(),
                 remarks || `Monthly tuition payment for ${month}/${year}`

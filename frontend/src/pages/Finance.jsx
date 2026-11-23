@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { financeAPI, studentsAPI } from '../services/api';
 import {
@@ -172,7 +172,7 @@ function StudentFinanceView({ studentFee, payments }) {
 
                         <div className="space-y-8">
                             {Object.entries(categoryTotals).map(([cat, val], i) => {
-                                const ratio = (val / totalPaid) * 100;
+                                const ratio = totalPaid > 0 ? (val / totalPaid) * 100 : 0;
                                 return (
                                     <div key={i} className="group/item">
                                         <div className="flex justify-between items-end mb-3">
@@ -381,7 +381,7 @@ function AdminFinanceView({
     };
 
     const collectionRate = summary.total_revenue_expected > 0
-        ? ((summary.total_revenue_collected / summary.total_revenue_expected) * 100).toFixed(1)
+        ? Math.min(100, (summary.total_revenue_collected / summary.total_revenue_expected) * 100).toFixed(1)
         : 0;
 
     return (
@@ -906,7 +906,7 @@ function AdminFinanceView({
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredFees.map((fee, i) => {
-                            const progress = fee.total_due > 0 ? (fee.total_paid / fee.total_due) * 100 : 0;
+                            const progress = fee.total_due > 0 ? Math.min(100, (fee.total_paid / fee.total_due) * 100) : 0;
                             return (
                                 <div key={fee.id || i} className="bg-white rounded-[2.5rem] border border-gray-100 shadow-xl overflow-hidden group hover:-translate-y-1 transition-all">
                                     <div className="p-8">
@@ -999,6 +999,7 @@ export default function Finance() {
     const [showModal, setShowModal] = useState(false);
     const [paymentForm, setPaymentForm] = useState(EMPTY_PAYMENT);
     const [saving, setSaving] = useState(false);
+    const submittingRef = useRef(false);
     const [viewingReport, setViewingReport] = useState(null);
     const [printingReport, setPrintingReport] = useState(null);
     const [editingRecord, setEditingRecord] = useState(null); // {type: 'payment' | 'fee', data: any }
@@ -1010,13 +1011,41 @@ export default function Finance() {
     const canEditFinance = user?.role === 'superadmin' || (user?.role === 'admin' && !!user?.can_edit_finance);
     const canRecordFinance = user?.role === 'superadmin' || user?.role === 'admin';
 
+    const buildRegistryScope = (records) => {
+        const keyOf = (v) => String(v || '').trim().toLowerCase();
+        const feeByKey = new Map((studentFees || []).map(f => [keyOf(f.student_id), f]));
+        const findFee = (key) => feeByKey.get(key)
+            || (studentFee && keyOf(studentFee.student_id) === key ? studentFee : null);
+
+        const students = [];
+        const seen = new Set();
+        for (const p of records || []) {
+            const key = keyOf(p.student_id);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const fee = findFee(key);
+            const total_due = Number(fee?.total_due || 0);
+            const total_paid = Number(fee?.total_paid || 0);
+            const balance = Math.max(0, Number(fee?.balance ?? (total_due > 0 ? total_due - total_paid : 0)));
+            students.push({ student_id: p.student_id, student_name: p.student_name || p.student_id, total_due, total_paid, balance });
+        }
+
+        return {
+            students,
+            scopeLabel: students.map(s => s.student_name).join(', '),
+            totalDue: students.reduce((s, x) => s + x.total_due, 0),
+            totalPaid: students.reduce((s, x) => s + x.total_paid, 0),
+            totalBalance: students.reduce((s, x) => s + x.balance, 0),
+        };
+    };
+
     const handleDownloadRegistryPDF = async (recordsToExport, filterSummary) => {
         if (!recordsToExport || recordsToExport.length === 0) {
             alert('No payment records found to export.');
             return;
         }
         setGeneratingRegistryPdf(true);
-        setPrintingRegistry({ payments: recordsToExport, filterSummary, generatedAt: new Date(), user });
+        setPrintingRegistry({ payments: recordsToExport, filterSummary, generatedAt: new Date(), user, ...buildRegistryScope(recordsToExport) });
 
         setTimeout(async () => {
             const element = document.getElementById('finance-registry-report-capture');
@@ -1039,20 +1068,15 @@ export default function Finance() {
                 const pdfHeight = pdf.internal.pageSize.getHeight();
                 const imgProps = pdf.getImageProperties(imgData);
                 const ratio = imgProps.height / imgProps.width;
-                const totalRenderedHeight = pdfWidth * ratio;
 
-                let heightLeft = totalRenderedHeight;
-                let position = 0;
-
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'FAST');
-                heightLeft -= pdfHeight;
-
-                while (heightLeft > 0) {
-                    position -= pdfHeight;
-                    pdf.addPage();
-                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, totalRenderedHeight, undefined, 'FAST');
-                    heightLeft -= pdfHeight;
+                // Fit the whole manifest on a single A4 page
+                let renderWidth = pdfWidth;
+                let renderHeight = pdfWidth * ratio;
+                if (renderHeight > pdfHeight) {
+                    renderHeight = pdfHeight;
+                    renderWidth = pdfHeight / ratio;
                 }
+                pdf.addImage(imgData, 'JPEG', (pdfWidth - renderWidth) / 2, 0, renderWidth, renderHeight, undefined, 'FAST');
 
                 const fileName = `Payment_Registry_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
                 pdf.save(fileName);
@@ -1071,7 +1095,7 @@ export default function Finance() {
             alert('No payment records found to print.');
             return;
         }
-        setPrintingRegistry({ payments: recordsToPrint, filterSummary, generatedAt: new Date(), user });
+        setPrintingRegistry({ payments: recordsToPrint, filterSummary, generatedAt: new Date(), user, ...buildRegistryScope(recordsToPrint) });
         setTimeout(() => {
             window.print();
             setPrintingRegistry(null);
@@ -1115,7 +1139,7 @@ export default function Finance() {
 
     const handleRecordPayment = async (e) => {
         if (e) e.preventDefault();
-        if (saving) return;
+        if (submittingRef.current || saving) return;
 
         const { student_id, mode } = paymentForm;
         if (!student_id) {
@@ -1123,6 +1147,7 @@ export default function Finance() {
             return;
         }
 
+        submittingRef.current = true;
         try {
             setSaving(true);
 
@@ -1130,14 +1155,19 @@ export default function Finance() {
                 const { amount, method, transaction_ref, category, semester, academic_year, remarks, payment_date } = paymentForm;
                 if (!amount || !method) {
                     alert('Amount and Method are required.');
-                    setSaving(false);
+                    return;
+                }
+                const parsedAmount = parseFloat(amount);
+                if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+                    alert('Amount must be a positive number.');
                     return;
                 }
                 await financeAPI.recordPayment({
                     student_id,
-                    amount: parseFloat(amount),
+                    amount: parsedAmount,
                     method,
-                    transaction_ref: transaction_ref || `MANUAL-${Date.now()}`,
+                    // Leave refs blank so the server generates a collision-free one
+                    transaction_ref: transaction_ref.trim() || undefined,
                     category,
                     semester,
                     academic_year,
@@ -1145,22 +1175,19 @@ export default function Finance() {
                     payment_date: payment_date || todayISO()
                 });
             } else {
-                const { total_due, total_paid } = paymentForm;
-                if (total_due === '' || total_paid === '') {
-                    alert('Please fill in total due and paid fields.');
-                    setSaving(false);
+                const { total_due } = paymentForm;
+                if (total_due === '') {
+                    alert('Please enter the total fee required.');
                     return;
                 }
                 const due = parseFloat(total_due);
-                const paid = parseFloat(total_paid);
-                const bal = Math.max(0, due - paid);
+                if (!Number.isFinite(due) || due < 0) {
+                    alert('Total fee required must be a valid non-negative amount.');
+                    return;
+                }
 
-                await financeAPI.updateStudentFee(student_id, {
-                    total_due: due,
-                    total_paid: paid,
-                    balance: bal,
-                    status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending')
-                });
+                // Collected amount is owned by the payments registry — never sent from the client
+                await financeAPI.updateStudentFee(student_id, { total_due: due });
             }
 
             setShowModal(false);
@@ -1171,7 +1198,10 @@ export default function Finance() {
             console.error('Finance Update Error:', error);
             const msg = error.response?.data?.error || error.message || 'Failed to update financial records.';
             alert(msg);
-        } finally { setSaving(false); }
+        } finally {
+            submittingRef.current = false;
+            setSaving(false);
+        }
     };
 
     const handleUpdateRecord = async (e) => {
@@ -1184,8 +1214,8 @@ export default function Finance() {
             if (type === 'payment') {
                 await financeAPI.updatePayment(id, data);
             } else {
-                // For fees, use student_id or id
-                await financeAPI.updateStudentFee(data.student_id || id, data);
+                // Only the agreed total_due is mutable; collected totals derive from payments
+                await financeAPI.updateStudentFee(data.student_id || id, { total_due: data.total_due });
             }
 
             setEditingRecord(null);
@@ -1210,20 +1240,69 @@ export default function Finance() {
         } finally { setSaving(false); }
     };
 
+    const buildReceiptContext = (data) => {
+        const sid = String(data.student_id || '').trim().toLowerCase();
+        const history = (payments || [])
+            .filter(p => String(p.student_id || '').trim().toLowerCase() === sid)
+            .slice()
+            .sort((a, b) => new Date(a.payment_date) - new Date(b.payment_date));
+        if (data.type !== 'status' && history.every(p => String(p.id ?? p._id) !== String(data.id ?? data._id))) {
+            history.push(data);
+            history.sort((a, b) => new Date(a.payment_date) - new Date(b.payment_date));
+        }
+
+        const feeRow = (studentFees || []).find(f => String(f.student_id || '').trim().toLowerCase() === sid)
+            || (studentFee && String(studentFee.student_id || '').trim().toLowerCase() === sid ? studentFee : null);
+        const historyTotal = history.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+        const totalDue = Number(feeRow?.total_due || 0);
+        const totalPaid = Number(feeRow?.total_paid ?? historyTotal);
+        const balance = Math.max(0, Number(feeRow?.balance ?? (totalDue > 0 ? totalDue - totalPaid : 0)));
+
+        return { history, account: { totalDue, totalPaid, balance } };
+    };
+
+    const handleViewReport = (data) => {
+        setViewingReport({
+            ...data,
+            type: data.type || (data.amount !== undefined ? 'payment' : 'status'),
+            ...buildReceiptContext(data),
+        });
+    };
+
     const handleDownload = async (data, title) => {
-        setPrintingReport({ data, title });
+        setPrintingReport({ data, title, ...buildReceiptContext(data) });
         setTimeout(async () => {
             const element = document.getElementById('finance-report-capture');
             if (!element) return;
             try {
-                const canvas = await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: '#ffffff', windowWidth: 794 });
-                const imgData = canvas.toDataURL('image/png');
+                const canvas = await html2canvas(element, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    windowWidth: 800,
+                    logging: false,
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
                 const imgProps = pdf.getImageProperties(imgData);
-                const ratio = imgProps.height / imgProps.width;
-                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, Math.min(pdfWidth * ratio, pdf.internal.pageSize.getHeight()));
-                pdf.save(`${title.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+                const renderedHeight = pdfWidth * (imgProps.height / imgProps.width);
+
+                // Multi-page: the ledger can run past one A4 sheet, so offset the
+                // same capture per page instead of squashing it to fit.
+                let heightLeft = renderedHeight;
+                let position = 0;
+                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, renderedHeight, undefined, 'FAST');
+                heightLeft -= pdfHeight;
+                while (heightLeft > 0) {
+                    position -= pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, renderedHeight, undefined, 'FAST');
+                    heightLeft -= pdfHeight;
+                }
+
+                pdf.save(`${title.replace(/\s+/g, '_')}_${(data.student_id || 'Account').replace(/[^a-z0-9]+/gi, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
             } catch (err) {
                 console.error(err);
                 alert('Download failed. Please try printing instead.');
@@ -1268,13 +1347,13 @@ export default function Finance() {
                         canEditFinance={canEditFinance}
                         canRecordFinance={canRecordFinance}
                         onRecord={() => canRecordFinance ? setShowModal(true) : alert('Access Denied: You do not have permission to record payments.')}
-                        onViewReport={setViewingReport}
+                        onViewReport={handleViewReport}
                         onEditPayment={(p) => canEditFinance ? setEditingRecord({ type: 'payment', data: { ...p } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
                         onEditFee={(f) => canEditFinance ? setEditingRecord({ type: 'fee', data: { ...f } }) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
                         onDeletePayment={(id) => canEditFinance ? handleDeleteRecord('payment', id) : alert('Access Denied: Finance editing requires permission from the Super Administrator.')}
                         onDownloadRegistryPDF={handleDownloadRegistryPDF}
                         onPrintRegistryPDF={handlePrintRegistryPDF}
-                        onPreviewRegistryReport={(records, filterSummary) => setViewingRegistryModal({ records, filterSummary })}
+                        onPreviewRegistryReport={(records, filterSummary) => setViewingRegistryModal({ records, filterSummary, ...buildRegistryScope(records) })}
                         generatingRegistryPdf={generatingRegistryPdf}
                     />
                 </div>
@@ -1317,12 +1396,13 @@ export default function Finance() {
                                             value={paymentForm.student_id}
                                             onChange={e => {
                                                 const id = e.target.value;
-                                                const fee = studentFees.find(f => f.student_id === id);
+                                                const key = String(id || '').trim().toLowerCase();
+                                                const fee = studentFees.find(f => String(f.student_id || '').trim().toLowerCase() === key);
                                                 setPaymentForm({
                                                     ...paymentForm,
                                                     student_id: id,
-                                                    total_due: fee ? fee.total_due.toString() : '',
-                                                    total_paid: fee ? fee.total_paid.toString() : ''
+                                                    total_due: fee ? String(fee.total_due ?? '') : '',
+                                                    total_paid: fee ? String(fee.total_paid ?? '') : ''
                                                 });
                                             }}
                                             className="w-full pl-8 pr-12 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all appearance-none cursor-pointer shadow-sm"
@@ -1481,25 +1561,21 @@ export default function Finance() {
                                                 </div>
                                                 <div className="space-y-3">
                                                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far (KSh)</label>
-                                                    <input
-                                                        type="number"
-                                                        step="any"
-                                                        value={paymentForm.total_paid}
-                                                        onChange={e => setPaymentForm({ ...paymentForm, total_paid: e.target.value })}
-                                                        onFocus={e => e.target.select()}
-                                                        className="w-full px-8 py-5 bg-white border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-800 outline-none focus:border-maroon/10 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm font-mono"
-                                                        placeholder="0.00"
-                                                    />
+                                                    <div className="w-full px-8 py-5 bg-gray-100 border-2 border-transparent rounded-[1.5rem] text-sm font-black text-gray-500 shadow-inner font-mono flex items-center justify-between">
+                                                        <span>{fmt(parseFloat(paymentForm.total_paid || 0))}</span>
+                                                        <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">From registry</span>
+                                                    </div>
+                                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest ml-2">Locked — collected totals derive from recorded payments</p>
                                                 </div>
                                             </div>
 
-                                            {paymentForm.total_due !== '' && paymentForm.total_paid !== '' && (
+                                            {paymentForm.total_due !== '' && (
                                                 <div className="p-8 bg-maroon rounded-3xl shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-500">
                                                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl" />
                                                     <div className="relative z-10 flex justify-between items-center">
                                                         <div>
                                                             <p className="text-[10px] font-black text-gold/60 uppercase tracking-widest mb-1">Calculated Ledger Balance</p>
-                                                            <h4 className="text-2xl font-black text-white tracking-tighter">KSh {fmt(parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0))}</h4>
+                                                            <h4 className="text-2xl font-black text-white tracking-tighter">KSh {fmt(Math.max(0, parseFloat(paymentForm.total_due || 0) - parseFloat(paymentForm.total_paid || 0)))}</h4>
                                                         </div>
                                                         <div className="text-right">
                                                             <p className="text-[9px] font-black text-gold/60 uppercase tracking-widest mb-1">Account Protocol</p>
@@ -1711,37 +1787,20 @@ export default function Finance() {
                                                     </div>
                                                     <div className="space-y-3">
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee paid so far</label>
-                                                        <input
-                                                            type="number"
-                                                            step="any"
-                                                            value={editingRecord.data.total_paid}
-                                                            onChange={e => {
-                                                                const paid = parseFloat(e.target.value) || 0;
-                                                                setEditingRecord({
-                                                                    ...editingRecord,
-                                                                    data: {
-                                                                        ...editingRecord.data,
-                                                                        total_paid: paid,
-                                                                        balance: Math.max(0, (editingRecord.data.total_due || 0) - paid)
-                                                                    }
-                                                                });
-                                                            }}
-                                                            onFocus={e => e.target.select()}
-                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm font-mono"
-                                                        />
+                                                        <div className="w-full px-6 py-4 bg-gray-100 rounded-2xl text-sm font-black text-gray-500 shadow-inner font-mono flex items-center justify-between">
+                                                            <span>KSh</span>
+                                                            <span>{fmt(editingRecord.data.total_paid || 0)}</span>
+                                                        </div>
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest ml-2">Locked — derived from recorded payments</p>
                                                     </div>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                                     <div className="space-y-3">
-                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Account Status Override</label>
-                                                        <select
-                                                            value={editingRecord.data.status}
-                                                            onChange={e => setEditingRecord({ ...editingRecord, data: { ...editingRecord.data, status: e.target.value } })}
-                                                            className="w-full px-6 py-4 bg-white border border-gray-100 rounded-2xl text-sm font-black text-gray-800 outline-none focus:border-maroon/20 focus:ring-4 focus:ring-maroon/5 transition-all shadow-sm cursor-pointer"
-                                                        >
-                                                            {['Paid', 'Partial', 'Pending', 'Overdue'].map(s => <option key={s}>{s}</option>)}
-                                                        </select>
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Account Status</label>
+                                                        <div className="w-full px-6 py-4 bg-gray-100 rounded-2xl shadow-inner">
+                                                            <StatusBadge status={editingRecord.data.status} />
+                                                        </div>
                                                     </div>
                                                     <div className="space-y-3">
                                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fee balance</label>
@@ -1753,7 +1812,7 @@ export default function Finance() {
                                                 </div>
                                             </div>
                                             <p className="text-[9px] font-bold text-gray-300 uppercase text-center px-10 leading-relaxed italic">
-                                                Warning: Adjusting the balance manually overrides the current registry totals for this student. Use with institutional authorization only.
+                                                Only the total fee required can be changed here. Collected totals and account status are derived automatically from recorded payments.
                                             </p>
                                         </div>
                                     )}
@@ -1877,6 +1936,75 @@ export default function Finance() {
                                         </div>
                                     </div>
 
+                                    {/* Account Standing */}
+                                    {viewingReport.account && (
+                                        <div>
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Account Standing</p>
+                                            <div className="grid grid-cols-3 gap-4">
+                                                <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100">
+                                                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">Total Fee Required</p>
+                                                    <p className="text-sm font-black text-gray-900 mt-2 tabular-nums">KSh {fmt(viewingReport.account.totalDue)}</p>
+                                                </div>
+                                                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100">
+                                                    <p className="text-[8px] font-black text-emerald-600/70 uppercase tracking-widest leading-none">Total Fee Paid</p>
+                                                    <p className="text-sm font-black text-emerald-700 mt-2 tabular-nums">KSh {fmt(viewingReport.account.totalPaid)}</p>
+                                                </div>
+                                                <div className={`p-4 rounded-2xl border ${viewingReport.account.balance > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                                    <p className={`text-[8px] font-black uppercase tracking-widest leading-none ${viewingReport.account.balance > 0 ? 'text-red-500/70' : 'text-emerald-600/70'}`}>Balance Remaining</p>
+                                                    <p className={`text-sm font-black mt-2 tabular-nums ${viewingReport.account.balance > 0 ? 'text-red-600' : 'text-emerald-700'}`}>KSh {fmt(viewingReport.account.balance)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Payment History */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment History</p>
+                                            <p className="text-[9px] font-black text-maroon uppercase tracking-widest">{viewingReport.history?.length || 0} Records</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-gray-100 overflow-hidden">
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="bg-maroon text-gold">
+                                                        <th className="px-3 py-2 text-[8px] font-black uppercase tracking-widest">Date</th>
+                                                        <th className="px-3 py-2 text-[8px] font-black uppercase tracking-widest">Reference</th>
+                                                        <th className="px-3 py-2 text-[8px] font-black uppercase tracking-widest">Category</th>
+                                                        <th className="px-3 py-2 text-[8px] font-black uppercase tracking-widest">Method</th>
+                                                        <th className="px-3 py-2 text-[8px] font-black uppercase tracking-widest text-right">Amount</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {(viewingReport.history || []).map((p, idx) => {
+                                                        const isCurrent = String(p.id ?? p._id) === String(viewingReport.id ?? viewingReport._id);
+                                                        return (
+                                                            <tr key={p.id ?? p._id ?? idx} className={isCurrent ? 'bg-gold/10' : (idx % 2 ? 'bg-gray-50/50' : 'bg-white')}>
+                                                                <td className="px-3 py-2 text-[9px] font-bold text-gray-600 whitespace-nowrap">
+                                                                    {new Date(p.payment_date).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-[8px] font-mono text-gray-500 break-all">{p.transaction_ref || '—'}</td>
+                                                                <td className="px-3 py-2 text-[9px] font-bold text-gray-600">{p.category || 'Tuition Fee'}</td>
+                                                                <td className="px-3 py-2 text-[9px] font-bold text-gray-500">{p.method || 'Cash'}</td>
+                                                                <td className="px-3 py-2 text-[9px] font-black text-gray-800 text-right tabular-nums">{fmt(p.amount)}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                    {(!viewingReport.history || viewingReport.history.length === 0) && (
+                                                        <tr>
+                                                            <td colSpan={5} className="px-3 py-4 text-center text-[9px] font-bold text-gray-400 uppercase italic">No payments recorded</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                                <tfoot>
+                                                    <tr className="border-t-2 border-maroon bg-gray-50/50">
+                                                        <td colSpan={4} className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest text-maroon">Total Paid</td>
+                                                        <td className="px-3 py-2 text-[10px] font-black text-maroon text-right tabular-nums">{fmt(viewingReport.account?.totalPaid || 0)}</td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    </div>
+
                                     {/* Remarks & Metadata */}
                                     {viewingReport.remarks && (
                                         <div className="p-6 bg-gray-50/50 rounded-[2rem] border border-gray-100 flex items-start gap-4">
@@ -1990,21 +2118,104 @@ export default function Finance() {
 
                                 {/* Financial Core Breakdown */}
                                 <div className="flex-1">
-                                    <div className="border-t-2 border-b-2 border-gray-50 py-[40px] mb-[40px]">
-                                        <div className="flex justify-between items-center mb-[20px]">
+                                    <div className="border-t-2 border-b-2 border-gray-50 py-[30px] mb-[30px]">
+                                        <div className="flex justify-between items-center mb-[16px]">
                                             <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em] italic font-serif">Financial Allocation Category</p>
-                                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">Validated Amount</p>
+                                            <p className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">
+                                                {printingReport.data.type === 'status' ? 'Outstanding Balance' : 'Validated Amount'}
+                                            </p>
                                         </div>
                                         <div className="flex justify-between items-end">
                                             <div>
-                                                <p className="text-[18px] font-black text-gray-900 uppercase tracking-tight">{printingReport.data.category || 'Institutional Obligations'}</p>
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Method: {printingReport.data.method || 'Internal Transfer'}</p>
+                                                <p className="text-[18px] font-black text-gray-900 uppercase tracking-tight">
+                                                    {printingReport.data.type === 'status' ? 'Account Settlement Status' : (printingReport.data.category || 'Institutional Obligations')}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">
+                                                    {printingReport.data.type === 'status'
+                                                        ? `Status: ${printingReport.data.status || 'Pending'}`
+                                                        : `Method: ${printingReport.data.method || 'Internal Transfer'}`}
+                                                </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-[32px] font-black text-emerald-600 tracking-tighter leading-none"><span className="text-[14px] mr-1">KSh</span>{fmt(printingReport.data.amount || printingReport.data.balance || 0)}</p>
-                                                <p className="text-[9px] font-black text-emerald-600/50 uppercase tracking-widest mt-2">Authenticated Receipt</p>
+                                                <p className={`text-[32px] font-black tracking-tighter leading-none ${printingReport.data.type === 'status' && Number(printingReport.data.balance) > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                                    <span className="text-[14px] mr-1">KSh</span>
+                                                    {fmt(printingReport.data.type === 'status' ? (printingReport.data.balance || 0) : (printingReport.data.amount || 0))}
+                                                </p>
+                                                <p className="text-[9px] font-black text-emerald-600/50 uppercase tracking-widest mt-2">
+                                                    {printingReport.data.type === 'status' ? 'Balance Outstanding' : 'Authenticated Receipt'}
+                                                </p>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Account Standing */}
+                                    <div className="mb-[30px]">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3">Account Standing</p>
+                                        <div className="grid grid-cols-3 gap-[12px]">
+                                            <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Total Fee Required</p>
+                                                <p className="text-[16px] font-black text-gray-900 mt-1 tabular-nums">KSh {fmt(printingReport.account.totalDue)}</p>
+                                            </div>
+                                            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-100">
+                                                <p className="text-[8px] font-black text-emerald-600/70 uppercase tracking-widest">Total Fee Paid</p>
+                                                <p className="text-[16px] font-black text-emerald-700 mt-1 tabular-nums">KSh {fmt(printingReport.account.totalPaid)}</p>
+                                            </div>
+                                            <div className={`p-4 rounded-xl border ${printingReport.account.balance > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                                <p className={`text-[8px] font-black uppercase tracking-widest ${printingReport.account.balance > 0 ? 'text-red-500/70' : 'text-emerald-600/70'}`}>Balance Remaining</p>
+                                                <p className={`text-[16px] font-black mt-1 tabular-nums ${printingReport.account.balance > 0 ? 'text-red-600' : 'text-emerald-700'}`}>KSh {fmt(printingReport.account.balance)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Complete Payment History */}
+                                    <div className="mb-[30px]">
+                                        <div className="flex justify-between items-end mb-3">
+                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Complete Payment History</p>
+                                            <p className="text-[9px] font-black text-maroon uppercase tracking-widest">{printingReport.history.length} Record{printingReport.history.length === 1 ? '' : 's'}</p>
+                                        </div>
+                                        <table className="w-full border-collapse">
+                                            <thead>
+                                                <tr className="bg-maroon text-white">
+                                                    <th className="text-left text-[8px] font-black uppercase tracking-widest px-3 py-2 w-[26px]">#</th>
+                                                    <th className="text-left text-[8px] font-black uppercase tracking-widest px-3 py-2">Date</th>
+                                                    <th className="text-left text-[8px] font-black uppercase tracking-widest px-3 py-2">Reference</th>
+                                                    <th className="text-left text-[8px] font-black uppercase tracking-widest px-3 py-2">Category</th>
+                                                    <th className="text-left text-[8px] font-black uppercase tracking-widest px-3 py-2">Method</th>
+                                                    <th className="text-right text-[8px] font-black uppercase tracking-widest px-3 py-2">Amount (KSh)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {printingReport.history.map((p, idx) => {
+                                                    const isCurrent = String(p.id ?? p._id) === String(printingReport.data.id ?? printingReport.data._id);
+                                                    return (
+                                                        <tr key={p.id ?? p._id ?? idx} className={isCurrent ? 'bg-gold/15' : (idx % 2 ? 'bg-gray-50/70' : 'bg-white')}>
+                                                            <td className="px-3 py-2 text-[9px] font-bold text-gray-400 tabular-nums">{idx + 1}</td>
+                                                            <td className="px-3 py-2 text-[9px] font-bold text-gray-700 whitespace-nowrap">
+                                                                {new Date(p.payment_date).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                            </td>
+                                                            <td className={`px-3 py-2 text-[8px] font-mono break-all ${isCurrent ? 'font-black text-maroon' : 'text-gray-500'}`}>{p.transaction_ref || '—'}</td>
+                                                            <td className="px-3 py-2 text-[9px] font-bold text-gray-700">{p.category || 'Tuition Fee'}</td>
+                                                            <td className="px-3 py-2 text-[9px] font-bold text-gray-500">{p.method || 'Cash'}</td>
+                                                            <td className="px-3 py-2 text-[9px] font-black text-gray-900 text-right tabular-nums">{fmt(p.amount)}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {printingReport.history.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={6} className="px-3 py-4 text-center text-[9px] font-bold text-gray-400 uppercase italic">No payments recorded</td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="border-t-2 border-maroon">
+                                                    <td colSpan={5} className="px-3 py-2 text-right text-[9px] font-black uppercase tracking-widest text-maroon">Total Paid Across All Records</td>
+                                                    <td className="px-3 py-2 text-[11px] font-black text-maroon text-right tabular-nums">{fmt(printingReport.account.totalPaid)}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-2">
+                                            This ledger lists every payment recorded against this account. Highlighted row indicates the receipted transaction.
+                                        </p>
                                     </div>
 
                                     {printingReport.data.remarks && (
@@ -2056,7 +2267,7 @@ export default function Finance() {
                                         Payment Registry Manifest Preview
                                     </h3>
                                     <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter mt-1">
-                                        {viewingRegistryModal.records?.length || 0} Records • Scope: {viewingRegistryModal.filterSummary}
+                                        {viewingRegistryModal.records?.length || 0} Records • Scope: {viewingRegistryModal.scopeLabel || viewingRegistryModal.filterSummary}
                                     </p>
                                 </div>
                             </div>
@@ -2102,23 +2313,23 @@ export default function Finance() {
                                 </div>
 
                                 {/* Summary Row */}
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                    <div className="p-4 bg-maroon/5 rounded-2xl border border-maroon/10">
-                                        <p className="text-[9px] font-black text-maroon/60 uppercase">Total Revenue Collected</p>
-                                        <p className="text-xl font-black text-maroon mt-1">
-                                            KSh {fmt(viewingRegistryModal.records?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
-                                        </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                                        <p className="text-[9px] font-black text-gray-500 uppercase">Total Fee Required</p>
+                                        <p className="text-xl font-black text-gray-900 mt-1">KSh {fmt(viewingRegistryModal.totalDue || 0)}</p>
                                     </div>
                                     <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                                        <p className="text-[9px] font-black text-emerald-600/60 uppercase">Total Records</p>
-                                        <p className="text-xl font-black text-emerald-700 mt-1">
-                                            {viewingRegistryModal.records?.length || 0} Entries
-                                        </p>
+                                        <p className="text-[9px] font-black text-emerald-600/60 uppercase">Total Fee Paid</p>
+                                        <p className="text-xl font-black text-emerald-700 mt-1">KSh {fmt(viewingRegistryModal.totalPaid || 0)}</p>
                                     </div>
-                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                                        <p className="text-[9px] font-black text-amber-700/60 uppercase">Filter Scope</p>
-                                        <p className="text-xs font-black text-amber-800 mt-2 uppercase truncate">{viewingRegistryModal.filterSummary}</p>
+                                    <div className={`p-4 rounded-2xl border ${(viewingRegistryModal.totalBalance || 0) > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                        <p className={`text-[9px] font-black uppercase ${(viewingRegistryModal.totalBalance || 0) > 0 ? 'text-red-500/70' : 'text-emerald-600/60'}`}>Fee Balance Remaining</p>
+                                        <p className={`text-xl font-black mt-1 ${(viewingRegistryModal.totalBalance || 0) > 0 ? 'text-red-600' : 'text-emerald-700'}`}>KSh {fmt(viewingRegistryModal.totalBalance || 0)}</p>
                                     </div>
+                                </div>
+                                <div className="flex items-center gap-2 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                    Students in Scope:
+                                    <span className="text-maroon">{viewingRegistryModal.scopeLabel || 'All Records'}</span>
                                 </div>
 
                                 {/* Table */}
@@ -2157,6 +2368,43 @@ export default function Finance() {
                                                 <td className="p-4 text-right font-black text-emerald-800 text-sm">
                                                     KSh {fmt(viewingRegistryModal.records?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
                                                 </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                {/* Student Account Summary */}
+                                <div className="border border-gray-100 rounded-2xl overflow-hidden">
+                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                        Student Account Summary
+                                    </div>
+                                    <table className="w-full text-left text-xs">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                                <th className="p-4">Student</th>
+                                                <th className="p-4">Admission No.</th>
+                                                <th className="p-4 text-right">Total Fee Required</th>
+                                                <th className="p-4 text-right">Total Paid</th>
+                                                <th className="p-4 text-right">Balance Remaining</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {(viewingRegistryModal.students || []).map((s, idx) => (
+                                                <tr key={idx} className="hover:bg-gray-50/50">
+                                                    <td className="p-4 font-black text-gray-800">{s.student_name}</td>
+                                                    <td className="p-4 font-mono text-[10px] text-gray-500">{s.student_id}</td>
+                                                    <td className="p-4 text-right font-bold text-gray-700">KSh {fmt(s.total_due)}</td>
+                                                    <td className="p-4 text-right font-bold text-emerald-700">KSh {fmt(s.total_paid)}</td>
+                                                    <td className={`p-4 text-right font-black ${s.balance > 0 ? 'text-red-600' : 'text-emerald-700'}`}>KSh {fmt(s.balance)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="bg-maroon/5 border-t border-maroon/10">
+                                                <td colSpan="2" className="p-4 font-black text-maroon uppercase tracking-widest text-[10px]">Totals</td>
+                                                <td className="p-4 text-right font-black text-gray-900">KSh {fmt(viewingRegistryModal.totalDue || 0)}</td>
+                                                <td className="p-4 text-right font-black text-emerald-800">KSh {fmt(viewingRegistryModal.totalPaid || 0)}</td>
+                                                <td className={`p-4 text-right font-black ${(viewingRegistryModal.totalBalance || 0) > 0 ? 'text-red-600' : 'text-emerald-800'}`}>KSh {fmt(viewingRegistryModal.totalBalance || 0)}</td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -2232,8 +2480,8 @@ export default function Finance() {
                                 </div>
                                 <div className="text-right space-y-3">
                                     <div>
-                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Audit Scope / Filters</p>
-                                        <p className="text-xs font-black text-maroon uppercase">{printingRegistry.filterSummary || 'All Records'}</p>
+                                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Students in Scope</p>
+                                        <p className="text-xs font-black text-maroon uppercase leading-snug">{printingRegistry.scopeLabel || 'All Records'}</p>
                                     </div>
                                     <div>
                                         <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Entries Captured</p>
@@ -2243,17 +2491,23 @@ export default function Finance() {
                             </div>
 
                             {/* Executive Summary Cards */}
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="p-5 bg-maroon/5 rounded-2xl border border-maroon/10">
-                                    <p className="text-[8px] font-black text-maroon/60 uppercase tracking-widest mb-1">Total Revenue Collected</p>
-                                    <p className="text-xl font-black text-maroon tracking-tight">
-                                        KSh {fmt(printingRegistry.payments?.reduce((s, p) => s + (Number(p.amount) || 0), 0))}
+                            <div className="grid grid-cols-3 gap-6">
+                                <div className="p-5 bg-gray-50 rounded-2xl border border-gray-200">
+                                    <p className="text-[8px] font-black text-gray-500 uppercase tracking-widest mb-1">Total Fee Required</p>
+                                    <p className="text-xl font-black text-gray-900 tracking-tight">
+                                        KSh {fmt(printingRegistry.totalDue || 0)}
                                     </p>
                                 </div>
                                 <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100">
-                                    <p className="text-[8px] font-black text-emerald-600/60 uppercase tracking-widest mb-1">Record Count</p>
+                                    <p className="text-[8px] font-black text-emerald-600/60 uppercase tracking-widest mb-1">Total Fee Paid</p>
                                     <p className="text-xl font-black text-emerald-700 tracking-tight">
-                                        {printingRegistry.payments?.length || 0} Verified Payments
+                                        KSh {fmt(printingRegistry.totalPaid || 0)}
+                                    </p>
+                                </div>
+                                <div className={`p-5 rounded-2xl border ${(printingRegistry.totalBalance || 0) > 0 ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                    <p className={`text-[8px] font-black uppercase tracking-widest mb-1 ${(printingRegistry.totalBalance || 0) > 0 ? 'text-red-500/70' : 'text-emerald-600/60'}`}>Fee Balance Remaining</p>
+                                    <p className={`text-xl font-black tracking-tight ${(printingRegistry.totalBalance || 0) > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                                        KSh {fmt(printingRegistry.totalBalance || 0)}
                                     </p>
                                 </div>
                             </div>
@@ -2266,7 +2520,7 @@ export default function Finance() {
                                             <th className="p-3">#</th>
                                             <th className="p-3">Date</th>
                                             <th className="p-3">Reference / Receipt</th>
-                                            <th className="p-3">Student Name & ID</th>
+                                            <th className="p-3">Student Name & Admission No.</th>
                                             <th className="p-3">Category</th>
                                             <th className="p-3">Method</th>
                                             <th className="p-3 text-right">Amount (KSh)</th>
@@ -2304,6 +2558,48 @@ export default function Finance() {
                                     </tfoot>
                                 </table>
                             </div>
+
+                            {/* Student Account Summary */}
+                            {printingRegistry.students?.length > 0 && (
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-end">
+                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Student Account Summary</p>
+                                        <p className="text-[9px] font-black text-maroon uppercase tracking-widest">{printingRegistry.students.length} Account{printingRegistry.students.length === 1 ? '' : 's'}</p>
+                                    </div>
+                                    <div className="border border-gray-200 rounded-2xl overflow-hidden">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-gray-100 text-gray-500 font-black uppercase text-[9px] tracking-wider">
+                                                    <th className="p-3">Student</th>
+                                                    <th className="p-3">Admission No.</th>
+                                                    <th className="p-3 text-right">Total Fee Required</th>
+                                                    <th className="p-3 text-right">Total Paid</th>
+                                                    <th className="p-3 text-right">Balance Remaining</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-200">
+                                                {printingRegistry.students.map(s => (
+                                                    <tr key={s.student_id} className="bg-white">
+                                                        <td className="p-3 font-black text-gray-800">{s.student_name}</td>
+                                                        <td className="p-3 text-[10px] font-bold text-gray-400">{s.student_id}</td>
+                                                        <td className="p-3 text-right font-bold text-gray-700">KSh {fmt(s.total_due)}</td>
+                                                        <td className="p-3 text-right font-black text-emerald-700">KSh {fmt(s.total_paid)}</td>
+                                                        <td className={`p-3 text-right font-black ${s.balance > 0 ? 'text-red-600' : 'text-emerald-700'}`}>KSh {fmt(s.balance)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr className="bg-maroon/10 border-t-2 border-maroon font-black uppercase text-[9px] tracking-wider text-maroon">
+                                                    <td colSpan={2} className="p-3">Totals</td>
+                                                    <td className="p-3 text-right">KSh {fmt(printingRegistry.totalDue || 0)}</td>
+                                                    <td className="p-3 text-right">KSh {fmt(printingRegistry.totalPaid || 0)}</td>
+                                                    <td className={`p-3 text-right ${(printingRegistry.totalBalance || 0) > 0 ? 'text-red-700' : 'text-emerald-800'}`}>KSh {fmt(printingRegistry.totalBalance || 0)}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Institutional Sign-off & Verification Footer */}
                             <div className="pt-8 border-t border-gray-200 flex justify-between items-end">

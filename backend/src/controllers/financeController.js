@@ -338,50 +338,72 @@ export async function getAllStudentFees(req, res) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
             const Payment = (await import('../models/mongo/Payment.js')).default;
-            const fees = await StudentFee.find();
 
-            const enriched = await Promise.all(fees.map(async (f) => {
-                const obj = f.toObject();
-                const student = await Student.findOne({ id: obj.student_id }).select('name course').catch(() => null);
-                obj.student_name = student?.name || 'Unknown Student';
-                obj.course = student?.course || '';
-                // Compute total_paid live from actual payments to prevent stale values
-                const paidAgg = await Payment.aggregate([
-                    { $match: { student_id: obj.student_id } },
-                    { $group: { _id: null, total: { $sum: '$amount' } } }
-                ]);
-                const liveTotalPaid = paidAgg[0]?.total || 0;
-                obj.total_paid = liveTotalPaid;
-                obj.balance = Math.max(0, (obj.total_due || 0) - liveTotalPaid);
-                return obj;
-            }));
+            const [students, fees, paidRows] = await Promise.all([
+                Student.find().select('id name course').lean(),
+                StudentFee.find().lean(),
+                Payment.find().select('student_id amount payment_date').lean()
+            ]);
+
+            const keyOf = (id) => String(id || '').trim().toLowerCase();
+            const feeByKey = new Map(fees.map(f => [keyOf(f.student_id), f]));
+            const paidByKey = new Map();
+            for (const p of paidRows) {
+                const key = keyOf(p.student_id);
+                const entry = paidByKey.get(key) || { total: 0, last: null };
+                entry.total += Number(p.amount) || 0;
+                const d = new Date(p.payment_date);
+                if (!isNaN(d) && (!entry.last || d > entry.last)) entry.last = d;
+                paidByKey.set(key, entry);
+            }
+
+            // Base the list on students so accounts without a ledger row still appear.
+            const enriched = students.map(s => {
+                const key = keyOf(s.id);
+                const fee = feeByKey.get(key) || {};
+                const paid = paidByKey.get(key) || {};
+                const totalDue = Number(fee.total_due || 0);
+                const totalPaid = Number(paid.total || 0);
+                const balance = totalDue > 0 ? Math.max(0, totalDue - totalPaid) : 0;
+                return {
+                    ...fee,
+                    student_id: s.id,
+                    student_name: s.name || 'Unknown Student',
+                    course: s.course || '',
+                    total_due: totalDue,
+                    total_paid: totalPaid,
+                    balance,
+                    status: (balance <= 0 && totalDue > 0) ? 'Paid' : (totalPaid > 0 ? 'Partial' : 'Pending'),
+                    last_payment_date: paid.last || fee.last_payment_date || null,
+                };
+            });
 
             return res.json(enriched);
         }
-        // SQL: compute total_paid live from the payments table via a LEFT JOIN
-        // so that Student Accounts always shows accurate Collected/Balance figures,
-        // even if the student_fees summary row is stale.
+        // SQL: drive the list from students so every account is visible, and compute
+        // total_paid live from the payments table so Collected/Balance can never be
+        // duplicated or left stale by the student_fees ledger.
         const fees = await query(`
             SELECT
-                sf.student_id,
-                sf.total_due,
+                s.id AS student_id,
+                COALESCE(sf.total_due, 0) AS total_due,
                 COALESCE(p.actual_paid, 0) AS total_paid,
                 CASE
-                    WHEN (sf.total_due - COALESCE(p.actual_paid, 0)) > 0
-                        THEN (sf.total_due - COALESCE(p.actual_paid, 0))
+                    WHEN COALESCE(sf.total_due, 0) - COALESCE(p.actual_paid, 0) > 0
+                        THEN COALESCE(sf.total_due, 0) - COALESCE(p.actual_paid, 0)
                     ELSE 0
                 END AS balance,
                 CASE
-                    WHEN sf.total_due > 0
-                     AND (sf.total_due - COALESCE(p.actual_paid, 0)) <= 0 THEN 'Paid'
-                    WHEN COALESCE(p.actual_paid, 0) > 0                   THEN 'Partial'
+                    WHEN COALESCE(sf.total_due, 0) > 0
+                     AND COALESCE(sf.total_due, 0) - COALESCE(p.actual_paid, 0) <= 0 THEN 'Paid'
+                    WHEN COALESCE(p.actual_paid, 0) > 0                                THEN 'Partial'
                     ELSE 'Pending'
                 END AS status,
                 p.last_payment_date AS last_payment_date,
                 s.name AS student_name,
                 s.course
-            FROM student_fees sf
-            JOIN students s ON LOWER(TRIM(sf.student_id)) = LOWER(TRIM(s.id))
+            FROM students s
+            LEFT JOIN student_fees sf ON LOWER(TRIM(sf.student_id)) = LOWER(TRIM(s.id))
             LEFT JOIN (
                 SELECT
                     LOWER(TRIM(student_id)) AS sid,
@@ -389,7 +411,8 @@ export async function getAllStudentFees(req, res) {
                     MAX(payment_date)       AS last_payment_date
                 FROM payments
                 GROUP BY LOWER(TRIM(student_id))
-            ) p ON p.sid = LOWER(TRIM(sf.student_id))
+            ) p ON p.sid = LOWER(TRIM(s.id))
+            ORDER BY s.name ASC
         `);
         res.json(fees);
     } catch (error) {
@@ -558,7 +581,6 @@ export async function recordPayment(req, res) {
         const {
             student_id, amount, method, transaction_ref,
             category, semester, academic_year, remarks,
-            manual_total_due, manual_total_paid, manual_balance,
             payment_date
         } = req.body;
 
@@ -566,60 +588,30 @@ export async function recordPayment(req, res) {
 
         const recorded_by = (req.user && (req.user.name || req.user.email)) || 'System';
 
+        // Always store a unique receipt reference, generated here when the admin
+        // leaves the field blank (client-side Date.now() refs can collide and leave
+        // the registry without a verifiable unicity check).
+        const finalRef = (transaction_ref && String(transaction_ref).trim())
+            || `PAY-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
         if (isMongo()) {
             const Payment = (await import('../models/mongo/Payment.js')).default;
-            const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
 
             const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(student_id).trim())}$`, 'i') } });
             const canonicalId = student ? student.id : student_id;
 
-            // If manual overrides are provided (Ledger Adjustment mode), only update the
-            // student_fees summary — do NOT insert a phantom payment entry into the payments
-            // collection, as that would create a duplicate entry in the payment registry.
-            if (manual_total_due !== undefined && manual_total_due !== '') {
-                const due = parseFloat(manual_total_due);
-                const paid = manual_total_paid !== undefined && manual_total_paid !== '' ? parseFloat(manual_total_paid) : (due - (parseFloat(manual_balance) || 0));
-                const bal = manual_balance !== undefined && manual_balance !== '' ? parseFloat(manual_balance) : (due - paid);
-
-                await StudentFee.findOneAndUpdate(
-                    { student_id: canonicalId },
-                    {
-                        total_due: due,
-                        total_paid: paid,
-                        balance: bal,
-                        status: bal <= 0 ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending'),
-                        last_payment_date: payment_date || new Date()
-                    },
-                    { upsert: true }
-                );
-                return res.status(201).json({ message: 'Payment recorded successfully' });
-            }
-
             // Real transaction — save the payment document and update the fee ledger.
             const newPayment = new Payment({
-                student_id: canonicalId, amount, method, transaction_ref, recorded_by,
+                student_id: canonicalId, amount, method, transaction_ref: finalRef, recorded_by,
                 category, semester, academic_year, remarks,
                 payment_date: payment_date || new Date()
             });
             await newPayment.save();
 
-            // Incremental update: add new payment amount to existing total_paid.
-            const feeDoc = await StudentFee.findOne({ student_id: canonicalId });
-            if (feeDoc) {
-                const existingDue = parseFloat(feeDoc.total_due || 0);
-                const newTotalPaid = parseFloat(feeDoc.total_paid || 0) + parseFloat(amount);
-                const newBalance = existingDue > 0 ? Math.max(0, existingDue - newTotalPaid) : 0;
-                const newStatus = (newBalance <= 0 && existingDue > 0) ? 'Paid' : (newTotalPaid > 0 ? 'Partial' : 'Pending');
-                await StudentFee.findOneAndUpdate(
-                    { student_id: canonicalId },
-                    { total_paid: newTotalPaid, balance: newBalance, status: newStatus, last_payment_date: payment_date || new Date() },
-                    { upsert: true }
-                );
-            } else {
-                // No fee row yet — fall back to full sync to initialize
-                await internalSyncStudentFee(canonicalId);
-            }
+            // Payments are the source of truth: recompute the ledger from all receipts
+            // instead of adding to a stored total that may already be out of sync.
+            await internalSyncStudentFee(canonicalId);
             
             // --- Notify Student ---
             await notificationService.notifyStudent(
@@ -654,60 +646,22 @@ export async function recordPayment(req, res) {
             const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [student_id]);
             canonicalId = student ? student.id : student_id;
 
-            // If manual overrides are provided (Ledger Adjustment mode), only update the
-            // student_fees summary — do NOT insert a phantom payment entry into the payments
-            // table, as that would create a duplicate entry in the payment registry.
-            if (manual_total_due !== undefined && manual_total_due !== '') {
-                const finalTotalDue = parseFloat(manual_total_due);
-                const finalTotalPaid = (manual_total_paid !== undefined && manual_total_paid !== '') ? parseFloat(manual_total_paid) : 0;
-                const finalBalance = (manual_balance !== undefined && manual_balance !== '') ? parseFloat(manual_balance) : Math.max(0, finalTotalDue - finalTotalPaid);
-                const newStatus = (finalBalance <= 0 && finalTotalDue > 0) ? 'Paid' : (finalTotalPaid > 0 ? 'Partial' : 'Pending');
-
-                const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
-                if (existing) {
-                    await run(
-                        'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                        [finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
-                    );
-                } else {
-                    await run(
-                        'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
-                        [canonicalId, finalTotalDue, finalTotalPaid, finalBalance, newStatus, payment_date || new Date()]
-                    );
-                }
-                if (!isMongo()) {
-                    await syncStudentMonthlyFeeTracking(canonicalId, finalTotalDue);
-                }
-                // Early return from the transaction — no payment row to insert.
-                return;
-            }
-
-            // Real transaction — insert the payment row then update the fee ledger.
+            // Real transaction — insert the payment row then rebuild the fee ledger.
             await run(
                 'INSERT INTO payments (student_id, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [canonicalId, amount, method, transaction_ref, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
+                [canonicalId, amount, method, finalRef, recorded_by, category, semester, academic_year, remarks, payment_date || new Date().toISOString()]
             );
 
-            // Incremental update: add the new payment amount to the existing total_paid.
-            const feeRow = await queryOne(
-                'SELECT total_due, total_paid FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+            // Payments are the source of truth: recompute total_paid/balance/status
+            // from all receipts instead of incrementing a possibly-stale total.
+            await internalSyncStudentFee(canonicalId);
+
+            const feeAfter = await queryOne(
+                'SELECT total_due FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
                 [canonicalId]
             );
-            if (feeRow) {
-                const existingDue = parseFloat(feeRow.total_due || 0);
-                const newTotalPaid = parseFloat(feeRow.total_paid || 0) + parseFloat(amount);
-                const newBalance = existingDue > 0 ? Math.max(0, existingDue - newTotalPaid) : 0;
-                const newStatus = (newBalance <= 0 && existingDue > 0) ? 'Paid' : (newTotalPaid > 0 ? 'Partial' : 'Pending');
-                await run(
-                    'UPDATE student_fees SET total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                    [newTotalPaid, newBalance, newStatus, payment_date || new Date().toISOString(), canonicalId]
-                );
-                if (!isMongo()) {
-                    await syncStudentMonthlyFeeTracking(canonicalId, existingDue);
-                }
-            } else {
-                // No student_fees row yet — fall back to full sync to initialize it
-                await internalSyncStudentFee(canonicalId);
+            if (feeAfter) {
+                await syncStudentMonthlyFeeTracking(canonicalId, parseFloat(feeAfter.total_due || 0));
             }
         });
 
@@ -814,9 +768,9 @@ export async function getPayments(req, res) {
             payments = await query(sql, params);
         } else {
             let sql = `
-                SELECT p.*, s.name as student_name 
+                SELECT p.*, COALESCE(s.name, p.student_id) as student_name 
                 FROM payments p 
-                JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id)) 
+                LEFT JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id)) 
                 ORDER BY payment_date DESC
             `;
             const params = [];
@@ -840,37 +794,35 @@ export async function getFinanceAnalytics(req, res) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Payment = (await import('../models/mongo/Payment.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
-            const FeeStructure = (await import('../models/mongo/FeeStructure.js')).default;
 
-            // 1. Calculate Real Inflow (from Payments)
-            const payments = await Payment.find();
-            const total_revenue_collected = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-
-            // 2. Calculate Real Expected Revenue (from Student Headcount * Fee Structures)
-            // We match by course name since students have names and fees have course_ids (joined via Course name)
-            const feeStructures = await FeeStructure.find();
-            const students = await Student.find({ status: 'Active' });
-
-            let total_revenue_expected = 0;
-            students.forEach(student => {
-                // Find fees matching student's courses
-                const studentCourses = Array.isArray(student.course) ? student.course : [student.course];
-                studentCourses.forEach(courseName => {
-                    const matchedFees = feeStructures.filter(f => f.category === 'Tuition Fee'); // Simplified to Tuition for global projection
-                    // In a production app, we'd match courseName -> courseId -> feeStructure
-                    // For now, let's sum student_fees.total_due as it's the official ledger
-                });
-            });
-
-            // 2. Aggregate stats from student_fees
-            const [ledgerStats, activeStudentCount] = await Promise.all([
-                StudentFee.aggregate([
-                    { $group: { _id: null, total_due: { $sum: "$total_due" }, total_paid: { $sum: "$total_paid" }, balance: { $sum: "$balance" } } }
-                ]),
-                Student.countDocuments({ status: { $ne: 'Graduated' } })
+            // 1. Expected fee comes from the agreed total_due; collected/outstanding
+            // are derived from actual payments (the ledger's cached paid totals drift).
+            const [feeRows, allPayments, activeStudentCount] = await Promise.all([
+                StudentFee.find().select('student_id total_due').lean(),
+                Payment.find().select('student_id amount').lean(),
+                Student.countDocuments({ status: 'Active' })
             ]);
 
-            const stats = ledgerStats[0] || { total_due: 0, total_paid: 0, balance: 0 };
+            const keyOf = (id) => String(id || '').trim().toLowerCase();
+            const paidByKey = new Map();
+            let totalCollected = 0;
+            for (const p of allPayments) {
+                const key = keyOf(p.student_id);
+                const amt = Number(p.amount) || 0;
+                paidByKey.set(key, (paidByKey.get(key) || 0) + amt);
+                totalCollected += amt;
+            }
+
+            let totalExpected = 0;
+            let totalOutstanding = 0;
+            for (const fee of feeRows) {
+                const due = Number(fee.total_due) || 0;
+                const paid = paidByKey.get(keyOf(fee.student_id)) || 0;
+                totalExpected += due;
+                totalOutstanding += Math.max(0, due - paid);
+            }
+
+            const stats = { total_due: totalExpected, total_paid: totalCollected, balance: totalOutstanding };
             const pendingAccounts = activeStudentCount;
 
             // 3. Calculate MoM Velocity
@@ -914,17 +866,29 @@ export async function getFinanceAnalytics(req, res) {
         }
 
         // --- SQL Path ---
-        // Get aggregate stats from student_fees summary and student count from directory
+        // Expected fee is the agreed total_due; collected/outstanding are derived
+        // from the payments table (the stored student_fees paid/balance drift).
         const [stats, activeCountRes] = await Promise.all([
             queryOne(`
-                SELECT 
-                    COALESCE(SUM(total_due), 0) as total_due, 
-                    COALESCE(SUM(total_paid), 0) as total_paid, 
-                    COALESCE(SUM(balance), 0) as balance 
-                FROM student_fees
+                SELECT
+                    COALESCE(SUM(sf.total_due), 0) AS total_due,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN sf.total_due - COALESCE(p.actual_paid, 0) > 0
+                                THEN sf.total_due - COALESCE(p.actual_paid, 0)
+                            ELSE 0
+                        END
+                    ), 0) AS balance
+                FROM student_fees sf
+                LEFT JOIN (
+                    SELECT LOWER(TRIM(student_id)) AS sid, SUM(amount) AS actual_paid
+                    FROM payments
+                    GROUP BY LOWER(TRIM(student_id))
+                ) p ON p.sid = LOWER(TRIM(sf.student_id))
             `),
-            queryOne("SELECT COUNT(*) as count FROM students WHERE status != 'Graduated'")
+            queryOne("SELECT COUNT(*) as count FROM students WHERE status = 'Active'")
         ]);
+        const collectedRes = await queryOne('SELECT COALESCE(SUM(amount), 0) AS collected FROM payments');
 
         // Velocity SQL (Improved Cross-DB Compatibility)
         const engine = getActiveDbEngine();
@@ -946,16 +910,16 @@ export async function getFinanceAnalytics(req, res) {
         const velocity = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth * 100) : (thisMonth > 0 ? 100 : 0);
 
         const recentPayments = await query(`
-            SELECT p.*, s.name as student_name, s.photo as student_photo 
-            FROM payments p 
-            JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id)) 
+            SELECT p.*, COALESCE(s.name, p.student_id) as student_name, s.photo as student_photo
+            FROM payments p
+            LEFT JOIN students s ON LOWER(TRIM(p.student_id)) = LOWER(TRIM(s.id))
             ORDER BY p.payment_date DESC LIMIT 6
         `);
 
         res.json({
             summary: {
                 total_revenue_expected: parseFloat(stats?.total_due || 0),
-                total_revenue_collected: parseFloat(stats?.total_paid || 0),
+                total_revenue_collected: parseFloat(collectedRes?.collected || 0),
                 total_outstanding: parseFloat(stats?.balance || 0),
                 pending_accounts: parseInt(activeCountRes?.count || 0),
                 velocity: velocity.toFixed(1)
@@ -1066,26 +1030,11 @@ export async function mpesaCallback(req, res) {
             throw insertErr;
         }
 
-        // ── 6. Atomically update the fee ledger (single statement) ─────────────
-        // All RHS references use the pre-update row values, so this is race-safe
-        // and avoids the previous read-modify-write lost-update bug.
+        // ── 6. Rebuild the fee ledger from receipts (never increment blindly) ──
+        // A stale total_paid would otherwise compound on every callback.
         if (student) {
-            const upd = await run(
-                `UPDATE student_fees
-                 SET total_paid = COALESCE(total_paid, 0) + ?,
-                     balance = CASE WHEN COALESCE(total_due,0) - (COALESCE(total_paid,0) + ?) < 0 THEN 0 ELSE COALESCE(total_due,0) - (COALESCE(total_paid,0) + ?) END,
-                     status = CASE WHEN COALESCE(total_due,0) > 0 AND COALESCE(total_due,0) - (COALESCE(total_paid,0) + ?) <= 0 THEN 'Paid' ELSE 'Partial' END,
-                     last_payment_date = CURRENT_TIMESTAMP
-                 WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))`,
-                [amount, amount, amount, amount, student.id]
-            );
-            if (!upd || upd.changes === 0) {
-                await run(
-                    'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                    [student.id, 0, amount, 0, 'Partial']
-                );
-            }
-            console.log(`[mpesa] Ledger updated for ${student.name} (${student.id})`);
+            await internalSyncStudentFee(student.id);
+            console.log(`[mpesa] Ledger rebuilt for ${student.name} (${student.id})`);
         } else {
             console.warn(`[mpesa] Payment recorded as PENDING_ASSIGNMENT (no student matched phone ${phone}).`);
         }
@@ -1177,34 +1126,36 @@ export async function deletePayment(req, res) {
 }
 
 /**
- * Update a student fee summary record
+ * Update a student fee summary record.
+ *
+ * Only the agreed total_due is editable here. The paid amount, balance and status
+ * are always derived from the payments table (source of truth) so an adjustment
+ * can never double-count money that is also in the payment registry.
  */
 export async function updateStudentFee(req, res) {
     try {
         const { id } = req.params; // This will be the ID or student_id
-        const { total_due, total_paid } = req.body;
-
-        // Always recompute balance and status server-side to prevent client-supplied bad data
+        const { total_due } = req.body;
         const due = Number(total_due) || 0;
-        const paid = Number(total_paid) || 0;
-        const computedBalance = Math.max(0, due - paid);
-        const computedStatus = computedBalance <= 0 && due > 0
-            ? 'Paid'
-            : (paid > 0 ? 'Partial' : 'Pending');
 
         if (isMongo()) {
             const StudentFee = (await import('../models/mongo/StudentFee.js')).default;
             const Student = (await import('../models/mongo/Student.js')).default;
-            
+            const Payment = (await import('../models/mongo/Payment.js')).default;
+
             const student = await Student.findOne({ id: { $regex: new RegExp(`^${escapeRegExp(String(id).trim())}$`, 'i') } });
             const canonicalId = student ? student.id : id;
 
-            // Directly update student_fees — no phantom ADJ payment entries created.
-            // Admin's entered total_paid is stored as authoritative. Add Transaction payments
-            // will increment this value going forward.
+            const payments = await Payment.find({ student_id: { $regex: new RegExp(`^${escapeRegExp(String(canonicalId).trim())}$`, 'i') } })
+                .select('amount')
+                .lean();
+            const paid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const balance = due > 0 ? Math.max(0, due - paid) : 0;
+            const status = (balance <= 0 && due > 0) ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending');
+
             const updated = await StudentFee.findOneAndUpdate(
                 { student_id: canonicalId },
-                { total_due: due, total_paid: paid, balance: computedBalance, status: computedStatus },
+                { total_due: due, total_paid: paid, balance, status },
                 { new: true, upsert: true }
             );
             return res.json({ message: 'Fee record synchronized successfully', data: updated });
@@ -1213,25 +1164,29 @@ export async function updateStudentFee(req, res) {
         const student = await queryOne('SELECT id FROM students WHERE LOWER(TRIM(id)) = LOWER(TRIM(?))', [id]);
         const canonicalId = student ? student.id : id;
 
-        // Directly update student_fees without creating phantom ADJ payment entries.
-        // The admin's entered total_paid is stored as the authoritative balance.
-        // Subsequent "Add Transaction" payments will add to this value incrementally.
+        const paidRow = await queryOne(
+            'SELECT COALESCE(SUM(amount), 0) AS total_paid, MAX(payment_date) AS last_date FROM payments WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+            [canonicalId]
+        );
+        const paid = parseFloat(paidRow?.total_paid || 0);
+        const lastPaymentDate = paidRow?.last_date || null;
+        const balance = due > 0 ? Math.max(0, due - paid) : 0;
+        const status = (balance <= 0 && due > 0) ? 'Paid' : (paid > 0 ? 'Partial' : 'Pending');
+
         const existing = await queryOne('SELECT student_id FROM student_fees WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))', [canonicalId]);
         if (existing) {
             await run(
-                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
-                [due, paid, computedBalance, computedStatus, canonicalId]
+                'UPDATE student_fees SET total_due = ?, total_paid = ?, balance = ?, status = ?, last_payment_date = ? WHERE LOWER(TRIM(student_id)) = LOWER(TRIM(?))',
+                [due, paid, balance, status, lastPaymentDate, canonicalId]
             );
         } else {
             await run(
-                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status) VALUES (?, ?, ?, ?, ?)',
-                [canonicalId, due, paid, computedBalance, computedStatus]
+                'INSERT INTO student_fees (student_id, total_due, total_paid, balance, status, last_payment_date) VALUES (?, ?, ?, ?, ?, ?)',
+                [canonicalId, due, paid, balance, status, lastPaymentDate]
             );
         }
 
-        if (!isMongo()) {
-            await syncStudentMonthlyFeeTracking(canonicalId, due);
-        }
+        await syncStudentMonthlyFeeTracking(canonicalId, due);
         res.json({ message: 'Fee record synchronized successfully' });
     } catch (error) {
         logger.error({ err: error }, 'updateStudentFee: unhandled error');
