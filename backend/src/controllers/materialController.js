@@ -8,6 +8,82 @@ function parseFacultyCourses(coursesField) {
     return parseCoursesField(coursesField);
 }
 
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Course ids a non-admin user may access, mirroring getMaterials() scoping.
+ * Returns null for admin/superadmin (unrestricted), otherwise an array of
+ * lowercased course ids — empty means "no access to anything".
+ */
+async function getAccessibleCourseIds(req) {
+    const role = String(req.user?.role || '').toLowerCase().trim();
+    if (role === 'admin' || role === 'superadmin') return null;
+
+    const userEmail = String(req.user?.email || '').toLowerCase().trim();
+    if (!userEmail) return [];
+
+    if (role === 'teacher') {
+        if (isMongo()) {
+            const Faculty = (await import('../models/mongo/Faculty.js')).default;
+            const Course = (await import('../models/mongo/Course.js')).default;
+            const faculty = await Faculty.findOne({ email: { $regex: new RegExp(`^${escapeRegExp(userEmail)}$`, 'i') } });
+            if (!faculty) return [];
+            const coursesList = parseFacultyCourses(faculty.courses);
+            const taught = await Course.find({
+                $or: [
+                    { instructor: { $regex: new RegExp(`^${escapeRegExp(faculty.name || '')}$`, 'i') } },
+                    ...(coursesList.length ? [{ name: { $in: coursesList } }] : []),
+                ],
+            }).select('_id');
+            return taught.map(c => String(c._id).toLowerCase());
+        }
+        const faculty = await queryOne('SELECT name, courses FROM faculty WHERE LOWER(email) = LOWER(?)', [userEmail]);
+        if (!faculty) return [];
+
+        const coursesList = parseFacultyCourses(faculty.courses);
+        const placeholders = coursesList.length > 0 ? coursesList.map(() => '?').join(',') : "''";
+        const taught = await query(
+            `SELECT id FROM courses WHERE LOWER(instructor) = LOWER(?) OR name IN (${placeholders})`,
+            [faculty.name, ...coursesList]
+        );
+        return taught.map(c => String(c.id).toLowerCase());
+    }
+
+    if (role === 'student') {
+        if (isMongo()) {
+            const Student = (await import('../models/mongo/Student.js')).default;
+            const Course = (await import('../models/mongo/Course.js')).default;
+            const student = await Student.findOne({ email: { $regex: new RegExp(`^${escapeRegExp(userEmail)}$`, 'i') } });
+            if (!student) return [];
+            const names = Array.isArray(student.course) ? student.course : [student.course].filter(Boolean);
+            if (!names.length) return [];
+            const matched = await Course.find({ name: { $in: names } }).select('_id');
+            return matched.map(c => String(c._id).toLowerCase());
+        }
+        const student = await queryOne('SELECT course FROM students WHERE LOWER(email) = LOWER(?)', [userEmail]);
+        if (!student) return [];
+
+        let names = [];
+        try {
+            if (student.course && String(student.course).startsWith('[')) names = JSON.parse(student.course);
+            else if (student.course) names = [student.course];
+        } catch {
+            names = [student.course].filter(Boolean);
+        }
+        if (!Array.isArray(names)) names = [names];
+        names = names.filter(Boolean);
+        if (!names.length) return [];
+
+        const matched = await query(
+            `SELECT id FROM courses WHERE name IN (${names.map(() => '?').join(',')})`,
+            names
+        );
+        return matched.map(c => String(c.id).toLowerCase());
+    }
+
+    return [];
+}
+
 /**
  * GET /materials
  * Returns material metadata ONLY - never returns the raw base64 file_url body.
@@ -213,10 +289,16 @@ export async function downloadMaterial(req, res) {
             material = await CourseMaterial.findById(id);
         } else {
             // Only include file_url in this targeted query
-            material = await queryOne('SELECT id, title, file_url, file_name, mime_type FROM course_materials WHERE id = ?', [id]);
+            material = await queryOne('SELECT id, course_id, title, file_url, file_name, mime_type FROM course_materials WHERE id = ?', [id]);
         }
 
         if (!material) return res.status(404).json({ error: 'Material not found' });
+
+        // Scope the download to the caller's courses (admins unrestricted).
+        const allowedCourseIds = await getAccessibleCourseIds(req);
+        if (allowedCourseIds && !allowedCourseIds.includes(String(material.course_id || '').toLowerCase())) {
+            return res.status(403).json({ error: 'You do not have access to this material.' });
+        }
 
         const fileUrl = material.file_url;
 
@@ -239,7 +321,15 @@ export async function downloadMaterial(req, res) {
             return res.send(buffer);
         }
 
-        // External URL - redirect
+        // External URL - redirect (allow only web URLs, never javascript:/data: etc.)
+        try {
+            const target = new URL(fileUrl);
+            if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+                return res.status(400).json({ error: 'Invalid material link' });
+            }
+        } catch {
+            return res.status(400).json({ error: 'Invalid material link' });
+        }
         return res.redirect(302, fileUrl);
     } catch (error) {
         console.error('downloadMaterial error:', error);

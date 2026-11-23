@@ -142,9 +142,16 @@ export const applicantAPI = {
     uploadDocument: (id, formData) => api.post(
         `applicants/${encodeURIComponent(id)}/documents`,
         formData,
-        // The instance sets a JSON Content-Type by default; clear it so the
-        // browser adds the multipart boundary (otherwise multer sees no file).
-        { headers: { 'Content-Type': undefined } }
+        // The instance sets a JSON Content-Type by default. It must be removed in
+        // transformRequest (headers: {'Content-Type': undefined} is re-merged to
+        // application/json by axios) so the browser adds the multipart boundary.
+        { transformRequest: [(data, headers) => {
+            if (headers) {
+                delete headers['Content-Type'];
+                delete headers['content-type'];
+            }
+            return data;
+        }] }
     ),
     downloadDocument: (id, docId) => api.get(
         `applicants/${encodeURIComponent(id)}/documents/${encodeURIComponent(docId)}/download`,
@@ -163,12 +170,18 @@ export const publicAPI = {
     admissionsInfo: () => publicHttp.get('public/admissions'),
     submitApplication: (data) => publicHttp.post('public/admissions', data),
     trackApplication: (data) => publicHttp.post('public/admissions/track', data),
+    // NOTE: Content-Type must be dropped in transformRequest, not via headers: {'Content-Type': undefined},
+    // otherwise axios.mergeConfig resurrects the instance default (application/json) and the browser never
+    // sets the multipart boundary, so multer sees no file.
     uploadDocument: (token, formData) => publicHttp.post('public/admissions/documents', formData, {
-        headers: {
-            // Clear the JSON default so the browser adds the multipart boundary.
-            'Content-Type': undefined,
-            Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
+        transformRequest: [(data, headers) => {
+            if (headers) {
+                delete headers['Content-Type'];
+                delete headers['content-type'];
+            }
+            return data;
+        }],
     }),
     deleteDocument: (token, docId) => publicHttp.delete(
         `public/admissions/documents/${encodeURIComponent(docId)}`,

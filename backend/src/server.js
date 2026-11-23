@@ -108,12 +108,12 @@ app.use(cors({
             return callback(null, true);
         }
 
-        // In production: check against the explicit allowedOrigins list only
-        const isAllowed = allowedOrigins.some(o => {
-            const normalizedOrigin = origin.replace(/\/$/, '');
-            const normalizedAllowed = o.replace(/\/$/, '');
-            return normalizedOrigin === normalizedAllowed || normalizedOrigin.startsWith(normalizedAllowed + '-');
-        });
+        // In production: exact match against the explicit allowedOrigins list.
+        // No prefix/suffix matching — `startsWith('https://project-')` would let
+        // anyone register a neighbouring `project-<anything>.vercel.app` project
+        // and call the API with credentials.
+        const normalizedOrigin = origin.replace(/\/$/, '');
+        const isAllowed = allowedOrigins.some(o => normalizedOrigin === o.replace(/\/$/, ''));
 
         if (isAllowed) {
             callback(null, true);

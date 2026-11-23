@@ -971,9 +971,16 @@ export async function getMonthlyAttendanceSummary(req, res) {
         }
 
         // ── Student role: restrict to own data ──────────────────────────────
-        const effectiveStudentId = role === 'student'
-            ? String(req.user.student_id || req.user.id || student_id || '').trim()
-            : student_id;
+        // Trust only the token claim — `student_id` in the query string is
+        // caller-controlled and must never widen a student's scope. The users
+        // table id is not a student id, so it is not a valid fallback either.
+        let effectiveStudentId = student_id;
+        if (role === 'student') {
+            effectiveStudentId = String(req.user.student_id || '').trim();
+            if (!effectiveStudentId) {
+                return res.status(403).json({ error: 'Your account is not linked to a student record.' });
+            }
+        }
 
         // ── Fetch records ───────────────────────────────────────────────────
         let records = [];

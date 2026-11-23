@@ -225,34 +225,48 @@ export async function getDashboardStats(req, res) {
 
 export async function globalSearch(req, res) {
     try {
+        const role = String(req.user?.role || '').toLowerCase().trim();
+        const isStaff = role === 'admin' || role === 'superadmin' || role === 'teacher';
+        const isStudent = role === 'student';
+        // Students may search courses only — the staff directory (names, emails)
+        // and inventory are not theirs to enumerate.
+        if (!isStaff && !isStudent) return res.json({ results: [] });
+
         const { q } = req.query;
         if (!q || q.length < 2) return res.json({ results: [] });
 
         const mongo = await isMongo();
-        const searchRegex = new RegExp(q, 'i');
+        // Escape regex metacharacters so user input can't become a ReDoS pattern.
+        const escaped = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const searchRegex = new RegExp(escaped, 'i');
         const searchSql = `%${q}%`;
 
-        let students, courses, faculty, inventory;
+        let students = [], courses = [], faculty = [], inventory = [];
 
         if (mongo) {
             const Student = (await import('../models/mongo/Student.js')).default;
             const Course = (await import('../models/mongo/Course.js')).default;
             const Faculty = (await import('../models/mongo/Faculty.js')).default;
 
-            [students, courses, faculty] = await Promise.all([
-                Student.find({ $or: [{ name: searchRegex }, { email: searchRegex }, { id: searchRegex }] }).limit(5).lean(),
-                Course.find({ name: searchRegex }).limit(5).lean(),
-                Faculty.find({ name: searchRegex }).limit(5).lean()
-            ]);
+            if (isStaff) {
+                [students, courses, faculty] = await Promise.all([
+                    Student.find({ $or: [{ name: searchRegex }, { email: searchRegex }, { id: searchRegex }] }).limit(5).lean(),
+                    Course.find({ name: searchRegex }).limit(5).lean(),
+                    Faculty.find({ name: searchRegex }).limit(5).lean()
+                ]);
+            } else {
+                courses = await Course.find({ name: searchRegex }).limit(5).lean();
+            }
             inventory = []; // Mongo inventory model not yet implemented
-        } else {
-
+        } else if (isStaff) {
             [students, courses, faculty, inventory] = await Promise.all([
                 query('SELECT id, name, email as sub FROM students WHERE name LIKE ? OR email LIKE ? OR id LIKE ? LIMIT 5', [searchSql, searchSql, searchSql]),
                 query('SELECT id, name, department as sub FROM courses WHERE name LIKE ? LIMIT 5', [searchSql]),
                 query('SELECT id, name, department as sub FROM faculty WHERE name LIKE ? LIMIT 5', [searchSql]),
                 query('SELECT id, name, item_code as sub FROM inv_items WHERE name LIKE ? OR item_code LIKE ? LIMIT 5', [searchSql, searchSql])
             ]);
+        } else {
+            courses = await query('SELECT id, name, department as sub FROM courses WHERE name LIKE ? LIMIT 5', [searchSql]);
         }
 
         const results = [
