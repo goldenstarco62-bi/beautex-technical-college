@@ -133,9 +133,11 @@ export async function updateCatPeriod(req, res) {
                 term_name ?? existing.term_name,
                 cat_name ?? existing.cat_name,
                 month !== undefined ? month : existing.month,
-                max_marks !== undefined ? parseFloat(max_marks) : existing.max_marks,
-                start_date !== undefined ? start_date : existing.start_date,
-                end_date !== undefined ? end_date : existing.end_date,
+                // Form inputs submit empty strings for unset values; Postgres
+                // rejects '' for date/numeric columns, so normalize them.
+                max_marks !== undefined ? (parseFloat(max_marks) || existing.max_marks) : existing.max_marks,
+                start_date !== undefined ? (start_date || null) : existing.start_date,
+                end_date !== undefined ? (end_date || null) : existing.end_date,
                 status ?? existing.status,
                 nextPeriodId,
                 id
