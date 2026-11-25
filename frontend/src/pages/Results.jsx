@@ -232,7 +232,13 @@ export default function Results() {
         e.preventDefault();
         try {
             if (editingPeriod) {
-                await catPeriodsAPI.update(editingPeriod.id, periodForm);
+                const payload = { ...periodForm };
+                // An unchanged term name must not trigger a re-link of the
+                // academic period (backend re-resolves by name on every update).
+                if (String(payload.term_name || '').trim().toLowerCase() === String(editingPeriod.term_name || '').trim().toLowerCase()) {
+                    delete payload.term_name;
+                }
+                await catPeriodsAPI.update(editingPeriod.id, payload);
                 showToast('CAT Period updated successfully.', 'success');
             } else {
                 await catPeriodsAPI.create(periodForm);
@@ -246,12 +252,39 @@ export default function Results() {
         }
     };
 
+    const buildPeriodForm = (period) => ({
+        academic_year: String(period?.academic_year ?? new Date().getFullYear()),
+        term_name: period?.term_name || '',
+        cat_name: period?.cat_name || '',
+        month: period?.month || '',
+        max_marks: period?.max_marks ?? 100,
+        start_date: period?.start_date || '',
+        end_date: period?.end_date || '',
+        status: period?.status || 'Active',
+    });
+
+    const openPeriodModal = (period = null) => {
+        setEditingPeriod(period);
+        setPeriodForm(period ? buildPeriodForm(period) : {
+            academic_year: String(new Date().getFullYear()), term_name: 'Term 1', cat_name: 'CAT 1',
+            month: 'April', max_marks: 100, start_date: '', end_date: '', status: 'Active',
+        });
+        setShowPeriodModal(true);
+    };
+
     const handleDeletePeriod = (periodId) => {
-        openConfirm('Delete this CAT Period? Only allowed if no results exist for it.', async () => {
+        const target = periods.find(p => String(p.id) === String(periodId));
+        const label = target ? `${target.academic_year} ${target.term_name} — ${target.cat_name}` : 'this CAT Period';
+        openConfirm(`Delete "${label}"? Only allowed when no results have been recorded against it.`, async () => {
             try {
                 await catPeriodsAPI.delete(periodId);
+                const remaining = periods.filter(p => String(p.id) !== String(periodId));
+                setPeriods(remaining);
+                if (String(selectedPeriod) === String(periodId)) {
+                    const next = remaining.find(p => p.status === 'Active') || remaining[0];
+                    setSelectedPeriod(next ? String(next.id) : '');
+                }
                 showToast('CAT Period deleted.', 'success');
-                loadData();
             } catch (err) {
                 showToast(err.response?.data?.error || 'Failed to delete period.', 'error');
             }
@@ -832,6 +865,27 @@ export default function Results() {
                         </select>
                     </div>
 
+                    {isAdmin && (
+                        <>
+                            <button
+                                onClick={() => openPeriodModal(currentPeriodObj)}
+                                disabled={!currentPeriodObj}
+                                title={currentPeriodObj ? 'Edit the selected CAT period' : 'Select a period to edit'}
+                                className="bg-white text-maroon p-3 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-md border border-maroon/10 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-maroon"
+                            >
+                                <Edit className="w-4.5 h-4.5" />
+                            </button>
+                            <button
+                                onClick={() => handleDeletePeriod(currentPeriodObj.id)}
+                                disabled={!currentPeriodObj}
+                                title={currentPeriodObj ? 'Delete the selected CAT period' : 'Select a period to delete'}
+                                className="bg-white text-red-600 p-3 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-md border border-red-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-red-600"
+                            >
+                                <Trash2 className="w-4.5 h-4.5" />
+                            </button>
+                        </>
+                    )}
+
 
                     <button onClick={loadResultsAndStats} className="bg-white text-maroon p-3 rounded-2xl hover:bg-maroon hover:text-white transition-all shadow-md border border-maroon/10" title="Refresh">
                         <RefreshCw className="w-4.5 h-4.5" />
@@ -840,11 +894,7 @@ export default function Results() {
                     {isAdmin && (
                         <>
                             <button
-                                onClick={() => {
-                                    setEditingPeriod(null);
-                                    setPeriodForm({ academic_year: '2026', term_name: 'Term 1', cat_name: 'CAT 1', month: 'April', max_marks: 100, start_date: '', end_date: '', status: 'Active' });
-                                    setShowPeriodModal(true);
-                                }}
+                                onClick={() => openPeriodModal(null)}
                                 className="bg-white text-maroon px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-wider border border-maroon/20 hover:bg-maroon hover:text-white transition-all shadow-sm flex items-center gap-1.5"
                             >
                                 <Plus className="w-4 h-4" /> Period
