@@ -13,6 +13,7 @@ const IVORY = '#FBF6E9';
 const RIBBON = '#630A11';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const AWARD_GRADES = ['Distinction', 'Credit', 'Pass', 'Fail'];
 function formatDate(v) {
     if (!v) return '';
     const d = new Date(v);
@@ -200,11 +201,14 @@ function missingCertFonts() {
 //  Banner heading  --> RIBBON panel at y=462-494 erases baked ivory text zone
 //  Course title    --> IVORY cover at y=496-526, text rendered on top
 //  Student name    --> IVORY cover at y=604-656, name rendered on top
-//  Body text       --> IVORY cover at y=666-756, text rendered on top
-//  Details row     --> IVORY cover at y=758-798
-//  Signature zone  --> targeted ivory covers for HOD line and labels
+//  Body text       --> IVORY cover at y=656-736 (baked sentence occupies y666-730)
+//  Grade band      --> IVORY cover at y=726-782 (spans the details width so it
+//                     erases the baked details labels at y765-800)
+//  Details row     --> IVORY cover at y=782-810, three equal aligned columns
+//  Signature zone  --> signatures y810-884, targeted ivory covers for HOD line
+//                     and labels (baked rules at y886-887)
 function CertificateTemplate({ data, innerRef }) {
-    const { bg, seal, signature, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, photo, nita, tveta, hodName, hodSig } = data;
+    const { bg, seal, signature, studentName, admissionNumber, courseName, category, awardDate, certificateNumber, grade, photo, nita, tveta, hodName, hodSig } = data;
     const heading = HEADINGS[category] || 'Certificate of Completion';
     const ending = ENDINGS[category] || ENDINGS['Short Course'];
     const courseDisplay = titleCase(courseName);
@@ -238,13 +242,14 @@ function CertificateTemplate({ data, innerRef }) {
             {/* ── Accreditation logos (centred between the two signature blocks) ─
                 The pair sits in the widened gutter x484–850 between the (moved)
                 Principal rule and the HOD rule, vertically centred in the clear
-                band y798–885. Transparent PNGs so no white box shows.           */}
+                band y806–886 between the details row and the rules. Transparent
+                PNGs so no white box shows.                                      */}
             {nita && (
                 <img
                     src={nita}
                     alt="NITA"
                     crossOrigin="anonymous"
-                    style={abs({ left: 528, top: 818, width: 180, height: 75 })}
+                    style={abs({ left: 569, top: 820, width: 132, height: 52 })}
                 />
             )}
             {tveta && (
@@ -252,7 +257,7 @@ function CertificateTemplate({ data, innerRef }) {
                     src={tveta}
                     alt="TVETA"
                     crossOrigin="anonymous"
-                    style={abs({ left: 730, top: 818, width: 75, height: 75 })}
+                    style={abs({ left: 713, top: 820, width: 52, height: 52 })}
                 />
             )}
 
@@ -339,42 +344,100 @@ function CertificateTemplate({ data, innerRef }) {
             </div>
 
             {/* ── Completion sentence ─────────────────────────────────────────
-                IVORY cover erases baked placeholder. Height 90px holds two lines
-                at 26px x lineHeight 1.55 comfortably.
-                No flex; block divs with text-align:center are html2canvas-safe.  */}
+                IVORY cover erases baked placeholder (which occupies y666-730).
+                Fixed 23px / 1.3 metrics keep two lines inside the 80px panel.
+                The course line is FitLine-fitted (min 72%) so an unusually long
+                course shrinks to stay on one line rather than wrapping into the
+                grade band; overflow stays clipped as a final guard.
+                No flex; block divs with text-align:center are html2canvas-safe. */}
             <div
                 style={abs({
-                    left: 230, top: 660, width: 1076, height: 80,
+                    left: 230, top: 652, width: 1076, height: 80,
                     background: IVORY,
                     fontStyle: 'italic',
-                    fontSize: 27,
+                    fontSize: 23,
                     color: MAROON,
                     textAlign: 'center',
-                    paddingTop: 10,
+                    paddingTop: 4,
+                    overflow: 'hidden',
                 })}
             >
-                <div style={{ lineHeight: 1.5 }}>
-                    has successfully completed the prescribed course of study in {courseDisplay}
+                <div style={{ lineHeight: 1.3 }}>
+                    <FitLine minScale={0.72}>has successfully completed the prescribed course of study in {courseDisplay}</FitLine>
                 </div>
-                <div style={{ lineHeight: 1.5 }}>{ending}</div>
+                <div style={{ lineHeight: 1.3 }}>{ending}</div>
+            </div>
+
+            {/* ── Award grade ─────────────────────────────────────────────────
+                Dedicated centred band between the completion statement and the
+                administrative details row. The IVORY panel spans the details
+                row's full width (x100-1260) so it also erases the baked details
+                labels (x130-1245, y765-800) — a narrower panel left the baked
+                "Date of Award:" text peeking out. Rendered even without a grade
+                so every certificate keeps identical spacing. No flex — block
+                text-align:center is html2canvas-safe.
+                Panel starts at y720 because html2canvas paints each text block
+                ~5px lower than its CSS line box: with the label at 720-734 the
+                32px grade's glyphs end at ~773, clear of the details panel at
+                778. Starting at 724 pushed the glyph bottoms under that panel
+                and sliced the grade in the PDF.                                   */}
+            <div
+                style={abs({
+                    left: 100, top: 720, width: 1160, height: 60,
+                    background: IVORY,
+                    textAlign: 'center',
+                    color: MAROON,
+                })}
+            >
+                {grade && (
+                    <>
+                        <div
+                            style={{
+                                fontFamily: '"Times New Roman", Times, serif',
+                                fontSize: 14,
+                                fontWeight: 700,
+                                letterSpacing: 3,
+                                lineHeight: '14px',
+                                color: MAROON,
+                            }}
+                        >
+                            GRADE AWARDED
+                        </div>
+                        <div
+                            style={{
+                                fontFamily: '"Times New Roman", Times, serif',
+                                fontSize: 32,
+                                fontWeight: 700,
+                                letterSpacing: 2,
+                                lineHeight: '30px',
+                                marginTop: 1,
+                            }}
+                        >
+                            {String(grade).toUpperCase()}
+                        </div>
+                    </>
+                )}
             </div>
 
             {/* ── Details row ─────────────────────────────────────────────────
-                Plain div with display:flex (NOT wrapped in FitLine — FitLine would
-                apply inline-block and collapse flex children to 0px in html2canvas).
-                Each label+value pair is a nowrap flex child.                     */}
+                Three equal, centred columns (flex 1 1 0 + minWidth 0) — each
+                field owns a third of the row, so labels/values can never run
+                into one another. FitLine shrinks an unusually long certificate
+                or registration number inside its own column instead of
+                overflowing. FitLine wraps the WHOLE field line, so it is
+                inline-block inside a block column (not a direct flex child —
+                that setup misrenders in html2canvas).
+                Row ends at y810 so it never reaches the signature images.     */}
             <div
                 style={abs({
-                    left: 100, top: 758, width: 1160, height: 40,
+                    left: 100, top: 778, width: 1160, height: 28,
                     background: IVORY,
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 16,
                     fontStyle: 'italic',
-                    fontSize: 20,
+                    fontSize: 17,
                     color: MAROON,
-                    padding: '0 12px',
+                    padding: '0 4px',
                 })}
             >
                 {[
@@ -382,9 +445,11 @@ function CertificateTemplate({ data, innerRef }) {
                     ['Certificate No.:', certificateNumber || ''],
                     ['Registration No.:', admissionNumber || ''],
                 ].map(([label, val]) => (
-                    <div key={label} style={{ flex: '0 1 auto', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontWeight: 700 }}>{label}&nbsp;</span>
-                        <span>{val || ' '}</span>
+                    <div key={label} style={{ flex: '1 1 0', minWidth: 0, padding: '0 8px', textAlign: 'center' }}>
+                        <FitLine minScale={0.6}>
+                            <span style={{ fontWeight: 700 }}>{label}&nbsp;</span>
+                            <span>{val || '\u00A0'}</span>
+                        </FitLine>
                     </div>
                 ))}
             </div>
@@ -411,7 +476,7 @@ function CertificateTemplate({ data, innerRef }) {
                     src={signature}
                     alt=""
                     crossOrigin="anonymous"
-                    style={abs({ left: 226, top: 795, width: 200, height: 89 })}
+                    style={abs({ left: 247, top: 812, width: 161, height: 72 })}
                 />
             )}
             <div
@@ -432,7 +497,7 @@ function CertificateTemplate({ data, innerRef }) {
                     src={hodSig}
                     alt=""
                     crossOrigin="anonymous"
-                    style={abs({ left: 934, top: 796, width: 150, height: 88 })}
+                    style={abs({ left: 949, top: 812, width: 121, height: 72 })}
                 />
             )}
             {/* HOD name + title under the right rule (mirrors the Principal block) */}
@@ -504,7 +569,7 @@ export default function Certificates() {
     const [revokeTarget, setRevokeTarget] = useState(null);     // certificate row pending revoke
     const [revokeReason, setRevokeReason] = useState('');
     const [editTarget, setEditTarget] = useState(null);         // certificate row being edited
-    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', hod_name: '', hod_signature: '', passport_photo: '', student_name: '', course_name: '' });
+    const [editForm, setEditForm] = useState({ certificate_number: '', award_date: '', grade: '', hod_name: '', hod_signature: '', passport_photo: '', student_name: '', course_name: '' });
     const editOriginalSigRef = useRef('');
     const editOriginalPhotoRef = useRef('');
 
@@ -603,7 +668,8 @@ export default function Certificates() {
             hodName,
             category: row.category,
             awardDate: row.award_date || row.completion_date,
-            certificateNumber: row.certificate_number || null
+            certificateNumber: row.certificate_number || null,
+            grade: row.grade || ''
         };
     }
 
@@ -667,6 +733,7 @@ export default function Certificates() {
         setEditForm({
             certificate_number: c.certificate_number || '',
             award_date: toInputDate(c.award_date),
+            grade: c.grade || '',
             hod_name: c.hod_name || hodForCourse(c.course_name).hod || '',
             hod_signature: c.hod_signature || '',
             passport_photo: c.passport_photo || '',
@@ -735,6 +802,7 @@ export default function Certificates() {
             const payload = {
                 certificate_number,
                 award_date: editForm.award_date,
+                grade: editForm.grade,
                 hod_name: editForm.hod_name.trim(),
                 student_name,
                 course_name
@@ -1451,6 +1519,12 @@ export default function Certificates() {
                         <input value={editForm.certificate_number} onChange={e => setEditForm(f => ({ ...f, certificate_number: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-black text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
                         <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Award Date</label>
                         <input type="date" value={editForm.award_date} onChange={e => setEditForm(f => ({ ...f, award_date: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-3" />
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Award Grade</label>
+                        <select value={editForm.grade} onChange={e => setEditForm(f => ({ ...f, grade: e.target.value }))} className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-maroon outline-none focus:ring-2 focus:ring-maroon/10 mb-1">
+                            <option value="">— No grade —</option>
+                            {AWARD_GRADES.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <p className="text-[10px] font-bold text-black/40 mb-3">Printed on the certificate. Leave blank to omit the grade.</p>
 
                         <label className="block text-[10px] font-black uppercase tracking-widest text-maroon/50 mb-1">Passport Photo</label>
                         <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 mb-1">

@@ -36,6 +36,9 @@ function qualificationTitle(courseName, category) {
 
 const CATEGORY_CODE = { Diploma: 'DIP', Certificate: 'CERT', 'Short Course': 'SC' };
 
+// Award grades allowed on a certificate (empty = grade not stated).
+const AWARD_GRADES = ['Distinction', 'Credit', 'Pass', 'Fail'];
+
 // Normalise a DATE value (JS Date, ISO string, or empty) to a YYYY-MM-DD string.
 function toDateStr(v) {
     if (!v) return null;
@@ -134,7 +137,7 @@ export async function getEligibleStudents(req, res) {
              ORDER BY name`
         );
         const issued = await query(
-            `SELECT student_id, programme_id, certificate_number FROM certificates WHERE status = 'Issued'`
+            `SELECT student_id, programme_id, certificate_number, grade FROM certificates WHERE status = 'Issued'`
         );
         const issuedKey = new Set(issued.map(c => `${c.student_id}::${c.programme_id ?? ''}`));
 
@@ -172,7 +175,8 @@ export async function getEligibleStudents(req, res) {
                     category,
                     course_name: qualificationTitle(course.name, category),
                     already_issued: issuedKey.has(key),
-                    certificate_number: existing ? existing.certificate_number : null
+                    certificate_number: existing ? existing.certificate_number : null,
+                    grade: existing ? existing.grade : null
                 });
             }
         }
@@ -316,7 +320,8 @@ export async function revokeCertificate(req, res) {
 }
 
 // PUT /certificates/:id — admin correction of an issued certificate.
-// Editable: certificate_number, award_date, hod_name (override of the course→HOD mapping),
+// Editable: certificate_number, award_date, grade (Distinction/Credit/Pass/Fail or empty),
+// hod_name (override of the course→HOD mapping),
 // hod_signature (image data URI for that certificate), passport_photo (image data URI that
 // replaces the student's photo on this certificate only), student_name, course_name.
 // The rendered design is untouched; only the stored variable fields change (these are
@@ -341,6 +346,13 @@ export async function updateCertificate(req, res) {
             const date = toDateStr(req.body.award_date);
             if (!date) return res.status(400).json({ error: 'Invalid award date.' });
             updates.push('award_date = ?'); params.push(date);
+        }
+        if (req.body?.grade !== undefined) {
+            const grade = String(req.body.grade || '').trim();
+            if (grade && !AWARD_GRADES.includes(grade)) {
+                return res.status(400).json({ error: `Grade must be one of: ${AWARD_GRADES.join(', ')} (or blank).` });
+            }
+            updates.push('grade = ?'); params.push(grade || null);
         }
         if (req.body?.hod_name !== undefined) {
             const hod = String(req.body.hod_name).trim();

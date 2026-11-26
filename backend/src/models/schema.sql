@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS certificates (
   issued_by_name TEXT,
   revoke_reason TEXT,
   revoked_at DATETIME,
+  grade TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
